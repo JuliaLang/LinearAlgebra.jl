@@ -415,10 +415,7 @@ const _TypedDenseConcatGroup{T} = Union{Vector{T}, Adjoint{T,Vector{T}}, Transpo
 promote_to_array_type(::Tuple{Vararg{Union{_DenseConcatGroup,UniformScaling}}}) = Matrix
 
 Base._cat(dims, xs::_DenseConcatGroup...) = Base._cat_t(dims, promote_eltype(xs...), xs...)
-for T in [Vector, Matrix]
-    @eval vcat(A::$(T)...) = Base.typed_vcat(promote_eltype(A...), A...)
-    @eval hcat(A::$(T)...) = Base.typed_hcat(promote_eltype(A...), A...)
-end
+vcat(A::Vector...) = Base.typed_vcat(promote_eltype(A...), A...)
 vcat(A::_DenseConcatGroup...) = Base.typed_vcat(promote_eltype(A...), A...)
 hcat(A::_DenseConcatGroup...) = Base.typed_hcat(promote_eltype(A...), A...)
 hvcat(rows::Tuple{Vararg{Int}}, xs::_DenseConcatGroup...) = Base.typed_hvcat(promote_eltype(xs...), rows, xs...)
@@ -427,6 +424,10 @@ Base._cat(dims, xs::_TypedDenseConcatGroup{T}...) where {T} = Base._cat_t(dims, 
 vcat(A::_TypedDenseConcatGroup{T}...) where {T} = Base.typed_vcat(T, A...)
 hcat(A::_TypedDenseConcatGroup{T}...) where {T} = Base.typed_hcat(T, A...)
 hvcat(rows::Tuple{Vararg{Int}}, xs::_TypedDenseConcatGroup{T}...) where {T} = Base.typed_hvcat(T, rows, xs...)
+for S in [Vector, Matrix]
+    @eval vcat(A::$(S){T}...) where {T} = Base.typed_vcat(promote_eltype(A...), A...)
+    @eval hcat(A::$(S){T}...) where {T} = Base.typed_hcat(promote_eltype(A...), A...)
+end
 
 # factorizations
 function cholesky(S::RealHermSymComplexHerm{<:Real,<:SymTridiagonal}, ::NoPivot = NoPivot(); check::Bool = true)
