@@ -430,6 +430,7 @@ for S in [Vector, Matrix]
     @eval hcat(A::$(S){T}...) where {T} = Base.typed_hcat(promote_eltype(A...), A...)
     @eval Base._cat(dims, xs::$(S)...) = Base._cat_t(dims, promote_eltype(xs...), xs...)
 end
+hcat(A::Union{Number, Vector, Matrix}...) = Base.typed_hcat(promote_eltype(A...), A...)
 
 # factorizations
 function cholesky(S::RealHermSymComplexHerm{<:Real,<:SymTridiagonal}, ::NoPivot = NoPivot(); check::Bool = true)
