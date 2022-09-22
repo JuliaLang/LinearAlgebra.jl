@@ -22,9 +22,7 @@ using Base.Broadcast: Broadcasted, broadcasted
 using OpenBLAS_jll
 using libblastrampoline_jll
 import Libdl
-@static if Base.VERSION >= v"1.9-"
-    using Base: Splat
-else
+if !isdefined(Base, :Splat)
     const Splat = Base.splat
 end
 
