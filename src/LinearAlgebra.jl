@@ -17,12 +17,16 @@ import Base: USE_BLAS64, abs, acos, acosh, acot, acoth, acsc, acsch, adjoint, as
     sincos, sinh, size, sqrt, strides, stride, tan, tanh, transpose, trunc, typed_hcat,
     vec, zero
 using Base: IndexLinear, promote_eltype, promote_op, promote_typeof,
-    @propagate_inbounds, reduce, typed_hvcat, typed_vcat, require_one_based_indexing,
-    Splat
+    @propagate_inbounds, reduce, typed_hvcat, typed_vcat, require_one_based_indexing
 using Base.Broadcast: Broadcasted, broadcasted
 using OpenBLAS_jll
 using libblastrampoline_jll
 import Libdl
+@static if Base.VERSION >= v"1.9-"
+    using Base: Splat
+else
+    const Splat = Base.splat
+end
 
 export
 # Modules
