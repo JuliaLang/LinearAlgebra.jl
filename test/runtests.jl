@@ -9,8 +9,10 @@ delete_methods_from("LinearAlgebra")
 import LinearAlgebra
 using Test: @testset
 
+@testset "LinearAlgebra" begin # TODO: delete this line
 for file in readlines(joinpath(@__DIR__, "testgroups"))
     @testset "$(file)" begin
         include(file * ".jl")
     end
 end
+end # TODO: delete this line
