@@ -36,9 +36,6 @@ import LinearAlgebra
 import Test
 
 for file in strip.(readlines(joinpath(@__DIR__, "testgroups")))
-    if isempty(file) || startswith(file, '#')
-        continue
-    end
     @debug "Running the $(file) testset"
     Test.@testset "$(file)" begin
         include(file * ".jl")
