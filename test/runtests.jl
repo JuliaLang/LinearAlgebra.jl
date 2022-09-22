@@ -33,13 +33,14 @@ delete_methods_from("LinearAlgebra")
 
 # Load our version of LinearAlgebra
 import LinearAlgebra
+import Test
 
 for file in strip.(readlines(joinpath(@__DIR__, "testgroups")))
     if isempty(file) || startswith(file, '#')
         continue
     end
     @info "Running the $(file) testset - TODO delete this line" # TODO: delete this line
-    @testset "$(file)" begin
+    Test.@testset "$(file)" begin
         include(file * ".jl")
     end
 end
