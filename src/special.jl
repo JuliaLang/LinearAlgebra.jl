@@ -429,6 +429,7 @@ for S in [Vector, Matrix]
     @eval vcat(A::$(S){T}...) where {T} = Base.typed_vcat(promote_eltype(A...), A...)
     @eval hcat(A::$(S){T}...) where {T} = Base.typed_hcat(promote_eltype(A...), A...)
     @eval Base._cat(dims, xs::$(S)...) = Base._cat_t(dims, promote_eltype(xs...), xs...)
+    @eval Base._cat(dims, xs::$(S){T}...) where {T} = Base._cat_t(dims, T, xs...)
 end
 hcat(A::Union{Number, Vector, Matrix}...) = Base.typed_hcat(promote_eltype(A...), A...)
 
