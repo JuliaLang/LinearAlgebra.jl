@@ -39,7 +39,7 @@ for file in strip.(readlines(joinpath(@__DIR__, "testgroups")))
     if isempty(file) || startswith(file, '#')
         continue
     end
-    @info "Running the $(file) testset - TODO delete this line" # TODO: delete this line
+    @debug "Running the $(file) testset"
     Test.@testset "$(file)" begin
         include(file * ".jl")
     end
