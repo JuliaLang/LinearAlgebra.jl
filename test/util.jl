@@ -6,14 +6,10 @@ function delete_methods_from(
     for m in modules_to_search
         m_names = names(m; all = true, imported = true)
         for name in m_names
-            generic_function = try
-                getproperty(m, name)
-            catch
-                nothing
-            end
-            if generic_function === nothing
+            if !isdefined(m, name)
                 continue
             end
+            generic_function = getproperty(m, name)
             for method in methods(generic_function)
                 if string(method.module) == from_module_name
                     @debug "$(num_deleted_methods). Deleting method: $(method)"
