@@ -26,12 +26,8 @@ function delete_methods_from(
     return num_deleted_methods
 end
 
-function delete_sparsearray_methods()
-    return "delete this line"
-end
-
 function delete_all_methods()
     delete_methods_from("LinearAlgebra")
-    delete_sparsearray_methods()
+    delete_methods_from("SparseArrays")
     return nothing
 end
