@@ -29,7 +29,7 @@ function delete_methods_from(
 end
 
 # Make sure to run this before we do `import LinearAlgebra`
-delete_methods_from("LinearAlgebra")
+delete_all_methods()
 
 # Load our version of LinearAlgebra
 import LinearAlgebra
