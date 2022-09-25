@@ -8,6 +8,10 @@ delete_all_methods()
 # Load our version of LinearAlgebra
 import LinearAlgebra
 
+using Test: @testset
+
 for file in readlines(joinpath(@__DIR__, "testgroups"))
-    include(file * ".jl")
+    @testset "$(file)" begin
+        include(file * ".jl")
+    end
 end
