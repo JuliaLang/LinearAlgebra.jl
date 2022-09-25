@@ -26,4 +26,6 @@ function delete_methods_from(
     return num_deleted_methods
 end
 
-delete_all_methods() = delete_methods_from("LinearAlgebra")
+function delete_all_methods()
+delete_methods_from("LinearAlgebra")
+end
