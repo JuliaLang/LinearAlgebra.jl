@@ -26,5 +26,4 @@ function delete_methods_from(
     return num_deleted_methods
 end
 
-# Make sure to run this before we do `import LinearAlgebra`
-delete_methods_from("LinearAlgebra")
+delete_all_methods() = delete_methods_from("LinearAlgebra")
