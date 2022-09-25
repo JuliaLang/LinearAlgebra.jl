@@ -1,5 +1,10 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+include("util.jl")
+
+# Make sure to run this before we do `import LinearAlgebra`
+delete_all_methods()
+
 using Test, LinearAlgebra
 let ambig = detect_ambiguities(LinearAlgebra; recursive=true)
     @test isempty(ambig)
