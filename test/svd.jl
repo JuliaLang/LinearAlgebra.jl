@@ -294,4 +294,16 @@ end
     @test F.S ≈ F32.S
 end
 
+@testset "rank svd" begin
+    # Test that the rank of an svd is computed correctly
+    @test rank(svd([1.0 0.0; 0.0 1.0])) == 2
+    @test rank(svd([1.0 0.0; 0.0 0.9]), rtol=0.95) == 1
+    @test rank(svd([1.0 0.0; 0.0 0.9]), atol=0.95) == 1
+    @test rank(svd([1.0 0.0; 0.0 1.0]), rtol=1.01) == 0
+    @test rank(svd([1.0 0.0; 0.0 1.0]), atol=1.01) == 0
+
+    @test rank(svd([1.0 2.0; 2.0 4.0])) == 1
+    @test rank(svd([1.0 2.0 3.0; 4.0 5.0 6.0 ; 7.0 8.0 9.0])) == 2
+end
+
 end # module TestSVD
