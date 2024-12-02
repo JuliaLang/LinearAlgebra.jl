@@ -349,7 +349,9 @@ Base.getindex(A::MyTriangular, i::Int, j::Int) = A.data[i,j]
                                 (UnitUpperTriangular, :U),
                                 (LowerTriangular, :L),
                                 (UnitLowerTriangular, :L))
-
+                if !(elty1 == elty2 || elty1 ∈ (ComplexF32, Int) || elty1 ∈ (ComplexF32, Int))
+                    continue
+                end
                 debug && println("elty1: $elty1, A1: $t1, elty2: $elty2, A2: $t2")
 
                 A2 = t2(elty2 == Int ? rand(1:7, n, n) : convert(Matrix{elty2}, (elty2 <: Complex ? complex.(randn(n, n), randn(n, n)) : randn(n, n)) |> t -> cholesky(t't).U |> t -> uplo2 === :U ? t : copy(t')))
@@ -436,6 +438,12 @@ Base.getindex(A::MyTriangular, i::Int, j::Int) = A.data[i,j]
         end
 
         for eltyB in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
+            # Only test methods for the same element type and a single combination of mixed element types
+            # to avoid too much compilation
+            if !(elty1 == eltyB || elty1 ∈ (ComplexF32, Int) || eltyB ∈ (ComplexF32, Int))
+                continue
+            end
+
             B = convert(Matrix{eltyB}, (elty1 <: Complex ? real(A1) : A1)*fill(1., n, n))
 
             debug && println("elty1: $elty1, A1: $t1, B: $eltyB")

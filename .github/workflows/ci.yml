@@ -1,0 +1,29 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches:
+      - 'master'
+      - 'release-*'
+    tags: '*'
+concurrency:
+  # Skip intermediate builds: all builds except for builds on the `main` or `release-*` branches
+  # Cancel intermediate builds: only pull request builds
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.ref != 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-') || github.run_number }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: 'nightly'
+      - name: Generate docs
+        run: |
+          julia --project --color=yes -e ''
+          julia --project --color=yes -e 'using Pkg; Pkg.respect_sysimage_versions(false); Pkg.activate("docs"); Pkg.develop(PackageSpec(path = pwd()))'
+          julia --project=docs --color=yes docs/make.jl
+        env:
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
