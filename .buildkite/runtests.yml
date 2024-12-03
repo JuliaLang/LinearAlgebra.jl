@@ -1,4 +1,3 @@
----
 steps:
   # Linux x86_64
   - label: ":linux: linux-x86_64"
@@ -15,8 +14,13 @@ steps:
       - JuliaCI/julia#v1:
           version: "nightly"
     command: |
+      if [[ "${BUILDKITE_BRANCH}" =~ ^backports-release-.*$ || "${BUILDKITE_BRANCH}" =~ ^release-.*$ ]]; then
+        OPT_LEVEL=2
+      else
+        OPT_LEVEL=0
+      fi
       julia --color=yes --project=.ci -e 'using Pkg; Pkg.instantiate()'
-      julia --color=yes --project=.ci .ci/create_sysimage_and_run_tests.jl
+      julia --color=yes --project=.ci --optimize=$${OPT_LEVEL} .ci/create_sysimage_and_run_tests.jl
     agents:
       queue: "julia"
       os: "linux"
@@ -29,8 +33,13 @@ steps:
       - JuliaCI/julia#v1:
           version: "nightly"
     command: |
+      if [[ "${BUILDKITE_BRANCH}" =~ ^backports-release-.*$ || "${BUILDKITE_BRANCH}" =~ ^release-.*$ ]]; then
+        OPT_LEVEL=2
+      else
+        OPT_LEVEL=0
+      fi
       julia --color=yes --project=.ci -e 'using Pkg; Pkg.instantiate()'
-      julia --color=yes --project=.ci .ci/create_sysimage_and_run_tests.jl
+      julia --color=yes --project=.ci --optimize=$${OPT_LEVEL} .ci/create_sysimage_and_run_tests.jl
     agents:
       queue: "julia"
       os: "macos"
@@ -41,8 +50,13 @@ steps:
       - JuliaCI/julia#v1:
           version: "nightly"
     command: |
+      if [[ "${BUILDKITE_BRANCH}" =~ ^backports-release-.*$ || "${BUILDKITE_BRANCH}" =~ ^release-.*$ ]]; then
+        OPT_LEVEL=2
+      else
+        OPT_LEVEL=0
+      fi
       julia --color=yes --project=.ci -e 'using Pkg; Pkg.instantiate()'
-      julia --color=yes --project=.ci .ci/create_sysimage_and_run_tests.jl
+      julia --color=yes --project=.ci --optimize=$${OPT_LEVEL} .ci/create_sysimage_and_run_tests.jl
     agents:
       queue: "julia"
       os: "windows"
