@@ -102,6 +102,24 @@ function lu!(A::HermOrSym{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupi
     end
     lu!(A.data, pivot; check, allowsingular)
 end
+
+#reusing LU object
+#lu!(F::LU,A) should be dispatched on the type of matrix stored in the LU factorization.
+
+function lu!(F::LU{<:Any,<:StridedMatrix{<:BlasFloat}}, A; check::Bool = true, allowsingular::Bool = false)
+    copyto!(F.factors, A)
+    lpt = LAPACK.getrf!(F.factors, F.ipiv; check)
+    check && _check_lu_success(lpt[3], allowsingular)
+    return LU{T,typeof(lpt[1]),typeof(lpt[2])}(lpt[1], lpt[2], lpt[3])
+end
+
+function lu!(F::LU{<:Any,<:AbstractMatrix}, A; check::Bool = true, allowsingular::Bool = false)
+    copyto!(F.factors, A)
+    return generic_lufact!(F.factors, lupivottype(eltype(A)), F.ipiv; check, allowsingular)
+end
+
+
+
 # for backward compatibility
 # TODO: remove towards Julia v2
 @deprecate lu!(A::Union{StridedMatrix,HermOrSym,Tridiagonal}, ::Val{true}; check::Bool = true) lu!(A, RowMaximum(); check=check)
@@ -149,7 +167,7 @@ Stacktrace:
 """
 lu!(A::AbstractMatrix, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(eltype(A));
     check::Bool = true, allowsingular::Bool = false) = generic_lufact!(A, pivot; check, allowsingular)
-function generic_lufact!(A::AbstractMatrix{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(T);
+function generic_lufact!(A::AbstractMatrix{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(T), ipiv::AbstractVector{BlasInt} = Vector{BlasInt}(undef,min(size(A)...));
                          check::Bool = true, allowsingular::Bool = false) where {T}
     check && LAPACK.chkfinite(A)
     # Extract values
@@ -158,7 +176,6 @@ function generic_lufact!(A::AbstractMatrix{T}, pivot::Union{RowMaximum,NoPivot,R
 
     # Initialize variables
     info = 0
-    ipiv = Vector{BlasInt}(undef, minmn)
     @inbounds begin
         for k = 1:minmn
             # find index max
