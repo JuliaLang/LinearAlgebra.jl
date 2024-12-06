@@ -1541,38 +1541,8 @@ function factorize(A::AbstractMatrix{T}) where T
     m, n = size(A)
     if m == n
         if m == 1 return A[1] end
-        utri    = true
-        utri1   = true
-        herm    = true
-        sym     = true
-        for j = 1:n-1, i = j+1:m
-            if utri1
-                if A[i,j] != 0
-                    utri1 = i == j + 1
-                    utri = false
-                end
-            end
-            if sym
-                sym &= A[i,j] == A[j,i]
-            end
-            if herm
-                herm &= A[i,j] == conj(A[j,i])
-            end
-            if !(utri1|herm|sym) break end
-        end
-        ltri = true
-        ltri1 = true
-        for j = 3:n, i = 1:j-2
-            ltri1 &= A[i,j] == 0
-            if !ltri1 break end
-        end
+        utri, utri1, ltri, ltri1, sym, herm = getstructure(A)
         if ltri1
-            for i = 1:n-1
-                if A[i,i+1] != 0
-                    ltri &= false
-                    break
-                end
-            end
             if ltri
                 if utri
                     return Diagonal(A)
@@ -1609,6 +1579,66 @@ end
 factorize(A::Adjoint)   =   adjoint(factorize(parent(A)))
 factorize(A::Transpose) = transpose(factorize(parent(A)))
 factorize(a::Number)    = a # same as how factorize behaves on Diagonal types
+
+function getstructure(A::StridedMatrix)
+    m, n = size(A)
+    if m == 1 return A[1] end
+    utri    = true
+    utri1   = true
+    herm    = true
+    sym     = true
+    for j = 1:n-1, i = j+1:m
+        if utri1
+            if A[i,j] != 0
+                utri1 = i == j + 1
+                utri = false
+            end
+        end
+        if sym
+            sym &= A[i,j] == A[j,i]
+        end
+        if herm
+            herm &= A[i,j] == conj(A[j,i])
+        end
+        if !(utri1|herm|sym) break end
+    end
+    ltri = true
+    ltri1 = true
+    for j = 3:n, i = 1:j-2
+        ltri1 &= A[i,j] == 0
+        if !ltri1 break end
+    end
+    if ltri1
+        for i = 1:n-1
+            if A[i,i+1] != 0
+                ltri &= false
+                break
+            end
+        end
+    end
+    return (utri, utri1, ltri, ltri1, sym, herm)
+end
+_check_sym_herm(A) = (issymmetric(A), ishermitian(A))
+_check_sym_herm(A::AbstractMatrix{<:Real}) = (sym = issymmetric(A); (sym,sym))
+function getstructure(A::AbstractMatrix)
+    utri1 = istriu(A,-1)
+    # utri = istriu(A), but since we've already checked istriu(A,-1),
+    # we only need to check that the subdiagonal band is zero
+    utri = utri1 && iszero(diag(A,-1))
+    sym, herm = _check_sym_herm(A)
+    if sym || herm
+        # in either case, the lower and upper triangular halves have identical band structures
+        # in this case, istril(A,1) == istriu(A,-1) and istril(A) == istriu(A)
+        ltri1 = utri1
+        ltri = utri
+    else
+        ltri1 = istril(A,1)
+        # ltri = istril(A), but since we've already checked istril(A,1),
+        # we only need to check the superdiagonal band is zero
+        ltri = ltri1 && iszero(diag(A,1))
+    end
+    return (utri, utri1, ltri, ltri1, sym, herm)
+end
 
 ## Moore-Penrose pseudoinverse
 
