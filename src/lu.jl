@@ -87,12 +87,12 @@ end
 
 # the following method is meant to catch calls to lu!(A::LAPACKArray) without a pivoting strategy
 lu!(A::StridedMatrix{<:BlasFloat}; check::Bool = true, allowsingular::Bool = false) = lu!(A, RowMaximum(); check, allowsingular)
-function lu!(A::StridedMatrix{T}, ::RowMaximum; check::Bool = true, allowsingular::Bool = false) where {T<:BlasFloat}
-    lpt = LAPACK.getrf!(A; check)
+function lu!(A::StridedMatrix{T}, ::RowMaximum, ipiv::AbstractVector{BlasInt} = Vector{BlasInt}(undef,min(size(A)...)); check::Bool = true, allowsingular::Bool = false) where {T<:BlasFloat}
+    lpt = LAPACK.getrf!(A, ipiv; check)
     check && _check_lu_success(lpt[3], allowsingular)
     return LU{T,typeof(lpt[1]),typeof(lpt[2])}(lpt[1], lpt[2], lpt[3])
 end
-function lu!(A::HermOrSym{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(T);
+function lu!(A::HermOrSym{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(T), ipiv::AbstractVector{BlasInt} = Vector{BlasInt}(undef,min(size(A)...));
         check::Bool = true, allowsingular::Bool = false) where {T}
     copytri!(A.data, A.uplo, isa(A, Hermitian))
     @inbounds if isa(A, Hermitian) # realify diagonal
@@ -100,7 +100,7 @@ function lu!(A::HermOrSym{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupi
             A.data[i,i] = A[i,i]
         end
     end
-    lu!(A.data, pivot; check, allowsingular)
+    lu!(A.data, pivot, ipiv; check, allowsingular)
 end
 # for backward compatibility
 # TODO: remove towards Julia v2
@@ -147,9 +147,9 @@ Stacktrace:
 [...]
 ```
 """
-lu!(A::AbstractMatrix, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(eltype(A));
-    check::Bool = true, allowsingular::Bool = false) = generic_lufact!(A, pivot; check, allowsingular)
-function generic_lufact!(A::AbstractMatrix{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(T);
+lu!(A::AbstractMatrix, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(eltype(A)), ipiv::AbstractVector{BlasInt} = Vector{BlasInt}(undef,min(size(A)...));
+    check::Bool = true, allowsingular::Bool = false) = generic_lufact!(A, pivot, ipiv; check, allowsingular)
+function generic_lufact!(A::AbstractMatrix{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(T), ipiv::AbstractVector{BlasInt} = Vector{BlasInt}(undef,min(size(A)...));
                          check::Bool = true, allowsingular::Bool = false) where {T}
     check && LAPACK.chkfinite(A)
     # Extract values
@@ -158,7 +158,6 @@ function generic_lufact!(A::AbstractMatrix{T}, pivot::Union{RowMaximum,NoPivot,R
 
     # Initialize variables
     info = 0
-    ipiv = Vector{BlasInt}(undef, minmn)
     @inbounds begin
         for k = 1:minmn
             # find index max
