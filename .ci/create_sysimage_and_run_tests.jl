@@ -9,7 +9,13 @@ else
 end
 
 withenv("JULIA_IMAGE_THREADS" => ncores) do
-    create_sysimage(["LinearAlgebra", "Test", "Distributed", "Dates", "Printf", "Random"]; sysimage_path=sysimage, incremental=false, filter_stdlibs=true)
+    create_sysimage(
+        ["LinearAlgebra", "Test", "Distributed", "Dates", "Printf", "Random"];
+        sysimage_path=sysimage,
+        incremental=false,
+        filter_stdlibs=true,
+        sysimage_build_args = `--optimize=0`
+    )
 end
 
 current_dir = @__DIR__
