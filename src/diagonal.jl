@@ -854,7 +854,9 @@ adjoint(D::Diagonal) = Diagonal(adjoint.(D.diag))
 permutedims(D::Diagonal) = D
 permutedims(D::Diagonal, perm) = (Base.checkdims_perm(axes(D), axes(D), perm); D)
 
-function diag(D::Diagonal, k::Integer=0)
+diag(D::Diagonal) = D.diag
+
+function diag(D::Diagonal, k::Integer)
     # every branch call similar(..., ::Int) to make sure the
     # same vector type is returned independent of k
     v = similar(D.diag, max(0, length(D.diag)-abs(k)))
