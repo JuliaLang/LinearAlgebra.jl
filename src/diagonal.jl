@@ -931,15 +931,18 @@ function pinv(D::Diagonal{T}, tol::Real) where T
     Diagonal(Di)
 end
 
+_ortho_eltype(T) = Base.promote_op(/, T, T)
+_ortho_eltype(T::Type{<:Number}) = typeof(one(T))
+
 # TODO Docstrings for eigvals, eigvecs, eigen all mention permute, scale, sortby as keyword args
 # but not all of them below provide them. Do we need to fix that?
 #Eigensystem
 eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true) = copy(D.diag)
 eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true) =
     reduce(vcat, eigvals(x) for x in D.diag) #For block matrices, etc.
-function eigvecs(D::Diagonal{T}) where T<:AbstractMatrix
+function eigvecs(D::Diagonal{T}) where {T<:AbstractMatrix}
     diag_vecs = [ eigvecs(x) for x in D.diag ]
-    matT = reduce((a,b) -> promote_type(typeof(a),typeof(b)), diag_vecs)
+    matT = promote_type(map(typeof, diag_vecs)...)
     ncols_diag = [ size(x, 2) for x in D.diag ]
     nrows = size(D, 1)
     vecs = Matrix{Vector{eltype(matT)}}(undef, nrows, sum(ncols_diag))
@@ -961,7 +964,7 @@ function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{
     if any(!isfinite, D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
-    Td = Base.promote_op(/, eltype(D), eltype(D))
+    Td = _ortho_eltype(eltype(D))
     λ = eigvals(D)
     if !isnothing(sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
@@ -1019,13 +1022,13 @@ function svd(D::Diagonal{T}) where {T<:Number}
     s = abs.(d)
     piv = sortperm(s, rev = true)
     S = s[piv]
-    Td  = typeof(oneunit(T)/oneunit(T))
+    Td  = _ortho_eltype(T)
     U = zeros(Td, size(D))
     Vt = copy(U)
     for i in 1:length(d)
         j = piv[i]
-        U[j,i] = iszero(d[j]) ? oneunit(Td) : d[j] / S[i]
-        Vt[i,j] = oneunit(Td)
+        U[j,i] = iszero(d[j]) ? one(Td) : d[j] / S[i]
+        Vt[i,j] = one(Td)
     end
     return SVD(U, S, Vt)
 end
