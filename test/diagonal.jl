@@ -478,14 +478,14 @@ Random.seed!(1)
         U, s, V = F
         @test map(x -> x.val, Matrix(F)) ≈ map(x -> x.val, Du)
         @test svdvals(Du) == s
-        @test U isa AbstractMatrix{<:Furlong{0}}
-        @test V isa AbstractMatrix{<:Furlong{0}}
+        @test U isa AbstractMatrix{<:Union{Real,Complex}}
+        @test V isa AbstractMatrix{<:AbstractFloat}
         @test s isa AbstractVector{<:Furlong{1}}
         E = eigen(Du)
         vals, vecs = E
         @test Matrix(E) == Du
         @test vals isa AbstractVector{<:Furlong{1}}
-        @test vecs isa AbstractMatrix{<:Furlong{0}}
+        @test vecs isa AbstractMatrix{<:AbstractFloat}
     end
 end
 
@@ -858,6 +858,10 @@ end
     @test eigD.values == evals
     @test eigD.vectors ≈ evecs
     @test D * eigD.vectors ≈ eigD.vectors * Diagonal(eigD.values)
+
+    # test concrete types
+    D = Diagonal([I2 for _ in 1:4])
+    @test eigen(D) isa Eigen{Vector{Float64}, Float64, Matrix{Vector{Float64}}, Vector{Float64}}
 end
 
 @testset "linear solve for block diagonal matrices" begin
