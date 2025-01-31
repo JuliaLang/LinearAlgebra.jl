@@ -676,13 +676,8 @@ end
 @testset "posv and some errors for friends" begin
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         local n = 10
-        A = rand(elty,n,n)/100
-        A += real(diagm(0 => n*real(rand(elty,n))))
-        if elty <: Complex
-            A = A + A'
-        else
-            A = A + transpose(A)
-        end
+        A = randn(elty,n,n)
+        A = A'*A
         B = rand(elty,n,n)
         D = copy(A)
         C = copy(B)
