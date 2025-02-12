@@ -839,6 +839,10 @@ end
     @test eigD.values == evals
     @test eigD.vectors ≈ evecs
     @test D * eigD.vectors ≈ eigD.vectors * Diagonal(eigD.values)
+
+    # test concrete types
+    D = Diagonal([I2 for _ in 1:4])
+    @test eigen(D) isa Eigen{Vector{Float64}, Float64, Matrix{Vector{Float64}}, Vector{Float64}}
 end
 
 @testset "linear solve for block diagonal matrices" begin
