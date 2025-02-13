@@ -1366,4 +1366,9 @@ end
     @test !any(LinearAlgebra.getstructure(A))
 end
 
+@testset "SingularException show" begin
+    A = diagm(0=> [1, 0])
+    @test_throws "matrix is singular; factorization failed" inv(A)
+end
+
 end # module TestDense
