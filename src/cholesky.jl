@@ -305,7 +305,7 @@ function _cholpivoted!(A::AbstractMatrix, ::Type{UpperTriangular}, tol::Real, ch
     rTA = real(eltype(A))
     # checks
     Base.require_one_based_indexing(A)
-    n = LinearAlgebra.checksquare(A)
+    n = checksquare(A)
     # initialization
     piv = collect(1:n)
     dots = zeros(rTA, n)
@@ -354,7 +354,7 @@ function _cholpivoted!(A::AbstractMatrix, ::Type{LowerTriangular}, tol::Real, ch
     rTA = real(eltype(A))
     # checks
     Base.require_one_based_indexing(A)
-    n = LinearAlgebra.checksquare(A)
+    n = checksquare(A)
     # initialization
     piv = collect(1:n)
     dots = zeros(rTA, n)
@@ -798,7 +798,7 @@ function rdiv!(B::AbstractMatrix, C::Cholesky)
     end
 end
 
-function LinearAlgebra.rdiv!(B::AbstractMatrix, C::CholeskyPivoted)
+function rdiv!(B::AbstractMatrix, C::CholeskyPivoted)
     n = size(C, 2)
     for i in 1:size(B, 1)
         permute!(view(B, i, 1:n), C.piv)
@@ -950,7 +950,7 @@ function lowrankdowndate!(C::Cholesky, v::AbstractVector)
         s = conj(v[i]/Aii)
         s2 = abs2(s)
         if s2 > 1
-            throw(LinearAlgebra.PosDefException(i))
+            throw(PosDefException(i))
         end
         c = sqrt(1 - abs2(s))
 
