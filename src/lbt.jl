@@ -228,10 +228,14 @@ function lbt_set_num_threads(nthreads)
     return ccall((:lbt_set_num_threads, libblastrampoline), Cvoid, (Int32,), nthreads)
 end
 
+function lbt_forward_ccall(path::AbstractString; clear::Bool = false, verbose::Bool = false, suffix_hint::Union{String,Nothing} = nothing)
+    return ccall((:lbt_forward, libblastrampoline), Int32, (Cstring, Int32, Int32, Cstring),
+                     path, clear ? 1 : 0, verbose ? 1 : 0, something(suffix_hint, C_NULL))
+end
+
 function lbt_forward(path::AbstractString; clear::Bool = false, verbose::Bool = false, suffix_hint::Union{String,Nothing} = nothing)
     _clear_config_with() do
-        return ccall((:lbt_forward, libblastrampoline), Int32, (Cstring, Int32, Int32, Cstring),
-                     path, clear ? 1 : 0, verbose ? 1 : 0, something(suffix_hint, C_NULL))
+        lbt_forward_ccall(path; clear, verbose, suffix_hint)
     end
 end
 

@@ -820,25 +820,27 @@ function versioninfo(io::IO=stdout)
     return nothing
 end
 
-function __init__()
-    try
-        verbose = parse(Bool, get(ENV, "LBT_VERBOSE", "false"))
-        BLAS.lbt_forward(OpenBLAS_jll.libopenblas_path; clear=true, verbose)
-        BLAS.check()
-    catch ex
-        Base.showerror_nostdio(ex, "WARNING: Error during initialization of module LinearAlgebra")
-    end
+function lbt_openblas_onload_callback()
+    # We don't use `BLAS.lbt_forward()` here because we don't want to take a lock on the config cache.
+    verbose = parse(Bool, get(ENV, "LBT_VERBOSE", "false"))
+    BLAS.lbt_forward_ccall(OpenBLAS_jll.libopenblas_path; clear=true, verbose)
+    BLAS.check()
+
     # register a hook to disable BLAS threading
     Base.at_disable_library_threading(() -> BLAS.set_num_threads(1))
 
     # https://github.com/xianyi/OpenBLAS/blob/c43ec53bdd00d9423fc609d7b7ecb35e7bf41b85/README.md#setting-the-number-of-threads-using-environment-variables
     if !haskey(ENV, "OPENBLAS_NUM_THREADS") && !haskey(ENV, "GOTO_NUM_THREADS") && !haskey(ENV, "OMP_NUM_THREADS")
         @static if Sys.isapple() && Base.BinaryPlatforms.arch(Base.BinaryPlatforms.HostPlatform()) == "aarch64"
-            BLAS.set_num_threads(max(1, @ccall(jl_effective_threads()::Cint)))
+            nthreads = max(1, @ccall(jl_effective_threads()::Cint))
         else
-            BLAS.set_num_threads(max(1, @ccall(jl_effective_threads()::Cint) ÷ 2))
+            nthreads = max(1, @ccall(jl_effective_threads()::Cint) ÷ 2)
         end
+        BLAS.lbt_set_num_threads(nthreads)
     end
 end
 
+# If users want to lazily load a different BLAS, they'd need to either change this call, or
+# clear the datastructures modified by this call and call it again with their own.
+libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, lbt_openblas_onload_callback)
 end # module LinearAlgebra

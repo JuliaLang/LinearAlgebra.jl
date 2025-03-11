@@ -162,7 +162,9 @@ get_num_threads()::Int = lbt_get_num_threads()
 function check()
     # TODO: once we have bitfields of the BLAS functions that are actually forwarded,
     # ensure that we have a complete set here (warning on an incomplete BLAS implementation)
-    config = get_config()
+    # We don't use `get_config()` here because we are invoked in the onload callback and
+    # we don't want to take any locks.
+    config = LBTConfig(unsafe_load(ccall((:lbt_get_config, libblastrampoline), Ptr{lbt_config_t}, ())))
 
     # Ensure that one of our loaded libraries satisfies our interface requirement
     interface = USE_BLAS64 ? :ilp64 : :lp64
