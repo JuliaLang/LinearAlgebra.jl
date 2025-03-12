@@ -325,6 +325,10 @@ end
             @test 0 == @allocations mul!(C, At, Bt)
         end
         # syrk/herk
+        mul!(C, transpose(A), A)
+        mul!(C, adjoint(A), A)
+        mul!(C, A, transpose(A))
+        mul!(C, A, adjoint(A))
         @test 0 == @allocations mul!(C, transpose(A), A)
         @test 0 == @allocations mul!(C, adjoint(A), A)
         @test 0 == @allocations mul!(C, A, transpose(A))
@@ -334,6 +338,7 @@ end
         Ac = complex(A)
         for t in (identity, adjoint, transpose)
             Bt = t(B)
+            mul!(Cc, Ac, Bt)
             @test 0 == @allocations mul!(Cc, Ac, Bt)
         end
     end
@@ -356,6 +361,9 @@ end
         A = rand(-10:10, n, n)
         B = ones(Float64, n, n)
         C = zeros(Float64, n, n)
+        mul!(C, A, B)
+        mul!(C, A, transpose(B))
+        mul!(C, adjoint(A), B)
         @test 0 == @allocations mul!(C, A, B)
         @test 0 == @allocations mul!(C, A, transpose(B))
         @test 0 == @allocations mul!(C, adjoint(A), B)
