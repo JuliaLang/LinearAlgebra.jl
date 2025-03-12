@@ -227,8 +227,8 @@ function rmul!(A::SymTridiagonal, x::Number)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    A.dv .*= x
-    _evview(A) .*= x
+    rmul!(A.dv, x)
+    rmul!(_evview(A), x)
     return A
 end
 function lmul!(x::Number, B::SymTridiagonal)
@@ -238,9 +238,8 @@ function lmul!(x::Number, B::SymTridiagonal)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. B.dv = x * B.dv
-    ev = _evview(B)
-    @. ev = x * ev
+    lmul!(x, B.dv)
+    lmul!(x, _evview(B))
     return B
 end
 /(A::SymTridiagonal, B::Number) = SymTridiagonal(A.dv/B, A.ev/B)

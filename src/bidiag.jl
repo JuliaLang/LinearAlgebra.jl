@@ -454,8 +454,8 @@ function rmul!(B::Bidiagonal, x::Number)
         iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. B.dv *= x
-    @. B.ev *= x
+    rmul!(B.dv, x)
+    rmul!(B.ev, x)
     return B
 end
 function lmul!(x::Number, B::Bidiagonal)
@@ -467,8 +467,8 @@ function lmul!(x::Number, B::Bidiagonal)
         iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. B.dv = x * B.dv
-    @. B.ev = x * B.ev
+    lmul!(x, B.dv)
+    lmul!(x, B.ev)
     return B
 end
 /(A::Bidiagonal, B::Number) = Bidiagonal(A.dv/B, A.ev/B, A.uplo)

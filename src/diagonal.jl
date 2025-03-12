@@ -298,7 +298,7 @@ function lmul!(x::Number, D::Diagonal)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (2, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. D.diag = x * D.diag
+    lmul!(x, D.diag)
     return D
 end
 function rmul!(D::Diagonal, x::Number)
@@ -308,7 +308,7 @@ function rmul!(D::Diagonal, x::Number)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (2, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. D.diag *= x
+    rmul!(D.diag, x)
     return D
 end
 (/)(D::Diagonal, x::Number) = Diagonal(D.diag / x)
