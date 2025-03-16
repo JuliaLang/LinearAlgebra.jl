@@ -955,7 +955,7 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
             if !iszero(beta)
                 C[i] *= beta
             elseif length(B) == 0
-                C[i] = false
+                C[i] = zero(eltype(C))
             else
                 C[i] = zero(A[i]*B[1] + A[i]*B[1])
             end
