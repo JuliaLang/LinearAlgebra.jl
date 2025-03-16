@@ -893,6 +893,89 @@ opnorm(v::TransposeAbsVec) = norm(v.parent)
 norm(v::AdjOrTrans, p::Real) = norm(v.parent, p)
 
 """
+    lpdist(x::T, y::T, p::Int) where {T <: AbstractVector}
+    lpdist(x::T, y::T, p::Real) where {T <: AbstractVector}
+
+    Computes the Lₚ distance between two vectors `x` and `y`, defined as:
+    for 0 < p < Inf: Lₚ dist = ᵖ√(Σ|xᵢ - yᵢ|ᵖ)
+    for p = 0: count of mismatches for p = 0
+    for p + Inf: L_∞ = maxᵢ(abs(xᵢ - yᵢ))
+"""
+
+function _lpunnorm(x::T, y::T, fn) where {T}
+    r = 0.0
+    for i in eachindex(x,y)
+        @inbounds r += fn(x[i] - y[i])
+    end
+
+    return r
+end
+
+
+function lpdist(x::T, y::T, p::Int) where {T <: AbstractVector}
+    p < 0 && throw(DomainError("p must be non-negative"))
+    length(x) == length(y) || throw(DimensionMismatch("x and y have different lenghts"))
+    if p == 0
+        @warn("Technically not a distance metric for p = 0")
+        fn = !iszero # simply count number of nonzeros
+    elseif p == 1
+        fn = abs
+    elseif p == 2
+        fn = abs2
+    else
+        fn = u -> abs(u)^p
+    end
+    r = _lpunnorm(x, y, fn)
+
+    p <= 1 && return r
+    p == 2 && return √r
+
+    return r^(1/p)
+end
+
+function lpdist(x::T, y::T, p::Real) where {T <: AbstractVector}
+    length(x) == length(y) || throw(DimensionMismatch("x and y have different lenghts"))
+    p < 0 && throw(DomainError("p must be non-negative"))
+    p < 1 && @warn("Technically not a distance metric for 0 < p < 1")
+
+    # handle inf norm separatey
+    if p == Inf
+        r = 0.0
+        for i in eachindex(x,y)
+            @inbounds r = max(abs(x[i] - y[i]), r)
+        end
+        return r
+    elseif iszero(p)
+        return lpdist(x, y, 0)
+    else
+        fn = u -> abs(u)^p
+    end
+    r = _lpunnorm(x, y, fn)
+
+    return r^(1/p)
+end
+
+"""
+    euclidean(x::T, y::T)
+    l2dist(x::T, y::T)
+
+    Compute the L₂ distance between vectors x and y.
+    Basically just aliases for lpdist(x, y, 2)
+"""
+euclidean(x::T, y::T) where {T <: AbstractVector} = lpdist(x, y, 2)
+l2dist(x::T, y::T) where {T <: AbstractVector} = lpdist(x, y, 2)
+
+"""
+    l1dist(x::T, y::T)
+
+    Compute the L₁ distance between vectors x and y.
+    Basically just an alias for lpdist(x, y, 1)
+"""
+l1dist(x::T, y::T) where {T <: AbstractVector} = lpdist(x, y, 1)
+
+
+## dot products
+"""
     dot(x, y)
     x ⋅ y
 
