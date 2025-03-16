@@ -1182,7 +1182,7 @@ end
 end
 
 @testset "zero-length generic matvec" begin
-    m = SizedArrays.SizedArray{(2,2)}(reshape(1:4, 2, 2))
+    m = SizedArrays.SizedArray{(2,2)}(ones(2,2))
     A = fill(m, 2, 0)
     v = fill(m, size(A,2))
     w = similar(v, size(A,1))
