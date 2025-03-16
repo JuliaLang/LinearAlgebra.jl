@@ -962,7 +962,7 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
         end
         for k = eachindex(B)
             aoffs = (k-1)*Astride
-            b = @stable_muladdmul MulAddMul(alpha,beta)(B[k])
+            b = @stable_muladdmul MulAddMul(alpha,false)(B[k])
             for i = eachindex(C)
                 C[i] += A[aoffs + i] * b
             end
