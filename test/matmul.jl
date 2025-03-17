@@ -1188,6 +1188,9 @@ end
     w = similar(v, size(A,1))
     mul!(w, A, v)
     @test all(iszero, w)
+    A = fill(m, 0, 2)
+    mul!(w, A', v)
+    @test all(iszero, w)
 end
 
 end # module TestMatmul
