@@ -951,20 +951,18 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
                             alpha::Number, beta::Number)
     Astride = size(A, 1)
     @inbounds begin
-        for i = eachindex(C)
-            if !iszero(beta)
-                C[i] *= beta
-            elseif length(B) == 0
+        for i in eachindex(C)
+            if length(B) == 0
                 C[i] = false
             else
-                C[i] = zero(A[i]*B[1] + A[i]*B[1])
+                @stable_muladdmul _modify!(MulAddMul(alpha, beta), A[i]*B[1], C, i)
             end
         end
-        for k = eachindex(B)
+        for k in @view eachindex(B)[2:end]
             aoffs = (k-1)*Astride
-            b = @stable_muladdmul MulAddMul(alpha,false)(B[k])
-            for i = eachindex(C)
-                C[i] += A[aoffs + i] * b
+            bα = @stable_muladdmul MulAddMul(alpha,false)(B[k])
+            for i in eachindex(C)
+                C[i] += A[aoffs + i] * bα
             end
         end
     end
