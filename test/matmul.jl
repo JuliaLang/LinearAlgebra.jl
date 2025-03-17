@@ -6,6 +6,11 @@ using Base: rtoldefault
 using Test, LinearAlgebra, Random
 using LinearAlgebra: mul!, Symmetric, Hermitian
 
+const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+
+isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
+using .Main.SizedArrays
+
 ## Test Julia fallbacks to BLAS routines
 
 mul_wrappers = [
@@ -1174,6 +1179,18 @@ end
         @test_throws "expected size: (2, 2)" LinearAlgebra.matmul2x2!(zeros(T,2,2), 'N', 'N', zeros(T,2,3), zeros(T,3,2))
         @test_throws "expected size: (2, 2)" LinearAlgebra.matmul2x2!(zeros(T,2,3), 'N', 'N', zeros(T,2,2), zeros(T,2,3))
     end
+end
+
+@testset "zero-length generic matvec" begin
+    m = SizedArrays.SizedArray{(2,2)}(ones(2,2))
+    A = fill(m, 2, 0)
+    v = fill(m, size(A,2))
+    w = similar(v, size(A,1))
+    mul!(w, A, v)
+    @test all(iszero, w)
+    A = fill(m, 0, 2)
+    mul!(w, A', v)
+    @test all(iszero, w)
 end
 
 end # module TestMatmul
