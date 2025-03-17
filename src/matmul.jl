@@ -932,7 +932,7 @@ function __generic_matvecmul!(f::F, C::AbstractVector, A::AbstractVecOrMat, B::A
     @inbounds begin
         if length(B) == 0
             for k = eachindex(C)
-                @stable_muladdmul _modify!(MulAddMul(alpha,beta), false, C, k)
+                @stable_muladdmul _modify!(MulAddMul(alpha,beta), zero(eltype(C)), C, k)
             end
         else
             for k = eachindex(C)
