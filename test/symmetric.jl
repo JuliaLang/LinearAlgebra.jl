@@ -1163,4 +1163,19 @@ end
     end
 end
 
+@testset "copyto! with mismatched uplo" begin
+    for (S,tf) in ((Symmetric, transpose), (Hermitian, adjoint))
+        for (uplo1,uplo2) in [(:U,:L), (:L, :U)]
+            M = Matrix{Complex{BigFloat}}(undef, 2, 2)
+            M[1,1] = M[2,2] = 3
+            isupper = uplo1 == :U
+            M[1+!isupper, 1+isupper] = 4+3im
+            H1 = S(M, uplo1)
+            H2 = 2 * S(tf(M), uplo2)
+            copyto!(H2, H1)
+            @test H2 == H1
+        end
+    end
+end
+
 end # module TestSymmetric
