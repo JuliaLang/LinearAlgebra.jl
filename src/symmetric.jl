@@ -445,8 +445,6 @@ adjoint(A::Hermitian) = A
 transpose(A::Symmetric) = A
 adjoint(A::Symmetric{<:Real}) = A
 transpose(A::Hermitian{<:Real}) = A
-adjoint(A::Symmetric) = Adjoint(A)
-transpose(A::Hermitian) = Transpose(A)
 
 real(A::Symmetric{<:Real}) = A
 real(A::Hermitian{<:Real}) = A
