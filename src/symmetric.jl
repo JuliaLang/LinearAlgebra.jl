@@ -352,7 +352,7 @@ function copyto!(dest::Symmetric, src::Symmetric)
     elseif src.uplo == dest.uplo
         copytrito!(dest.data, src.data, src.uplo)
     else
-        transpose!(dest.data, Base.unalias(dest.data, src.data))
+        copytrito!(dest.data, transpose(Base.unalias(dest.data, src.data)), dest.uplo)
     end
     return dest
 end
@@ -363,7 +363,7 @@ function copyto!(dest::Hermitian, src::Hermitian)
     elseif src.uplo == dest.uplo
         copytrito!(dest.data, src.data, src.uplo)
     else
-        adjoint!(dest.data, Base.unalias(dest.data, src.data))
+        copytrito!(dest.data, adjoint(Base.unalias(dest.data, src.data)), dest.uplo)
     end
     return dest
 end
