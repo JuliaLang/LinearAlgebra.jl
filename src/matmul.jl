@@ -743,7 +743,7 @@ Base.@constprop :aggressive function herk_wrapper!(C::Union{StridedMatrix{T}, St
     # Result array does not need to be initialized as long as beta==0
     #    C = Matrix{T}(undef, mA, mA)
 
-    if iszero(β) || issymmetric(C)
+    if iszero(β) || ishermitian(C)
         alpha, beta = promote(α, β, zero(T))
         if (alpha isa Union{Bool,T} &&
                 beta isa Union{Bool,T} &&
