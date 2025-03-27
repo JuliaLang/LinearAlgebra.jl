@@ -602,11 +602,7 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
         throw(DimensionMismatch(lazy"output matrix has size: $(size(C)), but should have size $((mA, mA))"))
     end
 
-    if iszero(β)
-        fill!(C, T(0))
-    elseif !isone(β)
-        C .*= β
-    end
+    _rmul_or_fill!(C, β)
     @inbounds if !conjugate
         if aat
             for k ∈ 1:n, j ∈ 1:m
