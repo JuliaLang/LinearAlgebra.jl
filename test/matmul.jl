@@ -542,13 +542,13 @@ end
         a = randn(T, 3, 4)
         csmall = similar(a, 3, 3)
         cbig = similar(a, 4, 4)
-        _generic_matmatmul!(csmall, a, a', true, false)
+        LinearAlgebra._generic_matmatmul!(csmall, a, a', true, false)
         @test csmall ≈ a * a'
-        _generic_matmatmul!(csmall, a, transpose(a), true, false)
+        LinearAlgebra._generic_matmatmul!(csmall, a, transpose(a), true, false)
         @test csmall ≈ a * transpose(a)
-        _generic_matmatmul!(cbig, a', a, true, false)
+        LinearAlgebra._generic_matmatmul!(cbig, a', a, true, false)
         @test cbig ≈ a' * a
-        _generic_matmatmul!(cbig, transpose(a), a, true, false)
+        LinearAlgebra._generic_matmatmul!(cbig, transpose(a), a, true, false)
         @test cbig ≈ transpose(a) * a
     end
 end
