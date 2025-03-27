@@ -570,6 +570,89 @@ Base.@constprop :aggressive function _symm_hemm_generic!(C, tA, tB, A, B, alpha,
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
 end
 
+Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
+                                    α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:Number}
+    mA, nA = lapack_size(tA, A)
+    mB, nB = lapack_size(tB, B)
+    if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
+        matmul_size_check(size(C), (mA, nA), (mB, nB))
+        return _rmul_or_fill!(C, β)
+    end
+    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+
+    if A === B
+        tA_uc = uppercase(tA) # potentially strip a WrapperChar
+        aat = (tA_uc == 'N')
+        blasfn = _valtypeparam(val)
+        if blasfn == BlasFlag.SYRK && T <: Union{Real,Complex} && (iszero(β) || issymmetric(C))
+            return copytri!(generic_syrk!(C, A, false, aat, α, β), 'U')
+        elseif blasfn == BlasFlag.HERK && (iszero(β) || ishermitian(C))
+            return copytri!(generic_syrk!(C, A, true, aat, α, β), 'U', true)
+        end
+    end
+
+    return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
+end
+
+function generic_syrk!(C::StridedMatrix{T}, A::StridedMatrix{T}, conjugate::Bool, aat::Bool, α, β) where {T<:Number}
+    nC = checksquare(C)
+    m, n = size(A)
+    mA = aat ? m : n
+    if nC != mA
+        throw(DimensionMismatch(lazy"output matrix has size: $(size(C)), but should have size $((mA, mA))"))
+    end
+
+    if iszero(β)
+        fill!(C, T(0))
+    elseif !isone(β)
+        C .*= β
+    end
+    @inbounds if !conjugate
+        if aat
+            for k ∈ 1:n, j ∈ 1:m
+                αA_jk = α * A[j, k]
+                for i ∈ 1:j
+                    C[i, j] += A[i, k] * αA_jk
+                end
+            end
+        else
+            for j ∈ 1:n, i ∈ 1:j
+                temp = A[1, i] * A[1, j]
+                for k ∈ 2:m
+                    temp += A[k, i] * A[k, j]
+                end
+                C[i, j] += α * temp
+            end
+        end
+    else
+        if aat
+            for k ∈ 1:n, j ∈ 1:m
+                αA_jk_bar = α * conj(A[j, k])
+                for i ∈ 1:j-1
+                    C[i, j] += A[i, k] * αA_jk_bar
+                end
+                C[j, j] += α * abs2(A[j, k])
+            end
+        else
+            for j ∈ 1:n
+                for i ∈ 1:j-1
+                    temp = conj(A[1, i]) * A[1, j]
+                    for k ∈ 2:m
+                        temp += conj(A[k, i]) * A[k, j]
+                    end
+                    C[i, j] += α * temp
+                end
+                temp = abs2(A[1, j])
+                for k ∈ 2:m
+                    temp += abs2(A[k, j])
+                end
+                C[j, j] += α * temp
+            end
+        end
+    end
+    return C
+end
+
 # legacy method
 Base.@constprop :aggressive generic_matmatmul!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
         _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
