@@ -537,7 +537,7 @@ end
     @test_throws DimensionMismatch LinearAlgebra.herk_wrapper!(A5x5, 'N', A6x5)
 end
 
-@testset "generic syrk & herk"
+@testset "generic syrk & herk" begin
     for T ∈ (BigFloat, Complex{BigFloat})
         a = randn(T, 3, 4)
         csmall = similar(a, 3, 3)
@@ -549,7 +549,7 @@ end
         _generic_matmatmul!(cbig, a', a, true, false)
         @test cbig ≈ a' * a
         _generic_matmatmul!(cbig, transpose(a), a, true, false)
-        @test cbig ≈ tranpose(a) * a
+        @test cbig ≈ transpose(a) * a
     end
 end
 
