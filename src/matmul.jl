@@ -594,9 +594,9 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
     return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
 end
 
-function generic_syrk!(C::StridedMatrix{T}, A::StridedMatrix{T}, conjugate::Bool, aat::Bool, α, β) where {T<:Number}
+function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bool, aat::Bool, α, β) where {T<:Number}
     nC = checksquare(C)
-    m, n = size(A)
+    m, n = size(A, 1), size(A, 2)
     mA = aat ? m : n
     if nC != mA
         throw(DimensionMismatch(lazy"output matrix has size: $(size(C)), but should have size $((mA, mA))"))
