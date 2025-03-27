@@ -595,6 +595,7 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
 end
 
 function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bool, aat::Bool, α, β) where {T<:Number}
+    require_one_based_indexing(C, A)
     nC = checksquare(C)
     m, n = size(A, 1), size(A, 2)
     mA = aat ? m : n
