@@ -128,7 +128,7 @@ function bunchkaufman!(A::StridedMatrix{<:BlasFloat}, rook::Bool = false; check:
 end
 
 bkcopy_oftype(A, S) = eigencopy_oftype(A, S)
-bkcopy_oftype(A::Symmetric{<:Complex}, S) = Symmetric(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), sym_uplo(A.uplo))
+bkcopy_oftype(A::Symmetric{<:Complex}, S) = copyto!(similar(A, S), A)
 
 """
     bunchkaufman(A, rook::Bool=false; check = true) -> S::BunchKaufman
