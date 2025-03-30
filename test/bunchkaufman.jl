@@ -257,4 +257,10 @@ end
     @test B.U * B.D * B.U' ≈ S
 end
 
+@testset "complex Symmetric" begin
+    S = Symmetric(rand(ComplexF64,4,4))
+    B = bunchkaufman(S)
+    @test B.U * B.D * transpose(B.U) ≈ B.P * S * transpose(B.P)
+end
+
 end # module TestBunchKaufman
