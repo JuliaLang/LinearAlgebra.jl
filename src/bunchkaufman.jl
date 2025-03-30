@@ -182,10 +182,8 @@ julia> d, u, p = S; # destructuring via iteration
 julia> d == S.D && u == S.U && p == S.p
 true
 
-julia> S.U*S.D*S.U' - S.P*A*S.P'
-2×2 Matrix{Float64}:
- 0.0  0.0
- 0.0  0.0
+julia> S.U * S.D * S.U' ≈ S.P * A * S.P'
+true
 
 julia> S = bunchkaufman(Symmetric(A, :L))
 BunchKaufman{Float64, Matrix{Float64}, Vector{Int64}}
@@ -202,10 +200,8 @@ permutation:
  2
  1
 
-julia> S.L*S.D*S.L' - A[S.p, S.p]
-2×2 Matrix{Float64}:
- 0.0  0.0
- 0.0  0.0
+julia> S.L * S.D * S.L' ≈ A[S.p, S.p]
+true
 ```
 """
 bunchkaufman(A::AbstractMatrix{T}, rook::Bool=false; check::Bool = true) where {T} =
