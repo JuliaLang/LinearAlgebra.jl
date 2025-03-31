@@ -607,7 +607,7 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
     @inbounds if !conjugate
         if aat
             for k ∈ 1:n, j ∈ 1:m
-                αA_jk = α * A[j, k]
+                αA_jk = A[j, k] * α
                 for i ∈ 1:j
                     C[i, j] += A[i, k] * αA_jk
                 end
@@ -618,17 +618,17 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
                 for k ∈ 2:m
                     temp += A[k, i] * A[k, j]
                 end
-                C[i, j] += α * temp
+                C[i, j] += temp * α
             end
         end
     else
         if aat
             for k ∈ 1:n, j ∈ 1:m
-                αA_jk_bar = α * conj(A[j, k])
+                αA_jk_bar = conj(A[j, k]) * α
                 for i ∈ 1:j-1
                     C[i, j] += A[i, k] * αA_jk_bar
                 end
-                C[j, j] += α * abs2(A[j, k])
+                C[j, j] += abs2(A[j, k]) * α
             end
         else
             for j ∈ 1:n
@@ -637,13 +637,13 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
                     for k ∈ 2:m
                         temp += conj(A[k, i]) * A[k, j]
                     end
-                    C[i, j] += α * temp
+                    C[i, j] += temp * α
                 end
                 temp = abs2(A[1, j])
                 for k ∈ 2:m
                     temp += abs2(A[k, j])
                 end
-                C[j, j] += α * temp
+                C[j, j] += temp * α
             end
         end
     end
