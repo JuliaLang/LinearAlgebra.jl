@@ -593,8 +593,14 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
     return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
 end
 
-#if conjugate is true, computes A A' α + C β if aat is true, and A' A α + C β otherwise
-#if conjugate is false, computes A transpose(A) α + C β if aat is true, and tranpose(A) A α + C β otherwise
+"""
+    generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bool, aat::Bool, α, β) where {T<:Number}
+
+Computes syrk/herk for generic number types. If `conjugate` is false computes syrk, i.e.,
+``A transpose(A) α + C β`` if `aat` is true, and ``transpose(A) A α + C β`` otherwise.
+If `conjugate` is true computes herk, i.e., ``A A' α + C β`` if `aat` is true, and
+``A' A α + C β`` otherwise.
+"""
 function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bool, aat::Bool, α, β) where {T<:Number}
     require_one_based_indexing(C, A)
     nC = checksquare(C)
