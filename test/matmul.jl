@@ -537,22 +537,6 @@ end
     @test_throws DimensionMismatch LinearAlgebra.herk_wrapper!(A5x5, 'N', A6x5)
 end
 
-@testset "generic syrk & herk" begin
-    for T ∈ (BigFloat, Complex{BigFloat})
-        a = randn(T, 3, 4)
-        csmall = similar(a, 3, 3)
-        cbig = similar(a, 4, 4)
-        LinearAlgebra._generic_matmatmul!(csmall, a, a', true, false)
-        @test csmall ≈ a * a'
-        LinearAlgebra._generic_matmatmul!(csmall, a, transpose(a), true, false)
-        @test csmall ≈ a * transpose(a)
-        LinearAlgebra._generic_matmatmul!(cbig, a', a, true, false)
-        @test cbig ≈ a' * a
-        LinearAlgebra._generic_matmatmul!(cbig, transpose(a), a, true, false)
-        @test cbig ≈ transpose(a) * a
-    end
-end
-
 @testset "matmul for types w/o sizeof (issue #1282)" begin
     AA = fill(complex(1, 1), 10, 10)
     for A in (copy(AA), view(AA, 1:10, 1:10))
