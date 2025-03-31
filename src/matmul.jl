@@ -578,7 +578,6 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
         matmul_size_check(size(C), (mA, nA), (mB, nB))
         return _rmul_or_fill!(C, β)
     end
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
 
     if A === B
         tA_uc = uppercase(tA) # potentially strip a WrapperChar
