@@ -539,7 +539,7 @@ end
 
     A5x5, A6x5 = Matrix{Float64}.(undef, ((5, 5), (6, 5)))
     @test_throws DimensionMismatch LinearAlgebra.syrk_wrapper!(A5x5, 'N', A6x5)
-    @test_throws DimensionMismatch LinearAlgebra.herk_wrapper!(A5x5, 'N', A6x5)
+    @test_throws DimensionMismatch LinearAlgebra.herk_wrapper!(complex(A5x5), 'N', complex(A6x5))
 end
 
 @testset "5-arg syrk! & herk!" begin
