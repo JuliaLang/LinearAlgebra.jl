@@ -692,7 +692,7 @@ end
 # the aggressive constprop pushes tA and tB into gemm_wrapper!, which is needed for wrap calls within it
 # to be concretely inferred
 Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
-        alpha::Number, beta::Number) where {T<:BlasFloat}
+        α::Number, β::Number) where {T<:BlasFloat}
     nC = checksquare(C)
     tA_uc = uppercase(tA) # potentially convert a WrapperChar to a Char
     if tA_uc == 'T'
@@ -708,8 +708,8 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
 
     # BLAS.syrk! only updates symmetric C
     # alternatively, make non-zero β a show-stopper for BLAS.syrk!
-    if iszero(beta) || issymmetric(C)
-        α, β = promote(alpha, beta, zero(T))
+    if iszero(β) || issymmetric(C)
+        alpha, beta = promote(α, β, zero(T))
         if (alpha isa Union{Bool,T} &&
                 beta isa Union{Bool,T} &&
                 stride(A, 1) == stride(C, 1) == 1 &&
@@ -717,7 +717,7 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
             return copytri!(BLAS.syrk!('U', tA, alpha, A, beta, C), 'U')
         end
     end
-    return gemm_wrapper!(C, tA, tAt, A, A, alpha, beta)
+    return gemm_wrapper!(C, tA, tAt, A, A, α, β)
 end
 # legacy method
 syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T}, _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
@@ -743,7 +743,7 @@ Base.@constprop :aggressive function herk_wrapper!(C::Union{StridedMatrix{T}, St
     # Result array does not need to be initialized as long as beta==0
     #    C = Matrix{T}(undef, mA, mA)
 
-    if iszero(β) || issymmetric(C)
+    if iszero(β) || ishermitian(C)
         alpha, beta = promote(α, β, zero(T))
         if (alpha isa Union{Bool,T} &&
                 beta isa Union{Bool,T} &&
