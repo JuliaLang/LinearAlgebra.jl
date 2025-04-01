@@ -840,7 +840,10 @@ function lbt_openblas_onload_callback()
     end
 end
 
-# If users want to lazily load a different BLAS, they'd need to either change this call, or
-# clear the datastructures modified by this call and call it again with their own.
-libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, lbt_openblas_onload_callback)
+function __init__()
+    # If users want to lazily load a different BLAS, they'd need to either change this call, or
+    # clear the datastructures modified by this call and call it again with their own.
+    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, lbt_openblas_onload_callback)
+end
+
 end # module LinearAlgebra
