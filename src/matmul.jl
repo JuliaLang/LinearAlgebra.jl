@@ -488,14 +488,13 @@ end
 
 # THE one big BLAS dispatch. This is split into two methods to improve latency
 Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
-                                    α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:BlasFloat}
+                                    α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:Number}
     mA, nA = lapack_size(tA, A)
     mB, nB = lapack_size(tB, B)
     if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
         matmul_size_check(size(C), (mA, nA), (mB, nB))
         return _rmul_or_fill!(C, β)
     end
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
     _syrk_herk_gemm_wrapper!(C, tA, tB, A, B, α, β, val)
     return C
 end
@@ -568,29 +567,6 @@ function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.HEMM})
 end
 Base.@constprop :aggressive function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.NONE})
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
-end
-
-Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
-                                    α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:Number}
-    mA, nA = lapack_size(tA, A)
-    mB, nB = lapack_size(tB, B)
-    if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
-        matmul_size_check(size(C), (mA, nA), (mB, nB))
-        return _rmul_or_fill!(C, β)
-    end
-
-    if A === B
-        tA_uc = uppercase(tA) # potentially strip a WrapperChar
-        aat = (tA_uc == 'N')
-        blasfn = _valtypeparam(val)
-        if blasfn == BlasFlag.SYRK && T <: Union{Real,Complex} && (iszero(β) || issymmetric(C))
-            return copytri!(generic_syrk!(C, A, false, aat, α, β), 'U')
-        elseif blasfn == BlasFlag.HERK && isreal(α) && isreal(β) && (iszero(β) || ishermitian(C))
-            return copytri!(generic_syrk!(C, A, true, aat, α, β), 'U', true)
-        end
-    end
-
-    return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
 end
 
 """
@@ -800,13 +776,24 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
         if (alpha isa Union{Bool,T} &&
                 beta isa Union{Bool,T} &&
                 stride(A, 1) == stride(C, 1) == 1 &&
-                _fullstride2(A) && _fullstride2(C))
+                _fullstride2(A) && _fullstride2(C)) &&
+                max(nA, mA) ≥ 4
             return copytri!(BLAS.syrk!('U', tA, alpha, A, beta, C), 'U')
         else
             return copytri!(generic_syrk!(C, A, false, tA_uc == 'N', alpha, beta), 'U')
         end
     end
     return gemm_wrapper!(C, tA, tAt, A, A, α, β)
+end
+Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
+        α::Number, β::Number) where {T<:Number}
+
+    tA_uc = uppercase(tA) # potentially strip a WrapperChar
+    aat = (tA_uc == 'N')
+    if T <: Union{Real,Complex} && (iszero(β) || issymmetric(C))
+        return copytri!(generic_syrk!(C, A, false, aat, α, β), 'U')
+    end
+    return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
 end
 # legacy method
 syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T}, _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
@@ -837,13 +824,25 @@ Base.@constprop :aggressive function herk_wrapper!(C::Union{StridedMatrix{T}, St
         if (alpha isa Union{Bool,T} &&
                 beta isa Union{Bool,T} &&
                 stride(A, 1) == stride(C, 1) == 1 &&
-                _fullstride2(A) && _fullstride2(C))
+                _fullstride2(A) && _fullstride2(C)) &&
+                max(nA, mA) ≥ 4
             return copytri!(BLAS.herk!('U', tA, alpha, A, beta, C), 'U', true)
         else
             return copytri!(generic_syrk!(C, A, true, tA_uc == 'N', alpha, beta), 'U', true)
         end
     end
     return gemm_wrapper!(C, tA, tAt, A, A, α, β)
+end
+Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
+        α::Number, β::Number) where {T<:Number}
+
+    tA_uc = uppercase(tA) # potentially strip a WrapperChar
+    aat = (tA_uc == 'N')
+
+    if isreal(α) && isreal(β) && (iszero(β) || ishermitian(C))
+        return copytri!(generic_syrk!(C, A, true, aat, α, β), 'U', true)
+    end
+    return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
 end
 # legacy method
 herk_wrapper!(C::Union{StridedMatrix{T}, StridedMatrix{Complex{T}}}, tA::AbstractChar, A::Union{StridedVecOrMat{T}, StridedVecOrMat{Complex{T}}},
@@ -896,6 +895,13 @@ end
 gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
         A::StridedVecOrMat{T}, B::StridedVecOrMat{T}, _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
     gemm_wrapper!(C, tA, tB, A, B, _add.alpha, _add.beta)
+# fallback for generic types
+Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
+                       A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
+                       α::Number, β::Number) where {T<:Number}
+    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
+end
 
 # Aggressive constprop helps propagate the values of tA and tB into wrap, which
 # makes the calls concretely inferred
