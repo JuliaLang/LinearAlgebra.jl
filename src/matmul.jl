@@ -793,7 +793,8 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
     if T <: Union{Real,Complex} && (iszero(β) || issymmetric(C))
         return copytri!(generic_syrk!(C, A, false, aat, α, β), 'U')
     end
-    return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
+    tAt = aat ? 'T' : 'N'
+    return _generic_matmatmul!(C, wrap(A, tA), wrap(A, tAt), α, β)
 end
 # legacy method
 syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T}, _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
@@ -838,11 +839,11 @@ Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{T}, tA::Abst
 
     tA_uc = uppercase(tA) # potentially strip a WrapperChar
     aat = (tA_uc == 'N')
-
     if isreal(α) && isreal(β) && (iszero(β) || ishermitian(C))
         return copytri!(generic_syrk!(C, A, true, aat, α, β), 'U', true)
     end
-    return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
+    tAt = aat ? 'C' : 'N'
+    return _generic_matmatmul!(C, wrap(A, tA), wrap(A, tAt), α, β)
 end
 # legacy method
 herk_wrapper!(C::Union{StridedMatrix{T}, StridedMatrix{Complex{T}}}, tA::AbstractChar, A::Union{StridedVecOrMat{T}, StridedVecOrMat{Complex{T}}},
@@ -877,6 +878,7 @@ Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::Ab
     mB, nB = lapack_size(tB, B)
 
     matmul_size_check(size(C), (mA, nA), (mB, nB))
+    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
 
     if C === A || B === C
         throw(ArgumentError("output matrix must not be aliased with input matrix"))
