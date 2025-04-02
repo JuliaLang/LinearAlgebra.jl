@@ -145,6 +145,17 @@ end
         mul!(cbig, transpose(a), a, α, false)
         LinearAlgebra._generic_matmatmul!(cbig_fallback, transpose(a), a, α, false)
         @test cbig ≈ cbig_fallback
+        if T <: Union{Real, Complex}
+            @test issymmetric(csmall)
+            @test issymmetric(cbig)
+        end
+        #make sure generic herk is not called for non-real α
+        mul!(csmall, a, a', α, false)
+        LinearAlgebra._generic_matmatmul!(csmall_fallback, a, a', α, false)
+        @test csmall ≈ csmall_fallback
+        mul!(cbig, a', a, α, false)
+        LinearAlgebra._generic_matmatmul!(cbig_fallback, a', a, α, false)
+        @test cbig ≈ cbig_fallback
     end
 end
 

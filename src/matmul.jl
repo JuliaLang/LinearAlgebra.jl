@@ -585,7 +585,7 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
         blasfn = _valtypeparam(val)
         if blasfn == BlasFlag.SYRK && T <: Union{Real,Complex} && (iszero(β) || issymmetric(C))
             return copytri!(generic_syrk!(C, A, false, aat, α, β), 'U')
-        elseif blasfn == BlasFlag.HERK && (iszero(β) || ishermitian(C))
+        elseif blasfn == BlasFlag.HERK && isreal(α) && isreal(β) && (iszero(β) || ishermitian(C))
             return copytri!(generic_syrk!(C, A, true, aat, α, β), 'U', true)
         end
     end
