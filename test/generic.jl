@@ -123,6 +123,42 @@ end
     @test_throws DimensionMismatch axpy!(α, x, Vector(1:3), y, Vector(1:5))
 end
 
+@testset "generic syrk & herk" begin
+    for T ∈ (BigFloat, Complex{BigFloat}, Quaternion{Float64})
+        α = randn(T)
+        a = randn(T, 3, 4)
+        csmall = similar(a, 3, 3)
+        csmall_fallback = similar(a, 3, 3)
+        cbig = similar(a, 4, 4)
+        cbig_fallback = similar(a, 4, 4)
+        mul!(csmall, a, a', real(α), false)
+        LinearAlgebra._generic_matmatmul!(csmall_fallback, a, a', real(α), false)
+        @test ishermitian(csmall)
+        @test csmall ≈ csmall_fallback
+        mul!(cbig, a', a, real(α), false)
+        LinearAlgebra._generic_matmatmul!(cbig_fallback, a', a, real(α), false)
+        @test ishermitian(cbig)
+        @test cbig ≈ cbig_fallback
+        mul!(csmall, a, transpose(a), α, false)
+        LinearAlgebra._generic_matmatmul!(csmall_fallback, a, transpose(a), α, false)
+        @test csmall ≈ csmall_fallback
+        mul!(cbig, transpose(a), a, α, false)
+        LinearAlgebra._generic_matmatmul!(cbig_fallback, transpose(a), a, α, false)
+        @test cbig ≈ cbig_fallback
+        if T <: Union{Real, Complex}
+            @test issymmetric(csmall)
+            @test issymmetric(cbig)
+        end
+        #make sure generic herk is not called for non-real α
+        mul!(csmall, a, a', α, false)
+        LinearAlgebra._generic_matmatmul!(csmall_fallback, a, a', α, false)
+        @test csmall ≈ csmall_fallback
+        mul!(cbig, a', a, α, false)
+        LinearAlgebra._generic_matmatmul!(cbig_fallback, a', a, α, false)
+        @test cbig ≈ cbig_fallback
+    end
+end
+
 @test !issymmetric(fill(1,5,3))
 @test !ishermitian(fill(1,5,3))
 @test (x = fill(1,3); cross(x,x) == zeros(3))
