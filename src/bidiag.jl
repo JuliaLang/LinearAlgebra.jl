@@ -604,7 +604,7 @@ _mul!(C::AbstractMatrix, A::BiTriSym, B::TriSym, _add::MulAddMul) =
     _bibimul!(C, A, B, _add)
 _mul!(C::AbstractMatrix, A::BiTriSym, B::Bidiagonal, _add::MulAddMul) =
     _bibimul!(C, A, B, _add)
-function _bibimul!(C, A, B, _add)
+function _bibimul!(C, A, B, _add::MulAddMul{ais1,bis0}) where {ais1,bis0}
     require_one_based_indexing(C)
     matmul_size_check(size(C), size(A), size(B))
     n = size(A,1)
@@ -612,8 +612,15 @@ function _bibimul!(C, A, B, _add)
     # We use `_rmul_or_fill!` instead of `_modify!` here since using
     # `_modify!` in the following loop will not update the
     # off-diagonal elements for non-zero beta.
-    _rmul_or_fill!(C, _add.beta)
-    _iszero_alpha(_add) && return C
+    (; alpha, beta) = _add
+    _rmul_or_fill!(C, beta)
+    _iszero_alpha(alpha) && return C
+    _add_nonzeroalpha = alpha isa Bool ? MulAddMul{true,bis0,Bool,typeof(beta)}(true, beta) : _add
+    _bibimul_nonzeroalpha!(C, A, B, _add_nonzeroalpha)
+    C
+end
+function _bibimul_nonzeroalpha!(C, A, B, _add)
+    n = size(A,1)
     if n <= 3
         # naive multiplication
         for I in CartesianIndices(C)
@@ -850,15 +857,22 @@ function __bibimul!(C, A::Bidiagonal, B::Bidiagonal, _add)
     C
 end
 
-_mul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, alpha::Number, beta::Number) =
-    @stable_muladdmul _mul!(C, A, B, MulAddMul(alpha, beta))
-function _mul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
+function _mul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, alpha::Number, beta::Number)
     require_one_based_indexing(C)
     matmul_size_check(size(C), size(A), size(B))
     n = size(A,1)
     iszero(n) && return C
-    _rmul_or_fill!(C, _add.beta)  # see the same use above
-    _iszero_alpha(_add) && return C
+    _rmul_or_fill!(C, beta)  # see the same use above
+    iszero(alpha) && return C
+    if alpha isa Bool
+        @stable_muladdmul _bidimul!(C, A, B, MulAddMul(true, beta))
+    else
+        @stable_muladdmul _bidimul!(C, A, B, MulAddMul(alpha, beta))
+    end
+    C
+end
+function _bidimul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
+    n = size(A,1)
     Al = _diag(A, -1)
     Ad = _diag(A, 0)
     Au = _diag(A, 1)
@@ -894,14 +908,8 @@ function _mul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
     end # inbounds
     C
 end
-
-function _mul!(C::AbstractMatrix, A::Bidiagonal, B::Diagonal, _add::MulAddMul)
-    require_one_based_indexing(C)
-    matmul_size_check(size(C), size(A), size(B))
+function _bidimul!(C::AbstractMatrix, A::Bidiagonal, B::Diagonal, _add::MulAddMul)
     n = size(A,1)
-    iszero(n) && return C
-    _rmul_or_fill!(C, _add.beta)  # see the same use above
-    _iszero_alpha(_add) && return C
     (; dv, ev) = A
     Bd = B.diag
     rowshift = A.uplo == 'U' ? -1 : 1
@@ -926,11 +934,20 @@ function _mul!(C::AbstractMatrix, A::Bidiagonal, B::Diagonal, _add::MulAddMul)
     C
 end
 
-function _mul!(C::Bidiagonal, A::Bidiagonal, B::Diagonal, _add::MulAddMul)
+function _mul!(C::Bidiagonal, A::Bidiagonal, B::Diagonal, alpha::Number, beta::Number)
     matmul_size_check(size(C), size(A), size(B))
     n = size(A,1)
     iszero(n) && return C
-    _iszero_alpha(_add) && return _rmul_or_fill!(C, _add.beta)
+    iszero(alpha) && return _rmul_or_fill!(C, beta)
+    if alpha isa Bool
+        @stable_muladdmul _bidimul!(C, A, B, MulAddMul(true, beta))
+    else
+        @stable_muladdmul _bidimul!(C, A, B, MulAddMul(alpha, beta))
+    end
+    C
+end
+function _bidimul!(C::Bidiagonal, A::Bidiagonal, B::Diagonal, _add::MulAddMul)
+    n = size(A,1)
     Adv, Aev = A.dv, A.ev
     Cdv, Cev = C.dv, C.ev
     Bd = B.diag
