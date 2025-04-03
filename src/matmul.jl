@@ -725,8 +725,9 @@ syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T}, _add
 
 # the aggressive constprop pushes tA and tB into gemm_wrapper!, which is needed for wrap calls within it
 # to be concretely inferred
-Base.@constprop :aggressive function herk_wrapper!(C::Union{StridedMatrix{T}, StridedMatrix{Complex{T}}}, tA::AbstractChar, A::Union{StridedVecOrMat{T}, StridedVecOrMat{Complex{T}}},
-        α::Number, β::Number) where {T<:BlasReal}
+Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{TC}, tA::AbstractChar, A::StridedVecOrMat{TC},
+        α::Number, β::Number) where {TC<:BlasComplex}
+    T = real(TC)
     nC = checksquare(C)
     tA_uc = uppercase(tA) # potentially convert a WrapperChar to a Char
     if tA_uc == 'C'
@@ -740,13 +741,10 @@ Base.@constprop :aggressive function herk_wrapper!(C::Union{StridedMatrix{T}, St
         throw(DimensionMismatch(lazy"output matrix has size: $(size(C)), but should have size $((mA, mA))"))
     end
 
-    # Result array does not need to be initialized as long as beta==0
-    #    C = Matrix{T}(undef, mA, mA)
-
+    # BLAS.herk! only updates hermitian C, alpha and beta need to be real
     if iszero(β) || ishermitian(C)
         alpha, beta = promote(α, β, zero(T))
-        if (alpha isa Union{Bool,T} &&
-                beta isa Union{Bool,T} &&
+        if (alpha isa T && beta isa T &&
                 stride(A, 1) == stride(C, 1) == 1 &&
                 _fullstride2(A) && _fullstride2(C))
             return copytri!(BLAS.herk!('U', tA, alpha, A, beta, C), 'U', true)
