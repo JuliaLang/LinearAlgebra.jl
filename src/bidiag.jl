@@ -600,6 +600,17 @@ function _diag(A::Bidiagonal, k)
     end
 end
 
+"""
+    _MulAddMul_nonzeroalpha(_add::MulAddMul[, ::Val{false}])
+
+Return a new `MulAddMul` with the value of `alpha` potentially set to a literal non-zero
+value if permitted by the type (e.g., for `_add.alpha isa Bool`, in which case the `alpha` is
+set to `true` in the returned instance).
+In other cases, the single-argument call is a no-op and returns `_add` without modifications.
+
+In addition, if `Val(false)` is provided as the second argument,
+`beta` is set to `false` in the returned `MulAddMul` instance.
+"""
 _MulAddMul_nonzeroalpha(_add::MulAddMul) = _add
 function _MulAddMul_nonzeroalpha(_add::MulAddMul{ais1,bis0,A}, ::Val{false}) where {ais1,bis0,A}
     MulAddMul{ais1,true,A,Bool}(_add.alpha, false)
@@ -1144,6 +1155,7 @@ function _dibimul!(C, A, B, _add)
     # ensure that we fill off-band elements in the destination
     _rmul_or_fill!(C, _add.beta)
     _iszero_alpha(_add) && return C
+    # beta is unused in the _dibimul_nonzeroalpha! call, so we set it to false
     _add_nonzeroalpha = _MulAddMul_nonzeroalpha(_add, Val(false))
     _dibimul_nonzeroalpha!(C, A, B, _add_nonzeroalpha)
     C
