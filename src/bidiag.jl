@@ -583,7 +583,7 @@ function _diag(A::Bidiagonal, k)
     elseif k == _offdiagind(A.uplo)
         return A.ev
     else
-        return diag(A, k)
+        return diagview(A, k)
     end
 end
 
