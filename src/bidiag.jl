@@ -298,14 +298,6 @@ function permutedims(B::Bidiagonal, perm)
     Base.checkdims_perm(axes(B), axes(B), perm)
     NTuple{2}(perm) == (2, 1) ? permutedims(B) : B
 end
-function Base.copy(aB::Adjoint{<:Any,<:Bidiagonal})
-    B = aB.parent
-    return Bidiagonal(map(x -> copy.(adjoint.(x)), (B.dv, B.ev))..., B.uplo == 'U' ? :L : :U)
-end
-function Base.copy(tB::Transpose{<:Any,<:Bidiagonal})
-    B = tB.parent
-    return Bidiagonal(map(x -> copy.(transpose.(x)), (B.dv, B.ev))..., B.uplo == 'U' ? :L : :U)
-end
 
 @noinline function throw_zeroband_error(A)
     uplo = A.uplo
@@ -1397,15 +1389,9 @@ function /(D::Diagonal, B::Bidiagonal)
     return B.uplo == 'U' ? UpperTriangular(A) : LowerTriangular(A)
 end
 
-/(A::AbstractMatrix, B::Transpose{<:Any,<:Bidiagonal}) = A / copy(B)
-/(A::AbstractMatrix, B::Adjoint{<:Any,<:Bidiagonal}) = A / copy(B)
 # disambiguation
 /(A::AdjointAbsVec, B::Bidiagonal) = adjoint(adjoint(B) \ parent(A))
 /(A::TransposeAbsVec, B::Bidiagonal) = transpose(transpose(B) \ parent(A))
-/(A::AdjointAbsVec, B::Transpose{<:Any,<:Bidiagonal}) = adjoint(adjoint(B) \ parent(A))
-/(A::TransposeAbsVec, B::Transpose{<:Any,<:Bidiagonal}) = transpose(transpose(B) \ parent(A))
-/(A::AdjointAbsVec, B::Adjoint{<:Any,<:Bidiagonal}) = adjoint(adjoint(B) \ parent(A))
-/(A::TransposeAbsVec, B::Adjoint{<:Any,<:Bidiagonal}) = transpose(transpose(B) \ parent(A))
 
 factorize(A::Bidiagonal) = A
 function inv(B::Bidiagonal{T}) where T
