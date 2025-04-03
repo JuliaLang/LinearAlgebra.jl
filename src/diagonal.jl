@@ -438,8 +438,8 @@ function _lmul!(D::Diagonal, A::UpperOrLowerTriangular)
     return TriWrapper(P)
 end
 
-@inline _modify_nonzeroalpha!(x, out, ind, alpha, beta) = @stable_muladdmul _modify!(MulAddMul(alpha,beta), x, out, ind)
-@inline _modify_nonzeroalpha!(x, out, ind, ::Bool, beta) = @stable_muladdmul _modify!(MulAddMul(true,beta), x, out, ind)
+@propagate_inbounds _modify_nonzeroalpha!(x, out, ind, alpha, beta) = @stable_muladdmul _modify!(MulAddMul(alpha,beta), x, out, ind)
+@propagate_inbounds _modify_nonzeroalpha!(x, out, ind, ::Bool, beta) = @stable_muladdmul _modify!(MulAddMul(true,beta), x, out, ind)
 
 @inline function __muldiag_nonzeroalpha!(out, D::Diagonal, B, alpha::Number, beta::Number)
     @inbounds for j in axes(B, 2)
