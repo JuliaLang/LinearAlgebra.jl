@@ -639,10 +639,8 @@ function _ldiv_Diagonal_loop!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOr
 end
 function _ldiv_Diagonal_loop!(B::StridedVecOrMat, D::Diagonal, A::StridedVecOrMat)
     dd = D.diag
-    @inbounds for j in axes(A,2)
-        @simd for i in axes(A,1)
-            B[i, j] = dd[i] \ A[i, j]
-        end
+    @inbounds for j in axes(A,2), i in axes(A,1)
+        B[i, j] = dd[i] \ A[i, j]
     end
     B
 end
