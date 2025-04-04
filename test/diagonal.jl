@@ -1481,4 +1481,11 @@ end
     @test ishermitian(D) == ishermitian(A)
 end
 
+@testset "setindex! with BandIndex" begin
+    D = Diagonal(zeros(2))
+    D[LinearAlgebra.BandIndex(0,2)] = 1
+    @test D[2,2] == 1
+    @test_throws "cannot set off-diagonal entry" D[LinearAlgebra.BandIndex(1,1)] = 1
+end
+
 end # module TestDiagonal

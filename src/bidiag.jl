@@ -178,6 +178,19 @@ end
     return A
 end
 
+@inline function setindex!(A::Bidiagonal, x, b::BandIndex)
+    @boundscheck checkbounds(A, b)
+    if b.band == 0
+        @inbounds A.dv[b.index] = x
+    elseif b.band ∈ (-1,1) && b.band == _offdiagind(A.uplo)
+        @inbounds A.ev[b.index] = x
+    elseif !iszero(x)
+        throw(ArgumentError(LazyString(lazy"cannot set entry $(to_indices(A, (b,))) off the ",
+            A.uplo == 'U' ? "upper" : "lower", " bidiagonal band to a nonzero value ", x)))
+    end
+    return A
+end
+
 Base._reverse(A::Bidiagonal, dims) = reverse!(Matrix(A); dims)
 Base._reverse(A::Bidiagonal, ::Colon) = Bidiagonal(reverse(A.dv), reverse(A.ev), A.uplo == 'U' ? :L : :U)
 
