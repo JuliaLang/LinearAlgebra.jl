@@ -144,6 +144,8 @@ const LowerOrUnitLowerTriangular{T,S<:AbstractMatrix{T}} = Union{LowerTriangular
 const UpperOrLowerTriangular{T,S<:AbstractMatrix{T}} = Union{UpperOrUnitUpperTriangular{T,S}, LowerOrUnitLowerTriangular{T,S}}
 const UnitUpperOrUnitLowerTriangular{T,S<:AbstractMatrix{T}} = Union{UnitUpperTriangular{T,S}, UnitLowerTriangular{T,S}}
 
+const UpperOrLowerTriangularStrided{T,S<:StridedMatrix{T}} = UpperOrLowerTriangular{T,S}
+
 uppertriangular(M) = UpperTriangular(M)
 lowertriangular(M) = LowerTriangular(M)
 
@@ -1116,9 +1118,18 @@ for (TA, TB) in ((:AbstractTriangular, :AbstractMatrix),
         if isone(alpha) && iszero(beta)
             return _trimul!(C, A, B)
         else
-            return generic_matmatmul!(C, 'N', 'N', A, B, alpha, beta)
+            return generic_matmatmulNN!(C, A, B, alpha, beta)
         end
     end
+end
+
+generic_matmatmulNN!(C, A, B, alpha, beta) = generic_matmatmul!(C, 'N', 'N', A, B, alpha, beta)
+# Optimization for strided matrices, where we know that _generic_matmatmul! will be taken 
+for (TA, TB) in ((:UpperOrLowerTriangularStrided, :StridedMatrix),
+                    (:StridedMatrix, :UpperOrLowerTriangularStrided),
+                    (:UpperOrLowerTriangularStrided, :UpperOrLowerTriangularStrided)
+                )
+    @eval generic_matmatmulNN!(C, A::$TA, B::$TB, alpha, beta) = _generic_matmatmul!(C, A, B, alpha, beta)
 end
 
 ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) = _ldiv!(C, A, B)
