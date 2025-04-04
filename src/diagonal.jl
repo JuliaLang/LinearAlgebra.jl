@@ -218,7 +218,7 @@ zeroslike(::Type{M}, sz::Tuple{Integer, Vararg{Integer}}) where {M<:AbstractMatr
     r
 end
 
-function setindex!(D::Diagonal, v, i::Int, j::Int)
+@inline function setindex!(D::Diagonal, v, i::Int, j::Int)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds D.diag[i] = v
@@ -228,6 +228,15 @@ function setindex!(D::Diagonal, v, i::Int, j::Int)
     return D
 end
 
+@inline function setindex!(D::Diagonal, v, b::BandIndex)
+    @boundscheck checkbounds(D, b)
+    if b.band == 0
+        @inbounds D.diag[b.index] = v
+    elseif !iszero(v)
+        throw(ArgumentError(lazy"cannot set off-diagonal entry $(to_indices(D, (b,))) to a nonzero value ($v)"))
+    end
+    return D
+end
 
 ## structured matrix methods ##
 function Base.replace_in_print_matrix(A::Diagonal,i::Integer,j::Integer,s::AbstractString)

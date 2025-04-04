@@ -1205,4 +1205,18 @@ end
     @test rmul!(B, D) == B2
 end
 
+@testset "setindex! with BandIndex" begin
+    B = Bidiagonal(zeros(3), zeros(2), :U)
+    B[LinearAlgebra.BandIndex(0,2)] = 1
+    @test B[2,2] == 1
+    B[LinearAlgebra.BandIndex(1,1)] = 2
+    @test B[1,2] == 2
+    @test_throws "cannot set entry $((1,3)) off the upper bidiagonal band" B[LinearAlgebra.BandIndex(2,1)] = 2
+
+    B = Bidiagonal(zeros(3), zeros(2), :L)
+    B[LinearAlgebra.BandIndex(-1,1)] = 2
+    @test B[2,1] == 2
+    @test_throws "cannot set entry $((3,1)) off the lower bidiagonal band" B[LinearAlgebra.BandIndex(-2,1)] = 2
+end
+
 end # module TestBidiagonal
