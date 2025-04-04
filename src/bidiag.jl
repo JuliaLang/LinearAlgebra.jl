@@ -642,35 +642,46 @@ function _bibimul!(C, A, B, _add::MulAddMul)
 end
 function _bibimul_nonzeroalpha!(C, A, B, _add)
     n = size(A,1)
-    if n <= 3
+    if n == 1
         # naive multiplication
-        for I in CartesianIndices(C)
-            C[I] += _add(sum(A[I[1], k] * B[k, I[2]] for k in axes(A,2)))
-        end
+        @inbounds C[1,1] += _add(A[1,1] * B[1,1])
         return C
     end
     @inbounds begin
         # first column of C
         C[1,1] += _add(A[1,1]*B[1,1] + A[1, 2]*B[2,1])
         C[2,1] += _add(A[2,1]*B[1,1] + A[2,2]*B[2,1])
-        C[3,1] += _add(A[3,2]*B[2,1])
+        if n >= 3
+            C[3,1] += _add(A[3,2]*B[2,1])
+        end
         # second column of C
         C[1,2] += _add(A[1,1]*B[1,2] + A[1,2]*B[2,2])
-        C[2,2] += _add(A[2,1]*B[1,2] + A[2,2]*B[2,2] + A[2,3]*B[3,2])
-        C[3,2] += _add(A[3,2]*B[2,2] + A[3,3]*B[3,2])
-        C[4,2] += _add(A[4,3]*B[3,2])
+        C22 = A[2,1]*B[1,2] + A[2,2]*B[2,2]
+        if n >= 3
+            C[2,2] += _add(C22 + A[2,3]*B[3,2])
+            C[3,2] += _add(A[3,2]*B[2,2] + A[3,3]*B[3,2])
+            if n >= 4
+                C[4,2] += _add(A[4,3]*B[3,2])
+            end
+        else
+            C[2,2] += _add(C22)
+        end
     end # inbounds
     # middle columns
     __bibimul!(C, A, B, _add)
     @inbounds begin
-        C[n-3,n-1] += _add(A[n-3,n-2]*B[n-2,n-1])
-        C[n-2,n-1] += _add(A[n-2,n-2]*B[n-2,n-1] + A[n-2,n-1]*B[n-1,n-1])
-        C[n-1,n-1] += _add(A[n-1,n-2]*B[n-2,n-1] + A[n-1,n-1]*B[n-1,n-1] + A[n-1,n]*B[n,n-1])
-        C[n,  n-1] += _add(A[n,n-1]*B[n-1,n-1] + A[n,n]*B[n,n-1])
+        if n >= 4
+            C[n-3,n-1] += _add(A[n-3,n-2]*B[n-2,n-1])
+            C[n-2,n-1] += _add(A[n-2,n-2]*B[n-2,n-1] + A[n-2,n-1]*B[n-1,n-1])
+            C[n-1,n-1] += _add(A[n-1,n-2]*B[n-2,n-1] + A[n-1,n-1]*B[n-1,n-1] + A[n-1,n]*B[n,n-1])
+            C[n,  n-1] += _add(A[n,n-1]*B[n-1,n-1] + A[n,n]*B[n,n-1])
+        end
         # last column of C
-        C[n-2,  n] += _add(A[n-2,n-1]*B[n-1,n])
-        C[n-1,  n] += _add(A[n-1,n-1]*B[n-1,n  ] + A[n-1,n]*B[n,n  ])
-        C[n,    n] += _add(A[n,n-1]*B[n-1,n  ] + A[n,n]*B[n,n  ])
+        if n >= 3
+            C[n-2,  n] += _add(A[n-2,n-1]*B[n-1,n])
+            C[n-1,  n] += _add(A[n-1,n-1]*B[n-1,n  ] + A[n-1,n]*B[n,n  ])
+            C[n,    n] += _add(A[n,n-1]*B[n-1,n  ] + A[n,n]*B[n,n  ])
+        end
     end # inbounds
     C
 end
