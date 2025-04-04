@@ -711,9 +711,9 @@ function __bibimul!(C, A, B::Bidiagonal, _add)
     Al = _diag(A, -1)
     Ad = _diag(A, 0)
     Au = _diag(A, 1)
-    Bd = _diag(B, 0)
+    Bd = B.dv
     if B.uplo == 'U'
-        Bu = _diag(B, 1)
+        Bu = B.ev
         @inbounds begin
             for j in 3:n-2
                 Aj₋2j₋1 = Au[j-2]
@@ -732,7 +732,7 @@ function __bibimul!(C, A, B::Bidiagonal, _add)
             end
         end
     else # B.uplo == 'L'
-        Bl = _diag(B, -1)
+        Bl = B.ev
         @inbounds begin
             for j in 3:n-2
                 Aj₋1j   = Au[j-1]
@@ -758,9 +758,9 @@ function __bibimul!(C, A::Bidiagonal, B, _add)
     Bl = _diag(B, -1)
     Bd = _diag(B, 0)
     Bu = _diag(B, 1)
-    Ad = _diag(A, 0)
+    Ad = A.dv
     if A.uplo == 'U'
-        Au = _diag(A, 1)
+        Au = A.ev
         @inbounds begin
             for j in 3:n-2
                 Aj₋2j₋1 = Au[j-2]
@@ -780,7 +780,7 @@ function __bibimul!(C, A::Bidiagonal, B, _add)
             end
         end
     else # A.uplo == 'L'
-        Al = _diag(A, -1)
+        Al = A.ev
         @inbounds begin
             for j in 3:n-2
                 Aj₋1j₋1 = Ad[j-1]
@@ -804,11 +804,11 @@ function __bibimul!(C, A::Bidiagonal, B, _add)
 end
 function __bibimul!(C, A::Bidiagonal, B::Bidiagonal, _add)
     n = size(A,1)
-    Ad = _diag(A, 0)
-    Bd = _diag(B, 0)
+    Ad = A.dv
+    Bd = B.dv
     if A.uplo == 'U' && B.uplo == 'U'
-        Au = _diag(A, 1)
-        Bu = _diag(B, 1)
+        Au = A.ev
+        Bu = B.ev
         @inbounds begin
             for j in 3:n-2
                 Aj₋2j₋1 = Au[j-2]
@@ -824,8 +824,8 @@ function __bibimul!(C, A::Bidiagonal, B::Bidiagonal, _add)
             end
         end
     elseif A.uplo == 'U' && B.uplo == 'L'
-        Au = _diag(A, 1)
-        Bl = _diag(B, -1)
+        Au = A.ev
+        Bl = B.ev
         @inbounds begin
             for j in 3:n-2
                 Aj₋1j   = Au[j-1]
@@ -841,8 +841,8 @@ function __bibimul!(C, A::Bidiagonal, B::Bidiagonal, _add)
             end
         end
     elseif A.uplo == 'L' && B.uplo == 'U'
-        Al = _diag(A, -1)
-        Bu = _diag(B, 1)
+        Al = A.ev
+        Bu = B.ev
         @inbounds begin
             for j in 3:n-2
                 Aj₋1j₋1 = Ad[j-1]
@@ -858,8 +858,8 @@ function __bibimul!(C, A::Bidiagonal, B::Bidiagonal, _add)
             end
         end
     else # A.uplo == 'L' && B.uplo == 'L'
-        Al = _diag(A, -1)
-        Bl = _diag(B, -1)
+        Al = A.ev
+        Bl = B.ev
         @inbounds begin
             for j in 3:n-2
                 Ajj     = Ad[j]
