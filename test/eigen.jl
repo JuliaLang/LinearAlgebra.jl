@@ -279,4 +279,13 @@ end
     @test λ == [1.0, 8.0]
 end
 
+@testset "SEBA algorithm for real matrices" begin
+    A = [1.0 0.0; 0.0 1.0]
+    B = [cos(pi/3) -sin(pi/3); sin(pi/3) cos(pi/3)]
+    S, R = seba(B*A)
+    @test S == [0.0 1.0; 1.0 0.0]
+    @test R ≈ [sin(pi/3) -cos(pi/3); cos(pi/3) sin(pi/3)]
+end
+
+
 end # module TestEigen
