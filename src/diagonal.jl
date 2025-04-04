@@ -604,7 +604,7 @@ function _rdiv!(B::AbstractVecOrMat, A::AbstractVecOrMat, D::Diagonal)
     @inbounds for j in axes(A,2)
         ddj = dd[j]
         iszero(ddj) && throw(SingularException(j))
-        @simd for i in axes(A,1)
+        for i in axes(A,1)
             B[i, j] = A[i, j] / ddj
         end
     end
