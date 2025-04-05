@@ -1359,7 +1359,13 @@ _iszero(V) = iszero(V)
 # A Base.FastContiguousSubArray view of a StridedArray
 FastContiguousSubArrayStrided{T,N,P<:StridedArray,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
 # using mapreduce instead of all permits vectorization
-_iszero(V::FastContiguousSubArrayStrided) = mapreduce(iszero, &, V, init=true)
+function _iszero(V::FastContiguousSubArrayStrided)
+    ret = true
+    for i in eachindex(V)
+        ret &= iszero(@inbounds V[i])
+    end
+    ret
+end
 
 """
     istriu(A::AbstractMatrix, k::Integer = 0) -> Bool
