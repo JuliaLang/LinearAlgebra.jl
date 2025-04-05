@@ -178,7 +178,7 @@ end
 parent(A::UpperOrLowerTriangular) = A.data
 
 # For strided matrices, we may only loop over the filled triangle
-copy(A::UpperOrLowerTriangular{<:Any, <:StridedMaybeAdjOrTransMat}) = copyto!(similar(A), A)
+copy(A::UpperOrLowerTriangular{<:Any, <:StridedMaybeAdjOrTransMat}) = copy!(similar(A), A)
 
 # then handle all methods that requires specific handling of upper/lower and unit diagonal
 
@@ -651,7 +651,7 @@ Base.@constprop :aggressive function copytrito_triangular!(Bdata, Adata, uplo, u
         BLAS.chkuplo(uplo)
         LAPACK.lacpy_size_check(size(Bdata), sz)
         # only the diagonal is copied in this case
-        copyto!(diagview(Bdata), diagview(Adata))
+        copy!(diagview(Bdata), diagview(Adata))
     end
     return Bdata
 end
@@ -1061,15 +1061,17 @@ isunit_char(::UnitUpperTriangular) = 'U'
 isunit_char(::LowerTriangular) = 'N'
 isunit_char(::UnitLowerTriangular) = 'U'
 
+_copy_or_copyto!(dest, src) = ndims(dest) == ndims(src) ? copy!(dest, src) : copyto!(dest, src)
+
 # generic fallback for AbstractTriangular matrices outside of the four subtypes provided here
 _trimul!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVector) =
-    lmul!(A, copyto!(C, B))
+    lmul!(A, _copy_or_copyto!(C, B))
 _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractMatrix) =
-    lmul!(A, copyto!(C, B))
+    lmul!(A, copy!(C, B))
 _trimul!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) =
-    rmul!(copyto!(C, A), B)
+    rmul!(copy!(C, A), B)
 _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractTriangular) =
-    lmul!(A, copyto!(C, B))
+    lmul!(A, copy!(C, B))
 # redirect for UpperOrLowerTriangular
 _trimul!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVector) =
     generic_trimatmul!(C, uplo_char(A), isunit_char(A), wrapperop(parent(A)), _unwrap_at(parent(A)), B)
@@ -1130,9 +1132,9 @@ end
 ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) = _ldiv!(C, A, B)
 # generic fallback for AbstractTriangular, directs to 2-arg [l/r]div!
 _ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) =
-    ldiv!(A, copyto!(C, B))
+    ldiv!(A, _copy_or_copyto!(C, B))
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) =
-    rdiv!(copyto!(C, A), B)
+    rdiv!(copy!(C, A), B)
 # redirect for UpperOrLowerTriangular to generic_*div!
 _ldiv!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
     generic_trimatdiv!(C, uplo_char(A), isunit_char(A), wrapperop(parent(A)), _unwrap_at(parent(A)), B)
@@ -1210,7 +1212,7 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
             elseif p == Inf
                 return inv(LAPACK.trcon!('I', $uploc, $isunitc, A.data))
             else # use fallback
-                return cond(copyto!(similar(parent(A)), A), p)
+                return cond(copy!(similar(parent(A)), A), p)
             end
         end
     end
@@ -1236,7 +1238,7 @@ end
 # division
 function generic_trimatdiv!(C::StridedVecOrMat{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVecOrMat{T}) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1
-        LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : copy!(C, B))
+        LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : _copy_or_copyto!(C, B))
     else # incompatible with LAPACK
         @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
     end
@@ -1968,7 +1970,7 @@ function powm!(A0::UpperTriangular, p::Real)
         for i in axes(S,1)
             @inbounds S[i, i] = S[i, i] + 1
         end
-        copyto!(Stmp, S)
+        copy!(Stmp, S)
         mul!(S, A, c)
         ldiv!(Stmp, S)
 
@@ -1976,14 +1978,14 @@ function powm!(A0::UpperTriangular, p::Real)
         for i in axes(S,1)
             @inbounds S[i, i] = S[i, i] + 1
         end
-        copyto!(Stmp, S)
+        copy!(Stmp, S)
         mul!(S, A, c)
         ldiv!(Stmp, S)
     end
     for i in axes(S,1)
         S[i, i] = S[i, i] + 1
     end
-    copyto!(Stmp, S)
+    copy!(Stmp, S)
     mul!(S, A, -p)
     ldiv!(Stmp, S)
     for i in axes(S,1)
@@ -1993,7 +1995,7 @@ function powm!(A0::UpperTriangular, p::Real)
     blockpower!(A0, S, p/(2^s))
     for m = 1:s
         mul!(Stmp.data, S, S)
-        copyto!(S, Stmp)
+        copy!(S, Stmp)
         blockpower!(A0, S, p/(2^(s-m)))
     end
     rmul!(S, normA0^p)
@@ -2180,7 +2182,7 @@ function _find_params_log_quasitriu!(A)
             break
         end
         _sqrt_quasitriu!(A isa UpperTriangular ? parent(A) : A, A)
-        copyto!(AmI, A)
+        copy!(AmI, A)
         for i in axes(AmI,1)
             @inbounds AmI[i,i] -= 1
         end
