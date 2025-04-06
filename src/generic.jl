@@ -1358,7 +1358,7 @@ ishermitian(x::Number) = (x == conj(x))
 _iszero(V) = iszero(V)
 # A Base.FastContiguousSubArray view of a StridedArray
 FastContiguousSubArrayStrided{T,N,P<:StridedArray,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
-# Reducing over the entire array instead of all permits vectorization
+# Reducing over the entire array instead of calling `all` within `iszero` permits vectorization
 # The loop is equivalent to a mapreduce, but is faster to compile
 function _iszero(V::FastContiguousSubArrayStrided)
     ret = true
