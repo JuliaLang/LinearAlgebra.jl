@@ -1180,6 +1180,7 @@ end
     end
     ST = SymTridiagonal(S)
     @test ST == SymTridiagonal(diag(S), diag(S,1))
+    @test convert(SymTridiagonal, S) == ST
 end
 
 end # module TestTridiagonal
