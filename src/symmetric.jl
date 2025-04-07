@@ -442,7 +442,7 @@ issymmetric(A::Hermitian{<:Complex}) = isreal(A)
 issymmetric(A::Symmetric) = true
 
 # check if the symmetry is known from the type
-_issymmetric(::Union{Symmetric, Hermitian{<:Real}}) = true
+_issymmetric(::Union{SymSymTri, Hermitian{<:Real}}) = true
 _issymmetric(::Any) = false
 
 adjoint(A::Hermitian) = A
