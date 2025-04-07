@@ -539,7 +539,17 @@ end
 
     A5x5, A6x5 = Matrix{Float64}.(undef, ((5, 5), (6, 5)))
     @test_throws DimensionMismatch LinearAlgebra.syrk_wrapper!(A5x5, 'N', A6x5)
-    @test_throws DimensionMismatch LinearAlgebra.herk_wrapper!(A5x5, 'N', A6x5)
+    @test_throws DimensionMismatch LinearAlgebra.herk_wrapper!(complex(A5x5), 'N', complex(A6x5))
+end
+
+@testset "5-arg syrk! & herk!" begin
+    for T in (Float32, Float64, ComplexF32, ComplexF64), A in (randn(T, 5), randn(T, 5, 5))
+        B = A' * A
+        C = B isa Number ? [B;;] : Matrix(Hermitian(B))
+        @test mul!(copy(C), A', A, true, 2) ≈ 3C
+        D = Matrix(Hermitian(A * A'))
+        @test mul!(copy(D), A, A', true, 3) ≈ 4D
+    end
 end
 
 @testset "matmul for types w/o sizeof (issue #1282)" begin
