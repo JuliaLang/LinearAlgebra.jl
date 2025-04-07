@@ -173,6 +173,7 @@ _copyto_banded!(dest::SymTridiagonal, src::SymTridiagonal) =
 for func in (:conj, :copy, :real, :imag)
     @eval ($func)(M::SymTridiagonal) = SymTridiagonal(($func)(M.dv), ($func)(M.ev))
 end
+isreal(S::SymTridiagonal) = isreal(S.dv) && isreal(S.ev)
 
 transpose(S::SymTridiagonal) = S
 adjoint(S::SymTridiagonal{<:Number}) = SymTridiagonal(vec(adjoint(S.dv)), vec(adjoint(S.ev)))
@@ -667,6 +668,7 @@ for func in (:conj, :copy, :real, :imag)
         Tridiagonal(($func)(M.dl), ($func)(M.d), ($func)(M.du))
     end
 end
+isreal(T::Tridiagonal) = isreal(T.dl) && isreal(T.d) && isreal(T.du)
 
 adjoint(S::Tridiagonal{<:Number}) = Tridiagonal(vec(adjoint(S.du)), vec(adjoint(S.d)), vec(adjoint(S.dl)))
 adjoint(S::Tridiagonal{<:Number, <:Base.ReshapedArray{<:Number,1,<:Adjoint}}) =

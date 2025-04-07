@@ -1162,4 +1162,14 @@ end
     end
 end
 
+@testset "isreal" begin
+    for M in (SymTridiagonal(ones(2), ones(1)),
+            Tridiagonal(ones(2), ones(3), ones(2)))
+        @test @inferred((M -> Val(isreal(M)))(M)) == Val(true)
+        M = complex.(M)
+        @test isreal(M)
+        @test !isreal(im*M)
+    end
+end
+
 end # module TestTridiagonal

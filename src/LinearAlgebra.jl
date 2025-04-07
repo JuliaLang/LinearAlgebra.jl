@@ -13,7 +13,7 @@ import Base: USE_BLAS64, abs, acos, acosh, acot, acoth, acsc, acsch, adjoint, as
     copy, copyto!, copymutable, cos, cosh, cot, coth, csc, csch, eltype, exp, fill!, floor,
     getindex, hcat, getproperty, imag, inv, invpermuterows!, isapprox, isequal, isone, iszero,
     IndexStyle, kron, kron!, length, log, map, ndims, one, oneunit, parent, permutecols!,
-    permutedims, permuterows!, power_by_squaring, promote_rule, real, sec, sech, setindex!,
+    permutedims, permuterows!, power_by_squaring, promote_rule, real, isreal, sec, sech, setindex!,
     show, similar, sin, sincos, sinh, size, sqrt, strides, stride, tan, tanh, transpose, trunc,
     typed_hcat, vec, view, zero
 import Base: AbstractArray, AbstractMatrix, Array, Matrix

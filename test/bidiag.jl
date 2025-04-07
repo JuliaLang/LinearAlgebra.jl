@@ -1172,4 +1172,12 @@ end
     @test_throws InexactError convert(Bidiagonal, M)
 end
 
+@testset "isreal" begin
+    M = Bidiagonal(ones(2), ones(1), :U)
+    @test @inferred((M -> Val(isreal(M)))(M)) == Val(true)
+    M = complex.(M)
+    @test isreal(M)
+    @test !isreal(im*M)
+end
+
 end # module TestBidiagonal
