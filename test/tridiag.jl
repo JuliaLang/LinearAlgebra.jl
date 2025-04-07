@@ -1172,4 +1172,10 @@ end
     end
 end
 
+@testset "SymTridiagonal from Symmetric" begin
+    S = Symmetric(reshape(1:9, 3, 3))
+    ST = SymTridiagonal(S)
+    @test ST == SymTridiagonal(diag(S), diag(S,1))
+end
+
 end # module TestTridiagonal
