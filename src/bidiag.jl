@@ -1260,7 +1260,7 @@ function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     end
 
     if N == 0
-        return _copy_or_copyto!(c, b)
+        return copyto!(c, b)
     end
 
     zi = findfirst(iszero, A.dv)
