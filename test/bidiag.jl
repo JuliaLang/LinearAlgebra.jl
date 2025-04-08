@@ -362,8 +362,9 @@ Random.seed!(1)
                     @test (x\T)::typediv ≈ x\TM
                     @test (T/x)::typediv ≈ TM/x
                     if !isa(x, Number)
-                        @test Array((T\x)::typediv2) ≈ Array(TM\x)
-                        @test Array((x/T)::typediv2) ≈ Array(x/TM)
+                        U = T.uplo == 'U' ? UpperTriangular : LowerTriangular
+                        @test Array((T\x)::typediv2) ≈ Array(U(TM)\x)
+                        @test Array((x/T)::typediv2) ≈ Array(x/U(TM))
                     end
                     return nothing
                 end
