@@ -734,15 +734,16 @@ end
 end
 
 @testset "istriu/istril forwards to parent" begin
-    @testset "$(nameof(typeof(M)))" for M in [Tridiagonal(rand(n-1), rand(n), rand(n-1)),
+    @testset "$(nameof(typeof(M)))" for M in Any[Tridiagonal(rand(n-1), rand(n), rand(n-1)),
                 Tridiagonal(zeros(n-1), zeros(n), zeros(n-1)),
                 Diagonal(randn(n)),
                 Diagonal(zeros(n)),
+                rand(n,n), zeros(n,n), diagm(1=>1:n-1), diagm(-2=>1:n-2),
                 ]
         @testset for TriT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
             U = TriT(M)
             A = Array(U)
-            for k in -n:n
+            @testset for k in -n:n
                 @test istriu(U, k) == istriu(A, k)
                 @test istril(U, k) == istril(A, k)
             end
@@ -757,6 +758,19 @@ end
         @testset for k in -n:n
             @test istriu(U, k) == istriu(A, k)
             @test istril(U, k) == istril(A, k)
+        end
+    end
+
+    @testset "partly initialized in unit triangular" begin
+        for (T, f) in ((UnitUpperTriangular, istril), (UnitLowerTriangular, istriu))
+            A = Matrix{BigFloat}(undef, 2, 2)
+            isupper = T === UnitUpperTriangular
+            A[1+!isupper, 1+isupper] = 3
+            UU = T(A)
+            UUA = Array(UU)
+            for k in -size(A,1):size(A,2)
+                @test f(UU, k) == f(UUA, k)
+            end
         end
     end
 

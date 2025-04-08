@@ -441,6 +441,10 @@ issymmetric(A::Hermitian{<:Real}) = true
 issymmetric(A::Hermitian{<:Complex}) = isreal(A)
 issymmetric(A::Symmetric) = true
 
+# check if the symmetry is known from the type
+_issymmetric(::Union{SymSymTri, Hermitian{<:Real}}) = true
+_issymmetric(::Any) = false
+
 adjoint(A::Hermitian) = A
 transpose(A::Symmetric) = A
 adjoint(A::Symmetric{<:Real}) = A

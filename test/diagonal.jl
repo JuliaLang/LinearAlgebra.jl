@@ -1481,4 +1481,12 @@ end
     @test ishermitian(D) == ishermitian(A)
 end
 
+@testset "isreal" begin
+    D = Diagonal(ones(2))
+    @test @inferred((D -> Val(isreal(D)))(D)) == Val(true)
+    D = complex.(D)
+    @test isreal(D)
+    @test !isreal(im*D)
+end
+
 end # module TestDiagonal

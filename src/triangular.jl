@@ -376,6 +376,11 @@ istril(A::Transpose, k::Integer=0) = istriu(A.parent, -k)
 istriu(A::Adjoint, k::Integer=0) = istril(A.parent, -k)
 istriu(A::Transpose, k::Integer=0) = istril(A.parent, -k)
 
+istril(U::UpperTriangular, k::Integer=0) = istril(parent(U), max(-1, k))
+istril(U::UnitUpperTriangular, k::Integer=0) = k < 0 ? false : istril(parent(U), k)
+istriu(U::LowerTriangular, k::Integer=0) = istriu(parent(U), min(1, k))
+istriu(U::UnitLowerTriangular, k::Integer=0) = k > 0 ? false : istriu(parent(U), k)
+
 function tril!(A::UpperTriangular{T}, k::Integer=0) where {T}
     if k < 0
         fill!(A.data, zero(T))

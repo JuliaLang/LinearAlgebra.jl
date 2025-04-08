@@ -286,6 +286,7 @@ axes(M::Bidiagonal) = (ax = axes(M.dv, 1); (ax, ax))
 for func in (:conj, :copy, :real, :imag)
     @eval ($func)(M::Bidiagonal) = Bidiagonal(($func)(M.dv), ($func)(M.ev), M.uplo)
 end
+isreal(M::Bidiagonal) = isreal(M.dv) && isreal(M.ev)
 
 adjoint(B::Bidiagonal{<:Number}) = Bidiagonal(vec(adjoint(B.dv)), vec(adjoint(B.ev)), B.uplo == 'U' ? :L : :U)
 adjoint(B::Bidiagonal{<:Number, <:Base.ReshapedArray{<:Number,1,<:Adjoint}}) =

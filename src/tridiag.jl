@@ -111,16 +111,14 @@ function (::Type{SymTri})(A::AbstractMatrix) where {SymTri <: SymTridiagonal}
     checksquare(A)
     du = diag(A, 1)
     d  = diag(A)
-    dl = diag(A, -1)
-    if _checksymmetric(d, du, dl)
-        SymTri(d, du)
-    else
+    if !(_issymmetric(A) || _checksymmetric(d, du, diag(A, -1)))
         throw(ArgumentError("matrix is not symmetric; cannot convert to SymTridiagonal"))
     end
+    return SymTri(d, du)
 end
 
 _checksymmetric(d, du, dl) = all(((x, y),) -> x == transpose(y), zip(du, dl)) && all(issymmetric, d)
-_checksymmetric(A::AbstractMatrix) = _checksymmetric(diagview(A), diagview(A, 1), diagview(A, -1))
+_checksymmetric(A::AbstractMatrix) = _issymmetric(A) || _checksymmetric(diagview(A), diagview(A, 1), diagview(A, -1))
 
 SymTridiagonal{T,V}(S::SymTridiagonal{T,V}) where {T,V<:AbstractVector{T}} = S
 SymTridiagonal{T,V}(S::SymTridiagonal) where {T,V<:AbstractVector{T}} =
@@ -173,6 +171,7 @@ _copyto_banded!(dest::SymTridiagonal, src::SymTridiagonal) =
 for func in (:conj, :copy, :real, :imag)
     @eval ($func)(M::SymTridiagonal) = SymTridiagonal(($func)(M.dv), ($func)(M.ev))
 end
+isreal(S::SymTridiagonal) = isreal(S.dv) && isreal(S.ev)
 
 transpose(S::SymTridiagonal) = S
 adjoint(S::SymTridiagonal{<:Number}) = SymTridiagonal(vec(adjoint(S.dv)), vec(adjoint(S.ev)))
@@ -667,6 +666,7 @@ for func in (:conj, :copy, :real, :imag)
         Tridiagonal(($func)(M.dl), ($func)(M.d), ($func)(M.du))
     end
 end
+isreal(T::Tridiagonal) = isreal(T.dl) && isreal(T.d) && isreal(T.du)
 
 adjoint(S::Tridiagonal{<:Number}) = Tridiagonal(vec(adjoint(S.du)), vec(adjoint(S.d)), vec(adjoint(S.dl)))
 adjoint(S::Tridiagonal{<:Number, <:Base.ReshapedArray{<:Number,1,<:Adjoint}}) =
