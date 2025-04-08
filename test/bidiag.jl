@@ -1180,4 +1180,15 @@ end
     @test !isreal(im*M)
 end
 
+@testset "ldiv! error message" begin
+    C = zeros(2)
+    B = Bidiagonal(1:0, 1:0, :U)
+    msg = "size of result, (2,), does not match the size of b, (0, 1)"
+    @test_throws msg ldiv!(C, B, zeros(0,1))
+    msg = "the first dimension of the Bidiagonal matrix, 0, does not match the length of the right-hand-side, 2"
+    @test_throws msg ldiv!(C, B, zeros(2))
+    msg = "the first dimension of the Bidiagonal matrix, 0, does not match the first dimension of the right-hand-side, 2"
+    @test_throws msg ldiv!(C, B, zeros(2,1))
+end
+
 end # module TestBidiagonal
