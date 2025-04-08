@@ -1250,19 +1250,17 @@ end
 ldiv!(A::Bidiagonal, b::AbstractVecOrMat) = @inline ldiv!(b, A, b)
 function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     require_one_based_indexing(c, A, b)
-    N = size(A, 2)
+    N = size(A, 1)
     mb, nb = size(b, 1), size(b, 2)
     if N != mb
-        throw(DimensionMismatch(lazy"second dimension of A, $N, does not match first dimension of b, $mb"))
+        throw(DimensionMismatch(lazy"first dimension of A, $N, does not match first dimension of b, $mb"))
     end
     mc, nc = size(c, 1), size(c, 2)
     if mc != mb || nc != nb
-        throw(DimensionMismatch(lazy"size of result, ($mc, $nc), does not match the size of b, ($mb, $nb)"))
+        throw(DimensionMismatch(lazy"size of result, $(size(c)), does not match the size of b, $(size(b))"))
     end
 
-    if N == 0
-        return copyto!(c, b)
-    end
+    N == 0 && return c # in this case c and b are also empty
 
     zi = findfirst(iszero, A.dv)
     isnothing(zi) || throw(SingularException(zi))
