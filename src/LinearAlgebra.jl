@@ -788,31 +788,22 @@ function versioninfo(io::IO=stdout)
     println(io, indent, "LinearAlgebra.BLAS.get_num_threads() = ", BLAS.get_num_threads())
     println(io, "Relevant environment variables:")
     env_var_names = [
-        "JULIA_NUM_THREADS",
-        "MKL_DYNAMIC",
-        "MKL_NUM_THREADS",
+        ["JULIA_NUM_THREADS"],
+        ["MKL_DYNAMIC"],
+        ["MKL_NUM_THREADS"],
          # OpenBLAS has a hierarchy of environment variables for setting the
          # number of threads, see
          # https://github.com/xianyi/OpenBLAS/blob/c43ec53bdd00d9423fc609d7b7ecb35e7bf41b85/README.md#setting-the-number-of-threads-using-environment-variables
-        ("OPENBLAS_NUM_THREADS", "GOTO_NUM_THREADS", "OMP_NUM_THREADS"),
+        ["OPENBLAS_NUM_THREADS", "GOTO_NUM_THREADS", "OMP_NUM_THREADS"],
     ]
     printed_at_least_one_env_var = false
     print_var(io, indent, name) = println(io, indent, name, " = ", ENV[name])
     for name in env_var_names
-        if name isa Tuple
-            # If `name` is a Tuple, then find the first environment which is
-            # defined, and disregard the following ones.
-            for nm in name
-                if haskey(ENV, nm)
-                    print_var(io, indent, nm)
-                    printed_at_least_one_env_var = true
-                    break
-                end
-            end
-        else
-            if haskey(ENV, name)
-                print_var(io, indent, name)
+        for nm in name
+            if haskey(ENV, nm)
+                print_var(io, indent, nm)
                 printed_at_least_one_env_var = true
+                break
             end
         end
     end
