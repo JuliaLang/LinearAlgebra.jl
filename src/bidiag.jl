@@ -953,11 +953,10 @@ function _mul!(C::AbstractVecOrMat, A::BiTriSym, B::AbstractVecOrMat, _add::MulA
     nB = size(B,2)
     (iszero(nA) || iszero(nB)) && return C
     iszero(_add.alpha) && return _rmul_or_fill!(C, _add.beta)
-    if nA <= 3
-        # naive multiplication
-        for I in CartesianIndices(C)
-            col = Base.tail(Tuple(I))
-            _modify!(_add, sum(A[I[1], k] * B[k, col...] for k in axes(A,2)), C, I)
+    if nA == 1
+        A11 = @inbounds A[1,1]
+        for i in 1:nB
+            @inbounds _modify!(_add, A11 * B[1,i], C, (1,i))
         end
         return C
     end
