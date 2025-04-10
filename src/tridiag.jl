@@ -635,11 +635,15 @@ axes(M::Tridiagonal) = (ax = axes(M.d,1); (ax, ax))
 
 function Matrix{T}(M::Tridiagonal) where {T}
     A = Matrix{T}(undef, size(M))
+    iszero(size(A,1)) && return A
     if haszero(T) # optimized path for types with zero(T) defined
         size(A,1) > 2 && fill!(A, zero(T))
-        copyto!(diagview(A), M.d)
-        copyto!(diagview(A,1), M.du)
-        copyto!(diagview(A,-1), M.dl)
+        for i in axes(M.dl,1)
+            A[i,i] = M.d[i]
+            A[i+1,i] = M.dl[i]
+            A[i,i+1] = M.du[i]
+        end
+        A[end,end] = M.d[end]
     else
         copyto!(A, M)
     end
