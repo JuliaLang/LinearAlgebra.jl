@@ -189,10 +189,20 @@ end
 #Converting from Bidiagonal to dense Matrix
 function Matrix{T}(A::Bidiagonal) where T
     B = Matrix{T}(undef, size(A))
+    iszero(size(B,1)) && return B
     if haszero(T) # optimized path for types with zero(T) defined
         size(B,1) > 1 && fill!(B, zero(T))
-        copyto!(diagview(B), A.dv)
-        copyto!(diagview(B, _offdiagind(A.uplo)), A.ev)
+        isupper = A.uplo == 'U'
+        if isupper
+            B[1,1] = A.dv[1]
+        end
+        for col in axes(A.ev,1)
+            B[col+!isupper, col+isupper] = A.ev[col]
+            B[col+isupper, col+isupper] = A.dv[col+isupper]
+        end
+        if !isupper
+            B[end,end] = A.dv[end]
+        end
     else
         copyto!(B, A)
     end
