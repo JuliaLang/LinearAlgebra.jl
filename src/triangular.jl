@@ -152,6 +152,12 @@ lowertriangular(U::LowerOrUnitLowerTriangular) = U
 
 Base.dataids(A::UpperOrLowerTriangular) = Base.dataids(A.data)
 
+function Matrix{T}(U::UpperOrLowerTriangular) where {T}
+    M = Matrix{T}(undef, size(U))
+    copyto_unaliased!(M, U)
+    return M
+end
+
 imag(A::UpperTriangular) = UpperTriangular(imag(A.data))
 imag(A::LowerTriangular) = LowerTriangular(imag(A.data))
 imag(A::UpperTriangular{<:Any,<:StridedMaybeAdjOrTransMat}) = imag.(A)
