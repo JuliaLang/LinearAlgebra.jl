@@ -641,14 +641,14 @@ end
     dest[col, col] = U[BandIndex(0,col)]
     dest
 end
-@propagate_inbounds function copy_unaliased_stored!(dest, U::LowerTriangular, col)
+@propagate_inbounds function copy_unaliased_stored!(dest, L::LowerTriangular, col)
     for row in col:lastindex(dest,1)
         dest[row,col] = L.data[row,col]
     end
     dest
 end
-@propagate_inbounds function copy_unaliased_stored!(dest, U::UnitLowerTriangular, col)
-    dest[col, col] = U[BandIndex(0,col)]
+@propagate_inbounds function copy_unaliased_stored!(dest, L::UnitLowerTriangular, col)
+    dest[col, col] = L[BandIndex(0,col)]
     for row in col+1:lastindex(dest,1)
         dest[row,col] = L.data[row,col]
     end
