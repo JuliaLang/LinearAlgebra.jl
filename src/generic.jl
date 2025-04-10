@@ -2079,28 +2079,20 @@ function copytrito!(B::AbstractMatrix, A::AbstractMatrix, uplo::AbstractChar)
     A = Base.unalias(B, A)
     if uplo == 'U'
         LAPACK.lacpy_size_check(size(B), (n < m ? n : m, n))
-        copytrito_upper!(B, A)
+        # extract the parents for UpperTriangular matrices
+        Bv, Av = uppertridata(B), uppertridata(A)
+        for j in axes(A,2), i in axes(A,1)[begin : min(j,end)]
+            @inbounds Bv[i,j] = Av[i,j]
+        end
     else # uplo == 'L'
         LAPACK.lacpy_size_check(size(B), (m, m < n ? m : n))
-        copytrito_lower!(B, A)
+        # extract the parents for LowerTriangular matrices
+        Bv, Av = lowertridata(B), lowertridata(A)
+        for j in axes(A,2), i in axes(A,1)[j:end]
+            @inbounds Bv[i,j] = Av[i,j]
+        end
     end
     return B
-end
-@inline function copytrito_upper!(B, A)
-    # extract the parents for UpperTriangular matrices
-    Bv, Av = uppertridata(B), uppertridata(A)
-    for j in axes(A,2), i in axes(A,1)[begin : min(j,end)]
-        @inbounds Bv[i,j] = Av[i,j]
-    end
-    B
-end
-@inline function copytrito_lower!(B, A)
-    # extract the parents for LowerTriangular matrices
-    Bv, Av = lowertridata(B), lowertridata(A)
-    for j in axes(A,2), i in axes(A,1)[j:end]
-        @inbounds Bv[i,j] = Av[i,j]
-    end
-    B
 end
 # Forward LAPACK-compatible strided matrices to lacpy
 function copytrito!(B::StridedMatrixStride1{T}, A::StridedMatrixStride1{T}, uplo::AbstractChar) where {T<:BlasFloat}
