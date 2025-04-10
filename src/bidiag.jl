@@ -955,7 +955,7 @@ function _mul!(C::AbstractVecOrMat, A::BiTriSym, B::AbstractVecOrMat, _add::MulA
     iszero(_add.alpha) && return _rmul_or_fill!(C, _add.beta)
     if nA == 1
         A11 = @inbounds A[1,1]
-        for i in 1:nB
+        for i in axes(B, 2)
             @inbounds _modify!(_add, A11 * B[1,i], C, (1,i))
         end
         return C

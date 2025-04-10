@@ -1192,4 +1192,12 @@ end
     @test_throws msg ldiv!(C, B, zeros(2,1))
 end
 
+@testset "1-row mul" begin
+    B = Bidiagonal(2:2, 1:0, :U)
+    for v in ([3], fill(3, 1, 4))
+        @test mul!(zero(v), B, v) == 2v
+        @test mul!(2v, B, v, 2, 2) == 8v
+    end
+end
+
 end # module TestBidiagonal
