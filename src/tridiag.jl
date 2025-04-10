@@ -872,9 +872,9 @@ function rmul!(T::Tridiagonal, x::Number)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    T.dl .*= x
-    T.d .*= x
-    T.du .*= x
+    rmul!(T.dl, x)
+    rmul!(T.d, x)
+    rmul!(T.du, x)
     return T
 end
 function lmul!(x::Number, T::Tridiagonal)
@@ -884,9 +884,9 @@ function lmul!(x::Number, T::Tridiagonal)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. T.dl = x * T.dl
-    @. T.d = x * T.d
-    @. T.du = x * T.du
+    lmul!(x, T.dl)
+    lmul!(x, T.d)
+    lmul!(x, T.du)
     return T
 end
 /(A::Tridiagonal, B::Number) = Tridiagonal(A.dl/B, A.d/B, A.du/B)
