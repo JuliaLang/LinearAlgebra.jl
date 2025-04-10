@@ -1334,27 +1334,27 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     isnothing(zi) || throw(SingularException(zi))
 
     if B.uplo == 'L'
-        diagB = B.dv[n]
-        for i in 1:m
-            C[i,n] = A[i,n] / diagB
+        diagB = @inbounds B.dv[n]
+        for i in axes(A,1)
+            @inbounds C[i,n] = A[i,n] / diagB
         end
-        for j in n-1:-1:1
-            diagB = B.dv[j]
-            offdiagB = B.ev[j]
-            for i in 1:m
-                C[i,j] = (A[i,j] - C[i,j+1]*offdiagB)/diagB
+        for j in reverse(axes(A,2)[1:end-1]) # n-1:-1:1
+            diagB = @inbounds B.dv[j]
+            offdiagB = @inbounds B.ev[j]
+            for i in axes(A,1)
+                @inbounds C[i,j] = (A[i,j] - C[i,j+1]*offdiagB)/diagB
             end
         end
     else
-        diagB = B.dv[1]
-        for i in 1:m
-            C[i,1] = A[i,1] / diagB
+        diagB = @inbounds B.dv[1]
+        for i in axes(A,1)
+            @inbounds C[i,1] = A[i,1] / diagB
         end
-        for j in 2:n
-            diagB = B.dv[j]
-            offdiagB = B.ev[j-1]
-            for i = 1:m
-                C[i,j] = (A[i,j] - C[i,j-1]*offdiagB)/diagB
+        for j in axes(A,2)[2:end]
+            diagB = @inbounds B.dv[j]
+            offdiagB = @inbounds B.ev[j-1]
+            for i in axes(A,1)
+                @inbounds C[i,j] = (A[i,j] - C[i,j-1]*offdiagB)/diagB
             end
         end
     end
