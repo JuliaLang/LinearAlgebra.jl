@@ -9,3 +9,18 @@ end
 @testset "Docstrings" begin
     @test isempty(Docs.undocumented_names(LinearAlgebra))
 end
+
+@testset "versioninfo" begin
+    vinfo = sprint(LinearAlgebra.versioninfo)
+    @test occursin("Threading:", vinfo)
+    @test occursin(r"Threads.threadpoolsize\(\) = [0-9]+", vinfo)
+    @test occursin(r"Threads.maxthreadid\(\) = [0-9]+", vinfo)
+    @test occursin(r"LinearAlgebra.BLAS.get_num_threads\(\) = [0-9]+", vinfo)
+    @test occursin("Relevant environment variables:", vinfo)
+    vars = strip(split(vinfo, "Relevant environment variables:")[end])
+    @test any(occursin(vars), [r"JULIA_NUM_THREADS = [0-9]+", r"MKL_DYNAMIC = [0-9]+",
+                r"MKL_NUM_THREADS = [0-9]+",
+                r"OPENBLAS_NUM_THREADS = [0-9]+",
+                r"GOTO_NUM_THREADS = [0-9]+",
+                r"OMP_NUM_THREADS = [0-9]+", r"\[none\]"])
+end

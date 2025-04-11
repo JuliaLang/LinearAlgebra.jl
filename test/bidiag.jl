@@ -362,8 +362,9 @@ Random.seed!(1)
                     @test (x\T)::typediv ≈ x\TM
                     @test (T/x)::typediv ≈ TM/x
                     if !isa(x, Number)
-                        @test Array((T\x)::typediv2) ≈ Array(TM\x)
-                        @test Array((x/T)::typediv2) ≈ Array(x/TM)
+                        U = T.uplo == 'U' ? UpperTriangular : LowerTriangular
+                        @test Array((T\x)::typediv2) ≈ Array(U(TM)\x)
+                        @test Array((x/T)::typediv2) ≈ Array(x/U(TM))
                     end
                     return nothing
                 end
@@ -1170,6 +1171,25 @@ end
     @test B isa Bidiagonal{Int8, OffsetVector{Int8, Vector{Int8}}}
     M = diagm(-1 => [1,2], 1=>[4,5])
     @test_throws InexactError convert(Bidiagonal, M)
+end
+
+@testset "isreal" begin
+    M = Bidiagonal(ones(2), ones(1), :U)
+    @test @inferred((M -> Val(isreal(M)))(M)) == Val(true)
+    M = complex.(M)
+    @test isreal(M)
+    @test !isreal(im*M)
+end
+
+@testset "ldiv! error message" begin
+    C = zeros(2)
+    B = Bidiagonal(1:0, 1:0, :U)
+    msg = "size of result, (2,), does not match the size of b, (0, 1)"
+    @test_throws msg ldiv!(C, B, zeros(0,1))
+    msg = "the first dimension of the Bidiagonal matrix, 0, does not match the length of the right-hand-side, 2"
+    @test_throws msg ldiv!(C, B, zeros(2))
+    msg = "the first dimension of the Bidiagonal matrix, 0, does not match the first dimension of the right-hand-side, 2"
+    @test_throws msg ldiv!(C, B, zeros(2,1))
 end
 
 end # module TestBidiagonal

@@ -352,7 +352,7 @@ function copyto!(dest::Symmetric, src::Symmetric)
     elseif src.uplo == dest.uplo
         copytrito!(dest.data, src.data, src.uplo)
     else
-        transpose!(dest.data, Base.unalias(dest.data, src.data))
+        copytrito!(dest.data, transpose(Base.unalias(dest.data, src.data)), dest.uplo)
     end
     return dest
 end
@@ -363,7 +363,7 @@ function copyto!(dest::Hermitian, src::Hermitian)
     elseif src.uplo == dest.uplo
         copytrito!(dest.data, src.data, src.uplo)
     else
-        adjoint!(dest.data, Base.unalias(dest.data, src.data))
+        copytrito!(dest.data, adjoint(Base.unalias(dest.data, src.data)), dest.uplo)
     end
     return dest
 end
@@ -441,12 +441,14 @@ issymmetric(A::Hermitian{<:Real}) = true
 issymmetric(A::Hermitian{<:Complex}) = isreal(A)
 issymmetric(A::Symmetric) = true
 
+# check if the symmetry is known from the type
+_issymmetric(::Union{SymSymTri, Hermitian{<:Real}}) = true
+_issymmetric(::Any) = false
+
 adjoint(A::Hermitian) = A
 transpose(A::Symmetric) = A
 adjoint(A::Symmetric{<:Real}) = A
 transpose(A::Hermitian{<:Real}) = A
-adjoint(A::Symmetric) = Adjoint(A)
-transpose(A::Hermitian) = Transpose(A)
 
 real(A::Symmetric{<:Real}) = A
 real(A::Hermitian{<:Real}) = A
@@ -702,15 +704,15 @@ for f in (:+, :-)
     end
 end
 
-*(A::HermOrSym, B::HermOrSym) = A * copyto!(similar(parent(B)), B)
+mul(A::HermOrSym, B::HermOrSym) = A * copyto!(similar(parent(B)), B)
 # catch a few potential BLAS-cases
-function *(A::HermOrSym{<:BlasFloat,<:StridedMatrix}, B::AdjOrTrans{<:BlasFloat,<:StridedMatrix})
+function mul(A::HermOrSym{<:BlasFloat,<:StridedMatrix}, B::AdjOrTrans{<:BlasFloat,<:StridedMatrix})
     T = promote_type(eltype(A), eltype(B))
     mul!(similar(B, T, (size(A, 1), size(B, 2))),
             convert(AbstractMatrix{T}, A),
             copy_oftype(B, T)) # make sure the AdjOrTrans wrapper is resolved
 end
-function *(A::AdjOrTrans{<:BlasFloat,<:StridedMatrix}, B::HermOrSym{<:BlasFloat,<:StridedMatrix})
+function mul(A::AdjOrTrans{<:BlasFloat,<:StridedMatrix}, B::HermOrSym{<:BlasFloat,<:StridedMatrix})
     T = promote_type(eltype(A), eltype(B))
     mul!(similar(B, T, (size(A, 1), size(B, 2))),
             copy_oftype(A, T), # make sure the AdjOrTrans wrapper is resolved

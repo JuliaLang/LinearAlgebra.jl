@@ -6,6 +6,11 @@ using Base: rtoldefault
 using Test, LinearAlgebra, Random
 using LinearAlgebra: mul!, Symmetric, Hermitian
 
+const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+
+isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
+using .Main.SizedArrays
+
 ## Test Julia fallbacks to BLAS routines
 
 mul_wrappers = [
@@ -325,6 +330,10 @@ end
             @test 0 == @allocations mul!(C, At, Bt)
         end
         # syrk/herk
+        mul!(C, transpose(A), A)
+        mul!(C, adjoint(A), A)
+        mul!(C, A, transpose(A))
+        mul!(C, A, adjoint(A))
         @test 0 == @allocations mul!(C, transpose(A), A)
         @test 0 == @allocations mul!(C, adjoint(A), A)
         @test 0 == @allocations mul!(C, A, transpose(A))
@@ -334,6 +343,7 @@ end
         Ac = complex(A)
         for t in (identity, adjoint, transpose)
             Bt = t(B)
+            mul!(Cc, Ac, Bt)
             @test 0 == @allocations mul!(Cc, Ac, Bt)
         end
     end
@@ -356,6 +366,9 @@ end
         A = rand(-10:10, n, n)
         B = ones(Float64, n, n)
         C = zeros(Float64, n, n)
+        mul!(C, A, B)
+        mul!(C, A, transpose(B))
+        mul!(C, adjoint(A), B)
         @test 0 == @allocations mul!(C, A, B)
         @test 0 == @allocations mul!(C, A, transpose(B))
         @test 0 == @allocations mul!(C, adjoint(A), B)
@@ -1166,6 +1179,37 @@ end
         @test_throws "expected size: (2, 2)" LinearAlgebra.matmul2x2!(zeros(T,2,2), 'N', 'N', zeros(T,2,3), zeros(T,3,2))
         @test_throws "expected size: (2, 2)" LinearAlgebra.matmul2x2!(zeros(T,2,3), 'N', 'N', zeros(T,2,2), zeros(T,2,3))
     end
+end
+
+@testset "zero-length generic matvec" begin
+    m = SizedArrays.SizedArray{(2,2)}(ones(2,2))
+    A = fill(m, 2, 0)
+    v = fill(m, size(A,2))
+    w = similar(v, size(A,1))
+    mul!(w, A, v)
+    @test all(iszero, w)
+    A = fill(m, 0, 2)
+    mul!(w, A', v)
+    @test all(iszero, w)
+end
+
+@testset "zero-size matmul" begin
+    A = zeros(0,2)
+    S = Symmetric(zeros(0,0))
+    @test S * A == A
+    @test A' * S == A'
+    S = Symmetric(zeros(2,2))
+    @test S * A' == A'
+    @test A * S == A
+end
+
+@testset "BlasFlag.NONE => generic_matmatmul!" begin
+    A = ones(2,2)
+    S = Symmetric(ones(2,2))
+    @test mul!(similar(A), S, A, big(1), big(0)) ≈ S * A
+    C1 = mul!(similar(A), S, A, big(2), big(1))
+    C2 = mul!(similar(A), S, A, 2, 1)
+    @test C1 ≈ C2
 end
 
 end # module TestMatmul

@@ -256,6 +256,8 @@ factorize(D::Diagonal) = D
 real(D::Diagonal) = Diagonal(real(D.diag))
 imag(D::Diagonal) = Diagonal(imag(D.diag))
 
+isreal(D::Diagonal) = isreal(D.diag)
+
 iszero(D::Diagonal) = all(iszero, D.diag)
 isone(D::Diagonal) = all(isone, D.diag)
 isdiag(D::Diagonal) = all(isdiag, D.diag)
@@ -298,7 +300,7 @@ function lmul!(x::Number, D::Diagonal)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (2, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. D.diag = x * D.diag
+    lmul!(x, D.diag)
     return D
 end
 function rmul!(D::Diagonal, x::Number)
@@ -308,7 +310,7 @@ function rmul!(D::Diagonal, x::Number)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (2, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. D.diag *= x
+    rmul!(D.diag, x)
     return D
 end
 (/)(D::Diagonal, x::Number) = Diagonal(D.diag / x)
@@ -320,7 +322,7 @@ Base.literal_pow(::typeof(^), D::Diagonal, valp::Val) =
     Diagonal(Base.literal_pow.(^, D.diag, valp)) # for speed
 Base.literal_pow(::typeof(^), D::Diagonal, ::Val{-1}) = inv(D) # for disambiguation
 
-function (*)(Da::Diagonal, Db::Diagonal)
+function mul(Da::Diagonal, Db::Diagonal)
     matmul_size_check(size(Da), size(Db))
     return Diagonal(Da.diag .* Db.diag)
 end
@@ -330,26 +332,19 @@ function (*)(D::Diagonal, V::AbstractVector)
     return D.diag .* V
 end
 
-function _diag_adj_mul(A::AdjOrTransAbsMat, D::Diagonal)
+function mul(A::AdjOrTransAbsMat, D::Diagonal)
     adj = wrapperop(A)
     copy(adj(adj(D) * adj(A)))
 end
-function _diag_adj_mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Number})
-    @invoke *(A::AbstractMatrix, D::AbstractMatrix)
+function mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Number})
+    @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
 end
-function _diag_adj_mul(D::Diagonal, A::AdjOrTransAbsMat)
+function mul(D::Diagonal, A::AdjOrTransAbsMat)
     adj = wrapperop(A)
     copy(adj(adj(A) * adj(D)))
 end
-function _diag_adj_mul(D::Diagonal{<:Number}, A::AdjOrTransAbsMat{<:Number, <:StridedMatrix})
-    @invoke *(D::AbstractMatrix, A::AbstractMatrix)
-end
-
-function (*)(A::AdjOrTransAbsMat, D::Diagonal)
-    _diag_adj_mul(A, D)
-end
-function (*)(D::Diagonal, A::AdjOrTransAbsMat)
-    _diag_adj_mul(D, A)
+function mul(D::Diagonal{<:Number}, A::AdjOrTransAbsMat{<:Number, <:StridedMatrix})
+    @invoke mul(D::AbstractMatrix, A::AbstractMatrix)
 end
 
 function rmul!(A::AbstractMatrix, D::Diagonal)
@@ -445,10 +440,13 @@ function _lmul!(D::Diagonal, A::UpperOrLowerTriangular)
     return TriWrapper(P)
 end
 
+@propagate_inbounds _modify_nonzeroalpha!(x, out, ind, alpha, beta) = @stable_muladdmul _modify!(MulAddMul(alpha,beta), x, out, ind)
+@propagate_inbounds _modify_nonzeroalpha!(x, out, ind, ::Bool, beta) = @stable_muladdmul _modify!(MulAddMul(true,beta), x, out, ind)
+
 @inline function __muldiag_nonzeroalpha!(out, D::Diagonal, B, alpha::Number, beta::Number)
     @inbounds for j in axes(B, 2)
         @simd for i in axes(B, 1)
-            @stable_muladdmul _modify!(MulAddMul(alpha,beta), D.diag[i] * B[i,j], out, (i,j))
+            _modify_nonzeroalpha!(D.diag[i] * B[i,j], out, (i,j), alpha, beta)
         end
     end
     return out
@@ -491,9 +489,12 @@ function __muldiag_nonzeroalpha!(out, D::Diagonal, B::UpperOrLowerTriangular, al
     return out
 end
 
+@inline _djalpha_nonzero(dj, alpha) = @stable_muladdmul MulAddMul(alpha,false)(dj)
+@inline _djalpha_nonzero(dj, ::Bool) = dj
+
 @inline function __muldiag_nonzeroalpha_right!(out, A, D::Diagonal, alpha::Number, beta::Number)
     @inbounds for j in axes(A, 2)
-        dja = @stable_muladdmul MulAddMul(alpha,false)(D.diag[j])
+        dja = _djalpha_nonzero(D.diag[j], alpha)
         @simd for i in axes(A, 1)
             @stable_muladdmul _modify!(MulAddMul(true,beta), A[i,j] * dja, out, (i,j))
         end
@@ -1088,9 +1089,6 @@ end
 *(x::TransposeAbsVec, D::Diagonal, y::AbstractVector) = _mapreduce_prod(*, x, D, y)
 /(u::AdjointAbsVec, D::Diagonal) = (D' \ u')'
 /(u::TransposeAbsVec, D::Diagonal) = transpose(transpose(D) \ transpose(u))
-# disambiguation methods: Call unoptimized version for user defined AbstractTriangular.
-*(A::AbstractTriangular, D::Diagonal) = @invoke *(A::AbstractMatrix, D::Diagonal)
-*(D::Diagonal, A::AbstractTriangular) = @invoke *(D::Diagonal, A::AbstractMatrix)
 
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)

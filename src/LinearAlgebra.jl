@@ -13,7 +13,7 @@ import Base: USE_BLAS64, abs, acos, acosh, acot, acoth, acsc, acsch, adjoint, as
     copy, copyto!, copymutable, cos, cosh, cot, coth, csc, csch, eltype, exp, fill!, floor,
     getindex, hcat, getproperty, imag, inv, invpermuterows!, isapprox, isequal, isone, iszero,
     IndexStyle, kron, kron!, length, log, map, ndims, one, oneunit, parent, permutecols!,
-    permutedims, permuterows!, power_by_squaring, promote_rule, real, sec, sech, setindex!,
+    permutedims, permuterows!, power_by_squaring, promote_rule, real, isreal, sec, sech, setindex!,
     show, similar, sin, sincos, sinh, size, sqrt, strides, stride, tan, tanh, transpose, trunc,
     typed_hcat, vec, view, zero
 import Base: AbstractArray, AbstractMatrix, Array, Matrix
@@ -728,6 +728,8 @@ end
 (\)(F::TransposeFactorization{T,<:LU}, B::VecOrMat{Complex{T}}) where {T<:BlasReal} =
     ldiv(F, B)
 
+const default_peakflops_size = Int === Int32 ? 2048 : 4096
+
 """
     LinearAlgebra.peakflops(n::Integer=4096; eltype::DataType=Float64, ntrials::Integer=3, parallel::Bool=false)
 
@@ -752,10 +754,10 @@ of the problem that is solved on each processor.
     This function requires at least Julia 1.1. In Julia 1.0 it is available from
     the standard library `InteractiveUtils`.
 """
-function peakflops(n::Integer=4096; eltype::DataType=Float64, ntrials::Integer=3, parallel::Bool=false)
+function peakflops(n::Integer=default_peakflops_size; eltype::Type{ElType}=Float64, ntrials::Integer=3, parallel::Bool=false) where {ElType}
     t = zeros(Float64, ntrials)
     for i=1:ntrials
-        a = ones(eltype,n,n)
+        a = ones(ElType,n,n)
         t[i] = @elapsed a2 = a*a
         @assert a2[1,1] == n
     end
@@ -822,25 +824,30 @@ function versioninfo(io::IO=stdout)
     return nothing
 end
 
-function __init__()
-    try
-        verbose = parse(Bool, get(ENV, "LBT_VERBOSE", "false"))
-        BLAS.lbt_forward(OpenBLAS_jll.libopenblas_path; clear=true, verbose)
-        BLAS.check()
-    catch ex
-        Base.showerror_nostdio(ex, "WARNING: Error during initialization of module LinearAlgebra")
-    end
+function lbt_openblas_onload_callback()
+    # We don't use `BLAS.lbt_forward()` here because we don't want to take a lock on the config cache.
+    verbose = parse(Bool, get(ENV, "LBT_VERBOSE", "false"))
+    BLAS.lbt_forward_ccall(OpenBLAS_jll.libopenblas_path; clear=true, verbose)
+    BLAS.check()
+
     # register a hook to disable BLAS threading
     Base.at_disable_library_threading(() -> BLAS.set_num_threads(1))
 
     # https://github.com/xianyi/OpenBLAS/blob/c43ec53bdd00d9423fc609d7b7ecb35e7bf41b85/README.md#setting-the-number-of-threads-using-environment-variables
     if !haskey(ENV, "OPENBLAS_NUM_THREADS") && !haskey(ENV, "GOTO_NUM_THREADS") && !haskey(ENV, "OMP_NUM_THREADS")
         @static if Sys.isapple() && Base.BinaryPlatforms.arch(Base.BinaryPlatforms.HostPlatform()) == "aarch64"
-            BLAS.set_num_threads(max(1, @ccall(jl_effective_threads()::Cint)))
+            nthreads = max(1, @ccall(jl_effective_threads()::Cint))
         else
-            BLAS.set_num_threads(max(1, @ccall(jl_effective_threads()::Cint) ÷ 2))
+            nthreads = max(1, @ccall(jl_effective_threads()::Cint) ÷ 2)
         end
+        BLAS.lbt_set_num_threads(nthreads)
     end
+end
+
+function __init__()
+    # If users want to lazily load a different BLAS, they'd need to either change this call, or
+    # clear the datastructures modified by this call and call it again with their own.
+    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, lbt_openblas_onload_callback)
 end
 
 end # module LinearAlgebra

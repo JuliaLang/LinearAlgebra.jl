@@ -189,10 +189,20 @@ end
 #Converting from Bidiagonal to dense Matrix
 function Matrix{T}(A::Bidiagonal) where T
     B = Matrix{T}(undef, size(A))
+    iszero(size(B,1)) && return B
     if haszero(T) # optimized path for types with zero(T) defined
         size(B,1) > 1 && fill!(B, zero(T))
-        copyto!(diagview(B), A.dv)
-        copyto!(diagview(B, _offdiagind(A.uplo)), A.ev)
+        isupper = A.uplo == 'U'
+        if isupper
+            B[1,1] = A.dv[1]
+        end
+        for col in axes(A.ev,1)
+            B[col+!isupper, col+isupper] = A.ev[col]
+            B[col+isupper, col+isupper] = A.dv[col+isupper]
+        end
+        if !isupper
+            B[end,end] = A.dv[end]
+        end
     else
         copyto!(B, A)
     end
@@ -286,6 +296,7 @@ axes(M::Bidiagonal) = (ax = axes(M.dv, 1); (ax, ax))
 for func in (:conj, :copy, :real, :imag)
     @eval ($func)(M::Bidiagonal) = Bidiagonal(($func)(M.dv), ($func)(M.ev), M.uplo)
 end
+isreal(M::Bidiagonal) = isreal(M.dv) && isreal(M.ev)
 
 adjoint(B::Bidiagonal{<:Number}) = Bidiagonal(vec(adjoint(B.dv)), vec(adjoint(B.ev)), B.uplo == 'U' ? :L : :U)
 adjoint(B::Bidiagonal{<:Number, <:Base.ReshapedArray{<:Number,1,<:Adjoint}}) =
@@ -454,8 +465,8 @@ function rmul!(B::Bidiagonal, x::Number)
         iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. B.dv *= x
-    @. B.ev *= x
+    rmul!(B.dv, x)
+    rmul!(B.ev, x)
     return B
 end
 function lmul!(x::Number, B::Bidiagonal)
@@ -467,8 +478,8 @@ function lmul!(x::Number, B::Bidiagonal)
         iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. B.dv = x * B.dv
-    @. B.ev = x * B.ev
+    lmul!(x, B.dv)
+    lmul!(x, B.ev)
     return B
 end
 /(A::Bidiagonal, B::Number) = Bidiagonal(A.dv/B, A.ev/B, A.uplo)
@@ -583,7 +594,7 @@ function _diag(A::Bidiagonal, k)
     elseif k == _offdiagind(A.uplo)
         return A.ev
     else
-        return diag(A, k)
+        return diagview(A, k)
     end
 end
 
@@ -952,11 +963,10 @@ function _mul!(C::AbstractVecOrMat, A::BiTriSym, B::AbstractVecOrMat, _add::MulA
     nB = size(B,2)
     (iszero(nA) || iszero(nB)) && return C
     iszero(_add.alpha) && return _rmul_or_fill!(C, _add.beta)
-    if nA <= 3
-        # naive multiplication
-        for I in CartesianIndices(C)
-            col = Base.tail(Tuple(I))
-            _modify!(_add, sum(A[I[1], k] * B[k, col...] for k in axes(A,2)), C, I)
+    if nA == 1
+        A11 = @inbounds A[1,1]
+        for i in axes(B, 2)
+            @inbounds _modify!(_add, A11 * B[1,i], C, (1,i))
         end
         return C
     end
@@ -1189,25 +1199,25 @@ function _dibimul!(C::Bidiagonal, A::Diagonal, B::Bidiagonal, _add)
     C
 end
 
-function *(A::UpperOrUnitUpperTriangular, B::Bidiagonal)
+function mul(A::UpperOrUnitUpperTriangular, B::Bidiagonal)
     TS = promote_op(matprod, eltype(A), eltype(B))
     C = mul!(similar(A, TS, size(A)), A, B)
     return B.uplo == 'U' ? UpperTriangular(C) : C
 end
 
-function *(A::LowerOrUnitLowerTriangular, B::Bidiagonal)
+function mul(A::LowerOrUnitLowerTriangular, B::Bidiagonal)
     TS = promote_op(matprod, eltype(A), eltype(B))
     C = mul!(similar(A, TS, size(A)), A, B)
     return B.uplo == 'L' ? LowerTriangular(C) : C
 end
 
-function *(A::Bidiagonal, B::UpperOrUnitUpperTriangular)
+function mul(A::Bidiagonal, B::UpperOrUnitUpperTriangular)
     TS = promote_op(matprod, eltype(A), eltype(B))
     C = mul!(similar(B, TS, size(B)), A, B)
     return A.uplo == 'U' ? UpperTriangular(C) : C
 end
 
-function *(A::Bidiagonal, B::LowerOrUnitLowerTriangular)
+function mul(A::Bidiagonal, B::LowerOrUnitLowerTriangular)
     TS = promote_op(matprod, eltype(A), eltype(B))
     C = mul!(similar(B, TS, size(B)), A, B)
     return A.uplo == 'L' ? LowerTriangular(C) : C
@@ -1249,19 +1259,19 @@ end
 ldiv!(A::Bidiagonal, b::AbstractVecOrMat) = @inline ldiv!(b, A, b)
 function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     require_one_based_indexing(c, A, b)
-    N = size(A, 2)
+    N = size(A, 1)
     mb, nb = size(b, 1), size(b, 2)
     if N != mb
-        throw(DimensionMismatch(lazy"second dimension of A, $N, does not match first dimension of b, $mb"))
+        dimstr = b isa AbstractVector ? "length" : "first dimension"
+        throw(DimensionMismatch(LazyString(lazy"the first dimension of the Bidiagonal matrix, $N, ",
+            lazy"does not match the $dimstr of the right-hand-side, $mb")))
     end
     mc, nc = size(c, 1), size(c, 2)
     if mc != mb || nc != nb
-        throw(DimensionMismatch(lazy"size of result, ($mc, $nc), does not match the size of b, ($mb, $nb)"))
+        throw(DimensionMismatch(lazy"size of result, $(size(c)), does not match the size of b, $(size(b))"))
     end
 
-    if N == 0
-        return copyto!(c, b)
-    end
+    N == 0 && return c # in this case c and b are also empty
 
     zi = findfirst(iszero, A.dv)
     isnothing(zi) || throw(SingularException(zi))
@@ -1333,27 +1343,27 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     isnothing(zi) || throw(SingularException(zi))
 
     if B.uplo == 'L'
-        diagB = B.dv[n]
-        for i in 1:m
-            C[i,n] = A[i,n] / diagB
+        diagB = @inbounds B.dv[n]
+        for i in axes(A,1)
+            @inbounds C[i,n] = A[i,n] / diagB
         end
-        for j in n-1:-1:1
-            diagB = B.dv[j]
-            offdiagB = B.ev[j]
-            for i in 1:m
-                C[i,j] = (A[i,j] - C[i,j+1]*offdiagB)/diagB
+        for j in reverse(axes(A,2)[1:end-1]) # n-1:-1:1
+            diagB = @inbounds B.dv[j]
+            offdiagB = @inbounds B.ev[j]
+            for i in axes(A,1)
+                @inbounds C[i,j] = (A[i,j] - C[i,j+1]*offdiagB)/diagB
             end
         end
     else
-        diagB = B.dv[1]
-        for i in 1:m
-            C[i,1] = A[i,1] / diagB
+        diagB = @inbounds B.dv[1]
+        for i in axes(A,1)
+            @inbounds C[i,1] = A[i,1] / diagB
         end
-        for j in 2:n
-            diagB = B.dv[j]
-            offdiagB = B.ev[j-1]
-            for i = 1:m
-                C[i,j] = (A[i,j] - C[i,j-1]*offdiagB)/diagB
+        for j in axes(A,2)[2:end]
+            diagB = @inbounds B.dv[j]
+            offdiagB = @inbounds B.ev[j-1]
+            for i in axes(A,1)
+                @inbounds C[i,j] = (A[i,j] - C[i,j-1]*offdiagB)/diagB
             end
         end
     end

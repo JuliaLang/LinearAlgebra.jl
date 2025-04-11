@@ -167,6 +167,12 @@ end
                 @test_throws DimensionMismatch mul!(similar(a), a, Diagonal(Vector{Float64}(undef, an+1)))
                 @test mul!(similar(a), a, Diagonal(1.:an)) == a.*Vector(1:an)'
                 @test mul!(similar(a), a, Diagonal(1:an))  == a.*Vector(1:an)'
+
+                @testset "different axes" begin
+                    O = OffsetArray(similar(a), ntuple(_->2, ndims(a)))
+                    @test mul!(O, a, 2) == OffsetArray(2a, axes(O))
+                    @test mul!(O, 2, a) == OffsetArray(2a, axes(O))
+                end
             end
 
             @testset "Scaling with 5-argument mul!" begin
@@ -180,6 +186,20 @@ end
                 @test mul!(copy(a), Diagonal([1; 2]), a, 10, 100)   == 10a.*[1; 2] .+ 100a
                 @test mul!(copy(a), a, Diagonal(1.:an), 10, 100) == 10a.*Vector(1:an)' .+ 100a
                 @test mul!(copy(a), a, Diagonal(1:an), 10, 100)  == 10a.*Vector(1:an)' .+ 100a
+
+                @testset "different axes" begin
+                    if eltype(a) <: Number
+                        O = OffsetArray(ones(size(a)), ntuple(_->2, ndims(a)))
+                        @test mul!(copy(O), a, 2, 3, 4) == OffsetArray(6a .+ 4, axes(O))
+                        @test mul!(copy(O), 2, a, 3, 4) == OffsetArray(6a .+ 4, axes(O))
+                        @test mul!(copy(O), a, 2, 3, 0) == OffsetArray(6a, axes(O))
+                        @test mul!(copy(O), 2, a, 3, 0) == OffsetArray(6a, axes(O))
+                        @test mul!(copy(O), a, 2, 1, 4) == OffsetArray(2a .+ 4, axes(O))
+                        @test mul!(copy(O), 2, a, 1, 4) == OffsetArray(2a .+ 4, axes(O))
+                        @test mul!(copy(O), a, 2, 1, 0) == OffsetArray(2a, axes(O))
+                        @test mul!(copy(O), 2, a, 1, 0) == OffsetArray(2a, axes(O))
+                    end
+                end
             end
         end
     end

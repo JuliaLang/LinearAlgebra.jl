@@ -376,6 +376,11 @@ istril(A::Transpose, k::Integer=0) = istriu(A.parent, -k)
 istriu(A::Adjoint, k::Integer=0) = istril(A.parent, -k)
 istriu(A::Transpose, k::Integer=0) = istril(A.parent, -k)
 
+istril(U::UpperTriangular, k::Integer=0) = istril(parent(U), max(-1, k))
+istril(U::UnitUpperTriangular, k::Integer=0) = k < 0 ? false : istril(parent(U), k)
+istriu(U::LowerTriangular, k::Integer=0) = istriu(parent(U), min(1, k))
+istriu(U::UnitLowerTriangular, k::Integer=0) = k > 0 ? false : istriu(parent(U), k)
+
 function tril!(A::UpperTriangular{T}, k::Integer=0) where {T}
     if k < 0
         fill!(A.data, zero(T))
@@ -1223,13 +1228,11 @@ function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function,
     end
 end
 # division
-generic_trimatdiv!(C::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVector{T}) where {T<:BlasFloat} =
-    BLAS.trsv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : copyto!(C, B))
-function generic_trimatdiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix{T}) where {T<:BlasFloat}
+function generic_trimatdiv!(C::StridedVecOrMat{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVecOrMat{T}) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1
-        BLAS.trsm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copyto!(C, B))
+        LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : copyto!(C, B))
     else # incompatible with LAPACK
-        @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
+        @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
     end
 end
 function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat}
@@ -1886,7 +1889,7 @@ end
 
 ## Some Triangular-Triangular cases. We might want to write tailored methods
 ## for these cases, but I'm not sure it is worth it.
-for f in (:*, :\)
+for f in (:mul, :\)
     @eval begin
         ($f)(A::LowerTriangular, B::LowerTriangular) =
             LowerTriangular(@invoke $f(A::LowerTriangular, B::AbstractMatrix))

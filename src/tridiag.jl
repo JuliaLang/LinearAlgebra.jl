@@ -111,16 +111,14 @@ function (::Type{SymTri})(A::AbstractMatrix) where {SymTri <: SymTridiagonal}
     checksquare(A)
     du = diag(A, 1)
     d  = diag(A)
-    dl = diag(A, -1)
-    if _checksymmetric(d, du, dl)
-        SymTri(d, du)
-    else
+    if !(_issymmetric(A) || _checksymmetric(d, du, diag(A, -1)))
         throw(ArgumentError("matrix is not symmetric; cannot convert to SymTridiagonal"))
     end
+    return SymTri(d, du)
 end
 
 _checksymmetric(d, du, dl) = all(((x, y),) -> x == transpose(y), zip(du, dl)) && all(issymmetric, d)
-_checksymmetric(A::AbstractMatrix) = _checksymmetric(diagview(A), diagview(A, 1), diagview(A, -1))
+_checksymmetric(A::AbstractMatrix) = _issymmetric(A) || _checksymmetric(diagview(A), diagview(A, 1), diagview(A, -1))
 
 SymTridiagonal{T,V}(S::SymTridiagonal{T,V}) where {T,V<:AbstractVector{T}} = S
 SymTridiagonal{T,V}(S::SymTridiagonal) where {T,V<:AbstractVector{T}} =
@@ -173,6 +171,7 @@ _copyto_banded!(dest::SymTridiagonal, src::SymTridiagonal) =
 for func in (:conj, :copy, :real, :imag)
     @eval ($func)(M::SymTridiagonal) = SymTridiagonal(($func)(M.dv), ($func)(M.ev))
 end
+isreal(S::SymTridiagonal) = isreal(S.dv) && isreal(S.ev)
 
 transpose(S::SymTridiagonal) = S
 adjoint(S::SymTridiagonal{<:Number}) = SymTridiagonal(vec(adjoint(S.dv)), vec(adjoint(S.ev)))
@@ -227,8 +226,8 @@ function rmul!(A::SymTridiagonal, x::Number)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    A.dv .*= x
-    _evview(A) .*= x
+    rmul!(A.dv, x)
+    rmul!(_evview(A), x)
     return A
 end
 function lmul!(x::Number, B::SymTridiagonal)
@@ -238,9 +237,8 @@ function lmul!(x::Number, B::SymTridiagonal)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. B.dv = x * B.dv
-    ev = _evview(B)
-    @. ev = x * ev
+    lmul!(x, B.dv)
+    lmul!(x, _evview(B))
     return B
 end
 /(A::SymTridiagonal, B::Number) = SymTridiagonal(A.dv/B, A.ev/B)
@@ -637,11 +635,15 @@ axes(M::Tridiagonal) = (ax = axes(M.d,1); (ax, ax))
 
 function Matrix{T}(M::Tridiagonal) where {T}
     A = Matrix{T}(undef, size(M))
+    iszero(size(A,1)) && return A
     if haszero(T) # optimized path for types with zero(T) defined
         size(A,1) > 2 && fill!(A, zero(T))
-        copyto!(diagview(A), M.d)
-        copyto!(diagview(A,1), M.du)
-        copyto!(diagview(A,-1), M.dl)
+        for i in axes(M.dl,1)
+            A[i,i] = M.d[i]
+            A[i+1,i] = M.dl[i]
+            A[i,i+1] = M.du[i]
+        end
+        A[end,end] = M.d[end]
     else
         copyto!(A, M)
     end
@@ -668,6 +670,7 @@ for func in (:conj, :copy, :real, :imag)
         Tridiagonal(($func)(M.dl), ($func)(M.d), ($func)(M.du))
     end
 end
+isreal(T::Tridiagonal) = isreal(T.dl) && isreal(T.d) && isreal(T.du)
 
 adjoint(S::Tridiagonal{<:Number}) = Tridiagonal(vec(adjoint(S.du)), vec(adjoint(S.d)), vec(adjoint(S.dl)))
 adjoint(S::Tridiagonal{<:Number, <:Base.ReshapedArray{<:Number,1,<:Adjoint}}) =
@@ -873,9 +876,9 @@ function rmul!(T::Tridiagonal, x::Number)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    T.dl .*= x
-    T.d .*= x
-    T.du .*= x
+    rmul!(T.dl, x)
+    rmul!(T.d, x)
+    rmul!(T.du, x)
     return T
 end
 function lmul!(x::Number, T::Tridiagonal)
@@ -885,9 +888,9 @@ function lmul!(x::Number, T::Tridiagonal)
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
-    @. T.dl = x * T.dl
-    @. T.d = x * T.d
-    @. T.du = x * T.du
+    lmul!(x, T.dl)
+    lmul!(x, T.d)
+    lmul!(x, T.du)
     return T
 end
 /(A::Tridiagonal, B::Number) = Tridiagonal(A.dl/B, A.d/B, A.du/B)

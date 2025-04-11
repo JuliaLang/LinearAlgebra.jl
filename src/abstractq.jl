@@ -9,6 +9,7 @@ end
 parent(adjQ::AdjointQ) = adjQ.Q
 eltype(::Type{<:AbstractQ{T}}) where {T} = T
 Base.eltypeof(Q::AbstractQ) = eltype(Q)
+Base.IteratorSize(::Type{<:AbstractQ}) = Base.HasShape{2}()
 ndims(::AbstractQ) = 2
 
 # inversion/adjoint/transpose
@@ -40,7 +41,6 @@ convert(::Type{AbstractQ{T}}, adjQ::AdjointQ{T}) where {T} = adjQ
 convert(::Type{AbstractQ{T}}, adjQ::AdjointQ) where {T} = convert(AbstractQ{T}, adjQ.Q)'
 
 # ... to matrix
-collect(Q::AbstractQ) = copyto!(Matrix{eltype(Q)}(undef, size(Q)), Q)
 Matrix{T}(Q::AbstractQ) where {T} = convert(Matrix{T}, Q*I) # generic fallback, yields square matrix
 Matrix{T}(adjQ::AdjointQ{S}) where {T,S} = convert(Matrix{T}, lmul!(adjQ, Matrix{S}(I, size(adjQ))))
 Matrix(Q::AbstractQ{T}) where {T} = Matrix{T}(Q)
