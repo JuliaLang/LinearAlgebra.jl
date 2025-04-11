@@ -857,4 +857,20 @@ end
     end
 end
 
+@testset "distance functions" begin
+    x = [1., 2., 3.]; y = [1., 2.1, 3.4]
+    @test lpdist(x, y, 1) ≈ norm(x .- y, 1)
+    @test lpdist(x, y, 2) ≈ norm(x .- y, 2)
+    @test lpdist(x, y, 4) ≈ norm(x .- y, 4)
+    @test lpdist(x, y, 3.5) ≈ norm(x .- y, 3.5)
+    @test euclidean(x, y) ≈ norm(x .- y, 2)
+    @test l2dist(x, y) ≈ norm(x .- y, 2)
+    @test l1dist(x, y) ≈ norm(x .- y, 1)
+    @test lpdist(x, y, 0) ≈ norm(x .- y, 0)
+    @test lpdist(x, y, Inf) ≈ norm(x .- y, Inf)
+    @test_throws DomainError lpdist(x, y, -1)
+    @test_throws DomainError lpdist(x, y, -0.5)
+    @test_throws DimensionMismatch lpdist(x, [1.5, 2.0, 2.0, 3.1], 1)
+end
+
 end # module TestGeneric
