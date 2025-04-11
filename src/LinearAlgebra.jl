@@ -10,7 +10,7 @@ module LinearAlgebra
 import Base: \, /, //, *, ^, +, -, ==
 import Base: USE_BLAS64, abs, acos, acosh, acot, acoth, acsc, acsch, adjoint, asec, asech,
     asin, asinh, atan, atanh, axes, big, broadcast, cbrt, ceil, cis, collect, conj, convert,
-    copy, copyto!, copymutable, cos, cosh, cot, coth, csc, csch, eltype, exp, fill!, floor,
+    copy, copy!, copyto!, copymutable, cos, cosh, cot, coth, csc, csch, eltype, exp, fill!, floor,
     getindex, hcat, getproperty, imag, inv, invpermuterows!, isapprox, isequal, isone, iszero,
     IndexStyle, kron, kron!, length, log, map, ndims, one, oneunit, parent, permutecols!,
     permutedims, permuterows!, power_by_squaring, promote_rule, real, isreal, sec, sech, setindex!,
@@ -706,9 +706,9 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
 
     if n > size(B, 1)
         # Underdetermined
-        copyto!(view(BB, 1:m, :), B)
+        copy!(view(BB, axes(B,1), ntuple(_->:, ndims(B)-1)...), B)
     else
-        copyto!(BB, B)
+        copy!(BB, B)
     end
 
     ldiv!(FF, BB)
