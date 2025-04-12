@@ -892,17 +892,20 @@ function __bibimul_bulk!(C, A::Bidiagonal, B::Bidiagonal, _add)
     C
 end
 
-function _mul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
+function _mul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, alpha::Number, beta::Number)
     require_one_based_indexing(C)
     matmul_size_check(size(C), size(A), size(B))
     n = size(A,1)
     iszero(n) && return C
-    _rmul_or_fill!(C, _add.beta)  # see the same use above
-    iszero(_add.alpha) && return C
+    _rmul_or_fill!(C, beta)  # see the same use above
+    iszero(alpha) && return C
     # beta is unused in the _bidimul! call, so we set it to false
-    _add_nonzeroalpha = _MulAddMul_nonzeroalpha(_add, Val(false))
-    _bidimul!(C, A, B, _add_nonzeroalpha)
+    @stable_muladdmul _mul_nonzeroalpha!(C, A, B, MulAddMul(alpha, false))
     C
+end
+function _mul_nonzeroalpha!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
+    _add_nonzeroalpha = _MulAddMul_nonzeroalpha(_add)
+    _bidimul!(C, A, B, _add_nonzeroalpha)
 end
 function _bidimul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
     n = size(A,1)
