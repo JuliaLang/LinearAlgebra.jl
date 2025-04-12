@@ -619,11 +619,11 @@ function _MulAddMul_nonzeroalpha(_add::MulAddMul{ais1,bis0,Bool}) where {ais1,bi
 end
 _MulAddMul_nonzeroalpha(_add::MulAddMul{ais1,bis0,Bool}, ::Val{false}) where {ais1,bis0} = MulAddMul()
 
-_mul!(C::AbstractMatrix, A::BiTriSym, B::TriSym, alpha::Number, beta::Number) =
-    _bibimul!(C, A, B, alpha, beta)
-_mul!(C::AbstractMatrix, A::BiTriSym, B::Bidiagonal, alpha::Number, beta::Number) =
-    _bibimul!(C, A, B, alpha, beta)
-function _bibimul!(C, A, B, alpha, beta)
+_mul!(C::AbstractMatrix, A::BiTriSym, B::TriSym, _add::MulAddMul) =
+    _bibimul!(C, A, B, _add)
+_mul!(C::AbstractMatrix, A::BiTriSym, B::Bidiagonal, _add::MulAddMul) =
+    _bibimul!(C, A, B, _add)
+function _bibimul!(C, A, B, _add)
     require_one_based_indexing(C)
     matmul_size_check(size(C), size(A), size(B))
     n = size(A,1)
@@ -631,17 +631,14 @@ function _bibimul!(C, A, B, alpha, beta)
     # We use `_rmul_or_fill!` instead of `_modify!` here since using
     # `_modify!` in the following loop will not update the
     # off-diagonal elements for non-zero beta.
-    _rmul_or_fill!(C, beta)
-    iszero(alpha) && return C
+    _rmul_or_fill!(C, _add.beta)
+    iszero(_add.alpha) && return C
     # beta is unused in _bibimul_nonzeroalpha!, so we set it to false
-    @stable_muladdmul _bibimul_nonzeroalpha!(C, A, B, MulAddMul(alpha, false))
+    _add_nonzeroalpha = _MulAddMul_nonzeroalpha(_add, Val(false))
+    _bibimul_nonzeroalpha!(C, A, B, _add_nonzeroalpha)
     C
 end
 function _bibimul_nonzeroalpha!(C, A, B, _add)
-    _add_nonzeroalpha = _MulAddMul_nonzeroalpha(_add)
-    __bibimul_nonzeroalpha!(C, A, B, _add_nonzeroalpha)
-end
-function __bibimul_nonzeroalpha!(C, A, B, _add)
     n = size(A,1)
     if n == 1
         # naive multiplication
@@ -669,7 +666,7 @@ function __bibimul_nonzeroalpha!(C, A, B, _add)
         end
     end # inbounds
     # middle columns
-    __bibimul_bulk!(C, A, B, _add)
+    __bibimul!(C, A, B, _add)
     @inbounds begin
         if n >= 4
             C[n-3,n-1] += _add(A[n-3,n-2]*B[n-2,n-1])
@@ -686,7 +683,7 @@ function __bibimul_nonzeroalpha!(C, A, B, _add)
     end # inbounds
     C
 end
-function __bibimul_bulk!(C, A, B, _add)
+function __bibimul!(C, A, B, _add)
     n = size(A,1)
     Al = _diag(A, -1)
     Ad = _diag(A, 0)
@@ -718,7 +715,7 @@ function __bibimul_bulk!(C, A, B, _add)
     end
     C
 end
-function __bibimul_bulk!(C, A, B::Bidiagonal, _add)
+function __bibimul!(C, A, B::Bidiagonal, _add)
     n = size(A,1)
     Al = _diag(A, -1)
     Ad = _diag(A, 0)
@@ -765,7 +762,7 @@ function __bibimul_bulk!(C, A, B::Bidiagonal, _add)
     end
     C
 end
-function __bibimul_bulk!(C, A::Bidiagonal, B, _add)
+function __bibimul!(C, A::Bidiagonal, B, _add)
     n = size(A,1)
     Bl = _diag(B, -1)
     Bd = _diag(B, 0)
@@ -814,7 +811,7 @@ function __bibimul_bulk!(C, A::Bidiagonal, B, _add)
     end
     C
 end
-function __bibimul_bulk!(C, A::Bidiagonal, B::Bidiagonal, _add)
+function __bibimul!(C, A::Bidiagonal, B::Bidiagonal, _add)
     n = size(A,1)
     Ad = A.dv
     Bd = B.dv
@@ -890,20 +887,17 @@ function __bibimul_bulk!(C, A::Bidiagonal, B::Bidiagonal, _add)
     C
 end
 
-function _mul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, alpha::Number, beta::Number)
+function _mul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
     require_one_based_indexing(C)
     matmul_size_check(size(C), size(A), size(B))
     n = size(A,1)
     iszero(n) && return C
-    _rmul_or_fill!(C, beta)  # see the same use above
-    iszero(alpha) && return C
+    _rmul_or_fill!(C, _add.beta)  # see the same use above
+    iszero(_add.alpha) && return C
     # beta is unused in the _bidimul! call, so we set it to false
-    @stable_muladdmul _mul_nonzeroalpha!(C, A, B, MulAddMul(alpha, false))
-    C
-end
-function _mul_nonzeroalpha!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
-    _add_nonzeroalpha = _MulAddMul_nonzeroalpha(_add)
+    _add_nonzeroalpha = _MulAddMul_nonzeroalpha(_add, Val(false))
     _bidimul!(C, A, B, _add_nonzeroalpha)
+    C
 end
 function _bidimul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
     n = size(A,1)
