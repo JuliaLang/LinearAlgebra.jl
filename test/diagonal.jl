@@ -1489,4 +1489,13 @@ end
     @test !isreal(im*D)
 end
 
+@testset "setindex! with BandIndex" begin
+    D = Diagonal(zeros(2))
+    D[LinearAlgebra.BandIndex(0,2)] = 1
+    @test D[2,2] == 1
+    @test_throws "cannot set off-diagonal entry $((1,2))" D[LinearAlgebra.BandIndex(1,1)] = 1
+    @test_throws BoundsError D[LinearAlgebra.BandIndex(size(D,1),1)]
+    @test_throws BoundsError D[LinearAlgebra.BandIndex(0,size(D,1)+1)]
+end
+
 end # module TestDiagonal

@@ -1184,4 +1184,27 @@ end
     @test convert(SymTridiagonal, S) == S
 end
 
+@testset "setindex! with BandIndex" begin
+    T = Tridiagonal(zeros(3), zeros(4), zeros(3))
+    T[LinearAlgebra.BandIndex(0,2)] = 1
+    @test T[2,2] == 1
+    T[LinearAlgebra.BandIndex(1,2)] = 2
+    @test T[2,3] == 2
+    T[LinearAlgebra.BandIndex(-1,2)] = 3
+    @test T[3,2] == 3
+
+    @test_throws "cannot set entry $((1,3)) off the tridiagonal band" T[LinearAlgebra.BandIndex(2,1)] = 1
+    @test_throws "cannot set entry $((3,1)) off the tridiagonal band" T[LinearAlgebra.BandIndex(-2,1)] = 1
+    @test_throws BoundsError T[LinearAlgebra.BandIndex(size(T,1),1)]
+    @test_throws BoundsError T[LinearAlgebra.BandIndex(0,size(T,1)+1)]
+
+    S = SymTridiagonal(zeros(4), zeros(3))
+    S[LinearAlgebra.BandIndex(0,2)] = 1
+    @test S[2,2] == 1
+
+    @test_throws "cannot set off-diagonal entry $((1,3))" S[LinearAlgebra.BandIndex(2,1)] = 1
+    @test_throws BoundsError S[LinearAlgebra.BandIndex(size(S,1),1)]
+    @test_throws BoundsError S[LinearAlgebra.BandIndex(0,size(S,1)+1)]
+end
+
 end # module TestTridiagonal

@@ -508,6 +508,17 @@ Base._reverse!(A::SymTridiagonal, dims::Colon) = (reverse!(A.dv); reverse!(A.ev)
     return A
 end
 
+@inline function setindex!(A::SymTridiagonal, x, b::BandIndex)
+    @boundscheck checkbounds(A, b)
+    if b.band == 0
+        issymmetric(x) || throw(ArgumentError("cannot set a diagonal entry of a SymTridiagonal to an asymmetric value"))
+        @inbounds A.dv[b.index] = x
+    else
+        throw(ArgumentError(lazy"cannot set off-diagonal entry $(to_indices(A, (b,)))"))
+    end
+    return A
+end
+
 ## Tridiagonal matrices ##
 struct Tridiagonal{T,V<:AbstractVector{T}} <: AbstractMatrix{T}
     dl::V    # sub-diagonal
@@ -770,6 +781,21 @@ end
         @inbounds A.du[i] = x
     elseif !iszero(x)
         throw(ArgumentError(LazyString(lazy"cannot set entry ($i, $j) off ",
+            lazy"the tridiagonal band to a nonzero value ($x)")))
+    end
+    return A
+end
+
+@inline function setindex!(A::Tridiagonal, x, b::BandIndex)
+    @boundscheck checkbounds(A, b)
+    if b.band == 0
+        @inbounds A.d[b.index] = x
+    elseif b.band == -1
+        @inbounds A.dl[b.index] = x
+    elseif b.band == 1
+        @inbounds A.du[b.index] = x
+    elseif !iszero(x)
+        throw(ArgumentError(LazyString(lazy"cannot set entry $(to_indices(A, (b,))) off ",
             lazy"the tridiagonal band to a nonzero value ($x)")))
     end
     return A
