@@ -154,7 +154,7 @@ Base.dataids(A::UpperOrLowerTriangular) = Base.dataids(A.data)
 
 function Matrix{T}(U::UpperOrLowerTriangular) where {T}
     M = Matrix{T}(undef, size(U))
-    _copyto!(M, U)
+    copy!(M, U)
     return M
 end
 
