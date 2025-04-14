@@ -879,4 +879,13 @@ end
     @test mul!(copy!(similar(v), v), v, 2, 2, 0) == 4v
 end
 
+@testset "aliasing in copytrito! for strided matrices" begin
+    M = rand(4, 1)
+    A = view(M, 1:3, 1:1)
+    A2 = copy(A)
+    B = view(M, 2:4, 1:1)
+    copytrito!(B, A, 'L')
+    @test B == A2
+end
+
 end # module TestGeneric
