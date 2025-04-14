@@ -778,10 +778,12 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
                 stride(A, 1) == stride(C, 1) == 1 &&
                 _fullstride2(A) && _fullstride2(C)) &&
                 max(nA, mA) ≥ 4
-            return copytri!(BLAS.syrk!('U', tA, alpha, A, beta, C), 'U')
+            BLAS.syrk!('U', tA, alpha, A, beta, C)
         else
-            return copytri!(generic_syrk!(C, A, false, tA_uc == 'N', alpha, beta), 'U')
+            generic_syrk!(C, A, false, tA_uc == 'N', alpha, beta)
         end
+        copytri!(C, 'U')
+        return C
     end
     return gemm_wrapper!(C, tA, tAt, A, A, α, β)
 end
