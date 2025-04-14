@@ -7176,6 +7176,7 @@ for (fn, elty) in ((:dlacpy_, :Float64),
         function lacpy!(B::AbstractMatrix{$elty}, A::AbstractMatrix{$elty}, uplo::AbstractChar)
             require_one_based_indexing(A, B)
             chkstride1(A, B)
+            chkuplo(uplo)
             m, n = size(A)
             m1, n1 = size(B)
             if uplo == 'U'
