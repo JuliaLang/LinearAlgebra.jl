@@ -2111,6 +2111,7 @@ end
 # Forward LAPACK-compatible strided matrices to lacpy
 function copytrito!(B::StridedMatrixStride1{T}, A::StridedMatrixStride1{T}, uplo::AbstractChar) where {T<:BlasFloat}
     require_one_based_indexing(A, B)
+    BLAS.chkuplo(uplo)
     B === A && return B
     A = Base.unalias(B, A)
     LAPACK.lacpy!(B, A, uplo)
