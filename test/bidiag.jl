@@ -1192,4 +1192,13 @@ end
     @test_throws msg ldiv!(C, B, zeros(2,1))
 end
 
+@testset "l/rmul with 0-sized matrices" begin
+    n = 0
+    B = Bidiagonal(ones(n), ones(max(n-1,0)), :U)
+    B2 = copy(B)
+    D = Diagonal(ones(n))
+    @test lmul!(D, B) == B2
+    @test rmul!(B, D) == B2
+end
+
 end # module TestBidiagonal
