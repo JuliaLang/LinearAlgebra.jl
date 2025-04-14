@@ -1217,8 +1217,8 @@ end
     A = ones(2,2)
     S = Symmetric(ones(2,2))
     @test mul!(similar(A), S, A, big(1), big(0)) ≈ S * A
-    C1 = mul!(similar(A), S, A, big(2), big(1))
-    C2 = mul!(similar(A), S, A, 2, 1)
+    C1 = mul!(zero(A), S, A, big(2), big(1))
+    C2 = mul!(zero(A), S, A, 2, 1)
     @test C1 ≈ C2
 end
 
