@@ -539,8 +539,8 @@ function lmul!(D::Diagonal, B::Bidiagonal)
     (; dv, ev) = B
     isL = B.uplo == 'L'
     iszero(size(D,1)) && return B
-    dv[1] = D.diag[1] * dv[1]
-    for i in axes(ev,1)
+    @inbounds dv[1] = D.diag[1] * dv[1]
+    @inbounds for i in axes(ev,1)
         ev[i] = D.diag[i + isL] * ev[i]
         dv[i+1] = D.diag[i+1] * dv[i+1]
     end
@@ -577,8 +577,8 @@ function rmul!(B::Bidiagonal, D::Diagonal)
     (; dv, ev) = B
     isU = B.uplo == 'U'
     iszero(size(D,1)) && return B
-    dv[1] *= D.diag[1]
-    for i in axes(ev,1)
+    @inbounds dv[1] *= D.diag[1]
+    @inbounds for i in axes(ev,1)
         ev[i] *= D.diag[i + isU]
         dv[i+1] *= D.diag[i+1]
     end
