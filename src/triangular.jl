@@ -152,6 +152,12 @@ lowertriangular(U::LowerOrUnitLowerTriangular) = U
 
 Base.dataids(A::UpperOrLowerTriangular) = Base.dataids(A.data)
 
+function Matrix{T}(U::UpperOrLowerTriangular) where {T}
+    M = Matrix{T}(undef, size(U))
+    copy!(M, U)
+    return M
+end
+
 imag(A::UpperTriangular) = UpperTriangular(imag(A.data))
 imag(A::LowerTriangular) = LowerTriangular(imag(A.data))
 imag(A::UpperTriangular{<:Any,<:StridedMaybeAdjOrTransMat}) = imag.(A)
@@ -622,29 +628,49 @@ end
 end
 # for strided matrices, we explicitly loop over the arrays to improve cache locality
 # This fuses the copytrito! for the two halves
+@propagate_inbounds function copy_unaliased_stored!(dest, U::UpperTriangular, col)
+    for row in firstindex(dest,1):col
+        dest[row,col] = U.data[row,col]
+    end
+    dest
+end
+@propagate_inbounds function copy_unaliased_stored!(dest, U::UnitUpperTriangular, col)
+    for row in firstindex(dest,1):col-1
+        dest[row,col] = U.data[row,col]
+    end
+    dest[col, col] = U[BandIndex(0,col)]
+    dest
+end
+@propagate_inbounds function copy_unaliased_stored!(dest, L::LowerTriangular, col)
+    for row in col:lastindex(dest,1)
+        dest[row,col] = L.data[row,col]
+    end
+    dest
+end
+@propagate_inbounds function copy_unaliased_stored!(dest, L::UnitLowerTriangular, col)
+    dest[col, col] = L[BandIndex(0,col)]
+    for row in col+1:lastindex(dest,1)
+        dest[row,col] = L.data[row,col]
+    end
+    dest
+end
 @inline function copy_unaliased!(dest::StridedMatrix, U::UpperOrUnitUpperTriangular{<:Any, <:StridedMatrix})
     @boundscheck checkbounds(dest, axes(U)...)
-    isunit = U isa UnitUpperTriangular
     for col in axes(dest,2)
-        for row in firstindex(dest,1):col-isunit
-            @inbounds dest[row,col] = U.data[row,col]
-        end
-        for row in col+!isunit:lastindex(dest,1)
-            @inbounds dest[row,col] = U[row,col]
+        @inbounds copy_unaliased_stored!(dest, U, col)
+        for row in col+1:lastindex(dest,1)
+            @inbounds dest[row,col] = diagzero(U,row,col)
         end
     end
     return dest
 end
 @inline function copy_unaliased!(dest::StridedMatrix, L::LowerOrUnitLowerTriangular{<:Any, <:StridedMatrix})
     @boundscheck checkbounds(dest, axes(L)...)
-    isunit = L isa UnitLowerTriangular
     for col in axes(dest,2)
-        for row in firstindex(dest,1):col-!isunit
-            @inbounds dest[row,col] = L[row,col]
+        for row in firstindex(dest,1):col-1
+            @inbounds dest[row,col] = diagzero(L,row,col)
         end
-        for row in col+isunit:lastindex(dest,1)
-            @inbounds dest[row,col] = L.data[row,col]
-        end
+        @inbounds copy_unaliased_stored!(dest, L, col)
     end
     return dest
 end
