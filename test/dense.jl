@@ -10,6 +10,9 @@ const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
 isdefined(Main, :FillArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "FillArrays.jl"))
 import Main.FillArrays
 
+isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
+using Main.SizedArrays
+
 @testset "Check that non-floats are correctly promoted" begin
     @test [1 0 0; 0 1 0]\[1,1] ≈ [1;1;0]
 end
@@ -1396,6 +1399,11 @@ end
     end
 
     @test_throws ArgumentError LinearAlgebra.copytri_maybe_inplace(Rc, 'X')
+end
+
+@testset "matrix exponentiation for immutable" begin
+    A = SizedArray{(2,2)}(reshape(1:4,2,2))
+    @test 2^A == 2^Matrix(A)
 end
 
 end # module TestDense

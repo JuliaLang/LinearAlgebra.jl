@@ -23,4 +23,10 @@ end
                 r"OPENBLAS_NUM_THREADS = [0-9]+",
                 r"GOTO_NUM_THREADS = [0-9]+",
                 r"OMP_NUM_THREADS = [0-9]+", r"\[none\]"])
+
+    withenv("MKL_NUM_THREADS" => 1) do
+        vinfo = sprint(LinearAlgebra.versioninfo)
+        vars = strip(split(vinfo, "Relevant environment variables:")[end])
+        @test occursin("MKL_NUM_THREADS = 1", vars)
+    end
 end

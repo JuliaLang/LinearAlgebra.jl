@@ -538,8 +538,9 @@ function lmul!(D::Diagonal, B::Bidiagonal)
     matmul_size_check(size(D), size(B))
     (; dv, ev) = B
     isL = B.uplo == 'L'
-    dv[1] = D.diag[1] * dv[1]
-    for i in axes(ev,1)
+    iszero(size(D,1)) && return B
+    @inbounds dv[1] = D.diag[1] * dv[1]
+    @inbounds for i in axes(ev,1)
         ev[i] = D.diag[i + isL] * ev[i]
         dv[i+1] = D.diag[i+1] * dv[i+1]
     end
@@ -575,8 +576,9 @@ function rmul!(B::Bidiagonal, D::Diagonal)
     matmul_size_check(size(B), size(D))
     (; dv, ev) = B
     isU = B.uplo == 'U'
-    dv[1] *= D.diag[1]
-    for i in axes(ev,1)
+    iszero(size(D,1)) && return B
+    @inbounds dv[1] *= D.diag[1]
+    @inbounds for i in axes(ev,1)
         ev[i] *= D.diag[i + isU]
         dv[i+1] *= D.diag[i+1]
     end

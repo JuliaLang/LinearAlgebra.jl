@@ -720,7 +720,7 @@ julia> ℯ^[1 2; 0 3]
  0.0      20.0855
 ```
 """
-Base.:^(b::Number, A::AbstractMatrix) = exp!(log(b)*A)
+Base.:^(b::Number, A::AbstractMatrix) = exp_maybe_inplace(log(b)*A)
 # method for ℯ to explicitly elide the log(b) multiplication
 Base.:^(::Irrational{:ℯ}, A::AbstractMatrix) = exp(A)
 
