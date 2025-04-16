@@ -1500,7 +1500,9 @@ function _isbanded_impl(A, kl, ku)
     last_col_nonemptybottomrows = size(A,1) + kl - 1 # empty bottom rows after this column
 
     colrange_onlybottomrows = firstindex(A,2):min(last_col_nonemptybottomrows, last_col_emptytoprows)
-    colrange_topbottomrows = max(last_col_emptytoprows, last(colrange_onlybottomrows))+1:last_col_nonzeroblocks
+    col_topbotrows_start = max(last_col_emptytoprows, last(colrange_onlybottomrows))+1
+    col_topbotrows_end = min(last_col_nonemptybottomrows, last_col_nonzeroblocks)
+    colrange_topbottomrows = col_topbotrows_start:col_topbotrows_end
     colrange_onlytoprows_nonzero = last(colrange_topbottomrows)+1:last_col_nonzeroblocks
     colrange_zero_block = last_col_nonzeroblocks+1:lastindex(A,2)
 
