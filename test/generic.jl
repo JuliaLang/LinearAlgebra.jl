@@ -857,4 +857,17 @@ end
     end
 end
 
+@testset "scaling mul" begin
+    v = 1:4
+    w = similar(v)
+    @test mul!(w, 2, v) == 2v
+    @test mul!(w, v, 2) == 2v
+    @test mul!(copy!(similar(v), v), 2, v, 1, 3) == 5v
+    @test mul!(copy!(similar(v), v), v, 2, 1, 3) == 5v
+    @test mul!(copy!(similar(v), v), 2, v, 2, 3) == 7v
+    @test mul!(copy!(similar(v), v), v, 2, 2, 3) == 7v
+    @test mul!(copy!(similar(v), v), 2, v, 2, 0) == 4v
+    @test mul!(copy!(similar(v), v), v, 2, 2, 0) == 4v
+end
+
 end # module TestGeneric
