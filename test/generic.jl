@@ -857,4 +857,26 @@ end
     end
 end
 
+@testset "scaling mul" begin
+    v = 1:4
+    w = similar(v)
+    @test mul!(w, 2, v) == 2v
+    @test mul!(w, v, 2) == 2v
+    # 5-arg equivalent to the 3-arg method, but with non-Bool alpha
+    @test mul!(copy!(similar(v), v), 2, v, 1, 0) == 2v
+    @test mul!(copy!(similar(v), v), v, 2, 1, 0) == 2v
+    # 5-arg tests with alpha::Bool
+    @test mul!(copy!(similar(v), v), 2, v, true, 1) == 3v
+    @test mul!(copy!(similar(v), v), v, 2, true, 1) == 3v
+    @test mul!(copy!(similar(v), v), 2, v, false, 2) == 2v
+    @test mul!(copy!(similar(v), v), v, 2, false, 2) == 2v
+    # 5-arg tests
+    @test mul!(copy!(similar(v), v), 2, v, 1, 3) == 5v
+    @test mul!(copy!(similar(v), v), v, 2, 1, 3) == 5v
+    @test mul!(copy!(similar(v), v), 2, v, 2, 3) == 7v
+    @test mul!(copy!(similar(v), v), v, 2, 2, 3) == 7v
+    @test mul!(copy!(similar(v), v), 2, v, 2, 0) == 4v
+    @test mul!(copy!(similar(v), v), v, 2, 2, 0) == 4v
+end
+
 end # module TestGeneric

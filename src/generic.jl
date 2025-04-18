@@ -202,23 +202,34 @@ _lscale_add!(C::StridedArray, s::Number, X::StridedArray, alpha::Number, beta::N
     generic_mul!(C, s, X, alpha, beta)
 @inline function _lscale_add!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Number, beta::Number)
     if axes(C) == axes(X)
-        if isone(alpha)
-            if iszero(beta)
-                @. C = s * X
-            else
-                @. C = s * X + C * beta
-            end
-        else
-            if iszero(beta)
-                @. C = s * X * alpha
-            else
-                @. C = s * X * alpha + C * beta
-            end
-        end
+        iszero(alpha) && return _rmul_or_fill!(C, beta)
+        _lscale_add_nonzeroalpha!(C, s, X, alpha, beta)
     else
         generic_mul!(C, s, X, alpha, beta)
     end
     return C
+end
+function _lscale_add_nonzeroalpha!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Number, beta::Number)
+    if isone(alpha)
+        # since alpha is unused, we might as well set to `true` to avoid recompiling
+        # the branch if an `alpha` of a different type is used
+        _lscale_add_nonzeroalpha!(C, s, X, true, beta)
+    else
+        if iszero(beta)
+            @. C = s * X * alpha
+        else
+            @. C = s * X * alpha + C * beta
+        end
+    end
+    C
+end
+function _lscale_add_nonzeroalpha!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Bool, beta::Number)
+    if iszero(beta)
+        @. C = s * X
+    else
+        @. C = s * X + C * beta
+    end
+    C
 end
 @inline mul!(C::AbstractArray, X::AbstractArray, s::Number, alpha::Number, beta::Number) =
     _rscale_add!(C, X, s, alpha, beta)
@@ -228,23 +239,25 @@ _rscale_add!(C::StridedArray, X::StridedArray, s::Number, alpha::Number, beta::N
 @inline function _rscale_add!(C::AbstractArray, X::AbstractArray, s::Number, alpha::Number, beta::Number)
     if axes(C) == axes(X)
         if isone(alpha)
-            if iszero(beta)
-                @. C = X * s
-            else
-                @. C = X * s + C * beta
-            end
+            # since alpha is unused, we might as well ignore it in this branch.
+            # This avoids recompiling the branch if an `alpha` of a different type is used
+            _rscale_add_alphaisone!(C, X, s, beta)
         else
             s_alpha = s * alpha
-            if iszero(beta)
-                @. C = X * s_alpha
-            else
-                @. C = X * s_alpha + C * beta
-            end
+            _rscale_add_alphaisone!(C, X, s_alpha, beta)
         end
     else
         generic_mul!(C, X, s, alpha, beta)
     end
     return C
+end
+function _rscale_add_alphaisone!(C::AbstractArray, X::AbstractArray, s::Number, beta::Number)
+    if iszero(beta)
+        @. C = X * s
+    else
+        @. C = X * s + C * beta
+    end
+    C
 end
 
 # For better performance when input and output are the same array
