@@ -211,11 +211,9 @@ _lscale_add!(C::StridedArray, s::Number, X::StridedArray, alpha::Number, beta::N
 end
 function _lscale_add_nonzeroalpha!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Number, beta::Number)
     if isone(alpha)
-        if iszero(beta)
-            @. C = s * X
-        else
-            @. C = s * X + C * beta
-        end
+        # since alpha is unused, we might as well set to `true` to avoid recompiling
+        # the branch if a different type is used
+        _lscale_add_nonzeroalpha!(C, s, X, true, beta)
     else
         if iszero(beta)
             @. C = s * X * alpha
