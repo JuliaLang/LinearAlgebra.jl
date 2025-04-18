@@ -124,6 +124,9 @@ MulAddMul() = MulAddMul{true,true,Bool,Bool}(true, false)
 @inline (p::MulAddMul{true, false})(x, y) = x + y * p.beta
 @inline (p::MulAddMul{false, false})(x, y) = x * p.alpha + y * p.beta
 
+_iszero_alpha(m::MulAddMul) = iszero(m.alpha)
+_iszero_alpha(m::MulAddMul{true}) = false
+
 """
     _modify!(_add::MulAddMul, x, C, idx)
 

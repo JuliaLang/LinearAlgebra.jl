@@ -996,7 +996,9 @@ end
             @test A * D ≈ mul!(S, A, D) ≈ M * D
             @test D * A ≈ mul!(S, D, A) ≈ D * M
             @test mul!(copy(S), D, A, 2, 2) ≈ D * M * 2 + S * 2
+            @test mul!(copy(S), D, A, 0, 2) ≈ D * M * 0 + S * 2
             @test mul!(copy(S), A, D, 2, 2) ≈ M * D * 2 + S * 2
+            @test mul!(copy(S), A, D, 0, 2) ≈ M * D * 0 + S * 2
 
             A2 = Bidiagonal(dv, zero(ev), uplo)
             M2 = Array(A2)
@@ -1074,10 +1076,12 @@ end
             @test B * v ≈ M * v
             @test mul!(similar(v), B, v) ≈ M * v
             @test mul!(ones(size(v)), B, v, 2, 3) ≈ M * v * 2 .+ 3
+            @test mul!(ones(size(v)), B, v, 0, 3) ≈ M * v * 0 .+ 3
 
             @test B * B ≈ M * M
             @test mul!(similar(B, size(B)), B, B) ≈ M * M
             @test mul!(ones(size(B)), B, B, 2, 4) ≈ M * M * 2 .+ 4
+            @test mul!(ones(size(B)), B, B, 0, 4) ≈ M * M * 0 .+ 4
 
             for m in 0:6
                 AL = rand(m,n)
