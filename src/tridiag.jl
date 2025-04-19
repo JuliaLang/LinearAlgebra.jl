@@ -310,7 +310,7 @@ eigmin(A::SymTridiagonal) = eigvals(A, 1:1)[1]
 
 #Compute selected eigenvectors only corresponding to particular eigenvalues
 """
-    eigvecs(A::SymTridiagonal[, eigvals]) -> Matrix
+    eigvecs(A::Union{Symmetric, Hermitian, SymTridiagonal}[, eigvals])::Matrix
 
 Return a matrix `M` whose columns are the eigenvectors of `A`. (The `k`th eigenvector can
 be obtained from the slice `M[:, k]`.)
@@ -345,7 +345,7 @@ julia> eigvecs(A, [1.])
  -0.5547001962252291
 ```
 """
-eigvecs(A::SymTridiagonal{<:BlasFloat,<:StridedVector}, eigvals::Vector{<:Real}) = LAPACK.stein!(A.dv, A.ev, eigvals)
+eigvecs(A::SymTridiagonal{<:BlasFloat,<:StridedVector}, eigvals::StridedVector{<:Real}) = LAPACK.stein!(A.dv, A.ev, eigvals)
 
 function svdvals!(A::SymTridiagonal)
     vals = eigvals!(A)

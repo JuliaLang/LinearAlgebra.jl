@@ -331,6 +331,12 @@ function eigvals!(A::Hermitian{T,S}, B::Hermitian{T,S}; sortby::Union{Function,N
 end
 eigvecs(A::HermOrSym) = eigvecs(eigen(A))
 
+function eigvecs(A::RealHermSymComplexHerm, eigvals::AbstractVector{<:Real})
+    F = hessenberg(A) # transform to SymTridiagonal form
+    X = eigvecs(F.H, eigvals)
+    return F.Q * X    # transform eigvecs of F.H back to eigvecs of A
+end
+
 function eigvals(A::AbstractMatrix, C::Cholesky; sortby::Union{Function,Nothing}=nothing)
     if ishermitian(A)
         eigvals!(eigencopy_oftype(Hermitian(A), eigtype(eltype(A))), C; sortby)
