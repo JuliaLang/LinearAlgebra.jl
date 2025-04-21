@@ -328,9 +328,9 @@ wrapperop(::Adjoint) = adjoint
 wrapperop(::Transpose) = transpose
 
 # equivalent to wrapperop, but treats real transposes and adjoints identically
-# this might help reduce compilation times
+# this helps reduce compilation latencies, and also matches the behavior of `wrapper_char`
 _wrapperop(x) = wrapperop(x)
-_wrapperop(::Transpose{<:Real}) = adjoint
+_wrapperop(::Adjoint{<:Real}) = transpose
 
 # the following fallbacks can be removed if Adjoint/Transpose are restricted to AbstractVecOrMat
 size(A::AdjOrTrans) = reverse(size(A.parent))
