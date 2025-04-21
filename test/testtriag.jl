@@ -1,5 +1,14 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+function rand_except(elty2_list, elty1)
+    v = copy(elty2_list)
+    ind_match = findfirst(==(elty1), v)
+    if !isnothing(ind_match)
+        deleteat!(v, ind_match)
+    end
+    rand(v)
+end
+
 # The following test block tries to call all methods in base/linalg/triangular.jl in order for a combination of input element types. Keep the ordering when adding code.
 function test_triangular(elty1_types)
     n = 9
@@ -314,12 +323,10 @@ function test_triangular(elty1_types)
             @test ((A1 \ A1)::t1) ≈ M1 \ M1
 
             # Begin loop for second Triangular matrix
-            @testset for elty2 in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat}, Int)
-                # Only test methods for the same element type and a single combination of mixed element types
-                # to avoid too much compilation
-                if !(elty1 == elty2 || elty1 ∈ (ComplexF32, Int) || elty2 ∈ (ComplexF32, Int))
-                    continue
-                end
+            # Only test methods for the same element type and a single combination of mixed element types
+            # to avoid too much compilation
+            elty2_list = [Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat}, Int]
+            @testset for elty2 in (elty1, rand_except(elty2_list, elty1))
                 @testset for (t2, uplo2) in ((UpperTriangular, :U),
                     (UnitUpperTriangular, :U),
                     (LowerTriangular, :L),
@@ -409,13 +416,10 @@ function test_triangular(elty1_types)
                 end
             end
 
-            @testset for eltyB in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
-                # Only test methods for the same element type and a single combination of mixed element types
-                # to avoid too much compilation
-                if !(elty1 == eltyB || elty1 ∈ (ComplexF32, Int) || eltyB ∈ (ComplexF32, Int))
-                    continue
-                end
-
+            # Only test methods for the same element type and a single combination of mixed element types
+            # to avoid too much compilation
+            eltyB_list = [Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat}]
+            @testset for eltyB in (elty1, rand_except(eltyB_list, elty1))
                 B = convert(Matrix{eltyB}, (elty1 <: Complex ? real(A1) : A1) * fill(1.0, n, n))
 
                 Tri = Tridiagonal(rand(eltyB, n - 1), rand(eltyB, n), rand(eltyB, n - 1))
