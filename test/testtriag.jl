@@ -5,7 +5,7 @@ function test_triangular(elty1_types)
     n = 9
     @testset for elty1 in elty1_types
         # Begin loop for first Triangular matrix
-        @testset for (t1, uplo1) in ((UpperTriangular, :U),.
+        @testset for (t1, uplo1) in ((UpperTriangular, :U),
             (UnitUpperTriangular, :U),
             (LowerTriangular, :L),
             (UnitLowerTriangular, :L))
