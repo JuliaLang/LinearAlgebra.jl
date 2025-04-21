@@ -5,7 +5,7 @@ function test_triangular(elty1_types)
     n = 9
     @testset for elty1 in elty1_types
         # Begin loop for first Triangular matrix
-        @testset for (t1, uplo1) in ((UpperTriangular, :U),
+        @testset for (t1, uplo1) in ((UpperTriangular, :U),.
             (UnitUpperTriangular, :U),
             (LowerTriangular, :L),
             (UnitLowerTriangular, :L))
@@ -317,7 +317,7 @@ function test_triangular(elty1_types)
             @testset for elty2 in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat}, Int)
                 # Only test methods for the same element type and a single combination of mixed element types
                 # to avoid too much compilation
-                if !(elty1 == elty2 || elty1 ∈ (ComplexF32, Int) || elty1 ∈ (ComplexF32, Int))
+                if !(elty1 == elty2 || elty1 ∈ (ComplexF32, Int) || elty2 ∈ (ComplexF32, Int))
                     continue
                 end
                 @testset for (t2, uplo2) in ((UpperTriangular, :U),
