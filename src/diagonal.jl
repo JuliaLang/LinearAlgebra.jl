@@ -333,14 +333,14 @@ function (*)(D::Diagonal, V::AbstractVector)
 end
 
 function mul(A::AdjOrTransAbsMat, D::Diagonal)
-    adj = wrapperop(A)
+    adj = _wrapperop(A)
     copy(adj(adj(D) * adj(A)))
 end
 function mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Number})
     @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
 end
 function mul(D::Diagonal, A::AdjOrTransAbsMat)
-    adj = wrapperop(A)
+    adj = _wrapperop(A)
     copy(adj(adj(A) * adj(D)))
 end
 function mul(D::Diagonal{<:Number}, A::AdjOrTransAbsMat{<:Number, <:StridedMatrix})
@@ -358,7 +358,7 @@ end
 # A' = A' * D => A = D' * A
 # This uses the fact that D' is a Diagonal
 function rmul!(A::AdjOrTransAbsMat, D::Diagonal)
-    f = wrapperop(A)
+    f = _wrapperop(A)
     lmul!(f(D), f(A))
     A
 end
@@ -406,7 +406,7 @@ end
 # A' = D * A' => A = A * D'
 # This uses the fact that D' is a Diagonal
 function lmul!(D::Diagonal, A::AdjOrTransAbsMat)
-    f = wrapperop(A)
+    f = _wrapperop(A)
     rmul!(f(A), f(D))
     A
 end

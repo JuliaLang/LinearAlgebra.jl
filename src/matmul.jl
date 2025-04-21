@@ -134,14 +134,14 @@ matprod_dest(A, B, T) = similar(B, T, (size(A, 1), size(B, 2)))
 function (*)(A::StridedMaybeAdjOrTransMat{<:BlasReal}, B::StridedMaybeAdjOrTransMat{<:BlasReal})
     TS = promote_type(eltype(A), eltype(B))
     mul!(similar(B, TS, (size(A, 1), size(B, 2))),
-         wrapperop(A)(convert(AbstractArray{TS}, _unwrap(A))),
-         wrapperop(B)(convert(AbstractArray{TS}, _unwrap(B))))
+         _wrapperop(A)(convert(AbstractArray{TS}, _unwrap(A))),
+         _wrapperop(B)(convert(AbstractArray{TS}, _unwrap(B))))
 end
 function (*)(A::StridedMaybeAdjOrTransMat{<:BlasComplex}, B::StridedMaybeAdjOrTransMat{<:BlasComplex})
     TS = promote_type(eltype(A), eltype(B))
     mul!(similar(B, TS, (size(A, 1), size(B, 2))),
-         wrapperop(A)(convert(AbstractArray{TS}, _unwrap(A))),
-         wrapperop(B)(convert(AbstractArray{TS}, _unwrap(B))))
+         _wrapperop(A)(convert(AbstractArray{TS}, _unwrap(A))),
+         _wrapperop(B)(convert(AbstractArray{TS}, _unwrap(B))))
 end
 
 # Complex Matrix times real matrix: We use that it is generally faster to reinterpret the
@@ -150,13 +150,13 @@ function (*)(A::StridedMatrix{<:BlasComplex}, B::StridedMaybeAdjOrTransMat{<:Bla
     TS = promote_type(eltype(A), eltype(B))
     mul!(similar(B, TS, (size(A, 1), size(B, 2))),
          convert(AbstractArray{TS}, A),
-         wrapperop(B)(convert(AbstractArray{real(TS)}, _unwrap(B))))
+         _wrapperop(B)(convert(AbstractArray{real(TS)}, _unwrap(B))))
 end
 function (*)(A::AdjOrTransStridedMat{<:BlasComplex}, B::StridedMaybeAdjOrTransMat{<:BlasReal})
     TS = promote_type(eltype(A), eltype(B))
     mul!(similar(B, TS, (size(A, 1), size(B, 2))),
          copymutable_oftype(A, TS), # remove AdjOrTrans to use reinterpret trick below
-         wrapperop(B)(convert(AbstractArray{real(TS)}, _unwrap(B))))
+         _wrapperop(B)(convert(AbstractArray{real(TS)}, _unwrap(B))))
 end
 # the following case doesn't seem to benefit from the translation A*B = (B' * A')'
 function (*)(A::StridedMatrix{<:BlasReal}, B::StridedMatrix{<:BlasComplex})
@@ -1031,7 +1031,7 @@ end
 function _generic_matmatmul_adjtrans!(C, A, B, alpha, beta)
     _rmul_or_fill!(C, beta)
     (iszero(alpha) || isempty(A) || isempty(B)) && return C
-    t = wrapperop(A)
+    t = _wrapperop(A)
     pB = parent(B)
     pA = parent(A)
     tmp = similar(C, axes(C, 2))

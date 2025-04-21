@@ -327,6 +327,11 @@ wrapperop(_) = identity
 wrapperop(::Adjoint) = adjoint
 wrapperop(::Transpose) = transpose
 
+# equivalent to wrapperop, but treats real transposes and adjoints identically
+# this might help reduce compilation times
+_wrapperop(x) = wrapperop(x)
+_wrapperop(::Transpose{<:Real}) = adjoint
+
 # the following fallbacks can be removed if Adjoint/Transpose are restricted to AbstractVecOrMat
 size(A::AdjOrTrans) = reverse(size(A.parent))
 axes(A::AdjOrTrans) = reverse(axes(A.parent))
