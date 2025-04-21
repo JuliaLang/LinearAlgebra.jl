@@ -291,7 +291,7 @@ function test_triangular(elty1_types)
             if !(elty1 in (BigFloat, Complex{BigFloat})) # Not handled yet
                 vals, vecs = eigen(A1)
                 if (t1 == UpperTriangular || t1 == LowerTriangular) && elty1 != Int # Cannot really handle degenerate eigen space and Int matrices will probably have repeated eigenvalues.
-                    @test vecs * diagm(0 => vals) / vecs ≈ A1 atol = sqrt(eps(float(real(one(vals[1]))))) * (opnorm(A1, Inf) * n)^2
+                    @test vecs * Diagonal(vals) ≈ A1 * vecs atol = sqrt(eps(float(real(one(vals[1]))))) * (opnorm(A1, Inf) * n)^2
                 end
             end
 
@@ -409,7 +409,7 @@ function test_triangular(elty1_types)
                 end
             end
 
-            for eltyB in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
+            @testset for eltyB in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
                 # Only test methods for the same element type and a single combination of mixed element types
                 # to avoid too much compilation
                 if !(elty1 == eltyB || elty1 ∈ (ComplexF32, Int) || eltyB ∈ (ComplexF32, Int))
