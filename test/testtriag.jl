@@ -314,13 +314,12 @@ function test_triangular(elty1_types)
             @test ((A1 \ A1)::t1) ≈ M1 \ M1
 
             # Begin loop for second Triangular matrix
-            @testset for elty2 in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat}, Int)
+            @testset for elty2 in push!(Set((ComplexF32, Int)), elty1)
                 # Only test methods for the same element type and a single combination of mixed element types
                 # to avoid too much compilation
-                if !(elty1 == elty2 || (elty1 ∈ (ComplexF32, Int) && elty2 ∈ (ComplexF32, Int)))
+                if elty1 ∉ (elty2, ComplexF32, Int)
                     continue
                 end
-                @show elty1, elty2
                 @testset for (t2, uplo2) in ((UpperTriangular, :U),
                     (UnitUpperTriangular, :U),
                     (LowerTriangular, :L),
@@ -410,10 +409,10 @@ function test_triangular(elty1_types)
                 end
             end
 
-            @testset for eltyB in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
+            @testset for eltyB in push!(Set((ComplexF32,)), elty1)
                 # Only test methods for the same element type and a single combination of mixed element types
                 # to avoid too much compilation
-                if !(elty1 == eltyB || (elty1 ∈ (ComplexF32, Int) && eltyB ∈ (ComplexF32, Int)))
+                if elty1 ∉ (eltyB, ComplexF32, Int)
                     continue
                 end
 
