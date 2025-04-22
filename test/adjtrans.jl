@@ -762,8 +762,14 @@ end
         end
     end
     @testset "inference for structured matrices" begin
-        v = @inferred ((A,i) -> Val(A'[LinearAlgebra.BandIndex(0,i)]))(A,1)
+        function f(A, i, ::Val{band}) where {band}
+            x = Adjoint(A)[LinearAlgebra.BandIndex(band,i)]
+            Val(x)
+        end
+        v = @inferred f(A, 1, Val(0))
         @test v == Val(1)
+        v = @inferred f(A, 1, Val(1))
+        @test v == Val(0)
     end
     @testset "non-square matrix" begin
         r = reshape(1:6, 2, 3)
