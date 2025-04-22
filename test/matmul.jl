@@ -549,6 +549,10 @@ end
         @test mul!(copy(C), A', A, true, 2) ≈ 3C
         D = Matrix(Hermitian(A * A'))
         @test mul!(copy(D), A, A', true, 3) ≈ 4D
+        if T <: Complex
+            @test mul!(copy(C), A', A, im, 2) ≈ 2C + im*C
+            @test mul!(copy(D), A, A', im, 3) ≈ 3D + im*D
+        end
     end
 end
 

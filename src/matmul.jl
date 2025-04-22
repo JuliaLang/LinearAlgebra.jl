@@ -820,7 +820,7 @@ Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{TC}, tA::Abs
     end
 
     # BLAS.herk! only updates hermitian C, alpha and beta need to be real
-    if iszero(β) || ishermitian(C)
+    if isreal(α) && isreal(β) && (iszero(β) || ishermitian(C))
         alpha, beta = promote(α, β, zero(T))
         if (alpha isa T && beta isa T &&
                 stride(A, 1) == stride(C, 1) == 1 &&
