@@ -749,4 +749,36 @@ end
     end
 end
 
+@testset "band indexing" begin
+    n = 3
+    A = UnitUpperTriangular(reshape(1:n^2, n, n))
+    @testset "every index" begin
+        Aadj = A'
+        for k in -(n-1):n-1
+            di = diagind(Aadj, k, IndexStyle(Aadj))
+            for (i,d) in enumerate(di)
+                @test Aadj[LinearAlgebra.BandIndex(k,i)] == Aadj[d]
+            end
+        end
+    end
+    @testset "inference for structured matrices" begin
+        v = @inferred ((A,i) -> Val(A'[LinearAlgebra.BandIndex(0,i)]))(A,1)
+        @test v == Val(1)
+    end
+    @testset "non-square matrix" begin
+        r = reshape(1:6, 2, 3)
+        for d in (r, r*im)
+            @test d'[LinearAlgebra.BandIndex(1,1)] == adjoint(d[2,1])
+            @test d'[LinearAlgebra.BandIndex(-1,2)] == adjoint(d[2,3])
+            @test transpose(d)[LinearAlgebra.BandIndex(1,1)] == transpose(d[2,1])
+            @test transpose(d)[LinearAlgebra.BandIndex(-1,2)] == transpose(d[2,3])
+        end
+    end
+    @testset "block matrix" begin
+        B = reshape([[1 2; 3 4]*i for i in 1:4], 2, 2)
+        @test B'[LinearAlgebra.BandIndex(1,1)] == adjoint(B[2,1])
+        @test transpose(B)[LinearAlgebra.BandIndex(1,1)] == transpose(B[2,1])
+    end
+end
+
 end # module TestAdjointTranspose
