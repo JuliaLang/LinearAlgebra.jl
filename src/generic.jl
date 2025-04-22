@@ -1493,6 +1493,24 @@ function _isbanded_impl(A, kl, ku)
     beyond ku, where the elements should all be zero. The reason we separate this from the
     third group is that we may loop over all the rows using A[:, col] instead of A[rowrange, col],
     which is usually faster.
+
+    E.g., in the following 6x10 matrix with (kl,ku) = (-1,1):
+     1  1  0  0  0  0  0  0  0  0
+     1  2  2  0  0  0  0  0  0  0
+     0  2  3  3  0  0  0  0  0  0
+     0  0  3  4  4  0  0  0  0  0
+     0  0  0  4  5  5  0  0  0  0
+     0  0  0  0  5  6  6  0  0  0
+
+    last_col_nonzeroblocks: 7, as every column beyond this is entirely zero
+    last_col_emptytoprows: 2, as there are zeros above the stored bands beyond this column
+    last_col_nonemptybottomrows: 4, as there are no zeros below the stored bands beyond this column
+    colrange_onlybottomrows: 1:2, as these columns only have zeros below the stored bands
+    colrange_topbottomrows: 3:4, as these columns have zeros both above and below the stored bands
+    colrange_onlytoprows_nonzero: 5:7, as these columns only have zeros above the stored bands
+    colrange_zero_block: 8:10, as every column in this range is filled with zeros
+
+    These are used to determine which rows to check for zeros in each column.
     =#
 
     last_col_nonzeroblocks = size(A,1) + ku # fully zero rectangular block beyond this column
