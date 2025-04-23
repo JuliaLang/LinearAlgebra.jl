@@ -764,6 +764,12 @@ end
         end
         @test_throws BoundsError D[BandIndex(size(D,1),1)]
     end
+    @testset "BandIndex to CartesianIndex" begin
+        b = BandIndex(1, 2)
+        c = CartesianIndex(b)
+        @test c == CartesianIndex(2, 3)
+        @test BandIndex(c) == b
+    end
 end
 
 @testset "Partly filled Hermitian and Diagonal algebra" begin

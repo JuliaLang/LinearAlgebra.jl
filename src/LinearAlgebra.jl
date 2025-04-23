@@ -517,6 +517,12 @@ function _torowcol(b::BandIndex)
 end
 CartesianIndex(b::BandIndex) = CartesianIndex{2}(b)
 CartesianIndex{2}(b::BandIndex) = CartesianIndex{2}(_torowcol(b))
+function BandIndex(c::CartesianIndex{2})
+    row, col = Tuple(c)
+    band = col - row
+    index = min(row, col)
+    BandIndex(band, index)
+end
 function Base.to_indices(A, inds, t::Tuple{BandIndex, Vararg})
     to_indices(A, inds, (_torowcol(first(t))..., Base.tail(t)...))
 end
