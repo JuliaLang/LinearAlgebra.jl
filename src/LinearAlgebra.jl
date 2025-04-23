@@ -15,7 +15,7 @@ import Base: USE_BLAS64, abs, acos, acosh, acot, acoth, acsc, acsch, adjoint, as
     IndexStyle, kron, kron!, length, log, map, ndims, one, oneunit, parent, permutecols!,
     permutedims, permuterows!, power_by_squaring, promote_rule, real, isreal, sec, sech, setindex!,
     show, similar, sin, sincos, sinh, size, sqrt, strides, stride, tan, tanh, transpose, trunc,
-    typed_hcat, vec, view, zero
+    typed_hcat, vec, view, zero, CartesianIndex
 import Base: AbstractArray, AbstractMatrix, Array, Matrix
 using Base: IndexLinear, promote_eltype, promote_op, print_matrix,
     @propagate_inbounds, reduce, typed_hvcat, typed_vcat, require_one_based_indexing,
@@ -508,21 +508,23 @@ struct BandIndex
     band :: Int
     index :: Int
 end
-function _cartinds(b::BandIndex)
+function _torowcol(b::BandIndex)
     (; band, index) = b
-    bandg0 = max(band,0)
-    row = index - band + bandg0
-    col = index + bandg0
-    CartesianIndex(row, col)
+    minband0, maxband0 = minmax(band,0)
+    row = index - minband0
+    col = index + maxband0
+    row, col
 end
-function Base.to_indices(A, inds, t::Tuple{BandIndex, Vararg{Any}})
-    to_indices(A, inds, (_cartinds(first(t)), Base.tail(t)...))
+CartesianIndex(b::BandIndex) = CartesianIndex{2}(b)
+CartesianIndex{2}(b::BandIndex) = CartesianIndex{2}(_torowcol(b))
+function Base.to_indices(A, inds, t::Tuple{BandIndex, Vararg})
+    to_indices(A, inds, (_torowcol(first(t))..., Base.tail(t)...))
 end
 function Base.checkbounds(::Type{Bool}, A::AbstractMatrix, b::BandIndex)
-    checkbounds(Bool, A, _cartinds(b))
+    checkbounds(Bool, A, _torowcol(b)...)
 end
 function Base.checkbounds(A::Broadcasted, b::BandIndex)
-    checkbounds(A, _cartinds(b))
+    checkbounds(A, _torowcol(b)...)
 end
 
 include("adjtrans.jl")
