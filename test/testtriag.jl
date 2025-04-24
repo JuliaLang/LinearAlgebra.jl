@@ -273,8 +273,8 @@ function test_triangular(elty1_types)
             # generalized dot
             for eltyb in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
                 b1 = convert(Vector{eltyb}, (eltype(A1) <: Complex ? real(A1) : A1) * fill(1.0, n))
-                b2 = convert(Vector{eltyb}, (eltype(A1) <: Complex ? real(A1) : A1) * randn(n))
-                @test dot(b1, A1, b2) ≈ dot(A1'b1, b2) atol = sqrt(max(eps(real(float(one(eltype(A1))))), eps(real(float(one(eltyb)))))) * n * n
+                b2 = oftype(b1, (eltype(A1) <: Complex ? real(A1) : A1) * randn(n))
+                @test dot(b1, A1, b2) ≈ dot(A1'b1, b2) atol = sqrt(max(eps(real(float(one(eltype(A1))))), eps(real(float(one(eltype(b1))))))) * n * n
             end
 
             # Binary operations
