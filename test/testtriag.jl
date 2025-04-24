@@ -31,15 +31,16 @@ function test_triangular(elty1_types)
             @test full!(copy(A1)) == A1
 
             # similar
-            @test isa(similar(A1), t1)
-            @test eltype(similar(A1)) == elty1
-            @test isa(similar(A1, Int), t1)
-            @test eltype(similar(A1, Int)) == Int
+            simA1 = similar(A1)
+            @test isa(simA1, t1)
+            @test eltype(simA1) == elty1
+            simA1Int = similar(A1, Int)
+            @test isa(simA1Int, t1)
+            @test eltype(simA1Int) == Int
             @test isa(similar(A1, (3, 2)), Matrix{elty1})
             @test isa(similar(A1, Int, (3, 2)), Matrix{Int})
 
             #copyto!
-            simA1 = similar(A1)
             copyto!(simA1, A1)
             @test simA1 == A1
 
@@ -119,23 +120,28 @@ function test_triangular(elty1_types)
                 @test tril(A1, 0) == A1
                 @test tril(A1, -1) == LowerTriangular(tril(M1, -1))
                 @test tril(A1, 1) == t1(tril(tril(M1, 1)))
-                @test tril(A1, -n - 2) == zeros(size(A1))
+                A1tril = tril(A1, -n - 2)
+                @test iszero(A1tril) && size(A1tril) == size(A1)
                 @test tril(A1, n) == A1
-                @test triu(A1, 0) == t1(diagm(0 => diag(A1)))
+                @test triu(A1, 0) == t1(Diagonal(diagview(A1)))
                 @test triu(A1, -1) == t1(tril(triu(A1.data, -1)))
-                @test triu(A1, 1) == zeros(size(A1)) # or just @test iszero(triu(A1,1))?
+                A1triu = triu(A1, 1)
+                @test iszero(A1triu) && size(A1triu) == size(A1)
                 @test triu(A1, -n) == A1
-                @test triu(A1, n + 2) == zeros(size(A1))
+                A1triu = triu(A1, n + 2)
+                @test iszero(A1triu) && size(A1triu) == size(A1)
             else
                 @test triu(A1, 0) == A1
                 @test triu(A1, 1) == UpperTriangular(triu(M1, 1))
                 @test triu(A1, -1) == t1(triu(triu(M1, -1)))
                 @test triu(A1, -n) == A1
-                @test triu(A1, n + 2) == zeros(size(A1))
-                @test tril(A1, 0) == t1(diagm(0 => diag(A1)))
+                A1triu = triu(A1, n + 2)
+                @test iszero(A1triu) && size(A1triu) == size(A1)
+                @test tril(A1, 0) == t1(Diagonal(diagview(A1)))
                 @test tril(A1, 1) == t1(triu(tril(A1.data, 1)))
-                @test tril(A1, -1) == zeros(size(A1)) # or just @test iszero(tril(A1,-1))?
-                @test tril(A1, -n - 2) == zeros(size(A1))
+                A1tril = tril(A1, -1)
+                @test iszero(A1tril) && size(A1tril) == size(A1)
+                @test iszero(A1tril) && size(A1tril) == size(A1)
                 @test tril(A1, n) == A1
             end
 
@@ -173,7 +179,8 @@ function test_triangular(elty1_types)
 
             # zero
             if A1 isa UpperTriangular || A1 isa LowerTriangular
-                @test zero(A1) == zero(parent(A1))
+                Z = zero(A1)
+                @test iszero(Z) && size(Z) == size(A1)
             end
 
             # Unary operations
@@ -426,11 +433,13 @@ function test_triangular(elty1_types)
                 mul!(C, A1, Tri)
                 @test C ≈ M1 * Tri
 
+                bcol1 = B[:, 1]
+
                 # Triangular-dense Matrix/vector multiplication
-                @test A1 * B[:, 1] ≈ M1 * B[:, 1]
+                @test A1 * bcol1 ≈ M1 * bcol1
                 @test A1 * B ≈ M1 * B
-                @test transpose(A1) * B[:, 1] ≈ transpose(M1) * B[:, 1]
-                @test A1'B[:, 1] ≈ M1'B[:, 1]
+                @test transpose(A1) * bcol1 ≈ transpose(M1) * bcol1
+                @test A1'bcol1 ≈ M1'bcol1
                 @test transpose(A1) * B ≈ transpose(M1) * B
                 @test A1'B ≈ M1'B
                 @test A1 * transpose(B) ≈ M1 * transpose(B)
@@ -438,34 +447,35 @@ function test_triangular(elty1_types)
                 @test transpose(A1) * adjoint(B) ≈ transpose(M1) * adjoint(B)
                 @test A1 * B' ≈ M1 * B'
                 @test B * A1 ≈ B * M1
-                @test transpose(B[:, 1]) * A1 ≈ transpose(B[:, 1]) * M1
-                @test B[:, 1]'A1 ≈ B[:, 1]'M1
+                @test transpose(bcol1) * A1 ≈ transpose(bcol1) * M1
+                @test bcol1'A1 ≈ bcol1'M1
                 @test transpose(B) * A1 ≈ transpose(B) * M1
                 @test transpose(B) * adjoint(A1) ≈ transpose(B) * M1'
                 @test adjoint(B) * transpose(A1) ≈ adjoint(B) * transpose(M1)
                 @test B'A1 ≈ B'M1
                 @test B * transpose(A1) ≈ B * transpose(M1)
                 @test B * A1' ≈ B * M1'
-                @test transpose(B[:, 1]) * transpose(A1) ≈ transpose(B[:, 1]) * transpose(M1)
-                @test B[:, 1]'A1' ≈ B[:, 1]'M1'
+                @test transpose(bcol1) * transpose(A1) ≈ transpose(bcol1) * transpose(M1)
+                @test bcol1'A1' ≈ bcol1'M1'
                 @test transpose(B) * transpose(A1) ≈ transpose(B) * transpose(M1)
                 @test B'A1' ≈ B'M1'
 
                 if eltyB == elty1
-                    @test mul!(similar(B), A1, B) ≈ M1 * B
-                    @test mul!(similar(B), A1, adjoint(B)) ≈ M1 * B'
-                    @test mul!(similar(B), A1, transpose(B)) ≈ M1 * transpose(B)
-                    @test mul!(similar(B), adjoint(A1), adjoint(B)) ≈ M1' * B'
-                    @test mul!(similar(B), transpose(A1), transpose(B)) ≈ transpose(M1) * transpose(B)
-                    @test mul!(similar(B), transpose(A1), adjoint(B)) ≈ transpose(M1) * B'
-                    @test mul!(similar(B), adjoint(A1), transpose(B)) ≈ M1' * transpose(B)
-                    @test mul!(similar(B), adjoint(A1), B) ≈ M1' * B
-                    @test mul!(similar(B), transpose(A1), B) ≈ transpose(M1) * B
+                    Bsim = similar(B)
+                    @test mul!(Bsim, A1, B) ≈ M1 * B
+                    @test mul!(Bsim, A1, adjoint(B)) ≈ M1 * B'
+                    @test mul!(Bsim, A1, transpose(B)) ≈ M1 * transpose(B)
+                    @test mul!(Bsim, adjoint(A1), adjoint(B)) ≈ M1' * B'
+                    @test mul!(Bsim, transpose(A1), transpose(B)) ≈ transpose(M1) * transpose(B)
+                    @test mul!(Bsim, transpose(A1), adjoint(B)) ≈ transpose(M1) * B'
+                    @test mul!(Bsim, adjoint(A1), transpose(B)) ≈ M1' * transpose(B)
+                    @test mul!(Bsim, adjoint(A1), B) ≈ M1' * B
+                    @test mul!(Bsim, transpose(A1), B) ≈ transpose(M1) * B
                     # test also vector methods
-                    B1 = vec(B[1, :])
-                    @test mul!(similar(B1), A1, B1) ≈ M1 * B1
-                    @test mul!(similar(B1), adjoint(A1), B1) ≈ M1' * B1
-                    @test mul!(similar(B1), transpose(A1), B1) ≈ transpose(M1) * B1
+                    bcol1sim = similar(bcol1)
+                    @test mul!(bcol1sim, A1, bcol1) ≈ M1 * bcol1
+                    @test mul!(bcol1sim, adjoint(A1), bcol1) ≈ M1' * bcol1
+                    @test mul!(bcol1sim, transpose(A1), bcol1) ≈ transpose(M1) * bcol1
                 end
                 #error handling
                 Ann, Bmm, bm = A1, Matrix{eltyB}(undef, n + 1, n + 1), Vector{eltyB}(undef, n + 1)
@@ -477,10 +487,10 @@ function test_triangular(elty1_types)
                 @test_throws DimensionMismatch rmul!(Bmm, transpose(Ann))
 
                 # ... and division
-                @test A1 \ B[:, 1] ≈ M1 \ B[:, 1]
+                @test A1 \ bcol1 ≈ M1 \ bcol1
                 @test A1 \ B ≈ M1 \ B
-                @test transpose(A1) \ B[:, 1] ≈ transpose(M1) \ B[:, 1]
-                @test A1' \ B[:, 1] ≈ M1' \ B[:, 1]
+                @test transpose(A1) \ bcol1 ≈ transpose(M1) \ bcol1
+                @test A1' \ bcol1 ≈ M1' \ bcol1
                 @test transpose(A1) \ B ≈ transpose(M1) \ B
                 @test A1' \ B ≈ M1' \ B
                 @test A1 \ transpose(B) ≈ M1 \ transpose(B)
