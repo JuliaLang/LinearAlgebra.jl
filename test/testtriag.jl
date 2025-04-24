@@ -149,25 +149,31 @@ function test_triangular(elty1_types)
             @test factorize(A1) == A1
 
             # [c]transpose[!] (test views as well, see issue #14317)
+            # transpose
+            @test copy(transpose(A1)) == transpose(M1)
+            A1ctr = transpose!(copy(A1))
+            @test A1ctr == transpose(A1)
+            @test typeof(A1ctr).name == typeof(transpose(A1)).name
+            # adjoint
+            @test copy(A1') == M1'
+            A1cadj = adjoint!(copy(A1))
+            @test A1cadj == adjoint(A1)
+            @test typeof(A1cadj).name == typeof(adjoint(A1)).name
+
             let vrange = 1:n-1, viewA1 = t1(view(A1.data, vrange, vrange))
+                MviewA1 = Matrix(viewA1)
                 # transpose
-                @test copy(transpose(A1)) == transpose(M1)
-                @test copy(transpose(viewA1)) == transpose(Matrix(viewA1))
+                @test copy(transpose(viewA1)) == transpose(MviewA1)
                 # adjoint
-                @test copy(A1') == M1'
-                @test copy(viewA1') == Matrix(viewA1)'
+                @test copy(viewA1') == MviewA1'
                 # transpose!
-                @test transpose!(copy(A1)) == transpose(A1)
-                @test typeof(transpose!(copy(A1))).name == typeof(transpose(A1)).name
                 @test transpose!(t1(view(copy(A1).data, vrange, vrange))) == transpose(viewA1)
                 # adjoint!
-                @test adjoint!(copy(A1)) == adjoint(A1)
-                @test typeof(adjoint!(copy(A1))).name == typeof(adjoint(A1)).name
                 @test adjoint!(t1(view(copy(A1).data, vrange, vrange))) == adjoint(viewA1)
             end
 
             # diag
-            @test diag(A1) == diag(M1)
+            @test diag(A1) == diagview(M1)
 
             # tr
             @test tr(A1)::elty1 == tr(M1)
@@ -187,22 +193,24 @@ function test_triangular(elty1_types)
             @test -A1 == -M1
 
             # copy and copyto! (test views as well, see issue #14317)
+            @test copy(A1) == M1
+            A1trc = copy(transpose(A1))
+            B = similar(A1trc)
+            copyto!(B, A1trc)
+            @test B == A1trc
+            B = similar(A1)
+            copyto!(B, A1)
+            @test B == A1
             let vrange = 1:n-1, viewA1 = t1(view(A1.data, vrange, vrange))
                 # copy
-                @test copy(A1) == copy(M1)
-                @test copy(viewA1) == copy(Matrix(viewA1))
+                @test copy(viewA1) == Matrix(viewA1)
                 # copyto!
-                B = similar(A1)
-                copyto!(B, A1)
-                @test B == A1
-                B = similar(copy(transpose(A1)))
-                copyto!(B, copy(transpose(A1)))
-                @test B == copy(transpose(A1))
                 B = similar(viewA1)
                 copyto!(B, viewA1)
                 @test B == viewA1
-                B = similar(copy(transpose(viewA1)))
-                copyto!(B, copy(transpose(viewA1)))
+                viewA1trc = copy(transpose(viewA1))
+                B = similar(viewA1trc)
+                copyto!(B, viewA1trc)
                 @test B == transpose(viewA1)
             end
 
@@ -224,15 +232,12 @@ function test_triangular(elty1_types)
                     A1tmp = copy(A1)
                     rmul!(A1tmp, cr)
                     @test A1tmp == cr * A1
-                    A1tmp = copy(A1)
+                    A1tmp .= A1
                     lmul!(cr, A1tmp)
                     @test A1tmp == cr * A1
-                    A1tmp = copy(A1)
                     A2tmp = unitt(A1)
                     mul!(A1tmp, A2tmp, cr)
                     @test A1tmp == cr * A2tmp
-                    A1tmp = copy(A1)
-                    A2tmp = unitt(A1)
                     mul!(A1tmp, cr, A2tmp)
                     @test A1tmp == cr * A2tmp
 
@@ -244,15 +249,12 @@ function test_triangular(elty1_types)
                     A1tmp = copy(A1)
                     rmul!(A1tmp, ci)
                     @test A1tmp == ci * A1
-                    A1tmp = copy(A1)
+                    A1tmp .= A1
                     lmul!(ci, A1tmp)
                     @test A1tmp == ci * A1
-                    A1tmp = copy(A1)
                     A2tmp = unitt(A1)
                     mul!(A1tmp, ci, A2tmp)
                     @test A1tmp == ci * A2tmp
-                    A1tmp = copy(A1)
-                    A2tmp = unitt(A1)
                     mul!(A1tmp, A2tmp, ci)
                     @test A1tmp == A2tmp * ci
                 end
@@ -272,19 +274,22 @@ function test_triangular(elty1_types)
             @test 0.5 \ A1 == 0.5 \ M1
 
             # inversion
-            @test inv(A1) ≈ inv(lu(M1))
-            inv(M1) # issue #11298
-            @test isa(inv(A1), t1)
+            invA1 = inv(A1)
+            M1lu = lu(M1)
+            @test invA1 ≈ inv(M1lu)
+            @test invA1 ≈ inv(M1) # issue #11298
+            @test isa(invA1, t1)
             # make sure the call to LAPACK works right
             if elty1 <: BlasFloat
-                @test LinearAlgebra.inv!(copy(A1)) ≈ inv(lu(M1))
+                @test LinearAlgebra.inv!(copy(A1)) ≈ inv(M1lu)
             end
 
             # Determinant
-            @test det(A1) ≈ det(lu(M1)) atol = sqrt(eps(real(float(one(elty1))))) * n * n
-            @test logdet(A1) ≈ logdet(lu(M1)) atol = sqrt(eps(real(float(one(elty1))))) * n * n
+            M1lu = lu(M1lu)
+            @test det(A1) ≈ det(M1lu) atol = sqrt(eps(real(float(one(elty1))))) * n * n
+            @test logdet(A1) ≈ logdet(M1lu) atol = sqrt(eps(real(float(one(elty1))))) * n * n
             lada, ladb = logabsdet(A1)
-            flada, fladb = logabsdet(lu(M1))
+            flada, fladb = logabsdet(M1lu)
             @test lada ≈ flada atol = sqrt(eps(real(float(one(elty1))))) * n * n
             @test ladb ≈ fladb atol = sqrt(eps(real(float(one(elty1))))) * n * n
 
@@ -347,7 +352,10 @@ function test_triangular(elty1_types)
                     @test kron(A1, A2) == kron(M1, M2)
 
                     # Triangular-Triangular multiplication and division
-                    @test A1 * A2 ≈ M1 * M2
+                    A1_mul_A2 = A1 * A2
+                    A1_rdiv_A2 = A1 / A2
+                    A1_ldiv_A2 = A1 \ A2
+                    @test A1_mul_A2 ≈ M1 * M2
                     @test transpose(A1) * A2 ≈ transpose(M1) * M2
                     @test transpose(A1) * adjoint(A2) ≈ transpose(M1) * adjoint(M2)
                     @test adjoint(A1) * transpose(A2) ≈ adjoint(M1) * transpose(M2)
@@ -356,35 +364,35 @@ function test_triangular(elty1_types)
                     @test A1 * A2' ≈ M1 * M2'
                     @test transpose(A1) * transpose(A2) ≈ transpose(M1) * transpose(M2)
                     @test A1'A2' ≈ M1'M2'
-                    @test A1 / A2 ≈ M1 / M2
-                    @test A1 \ A2 ≈ M1 \ M2
+                    @test A1_rdiv_A2 ≈ M1 / M2
+                    @test A1_ldiv_A2 ≈ M1 \ M2
                     if uplo1 === :U && uplo2 === :U
                         if t1 === UnitUpperTriangular && t2 === UnitUpperTriangular
-                            @test A1 * A2 isa UnitUpperTriangular
-                            @test A1 / A2 isa UnitUpperTriangular
-                            elty1 == Int && elty2 == Int && @test eltype(A1 / A2) == Int
-                            @test A1 \ A2 isa UnitUpperTriangular
-                            elty1 == Int && elty2 == Int && @test eltype(A1 \ A2) == Int
+                            @test A1_mul_A2 isa UnitUpperTriangular
+                            @test A1_rdiv_A2 isa UnitUpperTriangular
+                            elty1 == Int && elty2 == Int && @test eltype(A1_rdiv_A2) == Int
+                            @test A1_ldiv_A2 isa UnitUpperTriangular
+                            elty1 == Int && elty2 == Int && @test eltype(A1_ldiv_A2) == Int
                         else
-                            @test A1 * A2 isa UpperTriangular
-                            @test A1 / A2 isa UpperTriangular
-                            elty1 == Int && elty2 == Int && t2 === UnitUpperTriangular && @test eltype(A1 / A2) == Int
-                            @test A1 \ A2 isa UpperTriangular
-                            elty1 == Int && elty2 == Int && t1 === UnitUpperTriangular && @test eltype(A1 \ A2) == Int
+                            @test A1_mul_A2 isa UpperTriangular
+                            @test A1_rdiv_A2 isa UpperTriangular
+                            elty1 == Int && elty2 == Int && t2 === UnitUpperTriangular && @test eltype(A1_rdiv_A2) == Int
+                            @test A1_ldiv_A2 isa UpperTriangular
+                            elty1 == Int && elty2 == Int && t1 === UnitUpperTriangular && @test eltype(A1_ldiv_A2) == Int
                         end
                     elseif uplo1 === :L && uplo2 === :L
                         if t1 === UnitLowerTriangular && t2 === UnitLowerTriangular
-                            @test A1 * A2 isa UnitLowerTriangular
-                            @test A1 / A2 isa UnitLowerTriangular
-                            elty1 == Int && elty2 == Int && @test eltype(A1 / A2) == Int
-                            @test A1 \ A2 isa UnitLowerTriangular
-                            elty1 == Int && elty2 == Int && @test eltype(A1 \ A2) == Int
+                            @test A1_mul_A2 isa UnitLowerTriangular
+                            @test A1_rdiv_A2 isa UnitLowerTriangular
+                            elty1 == Int && elty2 == Int && @test eltype(A1_rdiv_A2) == Int
+                            @test A1_ldiv_A2 isa UnitLowerTriangular
+                            elty1 == Int && elty2 == Int && @test eltype(A1_ldiv_A2) == Int
                         else
-                            @test A1 * A2 isa LowerTriangular
-                            @test A1 / A2 isa LowerTriangular
-                            elty1 == Int && elty2 == Int && t2 === UnitLowerTriangular && @test eltype(A1 / A2) == Int
-                            @test A1 \ A2 isa LowerTriangular
-                            elty1 == Int && elty2 == Int && t1 === UnitLowerTriangular && @test eltype(A1 \ A2) == Int
+                            @test A1_mul_A2 isa LowerTriangular
+                            @test A1_rdiv_A2 isa LowerTriangular
+                            elty1 == Int && elty2 == Int && t2 === UnitLowerTriangular && @test eltype(A1_rdiv_A2) == Int
+                            @test A1_ldiv_A2 isa LowerTriangular
+                            elty1 == Int && elty2 == Int && t1 === UnitLowerTriangular && @test eltype(A1_ldiv_A2) == Int
                         end
                     end
                     offsizeA = Matrix{Float64}(I, n + 1, n + 1)
