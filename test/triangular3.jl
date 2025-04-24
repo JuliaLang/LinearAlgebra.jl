@@ -2,8 +2,7 @@
 
 module TestTriangularComplex
 
-using Test, LinearAlgebra, Random
-using LinearAlgebra: BlasFloat, errorbounds, full!, transpose!
+using Random
 
 Random.seed!(123)
 

@@ -1,5 +1,9 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+using Test, LinearAlgebra
+using LinearAlgebra: BlasFloat, errorbounds, full!, transpose!,
+    UpperOrUnitUpperTriangular, LowerOrUnitLowerTriangular, UnitUpperOrUnitLowerTriangular
+
 # The following test block tries to call all methods in base/linalg/triangular.jl in order for a combination of input element types. Keep the ordering when adding code.
 function test_triangular(elty1_types)
     n = 9
@@ -33,7 +37,7 @@ function test_triangular(elty1_types)
             # similar
             simA1 = similar(A1)
             @test isa(simA1, t1)
-            @test eltype(simA1) == elty1
+            @test eltype(simA1) == eltype(A1)
             simA1Int = similar(A1, Int)
             @test isa(simA1Int, t1)
             @test eltype(simA1Int) == Int
@@ -62,11 +66,11 @@ function test_triangular(elty1_types)
             A1c = copy(A1)
             for i = 1:size(A1, 1)
                 for j = 1:size(A1, 2)
-                    if uplo1 === :U
+                    if A1 isa UpperOrUnitUpperTriangular
                         if i > j
                             A1c[i, j] = 0
                             @test_throws ArgumentError A1c[i, j] = 1
-                        elseif i == j && t1 == UnitUpperTriangular
+                        elseif i == j && A1 isa UnitUpperTriangular
                             A1c[i, j] = 1
                             @test_throws ArgumentError A1c[i, j] = 0
                         else
@@ -77,7 +81,7 @@ function test_triangular(elty1_types)
                         if i < j
                             A1c[i, j] = 0
                             @test_throws ArgumentError A1c[i, j] = 1
-                        elseif i == j && t1 == UnitLowerTriangular
+                        elseif i == j && A1 isa UnitLowerTriangular
                             A1c[i, j] = 1
                             @test_throws ArgumentError A1c[i, j] = 0
                         else
@@ -89,7 +93,7 @@ function test_triangular(elty1_types)
             end
 
             # istril/istriu
-            if uplo1 === :L
+            if A1 isa LowerOrUnitLowerTriangular
                 @test istril(A1)
                 @test !istriu(A1)
                 @test istriu(A1')
@@ -116,7 +120,7 @@ function test_triangular(elty1_types)
             end
 
             #tril/triu
-            if uplo1 === :L
+            if A1 isa LowerOrUnitLowerTriangular
                 @test tril(A1, 0) == A1
                 @test tril(A1, -1) == LowerTriangular(tril(M1, -1))
                 @test tril(A1, 1) == t1(tril(tril(M1, 1)))
@@ -220,9 +224,9 @@ function test_triangular(elty1_types)
             end
 
             # scale
-            if (t1 == UpperTriangular || t1 == LowerTriangular)
+            if (A1 isa UpperTriangular || A1 isa LowerTriangular)
                 unitt = istriu(A1) ? UnitUpperTriangular : UnitLowerTriangular
-                if elty1 == Int
+                if eltype(A1) == Int
                     cr = 2
                 else
                     cr = 0.5
@@ -302,7 +306,7 @@ function test_triangular(elty1_types)
             # eigenproblems
             if !(elty1 in (BigFloat, Complex{BigFloat})) # Not handled yet
                 vals, vecs = eigen(A1)
-                if (t1 == UpperTriangular || t1 == LowerTriangular) && elty1 != Int # Cannot really handle degenerate eigen space and Int matrices will probably have repeated eigenvalues.
+                if (A1 isa UpperTriangular || A1 isa LowerTriangular) && elty1 != Int # Cannot really handle degenerate eigen space and Int matrices will probably have repeated eigenvalues.
                     @test vecs * Diagonal(vals) ≈ A1 * vecs atol = sqrt(eps(float(real(one(vals[1]))))) * (opnorm(A1, Inf) * n)^2
                 end
             end
@@ -366,33 +370,33 @@ function test_triangular(elty1_types)
                     @test A1'A2' ≈ M1'M2'
                     @test A1_rdiv_A2 ≈ M1 / M2
                     @test A1_ldiv_A2 ≈ M1 \ M2
-                    if uplo1 === :U && uplo2 === :U
-                        if t1 === UnitUpperTriangular && t2 === UnitUpperTriangular
+                    if A1 isa UpperOrUnitUpperTriangular && A2 isa UpperOrUnitUpperTriangular
+                        if A1 isa UnitUpperTriangular && A2 isa UnitUpperTriangular
                             @test A1_mul_A2 isa UnitUpperTriangular
                             @test A1_rdiv_A2 isa UnitUpperTriangular
-                            elty1 == Int && elty2 == Int && @test eltype(A1_rdiv_A2) == Int
+                            eltype(A1) == Int && eltype(A2) == Int && @test eltype(A1_rdiv_A2) == Int
                             @test A1_ldiv_A2 isa UnitUpperTriangular
-                            elty1 == Int && elty2 == Int && @test eltype(A1_ldiv_A2) == Int
+                            eltype(A1) == Int && eltype(A2) == Int && @test eltype(A1_ldiv_A2) == Int
                         else
                             @test A1_mul_A2 isa UpperTriangular
                             @test A1_rdiv_A2 isa UpperTriangular
-                            elty1 == Int && elty2 == Int && t2 === UnitUpperTriangular && @test eltype(A1_rdiv_A2) == Int
+                            eltype(A1) == Int && eltype(A2) == Int && A2 isa UnitUpperTriangular && @test eltype(A1_rdiv_A2) == Int
                             @test A1_ldiv_A2 isa UpperTriangular
-                            elty1 == Int && elty2 == Int && t1 === UnitUpperTriangular && @test eltype(A1_ldiv_A2) == Int
+                            eltype(A1) == Int && eltype(A2) == Int && A1 isa UnitUpperTriangular && @test eltype(A1_ldiv_A2) == Int
                         end
-                    elseif uplo1 === :L && uplo2 === :L
-                        if t1 === UnitLowerTriangular && t2 === UnitLowerTriangular
+                    elseif A1 isa LowerOrUnitLowerTriangular && A2 isa LowerOrUnitLowerTriangular
+                        if A1 isa UnitLowerTriangular && A2 isa UnitLowerTriangular
                             @test A1_mul_A2 isa UnitLowerTriangular
                             @test A1_rdiv_A2 isa UnitLowerTriangular
-                            elty1 == Int && elty2 == Int && @test eltype(A1_rdiv_A2) == Int
+                            eltype(A1) == Int && eltype(A2) == Int && @test eltype(A1_rdiv_A2) == Int
                             @test A1_ldiv_A2 isa UnitLowerTriangular
-                            elty1 == Int && elty2 == Int && @test eltype(A1_ldiv_A2) == Int
+                            eltype(A1) == Int && eltype(A2) == Int && @test eltype(A1_ldiv_A2) == Int
                         else
                             @test A1_mul_A2 isa LowerTriangular
                             @test A1_rdiv_A2 isa LowerTriangular
-                            elty1 == Int && elty2 == Int && t2 === UnitLowerTriangular && @test eltype(A1_rdiv_A2) == Int
+                            eltype(A1) == Int && eltype(A2) == Int && A2 isa UnitLowerTriangular && @test eltype(A1_rdiv_A2) == Int
                             @test A1_ldiv_A2 isa LowerTriangular
-                            elty1 == Int && elty2 == Int && t1 === UnitLowerTriangular && @test eltype(A1_ldiv_A2) == Int
+                            eltype(A1) == Int && eltype(A2) == Int && A1 isa UnitLowerTriangular && @test eltype(A1_ldiv_A2) == Int
                         end
                     end
                     offsizeA = Matrix{Float64}(I, n + 1, n + 1)
@@ -405,17 +409,17 @@ function test_triangular(elty1_types)
                     @test_throws DimensionMismatch transpose(A2) * offsizeA
                     @test_throws DimensionMismatch A2' * offsizeA
                     @test_throws DimensionMismatch A2 * offsizeA
-                    if (uplo1 == uplo2 && elty1 == elty2 != Int && t1 != UnitLowerTriangular && t1 != UnitUpperTriangular)
+                    if (uplo1 == uplo2 && eltype(A1) == elty2 != Int && !(A1 isa UnitUpperOrUnitLowerTriangular))
                         @test rdiv!(copy(A1), A2)::t1 ≈ A1 / A2 ≈ M1 / M2
                         @test ldiv!(A2, copy(A1))::t1 ≈ A2 \ A1 ≈ M2 \ M1
                     end
-                    if (uplo1 != uplo2 && elty1 == elty2 != Int && t2 != UnitLowerTriangular && t2 != UnitUpperTriangular)
+                    if (uplo1 != uplo2 && eltype(A1) == elty2 != Int && !(A2 isa UnitUpperOrUnitLowerTriangular))
                         @test lmul!(adjoint(A1), copy(A2)) ≈ A1' * A2 ≈ M1' * M2
                         @test lmul!(transpose(A1), copy(A2)) ≈ transpose(A1) * A2 ≈ transpose(M1) * M2
                         @test ldiv!(adjoint(A1), copy(A2)) ≈ A1' \ A2 ≈ M1' \ M2
                         @test ldiv!(transpose(A1), copy(A2)) ≈ transpose(A1) \ A2 ≈ transpose(M1) \ M2
                     end
-                    if (uplo1 != uplo2 && elty1 == elty2 != Int && t1 != UnitLowerTriangular && t1 != UnitUpperTriangular)
+                    if (uplo1 != uplo2 && eltype(A1) == elty2 != Int && !(A1 isa UnitUpperOrUnitLowerTriangular))
                         @test rmul!(copy(A1), adjoint(A2)) ≈ A1 * A2' ≈ M1 * M2'
                         @test rmul!(copy(A1), transpose(A2)) ≈ A1 * transpose(A2) ≈ M1 * transpose(M2)
                         @test rdiv!(copy(A1), adjoint(A2)) ≈ A1 / A2' ≈ M1 / M2'
@@ -468,7 +472,7 @@ function test_triangular(elty1_types)
                 @test transpose(B) * transpose(A1) ≈ transpose(B) * transpose(M1)
                 @test B'A1' ≈ B'M1'
 
-                if eltyB == elty1
+                if eltype(B) == eltype(A1)
                     Bsim = similar(B)
                     @test mul!(Bsim, A1, B) ≈ M1 * B
                     @test mul!(Bsim, A1, adjoint(B)) ≈ M1 * B'
@@ -509,7 +513,7 @@ function test_triangular(elty1_types)
                 @test_throws DimensionMismatch Ann \ bm
                 @test_throws DimensionMismatch Ann' \ bm
                 @test_throws DimensionMismatch transpose(Ann) \ bm
-                if t1 == UpperTriangular || t1 == LowerTriangular
+                if A1 isa UpperTriangular || A1 isa LowerTriangular
                     @test_throws SingularException ldiv!(t1(zeros(elty1, n, n)), fill(eltyB(1), n))
                 end
                 @test B / A1 ≈ B / M1
