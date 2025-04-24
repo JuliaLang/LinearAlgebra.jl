@@ -4,6 +4,12 @@ using Test, LinearAlgebra
 using LinearAlgebra: BlasFloat, errorbounds, full!, transpose!,
     UpperOrUnitUpperTriangular, LowerOrUnitLowerTriangular, UnitUpperOrUnitLowerTriangular
 
+check_uplo(::Any, A1, A2) = false
+check_uplo(::typeof{==}, A1::UpperOrUnitUpperTriangular, A2::UpperOrUnitUpperTriangular) = true
+check_uplo(::typeof{==}, A1::LowerOrUnitLowerTriangular, A2::LowerOrUnitLowerTriangular) = true
+check_uplo(::typeof{!=}, A1::UpperOrUnitUpperTriangular, A2::LowerOrUnitLowerTriangular) = true
+check_uplo(::typeof{!=}, A1::LowerOrUnitLowerTriangular, A2::UpperOrUnitUpperTriangular) = true
+
 # The following test block tries to call all methods in base/linalg/triangular.jl in order for a combination of input element types. Keep the ordering when adding code.
 function test_triangular(elty1_types)
     n = 9
@@ -409,17 +415,17 @@ function test_triangular(elty1_types)
                     @test_throws DimensionMismatch transpose(A2) * offsizeA
                     @test_throws DimensionMismatch A2' * offsizeA
                     @test_throws DimensionMismatch A2 * offsizeA
-                    if (uplo1 == uplo2 && eltype(A1) == elty2 != Int && !(A1 isa UnitUpperOrUnitLowerTriangular))
+                    if (check_uplo(==, A1, A2) && eltype(A1) == eltype(A2) != Int && !(A1 isa UnitUpperOrUnitLowerTriangular))
                         @test rdiv!(copy(A1), A2)::t1 ≈ A1 / A2 ≈ M1 / M2
                         @test ldiv!(A2, copy(A1))::t1 ≈ A2 \ A1 ≈ M2 \ M1
                     end
-                    if (uplo1 != uplo2 && eltype(A1) == elty2 != Int && !(A2 isa UnitUpperOrUnitLowerTriangular))
+                    if (check_uplo(!=, A1, A2) && eltype(A1) == eltype(A2) != Int && !(A2 isa UnitUpperOrUnitLowerTriangular))
                         @test lmul!(adjoint(A1), copy(A2)) ≈ A1' * A2 ≈ M1' * M2
                         @test lmul!(transpose(A1), copy(A2)) ≈ transpose(A1) * A2 ≈ transpose(M1) * M2
                         @test ldiv!(adjoint(A1), copy(A2)) ≈ A1' \ A2 ≈ M1' \ M2
                         @test ldiv!(transpose(A1), copy(A2)) ≈ transpose(A1) \ A2 ≈ transpose(M1) \ M2
                     end
-                    if (uplo1 != uplo2 && eltype(A1) == elty2 != Int && !(A1 isa UnitUpperOrUnitLowerTriangular))
+                    if (check_uplo(!=, A1, A2) && eltype(A1) == eltype(A2) != Int && !(A1 isa UnitUpperOrUnitLowerTriangular))
                         @test rmul!(copy(A1), adjoint(A2)) ≈ A1 * A2' ≈ M1 * M2'
                         @test rmul!(copy(A1), transpose(A2)) ≈ A1 * transpose(A2) ≈ M1 * transpose(M2)
                         @test rdiv!(copy(A1), adjoint(A2)) ≈ A1 / A2' ≈ M1 / M2'
