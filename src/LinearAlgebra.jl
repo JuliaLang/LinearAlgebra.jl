@@ -530,7 +530,7 @@ function Base.checkbounds(::Type{Bool}, A::AbstractMatrix, b::BandIndex)
     checkbounds(Bool, A, _torowcol(b)...)
 end
 function Base.checkbounds(A::Broadcasted, b::BandIndex)
-    checkbounds(A, _torowcol(b)...)
+    checkbounds(A, CartesianIndex(b))
 end
 
 include("adjtrans.jl")
