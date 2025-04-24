@@ -422,6 +422,7 @@ end
 @noinline function matmul_size_check_error(sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
     strA = _vec_or_mat_str(sizeA)
     strB = _vec_or_mat_str(sizeB)
+    szA2 = get(sizeA, 2, 1)
     B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
     size_or_len_str_B = B_size_len isa Integer ? "length" : "size"
     dim_or_len_str_B = B_size_len isa Integer ? "length" : "first dimension"
@@ -450,6 +451,7 @@ end
     strA = _vec_or_mat_str(sizeA)
     strB = _vec_or_mat_str(sizeB)
     strC = _vec_or_mat_str(sizeC)
+    szB2 = get(sizeB, 2, 1)
     C_size_len = length(sizeC) == 1 ? sizeC[1] : sizeC
     size_or_len_str_C = C_size_len isa Integer ? "length" : "size"
     B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
