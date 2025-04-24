@@ -436,7 +436,6 @@ end
         )
         )
     )
-    return nothing
 end
 function matmul_size_check(sizeC::Tuple{Integer,Vararg{Integer}}, sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
     matmul_size_check(sizeA, sizeB)
@@ -466,7 +465,6 @@ end
             )
         )
     )
-    return nothing
 end
 
 # We may inline the matmul2x2! and matmul3x3! calls for `α == true`
