@@ -16,7 +16,7 @@ steps:
           version: "nightly"
           arch: "i686"
     command: |
-      julia --color=yes .ci/run_tests.jl
+      julia --color=yes --code-coverage=@ .ci/run_tests.jl
     agents:
       queue: "julia"
       os: "linux"
@@ -39,7 +39,7 @@ steps:
       - JuliaCI/julia#v1:
           version: "nightly"
     command: |
-      julia --color=yes .ci/run_tests.jl
+      julia --color=yes --code-coverage=@ .ci/run_tests.jl
     agents:
       queue: "julia"
       os: "linux"
@@ -53,7 +53,7 @@ steps:
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
-      julia --color=yes .ci/run_tests.jl
+      julia --color=yes --code-coverage=@ .ci/run_tests.jl
     agents:
       queue: "julia"
       os: "macos"
@@ -66,7 +66,7 @@ steps:
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
-      julia --color=yes .ci/run_tests.jl
+      julia --color=yes --code-coverage=@ .ci/run_tests.jl
     agents:
       queue: "julia"
       os: "windows"
