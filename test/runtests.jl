@@ -1,4 +1,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
+
+include("prune_old_LA.jl")
+
 using Test, LinearAlgebra
 
 for file in readlines(joinpath(@__DIR__, "testgroups"))

@@ -1,5 +1,7 @@
 module TestUnitfulLinAlg
 
+isdefined(Main, :pruned_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 
 Random.seed!(1234321)

@@ -1,3 +1,5 @@
+include("../test/prune_old_LA.jl")
+
 using LinearAlgebra
 using Documenter: DocMeta, makedocs, deploydocs, HTML
 
