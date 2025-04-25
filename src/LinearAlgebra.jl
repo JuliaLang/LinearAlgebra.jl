@@ -287,7 +287,7 @@ julia> B = view(A, 2:2:4)
  4
 
 julia> LinearAlgebra.stride1(B)
-2
+3
 ```
 """
 stride1(x) = stride(x,1)

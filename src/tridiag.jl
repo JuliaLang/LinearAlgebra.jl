@@ -104,7 +104,7 @@ julia> B = reshape([[1 2; 2 3], [1 2; 3 4], [1 3; 2 4], [1 2; 2 3]], 2, 2);
 julia> SymTridiagonal(B)
 2×2 SymTridiagonal{Matrix{Int64}, Vector{Matrix{Int64}}}:
  [1 2; 2 3]  [1 3; 2 4]
- [1 2; 3 4]  [1 2; 2 3]
+ [1 2; 3 4]  [1 2; 2 1]
 ```
 """
 function (::Type{SymTri})(A::AbstractMatrix) where {SymTri <: SymTridiagonal}
@@ -138,6 +138,7 @@ AbstractMatrix{T}(S::SymTridiagonal) where {T} = SymTridiagonal{T}(S)
 AbstractMatrix{T}(S::SymTridiagonal{T}) where {T} = copy(S)
 
 function Matrix{T}(M::SymTridiagonal) where T
+    error()
     n = size(M, 1)
     Mf = Matrix{T}(undef, n, n)
     n == 0 && return Mf
