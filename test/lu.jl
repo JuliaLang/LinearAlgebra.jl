@@ -2,7 +2,7 @@
 
 module TestLU
 
-isdefined(Main, :pruned_LA) || @eval Main include("prune_old_LA.jl")
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: ldiv!, BlasReal, BlasInt, BlasFloat, rdiv!
