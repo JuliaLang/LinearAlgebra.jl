@@ -430,7 +430,7 @@ end
     pos_str_B = LazyString(length(sizeA) == length(sizeB) ? "second " : "", strB)
     throw(DimensionMismatch(
         LazyString(
-            lazy"incompatible dimensions for matrix multiplication: ",
+            "incompatible dimensions for matrix multiplication: ",
             lazy"tried to multiply a $strA of size $sizeA with a $strB of $size_or_len_str_B $B_size_len. ",
             lazy"The second dimension of the $pos_str_A: $szA2, does not match the $dim_or_len_str_B of the $pos_str_B: $(sizeB[1])."
         )
