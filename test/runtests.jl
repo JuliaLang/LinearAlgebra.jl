@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-include("prune_old_LA.jl")
+include(joinpath(@__DIR__, "prune_old_LA.jl"))
 
 using Test, LinearAlgebra
 
