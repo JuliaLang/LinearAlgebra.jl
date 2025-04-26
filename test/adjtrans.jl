@@ -751,13 +751,17 @@ end
 
 @testset "band indexing" begin
     n = 3
-    A = UnitUpperTriangular(reshape(1:n^2, n, n))
+    A = UnitUpperTriangular(Matrix(reshape(1:n^2, n, n)))
     @testset "every index" begin
-        Aadj = A'
+        Aadj = Adjoint(A)
         for k in -(n-1):n-1
             di = diagind(Aadj, k, IndexStyle(Aadj))
             for (i,d) in enumerate(di)
                 @test Aadj[LinearAlgebra.BandIndex(k,i)] == Aadj[d]
+                if k < 0 # the adjoint is a unit lower triangular
+                    Aadj[LinearAlgebra.BandIndex(k,i)] = n^2 + i
+                    @test Aadj[d] == n^2 + i
+                end
             end
         end
     end

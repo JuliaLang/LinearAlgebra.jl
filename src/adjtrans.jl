@@ -357,6 +357,11 @@ IndexStyle(::Type{<:AdjOrTransAbsVec}) = IndexLinear()
     require_one_based_indexing(A)
     wrapperop(A)(A.parent[BandIndex(-b.band, b.index)])::T
 end
+@propagate_inbounds function setindex!(A::AdjOrTransAbsMat, x, b::BandIndex)
+    require_one_based_indexing(A)
+    setindex!(A.parent, _wrapperop(A)(x), BandIndex(-b.band, b.index))
+    return A
+end
 
 # conversion of underlying storage
 convert(::Type{Adjoint{T,S}}, A::Adjoint) where {T,S} = Adjoint{T,S}(convert(S, A.parent))::Adjoint{T,S}
