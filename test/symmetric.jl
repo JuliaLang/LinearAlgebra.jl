@@ -1180,4 +1180,15 @@ end
     end
 end
 
+@testset "block-symmetric setindex!" begin
+    A = fill([1 2; 3 4], 2, 2)
+    v = [1 2; 3 4]
+    H = Hermitian(A)
+    h_msg = "cannot set a diagonal element of a hermitian matrix to a non-hermitian value"
+    @test_throws h_msg H[1,1] = v
+    S = Symmetric(A)
+    s_msg = "cannot set a diagonal element of a symmetric matrix to an asymmetric value"
+    @test_throws s_msg S[1,1] = v
+end
+
 end # module TestSymmetric
