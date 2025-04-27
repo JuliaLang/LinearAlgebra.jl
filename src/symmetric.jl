@@ -289,7 +289,7 @@ Base.dataids(A::HermOrSym) = Base.dataids(parent(A))
 Base.unaliascopy(A::Hermitian) = Hermitian(Base.unaliascopy(parent(A)), sym_uplo(A.uplo))
 Base.unaliascopy(A::Symmetric) = Symmetric(Base.unaliascopy(parent(A)), sym_uplo(A.uplo))
 
-_conjugation(::Symmetric) = transpose
+_conjugation(::Union{Symmetric, Hermitian{<:Real}}) = transpose
 _conjugation(::Hermitian) = adjoint
 
 diag(A::Symmetric) = symmetric.(diag(parent(A)), sym_uplo(A.uplo))
