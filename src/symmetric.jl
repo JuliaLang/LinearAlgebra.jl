@@ -229,12 +229,6 @@ const SelfAdjoint = Union{Symmetric{<:Real}, Hermitian{<:Number}}
 wrappertype(::Union{Symmetric, SymTridiagonal}) = Symmetric
 wrappertype(::Hermitian) = Hermitian
 
-_symherm_wrapperop(::Symmetric) = symmetric
-_symherm_wrapperop(::Hermitian) = hermitian
-
-_conjugation(::Symmetric) = transpose
-_conjugation(::Hermitian) = adjoint
-
 size(A::HermOrSym) = size(A.data)
 axes(A::HermOrSym) = axes(A.data)
 @inline function Base.isassigned(A::HermOrSym, i::Int, j::Int)
@@ -294,6 +288,9 @@ end
 Base.dataids(A::HermOrSym) = Base.dataids(parent(A))
 Base.unaliascopy(A::Hermitian) = Hermitian(Base.unaliascopy(parent(A)), sym_uplo(A.uplo))
 Base.unaliascopy(A::Symmetric) = Symmetric(Base.unaliascopy(parent(A)), sym_uplo(A.uplo))
+
+_conjugation(::Symmetric) = transpose
+_conjugation(::Hermitian) = adjoint
 
 diag(A::Symmetric) = symmetric.(diag(parent(A)), sym_uplo(A.uplo))
 diag(A::Hermitian) = hermitian.(diag(parent(A)), sym_uplo(A.uplo))
