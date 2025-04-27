@@ -240,7 +240,7 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
             if elty <: Real
                 @test Array(abs.(D)^a) ≈ abs.(DM)^a
             else
-                @test Array(D^a) ≈ DM^a
+                @test Array(D^a) ≈ DM^a rtol=max(eps(relty), 1e-15) # TODO: improve precision
             end
             @test Diagonal(1:100)^2 == Diagonal((1:100).^2)
             p = 3
