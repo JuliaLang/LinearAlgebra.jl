@@ -34,13 +34,17 @@ Random.seed!(1)
         UU+=im*convert(Matrix{elty}, randn(n,n))
     end
     D = Diagonal(dd)
-    DM = Matrix(Diagonal(dd))
+    M = Matrix(D)
+    # we can't directly compare with a Matrix, since the dense methods often dispatch
+    # to Diagonal ones. We therefore compare with other structured matrix types
+    # which have their own implementations
+    DM = elty <: Real ? Hermitian(M) : UpperTriangular(M)
 
     @testset "constructor" begin
         for x in (dd, GenericArray(dd))
-            @test Diagonal(x)::Diagonal{elty,typeof(x)} == DM
+            @test Diagonal(x)::Diagonal{elty,typeof(x)} == M
             @test Diagonal(x).diag === x
-            @test Diagonal{elty}(x)::Diagonal{elty,typeof(x)} == DM
+            @test Diagonal{elty}(x)::Diagonal{elty,typeof(x)} == M
             @test Diagonal{elty}(x).diag === x
             @test Diagonal{elty}(D) === D
         end
@@ -80,9 +84,9 @@ Random.seed!(1)
         @test typeof(convert(Diagonal{ComplexF32},D)) <: Diagonal{ComplexF32}
         @test typeof(convert(AbstractMatrix{ComplexF32},D)) <: Diagonal{ComplexF32}
 
-        @test Array(real(D)) == real(DM)
-        @test Array(abs.(D)) == abs.(DM)
-        @test Array(imag(D)) == imag(DM)
+        @test Array(real(D)) == real(M)
+        @test Array(abs.(D)) == abs.(M)
+        @test Array(imag(D)) == imag(M)
 
         @test parent(D) == dd
         @test D[1,1] == dd[1]
