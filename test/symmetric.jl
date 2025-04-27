@@ -1191,4 +1191,27 @@ end
     @test_throws s_msg S[1,1] = v
 end
 
+@testset "triu/tril with immutable arrays" begin
+    struct ImmutableMatrix{T,A<:AbstractMatrix{T}} <: AbstractMatrix{T}
+        a :: A
+    end
+    Base.size(A::ImmutableMatrix) = size(A.a)
+    Base.getindex(A::ImmutableMatrix, i::Int, j::Int) = getindex(A.a, i, j)
+    Base.copy(A::ImmutableMatrix) = A
+    LinearAlgebra.adjoint(A::ImmutableMatrix) = ImmutableMatrix(adjoint(A.a))
+    LinearAlgebra.transpose(A::ImmutableMatrix) = ImmutableMatrix(transpose(A.a))
+
+    A = ImmutableMatrix([1 2; 3 4])
+    for T in (Symmetric, Hermitian), uplo in (:U, :L)
+        H = T(A, uplo)
+        MH = Matrix(H)
+        @test triu(H,-1) == triu(MH,-1)
+        @test triu(H) == triu(MH)
+        @test triu(H,1) == triu(MH,1)
+        @test tril(H,1) == tril(MH,1)
+        @test tril(H) == tril(MH)
+        @test tril(H,-1) == tril(MH,-1)
+    end
+end
+
 end # module TestSymmetric

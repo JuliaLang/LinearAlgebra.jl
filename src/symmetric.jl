@@ -289,7 +289,7 @@ Base.dataids(A::HermOrSym) = Base.dataids(parent(A))
 Base.unaliascopy(A::Hermitian) = Hermitian(Base.unaliascopy(parent(A)), sym_uplo(A.uplo))
 Base.unaliascopy(A::Symmetric) = Symmetric(Base.unaliascopy(parent(A)), sym_uplo(A.uplo))
 
-_conjugation(::Symmetric) = transpose
+_conjugation(::Union{Symmetric, Hermitian{<:Real}}) = transpose
 _conjugation(::Hermitian) = adjoint
 
 diag(A::Symmetric) = symmetric.(diag(parent(A)), sym_uplo(A.uplo))
@@ -472,25 +472,25 @@ Base.conj!(A::HermOrSym) = typeof(A)(parentof_applytri(conj!, A), A.uplo)
 # tril/triu
 function tril(A::Hermitian, k::Integer=0)
     if A.uplo == 'U' && k <= 0
-        return tril!(copy(A.data'),k)
+        return tril_maybe_inplace(copy(A.data'),k)
     elseif A.uplo == 'U' && k > 0
-        return tril!(copy(A.data'),-1) + tril!(triu(A.data),k)
+        return tril_maybe_inplace(copy(A.data'),-1) + tril_maybe_inplace(triu(A.data),k)
     elseif A.uplo == 'L' && k <= 0
         return tril(A.data,k)
     else
-        return tril(A.data,-1) + tril!(triu!(copy(A.data')),k)
+        return tril(A.data,-1) + tril_maybe_inplace(triu_maybe_inplace(copy(A.data')),k)
     end
 end
 
 function tril(A::Symmetric, k::Integer=0)
     if A.uplo == 'U' && k <= 0
-        return tril!(copy(transpose(A.data)),k)
+        return tril_maybe_inplace(copy(transpose(A.data)),k)
     elseif A.uplo == 'U' && k > 0
-        return tril!(copy(transpose(A.data)),-1) + tril!(triu(A.data),k)
+        return tril_maybe_inplace(copy(transpose(A.data)),-1) + tril_maybe_inplace(triu(A.data),k)
     elseif A.uplo == 'L' && k <= 0
         return tril(A.data,k)
     else
-        return tril(A.data,-1) + tril!(triu!(copy(transpose(A.data))),k)
+        return tril(A.data,-1) + tril_maybe_inplace(triu_maybe_inplace(copy(transpose(A.data))),k)
     end
 end
 
@@ -498,11 +498,11 @@ function triu(A::Hermitian, k::Integer=0)
     if A.uplo == 'U' && k >= 0
         return triu(A.data,k)
     elseif A.uplo == 'U' && k < 0
-        return triu(A.data,1) + triu!(tril!(copy(A.data')),k)
+        return triu(A.data,1) + triu_maybe_inplace(tril_maybe_inplace(copy(A.data')),k)
     elseif A.uplo == 'L' && k >= 0
-        return triu!(copy(A.data'),k)
+        return triu_maybe_inplace(copy(A.data'),k)
     else
-        return triu!(copy(A.data'),1) + triu!(tril(A.data),k)
+        return triu_maybe_inplace(copy(A.data'),1) + triu_maybe_inplace(tril(A.data),k)
     end
 end
 
@@ -510,11 +510,11 @@ function triu(A::Symmetric, k::Integer=0)
     if A.uplo == 'U' && k >= 0
         return triu(A.data,k)
     elseif A.uplo == 'U' && k < 0
-        return triu(A.data,1) + triu!(tril!(copy(transpose(A.data))),k)
+        return triu(A.data,1) + triu_maybe_inplace(tril_maybe_inplace(copy(transpose(A.data))),k)
     elseif A.uplo == 'L' && k >= 0
-        return triu!(copy(transpose(A.data)),k)
+        return triu_maybe_inplace(copy(transpose(A.data)),k)
     else
-        return triu!(copy(transpose(A.data)),1) + triu!(tril(A.data),k)
+        return triu_maybe_inplace(copy(transpose(A.data)),1) + triu_maybe_inplace(tril(A.data),k)
     end
 end
 
