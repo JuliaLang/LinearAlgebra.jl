@@ -24,6 +24,17 @@ using .Main.SizedArrays
 const n=12 # Size of matrix problem to test
 Random.seed!(1)
 
+# wrapper to avoid dispatching to diagonal methods
+struct NotDiagonal{T,A<:AbstractMatrix{T}} <: AbstractMatrix{T}
+    a :: A
+end
+Base.size(N::NotDiagonal) = size(N.a)
+Base.getindex(N::NotDiagonal, i::Int, j::Int) = N.a[i, j]
+LinearAlgebra.isdiag(N::NotDiagonal) = false # this contradicts `getindex`
+LinearAlgebra.ishermitian(N::NotDiagonal) = ishermitian(N.a)
+LinearAlgebra.istriu(N::NotDiagonal) = istriu(N.a)
+LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
+
 @testset for relty in (Float32, Float64, BigFloat), elty in (relty, Complex{relty})
     dd=convert(Vector{elty}, randn(n))
     vv=convert(Vector{elty}, randn(n))
@@ -37,8 +48,9 @@ Random.seed!(1)
     M = Matrix(D)
     # we can't directly compare with a Matrix, since the dense methods often dispatch
     # to Diagonal ones. We therefore compare with other structured matrix types
-    # which have their own implementations
-    DM = elty <: Real ? Hermitian(M) : UpperTriangular(M)
+    # which have their own implementations.
+    # We wrap the complex matrices in NotDiagonal to avoid falling back to Diagonal methods
+    DM = elty <: Real ? Hermitian(M) : NotDiagonal(UpperTriangular(M))
 
     @testset "constructor" begin
         for x in (dd, GenericArray(dd))
