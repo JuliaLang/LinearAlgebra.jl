@@ -851,13 +851,13 @@ function dot(x::AbstractVector, A::UpperTriangular, y::AbstractVector)
         return dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y)))
     end
     x₁ = x[1]
-    r = dot(x₁, A[1,1], y[1])
+    r = dot(x₁, A.data[1,1], y[1])
     @inbounds for j in axes(A, 2)[2:end]
         yj = y[j]
         if !iszero(yj)
-            temp = adjoint(A[1,j]) * x₁
+            temp = adjoint(A.data[1,j]) * x₁
             @simd for i in 2:j
-                temp += adjoint(A[i,j]) * x[i]
+                temp += adjoint(A.data[i,j]) * x[i]
             end
             r += dot(temp, yj)
         end
@@ -876,9 +876,9 @@ function dot(x::AbstractVector, A::UnitUpperTriangular, y::AbstractVector)
     @inbounds for j in axes(A, 2)[2:end]
         yj = y[j]
         if !iszero(yj)
-            temp = adjoint(A[1,j]) * x₁
+            temp = adjoint(A.data[1,j]) * x₁
             @simd for i in 2:j-1
-                temp += adjoint(A[i,j]) * x[i]
+                temp += adjoint(A.data[i,j]) * x[i]
             end
             r += dot(temp, yj)
             r += dot(x[j], yj)
@@ -897,9 +897,9 @@ function dot(x::AbstractVector, A::LowerTriangular, y::AbstractVector)
     @inbounds for j in axes(A, 2)
         yj = y[j]
         if !iszero(yj)
-            temp = adjoint(A[j,j]) * x[j]
+            temp = adjoint(A.data[j,j]) * x[j]
             @simd for i in j+1:lastindex(A,1)
-                temp += adjoint(A[i,j]) * x[i]
+                temp += adjoint(A.data[i,j]) * x[i]
             end
             r += dot(temp, yj)
         end
@@ -919,7 +919,7 @@ function dot(x::AbstractVector, A::UnitLowerTriangular, y::AbstractVector)
         if !iszero(yj)
             temp = x[j]
             @simd for i in j+1:lastindex(A,1)
-                temp += adjoint(A[i,j]) * x[i]
+                temp += adjoint(A.data[i,j]) * x[i]
             end
             r += dot(temp, yj)
         end
