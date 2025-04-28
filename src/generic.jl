@@ -466,6 +466,11 @@ julia> triu(a,-3)
 """
 function triu(M::AbstractMatrix, k::Integer = 0)
     d = similar(M)
+    if !haszero(eltype(M))
+        # since the zero would need to be evaluated from the elements,
+        # we copy the array to avoid undefined references in triu!
+        copy!(d, M)
+    end
     A = triu!(d,k)
     if iszero(k)
         copytrito!(A, M, 'U')
@@ -509,6 +514,11 @@ julia> tril(a,-3)
 """
 function tril(M::AbstractMatrix,k::Integer=0)
     d = similar(M)
+    if !haszero(eltype(M))
+        # since the zero would need to be evaluated from the elements,
+        # we copy the array to avoid undefined references in tril!
+        copy!(d, M)
+    end
     A = tril!(d,k)
     if iszero(k)
         copytrito!(A, M, 'L')

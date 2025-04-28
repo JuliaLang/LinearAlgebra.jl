@@ -819,6 +819,13 @@ end
         @test all(x -> size(x) == (2,2), D)
         @test D == D1 * D2
     end
+
+    @testset "triu/tril" begin
+        D = Diagonal(fill(ones(2,2), 3))
+        M = Matrix{eltype(D)}(D)
+        @test triu(D,1) == triu(M,1)
+        @test tril(D,-1) == tril(M,-1)
+    end
 end
 
 @testset "Eigensystem for block diagonal (issue #30681)" begin

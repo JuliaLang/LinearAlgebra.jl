@@ -124,6 +124,17 @@ haszero(::Type) = false
 haszero(::Type{T}) where {T<:Number} = isconcretetype(T)
 haszero(::Type{Union{Missing,T}}) where {T<:Number} = haszero(T)
 @propagate_inbounds _zero(M::AbstractArray{T}, inds...) where {T} = haszero(T) ? zero(T) : zero(M[inds...])
+function zero!(M::AbstractArray{T}) where {T}
+    if haszero(T)
+        fill!(M, zero(T))
+    else
+        for i in eachindex(M)
+            v = @inbounds M[i]
+            z = zero(v)
+            @inbounds M[i] = z
+        end
+    end
+end
 
 """
     triu!(M, k::Integer)
