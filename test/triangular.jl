@@ -993,9 +993,9 @@ end
         A = SizedArrays.SizedArray{(2,2)}(P)
         M = fill(A, 2, 2)
         U = UnitUpperTriangular(M)
-        @test_throws "Cannot `convert` an object of type Int64" U[1,1] = 1
+        @test_throws "Cannot `convert` an object of type $Int" U[1,1] = 1
         L = UnitLowerTriangular(M)
-        @test_throws "Cannot `convert` an object of type Int64" L[1,1] = 1
+        @test_throws "Cannot `convert` an object of type $Int" L[1,1] = 1
 
         U = UnitUpperTriangular(P)
         @test_throws BoundsError U[0,0] = 1
