@@ -866,9 +866,6 @@ function ^(A::Hermitian, p::Integer)
     else
         retmat = Base.power_by_squaring(A, p)
     end
-    for i in diagind(retmat, IndexStyle(retmat))
-        retmat[i] = real(retmat[i])
-    end
     return Hermitian(retmat)
 end
 function ^(A::Hermitian{T}, p::Real) where T
@@ -876,14 +873,7 @@ function ^(A::Hermitian{T}, p::Real) where T
     F = eigen(A)
     if all(λ -> λ ≥ 0, F.values)
         retmat = (F.vectors * Diagonal((F.values).^p)) * F.vectors'
-        if T <: Real
-            return Hermitian(retmat)
-        else
-            for i in diagind(retmat, IndexStyle(retmat))
-                retmat[i] = real(retmat[i])
-            end
-            return Hermitian(retmat)
-        end
+        return Hermitian(retmat)
     else
         retmat = (F.vectors * Diagonal((complex.(F.values).^p))) * F.vectors'
         if T <: Real
