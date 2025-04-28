@@ -935,6 +935,7 @@ end
 end
 
 @testset "indexing checks" begin
+    P = [1 2; 3 4]
     @testset "getindex" begin
         U = UnitUpperTriangular(P)
         @test_throws BoundsError U[0,0]
@@ -957,7 +958,6 @@ end
         @test_throws BoundsError L[BandIndex(1,0)]
     end
     @testset "setindex!" begin
-        P = [1 2; 3 4]
         A = SizedArrays.SizedArray{(2,2)}(P)
         M = fill(A, 2, 2)
         U = UnitUpperTriangular(M)
