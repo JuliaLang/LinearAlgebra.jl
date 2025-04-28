@@ -279,7 +279,7 @@ function triu!(D::Diagonal{T}, k::Integer=0) where T
         throw(ArgumentError(string("the requested diagonal, $k, must be at least ",
             "$(-n + 1) and at most $(n + 1) in an $n-by-$n matrix")))
     elseif k > 0
-        zero!(D.diag)
+        fill!(D.diag, zero(T))
     end
     return D
 end
@@ -290,7 +290,7 @@ function tril!(D::Diagonal{T}, k::Integer=0) where T
         throw(ArgumentError(LazyString(lazy"the requested diagonal, $k, must be at least ",
             lazy"$(-n - 1) and at most $(n - 1) in an $n-by-$n matrix")))
     elseif k < 0
-        zero!(D.diag)
+        fill!(D.diag, zero(T))
     end
     return D
 end

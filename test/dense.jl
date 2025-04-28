@@ -1408,4 +1408,13 @@ end
     @test 2^A == 2^Matrix(A)
 end
 
+@testset "triu/tril for block matrices" begin
+    O = ones(2,2)
+    Z = zero(O)
+    M = fill(O, 3, 3)
+    res = fill(Z, size(M))
+    res[1,2] = res[1,3] = res[2,3] = O
+    @test triu(GenericArray(M),1) == res
+end
+
 end # module TestDense
