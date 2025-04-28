@@ -1013,4 +1013,15 @@ end
     end
 end
 
+@testset "unit triangular l/rdiv!" begin
+    A = rand(3,3)
+    @testset for (UT,T) in ((UnitUpperTriangular, UpperTriangular),
+                            (UnitLowerTriangular, LowerTriangular))
+        UnitTri = UT(A)
+        Tri = T(LinearAlgebra.full(UnitTri))
+        @test 2 \ UnitTri ≈ 2 \ Tri
+        @test UnitTri / 2 ≈ Tri / 2
+    end
+end
+
 end # module TestTriangular
