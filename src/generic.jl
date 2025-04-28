@@ -464,13 +464,9 @@ julia> triu(a,-3)
  1.0  1.0  1.0  1.0
 ```
 """
-function triu(M::AbstractMatrix, k::Integer = 0)
+triu(M::AbstractMatrix, k::Integer = 0) = _triu(M, Val(haszero(eltype(M))), k)
+function _triu(M::AbstractMatrix, ::Val{true}, k::Integer)
     d = similar(M)
-    if !haszero(eltype(M))
-        # since the zero would need to be evaluated from the elements,
-        # we copy the array to avoid undefined references in triu!
-        copy!(d, M)
-    end
     A = triu!(d,k)
     if iszero(k)
         copytrito!(A, M, 'U')
@@ -480,6 +476,14 @@ function triu(M::AbstractMatrix, k::Integer = 0)
             A[rows, col] = @view M[rows, col]
         end
     end
+    return A
+end
+function _triu(M::AbstractMatrix, ::Val{false}, k::Integer)
+    d = similar(M)
+    # since the zero would need to be evaluated from the elements,
+    # we copy the array to avoid undefined references in triu!
+    copy!(d, M)
+    A = triu!(d,k)
     return A
 end
 
@@ -512,13 +516,9 @@ julia> tril(a,-3)
  1.0  0.0  0.0  0.0
 ```
 """
-function tril(M::AbstractMatrix,k::Integer=0)
+tril(M::AbstractMatrix,k::Integer=0) = _tril(M, Val(haszero(eltype(M))), k)
+function _tril(M::AbstractMatrix, ::Val{true}, k::Integer)
     d = similar(M)
-    if !haszero(eltype(M))
-        # since the zero would need to be evaluated from the elements,
-        # we copy the array to avoid undefined references in tril!
-        copy!(d, M)
-    end
     A = tril!(d,k)
     if iszero(k)
         copytrito!(A, M, 'L')
@@ -528,6 +528,14 @@ function tril(M::AbstractMatrix,k::Integer=0)
             A[rows, col] = @view M[rows, col]
         end
     end
+    return A
+end
+function _tril(M::AbstractMatrix, ::Val{false}, k::Integer)
+    d = similar(M)
+    # since the zero would need to be evaluated from the elements,
+    # we copy the array to avoid undefined references in tril!
+    copy!(d, M)
+    A = tril!(d,k)
     return A
 end
 
