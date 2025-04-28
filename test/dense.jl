@@ -1415,6 +1415,7 @@ end
     res = fill(Z, size(M))
     res[1,2] = res[1,3] = res[2,3] = O
     @test triu(GenericArray(M),1) == res
+    @test tril(GenericArray(M),-1) == res'
 end
 
 end # module TestDense
