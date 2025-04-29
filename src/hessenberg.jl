@@ -177,6 +177,29 @@ function \(U::UnitUpperTriangular, H::UpperHessenberg)
     UpperHessenberg(HH)
 end
 
+function (\)(H::Union{UpperHessenberg,AdjOrTrans{<:Any,<:UpperHessenberg}}, B::AbstractVecOrMat)
+    TFB = typeof(oneunit(eltype(H)) \ oneunit(eltype(B)))
+    return ldiv!(H, copy_similar(B, TFB))
+end
+
+function (/)(B::AbstractMatrix, H::Union{UpperHessenberg,AdjOrTrans{<:Any,<:UpperHessenberg}})
+    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(H)))
+    return rdiv!(copy_similar(B, TFB), H)
+end
+
+ldiv!(H::AdjOrTrans{<:Any,<:UpperHessenberg}, B::AbstractVecOrMat) =
+    (rdiv!(wrapperop(H)(B), parent(H)); B)
+rdiv!(B::AbstractVecOrMat, H::AdjOrTrans{<:Any,<:UpperHessenberg}) =
+    (ldiv!(parent(H), wrapperop(H)(B)); B)
+
+# fix method ambiguities for right division, from adjtrans.jl:
+/(u::AdjointAbsVec, A::UpperHessenberg) = adjoint(adjoint(A) \ u.parent)
+/(u::TransposeAbsVec, A::UpperHessenberg) = transpose(transpose(A) \ u.parent)
+/(u::AdjointAbsVec, A::Adjoint{<:Any,<:UpperHessenberg}) = adjoint(adjoint(A) \ u.parent)
+/(u::TransposeAbsVec, A::Transpose{<:Any,<:UpperHessenberg}) = transpose(transpose(A) \ u.parent)
+/(u::AdjointAbsVec, A::Transpose{<:Any,<:UpperHessenberg}) = adjoint(conj(A.parent) \ u.parent) # technically should be adjoint(copy(adjoint(copy(A))) \ u.parent)
+/(u::TransposeAbsVec, A::Adjoint{<:Any,<:UpperHessenberg}) = transpose(conj(A.parent) \ u.parent)
+
 # Solving (H+µI)x = b: we can do this in O(m²) time and O(m) memory
 # (in-place in x) by the RQ algorithm from:
 #
