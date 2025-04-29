@@ -1726,7 +1726,7 @@ end
 """
     rotate!(x, y, c, s)
 
-Overwrite `x` with `c*x + s*y` and `y` with `-conj(s)*x + c*y`.
+Overwrite `x` with `s*y + c*x` and `y` with `c*y - conj(s)*x`.
 Returns `x` and `y`.
 
 !!! compat "Julia 1.5"
@@ -1741,8 +1741,8 @@ function rotate!(x::AbstractVector, y::AbstractVector, c, s)
     for i in eachindex(x,y)
         @inbounds begin
             xi, yi = x[i], y[i]
-            x[i] =       c *xi + s*yi
-            y[i] = -conj(s)*xi + c*yi
+            x[i] = s*yi +      c *xi
+            y[i] = c*yi - conj(s)*xi 
         end
     end
     return x, y
