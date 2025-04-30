@@ -46,6 +46,7 @@ struct UpperHessenberg{T,S<:AbstractMatrix{T}} <: AbstractMatrix{T}
 
     function UpperHessenberg{T,S}(data) where {T,S<:AbstractMatrix{T}}
         require_one_based_indexing(data)
+        checksquare(data)
         new{T,S}(data)
     end
 end
