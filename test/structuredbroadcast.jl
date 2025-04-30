@@ -22,8 +22,9 @@ using .Main.SizedArrays
         S = SymTridiagonal(rand(N), rand(max(0,N-1)))
         U = UpperTriangular(rand(N,N))
         L = LowerTriangular(rand(N,N))
+        UH = UpperHessenberg(rand(N,N))
         M = Matrix(rand(N,N))
-        structuredarrays = (D, B, T, U, L, M, S)
+        structuredarrays = (D, B, T, U, L, M, S, UH)
         fstructuredarrays = map(Array, structuredarrays)
         @testset "$(nameof(typeof(X)))" for (X, fX) in zip(structuredarrays, fstructuredarrays)
             @test (Q = broadcast(sin, X); typeof(Q) == typeof(X) && Q == broadcast(sin, fX))
@@ -135,6 +136,7 @@ end
         T = Tridiagonal(rand(max(0,N-1)), rand(N), rand(max(0,N-1)))
         ◣ = LowerTriangular(rand(N,N))
         ◥ = UpperTriangular(rand(N,N))
+        UH = UpperHessenberg(rand(N,N))
         M = Matrix(rand(N,N))
 
         @test broadcast!(sin, copy(D), D)::Diagonal == sin.(D)::Diagonal
@@ -143,6 +145,7 @@ end
         @test broadcast!(sin, copy(T), T)::Tridiagonal == sin.(T)::Tridiagonal
         @test broadcast!(sin, copy(◣), ◣)::LowerTriangular == sin.(◣)::LowerTriangular
         @test broadcast!(sin, copy(◥), ◥)::UpperTriangular == sin.(◥)::UpperTriangular
+        @test broadcast!(sin, copy(UH), UH)::UpperHessenberg == sin.(UH)::UpperHessenberg
         @test broadcast!(sin, copy(M), M)::Matrix == sin.(M)::Matrix
         @test broadcast!(*, copy(D), D, A) == Diagonal(broadcast(*, D, A))
         @test broadcast!(*, copy(Bu), Bu, A) == Bidiagonal(broadcast(*, Bu, A), :U)
@@ -150,6 +153,7 @@ end
         @test broadcast!(*, copy(T), T, A) == Tridiagonal(broadcast(*, T, A))
         @test broadcast!(*, copy(◣), ◣, A) == LowerTriangular(broadcast(*, ◣, A))
         @test broadcast!(*, copy(◥), ◥, A) == UpperTriangular(broadcast(*, ◥, A))
+        @test broadcast!(*, copy(UH), UH, A) == UpperHessenberg(broadcast(*, UH, A))
         @test broadcast!(*, copy(M), M, A) == Matrix(broadcast(*, M, A))
 
         if N > 2
@@ -181,8 +185,9 @@ end
     S = SymTridiagonal(rand(N), rand(N - 1))
     U = UpperTriangular(rand(N,N))
     L = LowerTriangular(rand(N,N))
+    UH = UpperHessenberg(rand(N,N))
     M = Matrix(rand(N,N))
-    structuredarrays = (M, D, B, T, S, U, L)
+    structuredarrays = (M, D, B, T, S, U, L, UH)
     fstructuredarrays = map(Array, structuredarrays)
     for (X, fX) in zip(structuredarrays, fstructuredarrays)
         @test (Q = map(sin, X); typeof(Q) == typeof(X) && Q == map(sin, fX))
