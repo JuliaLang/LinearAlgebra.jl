@@ -137,13 +137,13 @@ end
         ◥ = UpperTriangular(rand(N,N))
         M = Matrix(rand(N,N))
 
-        @test broadcast!(sin, copy(D), D) == sin.(D)::Diagonal
-        @test broadcast!(sin, copy(Bu), Bu) == sin.(Bu)::Bidiagonal
-        @test broadcast!(sin, copy(Bl), Bl) == sin.(Bl)::Bidiagonal
-        @test broadcast!(sin, copy(T), T) == sin.(T)::Tridiagonal
-        @test broadcast!(sin, copy(◣), ◣) == sin.(◣)::LowerTriangular
-        @test broadcast!(sin, copy(◥), ◥) == sin.(◥)::UpperTriangular
-        @test broadcast!(sin, copy(M), M) == sin.(M)::Matrix
+        @test broadcast!(sin, copy(D), D)::Diagonal == sin.(D)::Diagonal
+        @test broadcast!(sin, copy(Bu), Bu)::Bidiagonal == sin.(Bu)::Bidiagonal
+        @test broadcast!(sin, copy(Bl), Bl)::Bidiagonal == sin.(Bl)::Bidiagonal
+        @test broadcast!(sin, copy(T), T)::Tridiagonal == sin.(T)::Tridiagonal
+        @test broadcast!(sin, copy(◣), ◣)::LowerTriangular == sin.(◣)::LowerTriangular
+        @test broadcast!(sin, copy(◥), ◥)::UpperTriangular == sin.(◥)::UpperTriangular
+        @test broadcast!(sin, copy(M), M)::Matrix == sin.(M)::Matrix
         @test broadcast!(*, copy(D), D, A) == Diagonal(broadcast(*, D, A))
         @test broadcast!(*, copy(Bu), Bu, A) == Bidiagonal(broadcast(*, Bu, A), :U)
         @test broadcast!(*, copy(Bl), Bl, A) == Bidiagonal(broadcast(*, Bl, A), :L)
