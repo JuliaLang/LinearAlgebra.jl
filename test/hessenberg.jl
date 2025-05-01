@@ -286,4 +286,11 @@ end
     end
 end
 
+@testset "multiplication with empty HessenbergQ" begin
+    @test ones(2, 0)*hessenberg(zeros(0,0)).Q == zeros(2,0)
+    @test_throws DimensionMismatch ones(2, 1)*hessenberg(zeros(0,0)).Q
+    @test hessenberg(zeros(0,0)).Q * ones(0, 2) == zeros(0,2)
+    @test_throws DimensionMismatch hessenberg(zeros(0,0)).Q * ones(1, 2)
+end
+
 end # module TestHessenberg
