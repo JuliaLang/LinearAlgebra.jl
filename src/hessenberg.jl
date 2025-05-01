@@ -103,8 +103,8 @@ Base._reverse(A::UpperHessenberg, dims) = reverse!(Matrix(A); dims)
 
 Base.@propagate_inbounds function setindex!(A::UpperHessenberg, x, i::Integer, j::Integer)
     if i > j+1
-        x == 0 || throw(ArgumentError("cannot set index in the lower triangular part " *
-            lazy"($i, $j) of an UpperHessenberg matrix to a nonzero value ($x)"))
+        iszero(x) || throw(ArgumentError(LazyString("cannot set index in the lower triangular part ",
+            lazy"($i, $j) of an UpperHessenberg matrix to a nonzero value ($x)")))
     else
         A.data[i,j] = x
     end
