@@ -283,10 +283,10 @@ function copyto!(dest::LowerTriangular, bc::Broadcasted{<:StructuredMatrixStyle}
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
-    bc2 = preprocess_broadcasted(LowerTriangular, bc)
+    bc_unwrapped = preprocess_broadcasted(LowerTriangular, bc)
     for j in axs[2]
         for i in j:axs[1][end]
-            @inbounds dest.data[i,j] = bc2[CartesianIndex(i, j)]
+            @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
         end
     end
     return dest
@@ -296,9 +296,10 @@ function copyto!(dest::UpperTriangular, bc::Broadcasted{<:StructuredMatrixStyle}
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
+    bc_unwrapped = preprocess_broadcasted(UpperTriangular, bc)
     for j in axs[2]
         for i in 1:j
-            @inbounds dest.data[i,j] = bc[CartesianIndex(i, j)]
+            @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
         end
     end
     return dest
