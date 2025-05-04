@@ -401,4 +401,11 @@ end
     end
 end
 
+@testset "Rectangular UpperHessenberg" begin
+    UH = UpperHessenberg(ones(4,3))
+    UH2 = UH .+ UH .- UH
+    @test UH2 == UH
+    @test UH2 isa UpperHessenberg
+end
+
 end
