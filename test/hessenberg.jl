@@ -64,6 +64,13 @@ let n = 10
         H = UpperHessenberg(Areal)
         @test Array(Hc + H) == Array(Hc) + Array(H)
         @test Array(Hc - H) == Array(Hc) - Array(H)
+        @testset "ldiv and rdiv" begin
+            for b in (b_, B_), H in (H, Hc, H', Hc', transpose(Hc))
+                @test H * (H \ b) ≈ b
+                @test (b' / H) * H ≈ (Matrix(b') / H) * H ≈ b'
+                @test (transpose(b) / H) * H ≈ (Matrix(transpose(b)) / H) * H ≈ transpose(b)
+            end
+        end
         @testset "Preserve UpperHessenberg shape (issue #39388)" begin
             H = UpperHessenberg(Areal)
             A = rand(n,n)
