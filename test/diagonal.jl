@@ -21,6 +21,9 @@ using .Main.FillArrays
 isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
 using .Main.SizedArrays
 
+isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
+using .Main.ImmutableArrays
+
 const n=12 # Size of matrix problem to test
 Random.seed!(1)
 
@@ -1126,10 +1129,6 @@ end
         @test rdiv!(A, trans(I(3))) == A
     end
 end
-
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
 
 @testset "Conversion to AbstractArray" begin
     # tests corresponding to #34995
