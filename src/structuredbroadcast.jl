@@ -264,13 +264,24 @@ function copyto!(dest::Tridiagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     return dest
 end
 
+# Recursively replace wrapped matrices by their parents to improve broadcasting performance
+# We may do this because the indexing within `copyto!` is restricted to the stored indices
+preprocess_broadcasted(::Type{T}, A) where {T} = _preprocess_broadcasted(T, A)
+function preprocess_broadcasted(::Type{T}, bc::Broadcasted) where {T}
+    args = map(x -> preprocess_broadcasted(T, x), bc.args)
+    Broadcast.Broadcasted(bc.f, args, bc.axes)
+end
+_preprocess_broadcasted(::Type{LowerTriangular}, A) = lowertridata(A)
+_preprocess_broadcasted(::Type{UpperTriangular}, A) = uppertridata(A)
+
 function copyto!(dest::LowerTriangular, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
+    bc_unwrapped = preprocess_broadcasted(LowerTriangular, bc)
     for j in axs[2]
         for i in j:axs[1][end]
-            @inbounds dest.data[i,j] = bc[CartesianIndex(i, j)]
+            @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
         end
     end
     return dest
@@ -280,9 +291,10 @@ function copyto!(dest::UpperTriangular, bc::Broadcasted{<:StructuredMatrixStyle}
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
+    bc_unwrapped = preprocess_broadcasted(UpperTriangular, bc)
     for j in axs[2]
         for i in 1:j
-            @inbounds dest.data[i,j] = bc[CartesianIndex(i, j)]
+            @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
         end
     end
     return dest
