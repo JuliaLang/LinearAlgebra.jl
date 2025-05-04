@@ -6,6 +6,5 @@ end
 
 proj = abspath(joinpath(@__DIR__, ".."))
 cmd = """Base.runtests(["LinearAlgebra"]; propagate_project=true, ncores=$ncores)"""
-withenv("JULIA_NUM_THREADS" => 1) do
-    run(`$(Base.julia_cmd()) --project=$proj --compiled-modules=existing -e $cmd`)
-end
+run(addenv(`$(Base.julia_cmd()) --project=$proj --compiled-modules=existing -e $cmd`,
+    "JULIA_NUM_THREADS" => 1, "JULIA_PRUNE_OLD_LA" => true))
