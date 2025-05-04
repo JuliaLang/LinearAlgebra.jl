@@ -702,10 +702,8 @@ end
 
 uppertridata(A) = A
 lowertridata(A) = A
-# we restrict these specializations only to strided matrices to avoid cases where an UpperTriangular type
-# doesn't share its indexing with the parent
-uppertridata(A::UpperTriangular{<:Any, <:StridedMatrix}) = parent(A)
-lowertridata(A::LowerTriangular{<:Any, <:StridedMatrix}) = parent(A)
+uppertridata(A::UpperTriangular) = parent(A)
+lowertridata(A::LowerTriangular) = parent(A)
 
 @inline _rscale_add!(A::AbstractTriangular, B::AbstractTriangular, C::Number, alpha::Number, beta::Number) =
     @stable_muladdmul _triscale!(A, B, C, MulAddMul(alpha, beta))
