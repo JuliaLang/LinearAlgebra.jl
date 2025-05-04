@@ -389,9 +389,11 @@ end
 end
 
 @testset "nested triangular broadcast" begin
-    L = LowerTriangular(rand(Int,4,4))
-    M = Matrix(L)
-    @test L .+ L .+ 0 .+ L .+ 0 .- L == 2M
+    for T in (LowerTriangular, UpperTriangular)
+        L = T(rand(Int,4,4))
+        M = Matrix(L)
+        @test L .+ L .+ 0 .+ L .+ 0 .- L == 2M
+    end
 end
 
 end
