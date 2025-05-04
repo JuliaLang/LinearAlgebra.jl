@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module BitArray
+module TestBitArray
 
 prune_old_LA = parse(Bool, get(ENV, "JULIA_PRUNE_OLD_LA", "false"))
 !isdefined(Main, :pruned_old_LA) && prune_old_LA && @eval Main include("prune_old_LA.jl")
