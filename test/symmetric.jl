@@ -1191,4 +1191,13 @@ end
     @test_throws s_msg S[1,1] = v
 end
 
+@testset "fillstored!" begin
+    A = zeros(4,4)
+    for T in (Symmetric, Hermitian)
+        A .= 0
+        LinearAlgebra.fillstored!(T(A), 2)
+        @test all(==(2), T(A))
+    end
+end
+
 end # module TestSymmetric

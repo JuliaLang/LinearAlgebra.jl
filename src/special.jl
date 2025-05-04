@@ -323,7 +323,10 @@ _diag_or_value(A::UniformScaling) = A.λ
 fillstored!(A::Diagonal, x) = (fill!(A.diag, x); A)
 fillstored!(A::Bidiagonal, x) = (fill!(A.dv, x); fill!(A.ev, x); A)
 fillstored!(A::Tridiagonal, x) = (fill!(A.dl, x); fill!(A.d, x); fill!(A.du, x); A)
-fillstored!(A::SymTridiagonal, x) = (fill!(A.dv, x); fill!(A.ev, x); A)
+function fillstored!(A::SymTridiagonal, x)
+    issymmetric(x) || throw(ArgumentError("cannot set a diagonal entry of a SymTridiagonal to an asymmetric value"))
+    (fill!(A.dv, x); fill!(A.ev, x); A)
+end
 
 _small_enough(A::Union{Diagonal, Bidiagonal}) = size(A, 1) <= 1
 _small_enough(A::Tridiagonal) = size(A, 1) <= 2

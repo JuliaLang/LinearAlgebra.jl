@@ -841,4 +841,28 @@ end
     end
 end
 
+@testset "fillstored!" begin
+    dv, ev = zeros(4), zeros(3)
+    D = Diagonal(dv)
+    LinearAlgebra.fillstored!(D, 2)
+    @test D == diagm(fill(2, length(dv)))
+
+    dv .= 0
+    B = Bidiagonal(dv, ev, :U)
+    LinearAlgebra.fillstored!(B, 2)
+    @test B == diagm(0=>fill(2, length(dv)), 1=>fill(2, length(ev)))
+
+    dv .= 0
+    ev .= 0
+    T = Tridiagonal(ev, dv, ev)
+    LinearAlgebra.fillstored!(T, 2)
+    @test T == diagm(-1=>fill(2, length(ev)), 0=>fill(2, length(dv)), 1=>fill(2, length(ev)))
+
+    dv .= 0
+    ev .= 0
+    ST = SymTridiagonal(dv, ev)
+    LinearAlgebra.fillstored!(ST, 2)
+    @test ST == diagm(-1=>fill(2, length(ev)), 0=>fill(2, length(dv)), 1=>fill(2, length(ev)))
+end
+
 end # module TestSpecial

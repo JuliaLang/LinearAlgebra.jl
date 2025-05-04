@@ -402,13 +402,11 @@ fill!(A::HermOrSym, x) = fillstored!(A, x)
 function fillstored!(A::HermOrSym{T}, x) where T
     xT = convert(T, x)
     if isa(A, Hermitian)
-        isreal(xT) || throw(ArgumentError("cannot fill Hermitian matrix with a nonreal value"))
+        ishermitian(xT) || throw(ArgumentError("cannot fill Hermitian matrix with a non-hermitian value"))
+    elseif isa(A, Symmetric)
+        issymmetric(xT) || throw(ArgumentError("cannot fill Symmetric matrix with an asymmetric value"))
     end
-    if A.uplo == 'U'
-        fillband!(A.data, xT, 0, size(A,2)-1)
-    else # A.uplo == 'L'
-        fillband!(A.data, xT, 1-size(A,1), 0)
-    end
+    applytri(A -> fillstored!(A, xT), A)
     return A
 end
 
