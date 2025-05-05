@@ -38,9 +38,9 @@ To use a development version of this package, you can choose one of the followin
 
 1. **Change the UUID in the project file and load the package:**
 
-   Start `julia` as
-   ```julia
-   JULIA_PRUNE_OLD_LA=true julia +nightly --compiled-modules=existing --project
+   Start `julia` with the flags
+   ```console
+   julia +nightly --compiled-modules=existing --project
    ```
    where it is assumed that one is already within the `LinearAlgebra` directory. Otherwise, adjust
    the project path accordingly. The `julia +nightly` command above assumes that `juliaup` is being used
@@ -48,7 +48,10 @@ To use a development version of this package, you can choose one of the followin
 
    Within the `julia` session, load the `LinearAlgebra` module after pruning the one in the sysimage. This may be done as
    ```julia
-   include("test/prune_old_LA.jl") && using LinearAlgebra
+   withenv("JULIA_PRUNE_OLD_LA" => "true") do
+      include("test/prune_old_LA.jl")
+   end
+   using LinearAlgebra
    ```
 
 2. **Build Julia with the custom `LinearAlgebra` commit:**
