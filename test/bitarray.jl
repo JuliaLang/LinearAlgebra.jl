@@ -99,3 +99,5 @@ b2 = bitrand(v1)
 
 b1 = bitrand(n1, n1)
 @check_bit_operation diag(b1)
+
+end # module
