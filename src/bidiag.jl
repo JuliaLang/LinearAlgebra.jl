@@ -1186,39 +1186,27 @@ function _dibimul!(C, A, B, _add)
 end
 function _dibimul_nonzeroalpha!(C, A, B, _add)
     n = size(A,1)
-    if n <= 3
-        # For simplicity, use a naive multiplication for small matrices
-        # that loops over all elements.
-        for I in CartesianIndices(C)
-            C[I] += _add(A.diag[I[1]] * B[I[1], I[2]])
-        end
-        return C
-    end
     Ad = A.diag
     Bl = _diag(B, -1)
     Bd = _diag(B, 0)
     Bu = _diag(B, 1)
     @inbounds begin
         # first row of C
-        C[1,1] += _add(A[1,1]*B[1,1])
-        C[1,2] += _add(A[1,1]*B[1,2])
-        # second row of C
-        C[2,1] += _add(A[2,2]*B[2,1])
-        C[2,2] += _add(A[2,2]*B[2,2])
-        C[2,3] += _add(A[2,2]*B[2,3])
-        for j in 3:n-2
+        C[1,1] += _add(Ad[1]*Bd[1])
+        if n >= 2
+            C[1,2] += _add(Ad[1]*Bu[1])
+        end
+        for j in 2:n-1
             Ajj       = Ad[j]
             C[j, j-1] += _add(Ajj*Bl[j-1])
             C[j, j  ] += _add(Ajj*Bd[j])
             C[j, j+1] += _add(Ajj*Bu[j])
         end
-        # row before last of C
-        C[n-1,n-2] += _add(A[n-1,n-1]*B[n-1,n-2])
-        C[n-1,n-1] += _add(A[n-1,n-1]*B[n-1,n-1])
-        C[n-1,n  ] += _add(A[n-1,n-1]*B[n-1,n  ])
-        # last row of C
-        C[n,n-1] += _add(A[n,n]*B[n,n-1])
-        C[n,n  ] += _add(A[n,n]*B[n,n  ])
+        if n >= 2
+            # last row of C
+            C[n,n-1] += _add(Ad[n]*Bl[n-1])
+            C[n,n  ] += _add(Ad[n]*Bd[n])
+        end
     end # inbounds
     C
 end
