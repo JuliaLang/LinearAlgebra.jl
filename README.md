@@ -38,20 +38,30 @@ To use a development version of this package, you can choose one of the followin
 
 1. **Change the UUID in the project file and load the package:**
 
-   Start `julia` with the flags
-   ```console
-   julia +nightly --compiled-modules=existing --project
+   Change the UUID line in `Project.toml` as
+   ```diff
+   - uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+   + uuid = "27e2e46d-f89d-539d-b4ee-838fcccc9c8e"
    ```
-   where it is assumed that one is already within the `LinearAlgebra` directory. Otherwise, adjust
-   the project path accordingly. The `julia +nightly` command above assumes that `juliaup` is being used
+
+   Start `julia` as
+   ```console
+   JULIA_PRUNE_OLD_LA=true julia +nightly --compiled-modules=existing --project
+   ```
+   where it is assumed that one is already within the `LinearAlgebra` directory (otherwise, adjust
+   the project path accordingly). The `julia +nightly` command above assumes that `juliaup` is being used
    to launch `julia`, but one may substitute this with the path to the julia executable.
 
    Within the `julia` session, load the `LinearAlgebra` module after pruning the one in the sysimage. This may be done as
    ```julia
-   withenv("JULIA_PRUNE_OLD_LA" => "true") do
-      include("test/prune_old_LA.jl")
-   end
-   using LinearAlgebra
+   include("test/prune_old_LA.jl") && using LinearAlgebra
+   ```
+
+   Note that loading the test files in the REPL will automatically carry out the pruning to ensure that the development version of the package is used in the tests.
+
+   If you are contributing to the repo using this method, it may be convenient to ignore the local changes to `Project.toml` by running
+   ```console
+   git update-index --skip-worktree Project.toml
    ```
 
 2. **Build Julia with the custom `LinearAlgebra` commit:**
