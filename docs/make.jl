@@ -1,3 +1,4 @@
+ENV["JULIA_PRUNE_OLD_LA"] = "true"
 include("../test/prune_old_LA.jl")
 
 using LinearAlgebra
