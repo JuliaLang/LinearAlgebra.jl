@@ -48,10 +48,11 @@ methods_to_delete =
 :acsch
 ]
 
-prune_old_LA = parse(Bool, get(ENV, "JULIA_PRUNE_OLD_LA", "false"))
 
 let
-    LA = get(Base.loaded_modules, Base.PkgId(Base.UUID("37e2e46d-f89d-539d-b4ee-838fcccc9c8e"), "LinearAlgebra"), nothing)
+    prune_old_LA = parse(Bool, get(ENV, "JULIA_PRUNE_OLD_LA", "false"))
+    LinalgSysImg = Base.PkgId(Base.UUID("37e2e46d-f89d-539d-b4ee-838fcccc9c8e"), "LinearAlgebra")
+    LA = get(Base.loaded_modules, LinalgSysImg, nothing)
     if LA !== nothing && prune_old_LA
         @assert hasmethod(*, Tuple{Matrix{Float64}, Matrix{Float64}})
         for methss in methods_to_delete
@@ -63,9 +64,17 @@ let
             end
         end
     end
-    Base.unreference_module(Base.PkgId(Base.UUID("37e2e46d-f89d-539d-b4ee-838fcccc9c8e"), "LinearAlgebra"))
 end
 
-@assert !hasmethod(*, Tuple{Matrix{Float64}, Matrix{Float64}})
+# check in a separate block to ensure that the latest world age is used
+let
+    prune_old_LA = parse(Bool, get(ENV, "JULIA_PRUNE_OLD_LA", "false"))
+    LinalgSysImg = Base.PkgId(Base.UUID("37e2e46d-f89d-539d-b4ee-838fcccc9c8e"), "LinearAlgebra")
+    LA = get(Base.loaded_modules, LinalgSysImg, nothing)
+    if LA !== nothing && prune_old_LA
+        @assert !hasmethod(*, Tuple{Matrix{Float64}, Matrix{Float64}})
+    end
+    Base.unreference_module(LinalgSysImg)
+end
 
 pruned_old_LA = true

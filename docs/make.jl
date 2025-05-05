@@ -1,5 +1,6 @@
-ENV["JULIA_PRUNE_OLD_LA"] = "true"
-include("../test/prune_old_LA.jl")
+withenv("JULIA_PRUNE_OLD_LA" => "true")
+    include("../test/prune_old_LA.jl")
+end
 
 using LinearAlgebra
 using Documenter: DocMeta, makedocs, deploydocs, HTML
