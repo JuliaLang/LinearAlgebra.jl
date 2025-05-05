@@ -1,4 +1,4 @@
-withenv("JULIA_PRUNE_OLD_LA" => "true")
+withenv("JULIA_PRUNE_OLD_LA" => "true") do
     include("../test/prune_old_LA.jl")
 end
 
