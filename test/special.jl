@@ -2,8 +2,7 @@
 
 module TestSpecial
 
-prune_old_LA = parse(Bool, get(ENV, "JULIA_PRUNE_OLD_LA", "false"))
-!isdefined(Main, :pruned_old_LA) && prune_old_LA && @eval Main include("prune_old_LA.jl")
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: rmul!, BandIndex

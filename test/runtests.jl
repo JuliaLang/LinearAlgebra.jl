@@ -1,7 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-prune_old_LA = parse(Bool, get(ENV, "JULIA_PRUNE_OLD_LA", "false"))
-prune_old_LA && include("prune_old_LA.jl")
+include("prune_old_LA.jl")
 
 using Test, LinearAlgebra
 

@@ -48,9 +48,11 @@ methods_to_delete =
 :acsch
 ]
 
+prune_old_LA = parse(Bool, get(ENV, "JULIA_PRUNE_OLD_LA", "false"))
+
 let
     LA = get(Base.loaded_modules, Base.PkgId(Base.UUID("37e2e46d-f89d-539d-b4ee-838fcccc9c8e"), "LinearAlgebra"), nothing)
-    if LA !== nothing
+    if LA !== nothing && prune_old_LA
         @assert hasmethod(*, Tuple{Matrix{Float64}, Matrix{Float64}})
         for methss in methods_to_delete
             meths = getglobal(Base, methss)
