@@ -179,7 +179,8 @@ public AbstractTriangular,
         symmetric,
         symmetric_type,
         zeroslike,
-        matprod_dest
+        matprod_dest,
+        fillstored!
 
 const BlasFloat = Union{Float64,Float32,ComplexF64,ComplexF32}
 const BlasReal = Union{Float64,Float32}
