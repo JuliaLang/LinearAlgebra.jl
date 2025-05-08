@@ -512,7 +512,7 @@ Random.seed!(1)
     @test Matrix{ComplexF64}(BD) == BD
 end
 
-@testset "Constructors with Char uplo"
+@testset "Constructors with Char uplo" begin
     @test Bidiagonal(Int8[1,2], [1], 'U') == Bidiagonal(Int8[1,2], [1], :U)
 end
 
