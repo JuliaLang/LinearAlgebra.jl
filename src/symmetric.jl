@@ -850,9 +850,11 @@ function ^(A::SelfAdjoint, p::Real)
     isinteger(p) && return integerpow(A, p)
     F = eigen(A)
     if all(λ -> λ ≥ 0, F.values)
-        return wrappertype(A)((F.vectors * Diagonal((F.values).^p)) * F.vectors')
+        retmat = (F.vectors * Diagonal((F.values).^p)) * F.vectors'
+        return wrappertype(A)(retmat)
     else
-        return nonhermitianwrappertype(A)((F.vectors * Diagonal(complex.(F.values).^p)) * F.vectors')
+        retmat = (F.vectors * Diagonal(complex.(F.values).^p)) * F.vectors'
+        return nonhermitianwrappertype(A)(retmat)
     end
 end
 function ^(A::SymSymTri{<:Complex}, p::Real)
@@ -864,14 +866,16 @@ for func in (:exp, :cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :atanh,
     @eval begin
         function ($func)(A::SelfAdjoint)
             F = eigen(A)
-            return wrappertype(A)((F.vectors * Diagonal(($func).(F.values))) * F.vectors')
+            retmat = (F.vectors * Diagonal(($func).(F.values))) * F.vectors'
+            return wrappertype(A)(retmat)
         end
     end
 end
 
 function cis(A::SelfAdjoint)
     F = eigen(A)
-    return nonhermitianwrappertype(A)(F.vectors .* cis.(F.values') * F.vectors')
+    retmat = F.vectors .* cis.(F.values') * F.vectors'
+    return nonhermitianwrappertype(A)(retmat)
 end
 
 for func in (:acos, :asin)
@@ -879,9 +883,11 @@ for func in (:acos, :asin)
         function ($func)(A::SelfAdjoint)
             F = eigen(A)
             if all(λ -> -1 ≤ λ ≤ 1, F.values)
-                return wrappertype(A)((F.vectors * Diagonal(($func).(F.values))) * F.vectors')
+                retmat = (F.vectors * Diagonal(($func).(F.values))) * F.vectors'
+                return wrappertype(A)(retmat)
             else
-                return nonhermitianwrappertype(A)((F.vectors * Diagonal(($func).(complex.(F.values)))) * F.vectors')
+                retmat = (F.vectors * Diagonal(($func).(complex.(F.values)))) * F.vectors'
+                return nonhermitianwrappertype(A)(retmat)
             end
         end
     end
@@ -890,9 +896,11 @@ end
 function acosh(A::SelfAdjoint)
     F = eigen(A)
     if all(λ -> λ ≥ 1, F.values)
-        return wrappertype(A)((F.vectors * Diagonal(acosh.(F.values))) * F.vectors')
+        retmat = (F.vectors * Diagonal(acosh.(F.values))) * F.vectors'
+        return wrappertype(A)(retmat)
     else
-        return nonhermitianwrappertype(A)((F.vectors * Diagonal(acosh.(complex.(F.values)))) * F.vectors')
+        retmat = (F.vectors * Diagonal(acosh.(complex.(F.values)))) * F.vectors'
+        return nonhermitianwrappertype(A)(retmat)
     end
 end
 
@@ -910,9 +918,11 @@ end
 function log(A::SelfAdjoint)
     F = eigen(A)
     if all(λ -> λ > 0, F.values)
-        return wrappertype(A)((F.vectors * Diagonal(log.(F.values))) * F.vectors')
+        retmat = (F.vectors * Diagonal(log.(F.values))) * F.vectors'
+        return wrappertype(A)(retmat)
     else
-        return nonhermitianwrappertype(A)((F.vectors * Diagonal(log.(complex.(F.values)))) * F.vectors')
+        retmat = (F.vectors * Diagonal(log.(complex.(F.values)))) * F.vectors'
+        return nonhermitianwrappertype(A)(retmat)
     end
 end
 
@@ -921,9 +931,11 @@ function sqrt(A::SelfAdjoint; rtol = eps(real(float(eltype(A)))) * size(A, 1))
     F = eigen(A)
     λ₀ = -maximum(abs, F.values) * rtol # treat λ ≥ λ₀ as "zero" eigenvalues up to roundoff
     if all(λ -> λ ≥ λ₀, F.values)
-        return wrappertype(A)((F.vectors * Diagonal(sqrt.(max.(0, F.values)))) * F.vectors')
+        retmat = (F.vectors * Diagonal(sqrt.(max.(0, F.values)))) * F.vectors'
+        return wrappertype(A)(retmat)
     else
-        return nonhermitianwrappertype(A)((F.vectors * Diagonal(sqrt.(complex.(F.values)))) * F.vectors')
+        retmat = (F.vectors * Diagonal(sqrt.(complex.(F.values)))) * F.vectors'
+        return nonhermitianwrappertype(A)(retmat)
     end
 end
 
