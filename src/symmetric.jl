@@ -266,6 +266,7 @@ Base._reverse(A::Symmetric, ::Colon) = Symmetric(reverse(A.data), A.uplo == 'U' 
 
 @propagate_inbounds function setindex!(A::Symmetric, v, i::Integer, j::Integer)
     i == j || throw(ArgumentError("Cannot set a non-diagonal index in a symmetric matrix"))
+    issymmetric(v) || throw(ArgumentError("cannot set a diagonal element of a symmetric matrix to an asymmetric value"))
     setindex!(A.data, v, i, j)
     return A
 end
@@ -276,8 +277,8 @@ Base._reverse(A::Hermitian, ::Colon) = Hermitian(reverse(A.data), A.uplo == 'U' 
 @propagate_inbounds function setindex!(A::Hermitian, v, i::Integer, j::Integer)
     if i != j
         throw(ArgumentError("Cannot set a non-diagonal index in a Hermitian matrix"))
-    elseif !isreal(v)
-        throw(ArgumentError("Cannot set a diagonal entry in a Hermitian matrix to a nonreal value"))
+    elseif !ishermitian(v)
+        throw(ArgumentError("cannot set a diagonal element of a hermitian matrix to a non-hermitian value"))
     else
         setindex!(A.data, v, i, j)
     end
@@ -288,7 +289,7 @@ Base.dataids(A::HermOrSym) = Base.dataids(parent(A))
 Base.unaliascopy(A::Hermitian) = Hermitian(Base.unaliascopy(parent(A)), sym_uplo(A.uplo))
 Base.unaliascopy(A::Symmetric) = Symmetric(Base.unaliascopy(parent(A)), sym_uplo(A.uplo))
 
-_conjugation(::Symmetric) = transpose
+_conjugation(::Union{Symmetric, Hermitian{<:Real}}) = transpose
 _conjugation(::Hermitian) = adjoint
 
 diag(A::Symmetric) = symmetric.(diag(parent(A)), sym_uplo(A.uplo))
@@ -401,13 +402,11 @@ fill!(A::HermOrSym, x) = fillstored!(A, x)
 function fillstored!(A::HermOrSym{T}, x) where T
     xT = convert(T, x)
     if isa(A, Hermitian)
-        isreal(xT) || throw(ArgumentError("cannot fill Hermitian matrix with a nonreal value"))
+        ishermitian(xT) || throw(ArgumentError("cannot fill Hermitian matrix with a non-hermitian value"))
+    elseif isa(A, Symmetric)
+        issymmetric(xT) || throw(ArgumentError("cannot fill Symmetric matrix with an asymmetric value"))
     end
-    if A.uplo == 'U'
-        fillband!(A.data, xT, 0, size(A,2)-1)
-    else # A.uplo == 'L'
-        fillband!(A.data, xT, 1-size(A,1), 0)
-    end
+    applytri(A -> fillstored!(A, xT), A)
     return A
 end
 
@@ -440,6 +439,10 @@ ishermitian(A::Symmetric{<:Complex}) = isreal(A)
 issymmetric(A::Hermitian{<:Real}) = true
 issymmetric(A::Hermitian{<:Complex}) = isreal(A)
 issymmetric(A::Symmetric) = true
+
+# check if the symmetry is known from the type
+_issymmetric(::Union{SymSymTri, Hermitian{<:Real}}) = true
+_issymmetric(::Any) = false
 
 adjoint(A::Hermitian) = A
 transpose(A::Symmetric) = A
@@ -861,9 +864,6 @@ function ^(A::Hermitian, p::Integer)
     else
         retmat = Base.power_by_squaring(A, p)
     end
-    for i in diagind(retmat, IndexStyle(retmat))
-        retmat[i] = real(retmat[i])
-    end
     return Hermitian(retmat)
 end
 function ^(A::Hermitian{T}, p::Real) where T
@@ -871,14 +871,7 @@ function ^(A::Hermitian{T}, p::Real) where T
     F = eigen(A)
     if all(λ -> λ ≥ 0, F.values)
         retmat = (F.vectors * Diagonal((F.values).^p)) * F.vectors'
-        if T <: Real
-            return Hermitian(retmat)
-        else
-            for i in diagind(retmat, IndexStyle(retmat))
-                retmat[i] = real(retmat[i])
-            end
-            return Hermitian(retmat)
-        end
+        return Hermitian(retmat)
     else
         retmat = (F.vectors * Diagonal((complex.(F.values).^p))) * F.vectors'
         if T <: Real

@@ -2,6 +2,8 @@
 
 module TestGeneric
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using Test: GenericArray
 using LinearAlgebra: isbanded
@@ -123,6 +125,42 @@ end
     @test_throws DimensionMismatch axpy!(α, x, Vector(1:3), y, Vector(1:5))
 end
 
+@testset "generic syrk & herk" begin
+    for T ∈ (BigFloat, Complex{BigFloat}, Quaternion{Float64})
+        α = randn(T)
+        a = randn(T, 3, 4)
+        csmall = similar(a, 3, 3)
+        csmall_fallback = similar(a, 3, 3)
+        cbig = similar(a, 4, 4)
+        cbig_fallback = similar(a, 4, 4)
+        mul!(csmall, a, a', real(α), false)
+        LinearAlgebra._generic_matmatmul!(csmall_fallback, a, a', real(α), false)
+        @test ishermitian(csmall)
+        @test csmall ≈ csmall_fallback
+        mul!(cbig, a', a, real(α), false)
+        LinearAlgebra._generic_matmatmul!(cbig_fallback, a', a, real(α), false)
+        @test ishermitian(cbig)
+        @test cbig ≈ cbig_fallback
+        mul!(csmall, a, transpose(a), α, false)
+        LinearAlgebra._generic_matmatmul!(csmall_fallback, a, transpose(a), α, false)
+        @test csmall ≈ csmall_fallback
+        mul!(cbig, transpose(a), a, α, false)
+        LinearAlgebra._generic_matmatmul!(cbig_fallback, transpose(a), a, α, false)
+        @test cbig ≈ cbig_fallback
+        if T <: Union{Real, Complex}
+            @test issymmetric(csmall)
+            @test issymmetric(cbig)
+        end
+        #make sure generic herk is not called for non-real α
+        mul!(csmall, a, a', α, false)
+        LinearAlgebra._generic_matmatmul!(csmall_fallback, a, a', α, false)
+        @test csmall ≈ csmall_fallback
+        mul!(cbig, a', a, α, false)
+        LinearAlgebra._generic_matmatmul!(cbig_fallback, a', a, α, false)
+        @test cbig ≈ cbig_fallback
+    end
+end
+
 @test !issymmetric(fill(1,5,3))
 @test !ishermitian(fill(1,5,3))
 @test (x = fill(1,3); cross(x,x) == zeros(3))
@@ -167,6 +205,12 @@ end
                 @test_throws DimensionMismatch mul!(similar(a), a, Diagonal(Vector{Float64}(undef, an+1)))
                 @test mul!(similar(a), a, Diagonal(1.:an)) == a.*Vector(1:an)'
                 @test mul!(similar(a), a, Diagonal(1:an))  == a.*Vector(1:an)'
+
+                @testset "different axes" begin
+                    O = OffsetArray(similar(a), ntuple(_->2, ndims(a)))
+                    @test mul!(O, a, 2) == OffsetArray(2a, axes(O))
+                    @test mul!(O, 2, a) == OffsetArray(2a, axes(O))
+                end
             end
 
             @testset "Scaling with 5-argument mul!" begin
@@ -180,6 +224,20 @@ end
                 @test mul!(copy(a), Diagonal([1; 2]), a, 10, 100)   == 10a.*[1; 2] .+ 100a
                 @test mul!(copy(a), a, Diagonal(1.:an), 10, 100) == 10a.*Vector(1:an)' .+ 100a
                 @test mul!(copy(a), a, Diagonal(1:an), 10, 100)  == 10a.*Vector(1:an)' .+ 100a
+
+                @testset "different axes" begin
+                    if eltype(a) <: Number
+                        O = OffsetArray(ones(size(a)), ntuple(_->2, ndims(a)))
+                        @test mul!(copy(O), a, 2, 3, 4) == OffsetArray(6a .+ 4, axes(O))
+                        @test mul!(copy(O), 2, a, 3, 4) == OffsetArray(6a .+ 4, axes(O))
+                        @test mul!(copy(O), a, 2, 3, 0) == OffsetArray(6a, axes(O))
+                        @test mul!(copy(O), 2, a, 3, 0) == OffsetArray(6a, axes(O))
+                        @test mul!(copy(O), a, 2, 1, 4) == OffsetArray(2a .+ 4, axes(O))
+                        @test mul!(copy(O), 2, a, 1, 4) == OffsetArray(2a .+ 4, axes(O))
+                        @test mul!(copy(O), a, 2, 1, 0) == OffsetArray(2a, axes(O))
+                        @test mul!(copy(O), 2, a, 1, 0) == OffsetArray(2a, axes(O))
+                    end
+                end
             end
         end
     end
@@ -514,17 +572,17 @@ end
 
 @testset "generic functions for checking whether matrices have banded structure" begin
     pentadiag = [1 2 3; 4 5 6; 7 8 9]
-    tridiag   = [1 2 0; 4 5 6; 0 8 9]
-    tridiagG  = GenericArray([1 2 0; 4 5 6; 0 8 9])
+    tridiag   = diagm(-1=>1:6, 1=>1:6)
+    tridiagG  = GenericArray(tridiag)
     Tridiag   = Tridiagonal(tridiag)
     ubidiag   = [1 2 0; 0 5 6; 0 0 9]
-    ubidiagG  = GenericArray([1 2 0; 0 5 6; 0 0 9])
+    ubidiagG  = GenericArray(ubidiag)
     uBidiag   = Bidiagonal(ubidiag, :U)
     lbidiag   = [1 0 0; 4 5 0; 0 8 9]
-    lbidiagG  = GenericArray([1 0 0; 4 5 0; 0 8 9])
+    lbidiagG  = GenericArray(lbidiag)
     lBidiag   = Bidiagonal(lbidiag, :L)
     adiag     = [1 0 0; 0 5 0; 0 0 9]
-    adiagG    = GenericArray([1 0 0; 0 5 0; 0 0 9])
+    adiagG    = GenericArray(adiag)
     aDiag     = Diagonal(adiag)
     @testset "istriu" begin
         @test !istriu(pentadiag)
@@ -617,6 +675,17 @@ end
                 @test istril(A,k) == istril(G,k) == isempty(A) || (k >= m)
             end
         end
+    end
+
+    tridiag   = diagm(-1=>1:6, 1=>1:6)
+    A = [tridiag zeros(size(tridiag,1), 2)]
+    G = GenericArray(A)
+    @testset for (kl,ku) in Iterators.product(-10:10, -10:10)
+        @test isbanded(A, kl, ku) == isbanded(G, kl, ku)
+    end
+    @testset for k in -10:10
+        @test istriu(A,k) == istriu(G,k)
+        @test istril(A,k) == istril(G,k)
     end
 end
 
@@ -835,6 +904,37 @@ end
             end
         end
     end
+end
+
+@testset "scaling mul" begin
+    v = 1:4
+    w = similar(v)
+    @test mul!(w, 2, v) == 2v
+    @test mul!(w, v, 2) == 2v
+    # 5-arg equivalent to the 3-arg method, but with non-Bool alpha
+    @test mul!(copy!(similar(v), v), 2, v, 1, 0) == 2v
+    @test mul!(copy!(similar(v), v), v, 2, 1, 0) == 2v
+    # 5-arg tests with alpha::Bool
+    @test mul!(copy!(similar(v), v), 2, v, true, 1) == 3v
+    @test mul!(copy!(similar(v), v), v, 2, true, 1) == 3v
+    @test mul!(copy!(similar(v), v), 2, v, false, 2) == 2v
+    @test mul!(copy!(similar(v), v), v, 2, false, 2) == 2v
+    # 5-arg tests
+    @test mul!(copy!(similar(v), v), 2, v, 1, 3) == 5v
+    @test mul!(copy!(similar(v), v), v, 2, 1, 3) == 5v
+    @test mul!(copy!(similar(v), v), 2, v, 2, 3) == 7v
+    @test mul!(copy!(similar(v), v), v, 2, 2, 3) == 7v
+    @test mul!(copy!(similar(v), v), 2, v, 2, 0) == 4v
+    @test mul!(copy!(similar(v), v), v, 2, 2, 0) == 4v
+end
+
+@testset "aliasing in copytrito! for strided matrices" begin
+    M = rand(4, 1)
+    A = view(M, 1:3, 1:1)
+    A2 = copy(A)
+    B = view(M, 2:4, 1:1)
+    copytrito!(B, A, 'L')
+    @test B == A2
 end
 
 end # module TestGeneric

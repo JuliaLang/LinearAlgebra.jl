@@ -124,6 +124,9 @@ MulAddMul() = MulAddMul{true,true,Bool,Bool}(true, false)
 @inline (p::MulAddMul{true, false})(x, y) = x + y * p.beta
 @inline (p::MulAddMul{false, false})(x, y) = x * p.alpha + y * p.beta
 
+_iszero_alpha(m::MulAddMul) = iszero(m.alpha)
+_iszero_alpha(m::MulAddMul{true}) = false
+
 """
     _modify!(_add::MulAddMul, x, C, idx)
 
@@ -202,23 +205,34 @@ _lscale_add!(C::StridedArray, s::Number, X::StridedArray, alpha::Number, beta::N
     generic_mul!(C, s, X, alpha, beta)
 @inline function _lscale_add!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Number, beta::Number)
     if axes(C) == axes(X)
-        if isone(alpha)
-            if iszero(beta)
-                @. C = s * X
-            else
-                @. C = s * X + C * beta
-            end
-        else
-            if iszero(beta)
-                @. C = s * X * alpha
-            else
-                @. C = s * X * alpha + C * beta
-            end
-        end
+        iszero(alpha) && return _rmul_or_fill!(C, beta)
+        _lscale_add_nonzeroalpha!(C, s, X, alpha, beta)
     else
         generic_mul!(C, s, X, alpha, beta)
     end
     return C
+end
+function _lscale_add_nonzeroalpha!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Number, beta::Number)
+    if isone(alpha)
+        # since alpha is unused, we might as well set to `true` to avoid recompiling
+        # the branch if an `alpha` of a different type is used
+        _lscale_add_nonzeroalpha!(C, s, X, true, beta)
+    else
+        if iszero(beta)
+            @. C = s * X * alpha
+        else
+            @. C = s * X * alpha + C * beta
+        end
+    end
+    C
+end
+function _lscale_add_nonzeroalpha!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Bool, beta::Number)
+    if iszero(beta)
+        @. C = s * X
+    else
+        @. C = s * X + C * beta
+    end
+    C
 end
 @inline mul!(C::AbstractArray, X::AbstractArray, s::Number, alpha::Number, beta::Number) =
     _rscale_add!(C, X, s, alpha, beta)
@@ -228,23 +242,25 @@ _rscale_add!(C::StridedArray, X::StridedArray, s::Number, alpha::Number, beta::N
 @inline function _rscale_add!(C::AbstractArray, X::AbstractArray, s::Number, alpha::Number, beta::Number)
     if axes(C) == axes(X)
         if isone(alpha)
-            if iszero(beta)
-                @. C = X * s
-            else
-                @. C = X * s + C * beta
-            end
+            # since alpha is unused, we might as well ignore it in this branch.
+            # This avoids recompiling the branch if an `alpha` of a different type is used
+            _rscale_add_alphaisone!(C, X, s, beta)
         else
             s_alpha = s * alpha
-            if iszero(beta)
-                @. C = X * s_alpha
-            else
-                @. C = X * s_alpha + C * beta
-            end
+            _rscale_add_alphaisone!(C, X, s_alpha, beta)
         end
     else
         generic_mul!(C, X, s, alpha, beta)
     end
     return C
+end
+function _rscale_add_alphaisone!(C::AbstractArray, X::AbstractArray, s::Number, beta::Number)
+    if iszero(beta)
+        @. C = X * s
+    else
+        @. C = X * s + C * beta
+    end
+    C
 end
 
 # For better performance when input and output are the same array
@@ -280,6 +296,7 @@ julia> rmul!([NaN], 0.0)
 ```
 """
 function rmul!(X::AbstractArray, s::Number)
+    isone(s) && return X
     @simd for I in eachindex(X)
         @inbounds X[I] *= s
     end
@@ -318,6 +335,7 @@ julia> lmul!(0.0, [Inf])
 ```
 """
 function lmul!(s::Number, X::AbstractArray)
+    isone(s) && return X
     @simd for I in eachindex(X)
         @inbounds X[I] = s*X[I]
     end
@@ -446,7 +464,8 @@ julia> triu(a,-3)
  1.0  1.0  1.0  1.0
 ```
 """
-function triu(M::AbstractMatrix, k::Integer = 0)
+triu(M::AbstractMatrix, k::Integer = 0) = _triu(M, Val(haszero(eltype(M))), k)
+function _triu(M::AbstractMatrix, ::Val{true}, k::Integer)
     d = similar(M)
     A = triu!(d,k)
     if iszero(k)
@@ -457,6 +476,14 @@ function triu(M::AbstractMatrix, k::Integer = 0)
             A[rows, col] = @view M[rows, col]
         end
     end
+    return A
+end
+function _triu(M::AbstractMatrix, ::Val{false}, k::Integer)
+    d = similar(M)
+    # since the zero would need to be evaluated from the elements,
+    # we copy the array to avoid undefined references in triu!
+    copy!(d, M)
+    A = triu!(d,k)
     return A
 end
 
@@ -489,7 +516,8 @@ julia> tril(a,-3)
  1.0  0.0  0.0  0.0
 ```
 """
-function tril(M::AbstractMatrix,k::Integer=0)
+tril(M::AbstractMatrix,k::Integer=0) = _tril(M, Val(haszero(eltype(M))), k)
+function _tril(M::AbstractMatrix, ::Val{true}, k::Integer)
     d = similar(M)
     A = tril!(d,k)
     if iszero(k)
@@ -500,6 +528,14 @@ function tril(M::AbstractMatrix,k::Integer=0)
             A[rows, col] = @view M[rows, col]
         end
     end
+    return A
+end
+function _tril(M::AbstractMatrix, ::Val{false}, k::Integer)
+    d = similar(M)
+    # since the zero would need to be evaluated from the elements,
+    # we copy the array to avoid undefined references in tril!
+    copy!(d, M)
+    A = tril!(d,k)
     return A
 end
 
@@ -1358,8 +1394,15 @@ ishermitian(x::Number) = (x == conj(x))
 _iszero(V) = iszero(V)
 # A Base.FastContiguousSubArray view of a StridedArray
 FastContiguousSubArrayStrided{T,N,P<:StridedArray,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
-# using mapreduce instead of all permits vectorization
-_iszero(V::FastContiguousSubArrayStrided) = mapreduce(iszero, &, V, init=true)
+# Reducing over the entire array instead of calling `all` within `iszero` permits vectorization
+# The loop is equivalent to a mapreduce, but is faster to compile
+function _iszero(V::FastContiguousSubArrayStrided)
+    ret = true
+    for i in eachindex(V)
+        ret &= iszero(@inbounds V[i])
+    end
+    ret
+end
 
 """
     istriu(A::AbstractMatrix, k::Integer = 0) -> Bool
@@ -1486,6 +1529,24 @@ function _isbanded_impl(A, kl, ku)
     beyond ku, where the elements should all be zero. The reason we separate this from the
     third group is that we may loop over all the rows using A[:, col] instead of A[rowrange, col],
     which is usually faster.
+
+    E.g., in the following 6x10 matrix with (kl,ku) = (-1,1):
+     1  1  0  0  0  0  0  0  0  0
+     1  2  2  0  0  0  0  0  0  0
+     0  2  3  3  0  0  0  0  0  0
+     0  0  3  4  4  0  0  0  0  0
+     0  0  0  4  5  5  0  0  0  0
+     0  0  0  0  5  6  6  0  0  0
+
+    last_col_nonzeroblocks: 7, as every column beyond this is entirely zero
+    last_col_emptytoprows: 2, as there are zeros above the stored bands beyond this column
+    last_col_nonemptybottomrows: 4, as there are no zeros below the stored bands beyond this column
+    colrange_onlybottomrows: 1:2, as these columns only have zeros below the stored bands
+    colrange_topbottomrows: 3:4, as these columns have zeros both above and below the stored bands
+    colrange_onlytoprows_nonzero: 5:7, as these columns only have zeros above the stored bands
+    colrange_zero_block: 8:10, as every column in this range is filled with zeros
+
+    These are used to determine which rows to check for zeros in each column.
     =#
 
     last_col_nonzeroblocks = size(A,1) + ku # fully zero rectangular block beyond this column
@@ -1493,7 +1554,9 @@ function _isbanded_impl(A, kl, ku)
     last_col_nonemptybottomrows = size(A,1) + kl - 1 # empty bottom rows after this column
 
     colrange_onlybottomrows = firstindex(A,2):min(last_col_nonemptybottomrows, last_col_emptytoprows)
-    colrange_topbottomrows = max(last_col_emptytoprows, last(colrange_onlybottomrows))+1:last_col_nonzeroblocks
+    col_topbotrows_start = max(last_col_emptytoprows, last(colrange_onlybottomrows))+1
+    col_topbotrows_end = min(last_col_nonemptybottomrows, last_col_nonzeroblocks)
+    colrange_topbottomrows = col_topbotrows_start:col_topbotrows_end
     colrange_onlytoprows_nonzero = last(colrange_topbottomrows)+1:last_col_nonzeroblocks
     colrange_zero_block = last_col_nonzeroblocks+1:lastindex(A,2)
 
@@ -1663,7 +1726,7 @@ end
 """
     rotate!(x, y, c, s)
 
-Overwrite `x` with `c*x + s*y` and `y` with `-conj(s)*x + c*y`.
+Overwrite `x` with `s*y + c*x` and `y` with `c*y - conj(s)*x`.
 Returns `x` and `y`.
 
 !!! compat "Julia 1.5"
@@ -1678,8 +1741,8 @@ function rotate!(x::AbstractVector, y::AbstractVector, c, s)
     for i in eachindex(x,y)
         @inbounds begin
             xi, yi = x[i], y[i]
-            x[i] =       c *xi + s*yi
-            y[i] = -conj(s)*xi + c*yi
+            x[i] = s*yi +      c *xi
+            y[i] = c*yi - conj(s)*xi 
         end
     end
     return x, y
@@ -1733,7 +1796,7 @@ end
 """
     reflectorApply!(x, τ, A)
 
-Multiplies `A` in-place by a Householder reflection on the left. It is equivalent to `A .= (I - conj(τ)*[1; x[2:end]]*[1; x[2:end]]')*A`.
+Multiplies `A` in-place by a Householder reflection on the left. It is equivalent to `A .= (I - [1; x[2:end]] * conj(τ) * [1; x[2:end]]') * A`.
 """
 @inline function reflectorApply!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
     require_one_based_indexing(x, A)
@@ -2068,20 +2131,21 @@ julia> copytrito!(B, A, 'L')
 function copytrito!(B::AbstractMatrix, A::AbstractMatrix, uplo::AbstractChar)
     require_one_based_indexing(A, B)
     BLAS.chkuplo(uplo)
+    B === A && return B
     m,n = size(A)
     A = Base.unalias(B, A)
     if uplo == 'U'
         LAPACK.lacpy_size_check(size(B), (n < m ? n : m, n))
+        # extract the parents for UpperTriangular matrices
+        Bv, Av = uppertridata(B), uppertridata(A)
         for j in axes(A,2), i in axes(A,1)[begin : min(j,end)]
-            # extract the parents for UpperTriangular matrices
-            Bv, Av = uppertridata(B), uppertridata(A)
             @inbounds Bv[i,j] = Av[i,j]
         end
     else # uplo == 'L'
         LAPACK.lacpy_size_check(size(B), (m, m < n ? m : n))
+        # extract the parents for LowerTriangular matrices
+        Bv, Av = lowertridata(B), lowertridata(A)
         for j in axes(A,2), i in axes(A,1)[j:end]
-            # extract the parents for LowerTriangular matrices
-            Bv, Av = lowertridata(B), lowertridata(A)
             @inbounds Bv[i,j] = Av[i,j]
         end
     end
@@ -2089,5 +2153,10 @@ function copytrito!(B::AbstractMatrix, A::AbstractMatrix, uplo::AbstractChar)
 end
 # Forward LAPACK-compatible strided matrices to lacpy
 function copytrito!(B::StridedMatrixStride1{T}, A::StridedMatrixStride1{T}, uplo::AbstractChar) where {T<:BlasFloat}
+    require_one_based_indexing(A, B)
+    BLAS.chkuplo(uplo)
+    B === A && return B
+    A = Base.unalias(B, A)
     LAPACK.lacpy!(B, A, uplo)
+    return B
 end

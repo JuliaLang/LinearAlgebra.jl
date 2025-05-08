@@ -2,6 +2,8 @@
 
 module TestDiagonal
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasFloat, BlasComplex
 
@@ -18,6 +20,9 @@ using .Main.FillArrays
 
 isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
 using .Main.SizedArrays
+
+isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
+using .Main.ImmutableArrays
 
 const n=12 # Size of matrix problem to test
 Random.seed!(1)
@@ -1125,10 +1130,6 @@ end
     end
 end
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
-
 @testset "Conversion to AbstractArray" begin
     # tests corresponding to #34995
     d = ImmutableArray([1, 2, 3, 4])
@@ -1479,6 +1480,23 @@ end
     A = Array(D)
     @test issymmetric(D) == issymmetric(A)
     @test ishermitian(D) == ishermitian(A)
+end
+
+@testset "isreal" begin
+    D = Diagonal(ones(2))
+    @test @inferred((D -> Val(isreal(D)))(D)) == Val(true)
+    D = complex.(D)
+    @test isreal(D)
+    @test !isreal(im*D)
+end
+
+@testset "setindex! with BandIndex" begin
+    D = Diagonal(zeros(2))
+    D[LinearAlgebra.BandIndex(0,2)] = 1
+    @test D[2,2] == 1
+    @test_throws "cannot set off-diagonal entry $((1,2))" D[LinearAlgebra.BandIndex(1,1)] = 1
+    @test_throws BoundsError D[LinearAlgebra.BandIndex(size(D,1),1)]
+    @test_throws BoundsError D[LinearAlgebra.BandIndex(0,size(D,1)+1)]
 end
 
 end # module TestDiagonal

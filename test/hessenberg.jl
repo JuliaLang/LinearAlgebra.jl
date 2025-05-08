@@ -2,11 +2,16 @@
 
 module TestHessenberg
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
 isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
 using .Main.SizedArrays
+
+isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
+using .Main.ImmutableArrays
 
 # for tuple tests below
 ≅(x,y) = all(p -> p[1] ≈ p[2], zip(x,y))
@@ -64,6 +69,13 @@ let n = 10
         H = UpperHessenberg(Areal)
         @test Array(Hc + H) == Array(Hc) + Array(H)
         @test Array(Hc - H) == Array(Hc) - Array(H)
+        @testset "ldiv and rdiv" begin
+            for b in (b_, B_), H in (H, Hc, H', Hc', transpose(Hc))
+                @test H * (H \ b) ≈ b
+                @test (b' / H) * H ≈ (Matrix(b') / H) * H ≈ b'
+                @test (transpose(b) / H) * H ≈ (Matrix(transpose(b)) / H) * H ≈ transpose(b)
+            end
+        end
         @testset "Preserve UpperHessenberg shape (issue #39388)" begin
             H = UpperHessenberg(Areal)
             A = rand(n,n)
@@ -209,9 +221,6 @@ end
     end
 end
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
-
 @testset "Conversion to AbstractArray" begin
     # tests corresponding to #34995
     A = ImmutableArray([1 2 3; 4 5 6; 7 8 9])
@@ -283,5 +292,12 @@ end
         @test Q2'Q2 ≈ I
     end
 end
-    
+
+@testset "multiplication with empty HessenbergQ" begin
+    @test ones(2, 0)*hessenberg(zeros(0,0)).Q == zeros(2,0)
+    @test_throws DimensionMismatch ones(2, 1)*hessenberg(zeros(0,0)).Q
+    @test hessenberg(zeros(0,0)).Q * ones(0, 2) == zeros(0,2)
+    @test_throws DimensionMismatch hessenberg(zeros(0,0)).Q * ones(1, 2)
+end
+
 end # module TestHessenberg

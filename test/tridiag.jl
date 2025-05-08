@@ -2,6 +2,8 @@
 
 module TestTridiagonal
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
@@ -20,6 +22,9 @@ using .Main.OffsetArrays
 
 isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
 using .Main.SizedArrays
+
+isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
+using .Main.ImmutableArrays
 
 include("testutils.jl") # test_approx_eq_modphase
 
@@ -767,9 +772,6 @@ end
     @test ishermitian(S)
 end
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
-
 @testset "Conversion to AbstractArray" begin
     # tests corresponding to #34995
     v1 = ImmutableArray([1, 2])
@@ -794,8 +796,6 @@ end
     end
 end
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
 @testset "non-number eltype" begin
     @testset "sum for SymTridiagonal" begin
         dv = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:10]
@@ -1160,6 +1160,51 @@ end
         @test_throws InexactError convert(SymTridiagonal, fill(5, 4, 4))
         @test_throws InexactError convert(SymTridiagonal, diagm(0=>fill(NaN,4)))
     end
+end
+
+@testset "isreal" begin
+    for M in (SymTridiagonal(ones(2), ones(1)),
+            Tridiagonal(ones(2), ones(3), ones(2)))
+        @test @inferred((M -> Val(isreal(M)))(M)) == Val(true)
+        M = complex.(M)
+        @test isreal(M)
+        @test !isreal(im*M)
+    end
+end
+
+@testset "SymTridiagonal from Symmetric" begin
+    S = Symmetric(reshape(1:9, 3, 3))
+    @testset "helper functions" begin
+        @test LinearAlgebra._issymmetric(S)
+        @test !LinearAlgebra._issymmetric(Array(S))
+    end
+    ST = SymTridiagonal(S)
+    @test ST == SymTridiagonal(diag(S), diag(S,1))
+    S = Symmetric(Tridiagonal(1:3, 1:4, 1:3))
+    @test convert(SymTridiagonal, S) == S
+end
+
+@testset "setindex! with BandIndex" begin
+    T = Tridiagonal(zeros(3), zeros(4), zeros(3))
+    T[LinearAlgebra.BandIndex(0,2)] = 1
+    @test T[2,2] == 1
+    T[LinearAlgebra.BandIndex(1,2)] = 2
+    @test T[2,3] == 2
+    T[LinearAlgebra.BandIndex(-1,2)] = 3
+    @test T[3,2] == 3
+
+    @test_throws "cannot set entry $((1,3)) off the tridiagonal band" T[LinearAlgebra.BandIndex(2,1)] = 1
+    @test_throws "cannot set entry $((3,1)) off the tridiagonal band" T[LinearAlgebra.BandIndex(-2,1)] = 1
+    @test_throws BoundsError T[LinearAlgebra.BandIndex(size(T,1),1)]
+    @test_throws BoundsError T[LinearAlgebra.BandIndex(0,size(T,1)+1)]
+
+    S = SymTridiagonal(zeros(4), zeros(3))
+    S[LinearAlgebra.BandIndex(0,2)] = 1
+    @test S[2,2] == 1
+
+    @test_throws "cannot set off-diagonal entry $((1,3))" S[LinearAlgebra.BandIndex(2,1)] = 1
+    @test_throws BoundsError S[LinearAlgebra.BandIndex(size(S,1),1)]
+    @test_throws BoundsError S[LinearAlgebra.BandIndex(0,size(S,1)+1)]
 end
 
 end # module TestTridiagonal

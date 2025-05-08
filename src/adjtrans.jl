@@ -327,6 +327,11 @@ wrapperop(_) = identity
 wrapperop(::Adjoint) = adjoint
 wrapperop(::Transpose) = transpose
 
+# equivalent to wrapperop, but treats real transposes and adjoints identically
+# this helps reduce compilation latencies, and also matches the behavior of `wrapper_char`
+_wrapperop(x) = wrapperop(x)
+_wrapperop(::Adjoint{<:Real}) = transpose
+
 # the following fallbacks can be removed if Adjoint/Transpose are restricted to AbstractVecOrMat
 size(A::AdjOrTrans) = reverse(size(A.parent))
 axes(A::AdjOrTrans) = reverse(axes(A.parent))
@@ -341,11 +346,22 @@ IndexStyle(::Type{<:AdjOrTransAbsVec}) = IndexLinear()
 @propagate_inbounds Base.isassigned(v::AdjOrTransAbsMat, i::Int, j::Int) = isassigned(v.parent, j, i)
 @propagate_inbounds getindex(v::AdjOrTransAbsVec{T}, i::Int) where {T} = wrapperop(v)(v.parent[i-1+first(axes(v.parent)[1])])::T
 @propagate_inbounds getindex(A::AdjOrTransAbsMat{T}, i::Int, j::Int) where {T} = wrapperop(A)(A.parent[j, i])::T
-@propagate_inbounds setindex!(v::AdjOrTransAbsVec, x, i::Int) = (setindex!(v.parent, wrapperop(v)(x), i-1+first(axes(v.parent)[1])); v)
-@propagate_inbounds setindex!(A::AdjOrTransAbsMat, x, i::Int, j::Int) = (setindex!(A.parent, wrapperop(A)(x), j, i); A)
+@propagate_inbounds setindex!(v::AdjOrTransAbsVec, x, i::Int) = (setindex!(v.parent, _wrapperop(v)(x), i-1+first(axes(v.parent)[1])); v)
+@propagate_inbounds setindex!(A::AdjOrTransAbsMat, x, i::Int, j::Int) = (setindex!(A.parent, _wrapperop(A)(x), j, i); A)
 # AbstractArray interface, additional definitions to retain wrapper over vectors where appropriate
 @propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, is::AbstractArray{Int}) = wrapperop(v)(v.parent[is])
 @propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, ::Colon) = wrapperop(v)(v.parent[:])
+
+# band indexing
+@propagate_inbounds function getindex(A::AdjOrTransAbsMat{T}, b::BandIndex) where {T}
+    require_one_based_indexing(A)
+    wrapperop(A)(A.parent[BandIndex(-b.band, b.index)])::T
+end
+@propagate_inbounds function setindex!(A::AdjOrTransAbsMat, x, b::BandIndex)
+    require_one_based_indexing(A)
+    setindex!(A.parent, _wrapperop(A)(x), BandIndex(-b.band, b.index))
+    return A
+end
 
 # conversion of underlying storage
 convert(::Type{Adjoint{T,S}}, A::Adjoint) where {T,S} = Adjoint{T,S}(convert(S, A.parent))::Adjoint{T,S}

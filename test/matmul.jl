@@ -2,6 +2,8 @@
 
 module TestMatmul
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Base: rtoldefault
 using Test, LinearAlgebra, Random
 using LinearAlgebra: mul!, Symmetric, Hermitian
@@ -539,7 +541,21 @@ end
 
     A5x5, A6x5 = Matrix{Float64}.(undef, ((5, 5), (6, 5)))
     @test_throws DimensionMismatch LinearAlgebra.syrk_wrapper!(A5x5, 'N', A6x5)
-    @test_throws DimensionMismatch LinearAlgebra.herk_wrapper!(A5x5, 'N', A6x5)
+    @test_throws DimensionMismatch LinearAlgebra.herk_wrapper!(complex(A5x5), 'N', complex(A6x5))
+end
+
+@testset "5-arg syrk! & herk!" begin
+    for T in (Float32, Float64, ComplexF32, ComplexF64), A in (randn(T, 5), randn(T, 5, 5))
+        B = A' * A
+        C = B isa Number ? [B;;] : Matrix(Hermitian(B))
+        @test mul!(copy(C), A', A, true, 2) ≈ 3C
+        D = Matrix(Hermitian(A * A'))
+        @test mul!(copy(D), A, A', true, 3) ≈ 4D
+        if T <: Complex
+            @test mul!(2C, A', A, im, 2) ≈ (4 + im) * C
+            @test mul!(2D, A, A', im, 3) ≈ (6 + im) * D
+        end
+    end
 end
 
 @testset "matmul for types w/o sizeof (issue #1282)" begin
@@ -1191,6 +1207,25 @@ end
     A = fill(m, 0, 2)
     mul!(w, A', v)
     @test all(iszero, w)
+end
+
+@testset "zero-size matmul" begin
+    A = zeros(0,2)
+    S = Symmetric(zeros(0,0))
+    @test S * A == A
+    @test A' * S == A'
+    S = Symmetric(zeros(2,2))
+    @test S * A' == A'
+    @test A * S == A
+end
+
+@testset "BlasFlag.NONE => generic_matmatmul!" begin
+    A = ones(2,2)
+    S = Symmetric(ones(2,2))
+    @test mul!(similar(A), S, A, big(1), big(0)) ≈ S * A
+    C1 = mul!(one(A), S, A, big(2), big(1))
+    C2 = mul!(one(A), S, A, 2, 1)
+    @test C1 ≈ C2
 end
 
 end # module TestMatmul

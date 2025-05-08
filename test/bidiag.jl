@@ -2,6 +2,8 @@
 
 module TestBidiagonal
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasReal, BlasFloat
 
@@ -21,6 +23,9 @@ using .Main.OffsetArrays
 
 isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
 using .Main.SizedArrays
+
+isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
+using .Main.ImmutableArrays
 
 include("testutils.jl") # test_approx_eq_modphase
 
@@ -362,8 +367,9 @@ Random.seed!(1)
                     @test (x\T)::typediv ≈ x\TM
                     @test (T/x)::typediv ≈ TM/x
                     if !isa(x, Number)
-                        @test Array((T\x)::typediv2) ≈ Array(TM\x)
-                        @test Array((x/T)::typediv2) ≈ Array(x/TM)
+                        U = T.uplo == 'U' ? UpperTriangular : LowerTriangular
+                        @test Array((T\x)::typediv2) ≈ Array(U(TM)\x)
+                        @test Array((x/T)::typediv2) ≈ Array(x/U(TM))
                     end
                     return nothing
                 end
@@ -784,9 +790,6 @@ end
     @test c \ A ≈ c \ Matrix(A)
 end
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
-
 @testset "Conversion to AbstractArray" begin
     # tests corresponding to #34995
     dv = ImmutableArray([1, 2, 3, 4])
@@ -995,7 +998,9 @@ end
             @test A * D ≈ mul!(S, A, D) ≈ M * D
             @test D * A ≈ mul!(S, D, A) ≈ D * M
             @test mul!(copy(S), D, A, 2, 2) ≈ D * M * 2 + S * 2
+            @test mul!(copy(S), D, A, 0, 2) ≈ D * M * 0 + S * 2
             @test mul!(copy(S), A, D, 2, 2) ≈ M * D * 2 + S * 2
+            @test mul!(copy(S), A, D, 0, 2) ≈ M * D * 0 + S * 2
 
             A2 = Bidiagonal(dv, zero(ev), uplo)
             M2 = Array(A2)
@@ -1073,10 +1078,12 @@ end
             @test B * v ≈ M * v
             @test mul!(similar(v), B, v) ≈ M * v
             @test mul!(ones(size(v)), B, v, 2, 3) ≈ M * v * 2 .+ 3
+            @test mul!(ones(size(v)), B, v, 0, 3) ≈ M * v * 0 .+ 3
 
             @test B * B ≈ M * M
             @test mul!(similar(B, size(B)), B, B) ≈ M * M
             @test mul!(ones(size(B)), B, B, 2, 4) ≈ M * M * 2 .+ 4
+            @test mul!(ones(size(B)), B, B, 0, 4) ≈ M * M * 0 .+ 4
 
             for m in 0:6
                 AL = rand(m,n)
@@ -1170,6 +1177,51 @@ end
     @test B isa Bidiagonal{Int8, OffsetVector{Int8, Vector{Int8}}}
     M = diagm(-1 => [1,2], 1=>[4,5])
     @test_throws InexactError convert(Bidiagonal, M)
+end
+
+@testset "isreal" begin
+    M = Bidiagonal(ones(2), ones(1), :U)
+    @test @inferred((M -> Val(isreal(M)))(M)) == Val(true)
+    M = complex.(M)
+    @test isreal(M)
+    @test !isreal(im*M)
+end
+
+@testset "ldiv! error message" begin
+    C = zeros(2)
+    B = Bidiagonal(1:0, 1:0, :U)
+    msg = "size of result, (2,), does not match the size of b, (0, 1)"
+    @test_throws msg ldiv!(C, B, zeros(0,1))
+    msg = "the first dimension of the Bidiagonal matrix, 0, does not match the length of the right-hand-side, 2"
+    @test_throws msg ldiv!(C, B, zeros(2))
+    msg = "the first dimension of the Bidiagonal matrix, 0, does not match the first dimension of the right-hand-side, 2"
+    @test_throws msg ldiv!(C, B, zeros(2,1))
+end
+
+@testset "l/rmul with 0-sized matrices" begin
+    n = 0
+    B = Bidiagonal(ones(n), ones(max(n-1,0)), :U)
+    B2 = copy(B)
+    D = Diagonal(ones(n))
+    @test lmul!(D, B) == B2
+    @test rmul!(B, D) == B2
+end
+
+@testset "setindex! with BandIndex" begin
+    B = Bidiagonal(zeros(3), zeros(2), :U)
+    B[LinearAlgebra.BandIndex(0,2)] = 1
+    @test B[2,2] == 1
+    B[LinearAlgebra.BandIndex(1,1)] = 2
+    @test B[1,2] == 2
+    @test_throws "cannot set entry $((1,3)) off the upper bidiagonal band" B[LinearAlgebra.BandIndex(2,1)] = 2
+
+    B = Bidiagonal(zeros(3), zeros(2), :L)
+    B[LinearAlgebra.BandIndex(-1,1)] = 2
+    @test B[2,1] == 2
+    @test_throws "cannot set entry $((3,1)) off the lower bidiagonal band" B[LinearAlgebra.BandIndex(-2,1)] = 2
+
+    @test_throws BoundsError B[LinearAlgebra.BandIndex(size(B,1),1)]
+    @test_throws BoundsError B[LinearAlgebra.BandIndex(0,size(B,1)+1)]
 end
 
 end # module TestBidiagonal

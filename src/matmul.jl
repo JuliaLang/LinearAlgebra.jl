@@ -134,14 +134,14 @@ matprod_dest(A, B, T) = similar(B, T, (size(A, 1), size(B, 2)))
 function (*)(A::StridedMaybeAdjOrTransMat{<:BlasReal}, B::StridedMaybeAdjOrTransMat{<:BlasReal})
     TS = promote_type(eltype(A), eltype(B))
     mul!(similar(B, TS, (size(A, 1), size(B, 2))),
-         wrapperop(A)(convert(AbstractArray{TS}, _unwrap(A))),
-         wrapperop(B)(convert(AbstractArray{TS}, _unwrap(B))))
+         _wrapperop(A)(convert(AbstractArray{TS}, _unwrap(A))),
+         _wrapperop(B)(convert(AbstractArray{TS}, _unwrap(B))))
 end
 function (*)(A::StridedMaybeAdjOrTransMat{<:BlasComplex}, B::StridedMaybeAdjOrTransMat{<:BlasComplex})
     TS = promote_type(eltype(A), eltype(B))
     mul!(similar(B, TS, (size(A, 1), size(B, 2))),
-         wrapperop(A)(convert(AbstractArray{TS}, _unwrap(A))),
-         wrapperop(B)(convert(AbstractArray{TS}, _unwrap(B))))
+         _wrapperop(A)(convert(AbstractArray{TS}, _unwrap(A))),
+         _wrapperop(B)(convert(AbstractArray{TS}, _unwrap(B))))
 end
 
 # Complex Matrix times real matrix: We use that it is generally faster to reinterpret the
@@ -150,13 +150,13 @@ function (*)(A::StridedMatrix{<:BlasComplex}, B::StridedMaybeAdjOrTransMat{<:Bla
     TS = promote_type(eltype(A), eltype(B))
     mul!(similar(B, TS, (size(A, 1), size(B, 2))),
          convert(AbstractArray{TS}, A),
-         wrapperop(B)(convert(AbstractArray{real(TS)}, _unwrap(B))))
+         _wrapperop(B)(convert(AbstractArray{real(TS)}, _unwrap(B))))
 end
 function (*)(A::AdjOrTransStridedMat{<:BlasComplex}, B::StridedMaybeAdjOrTransMat{<:BlasReal})
     TS = promote_type(eltype(A), eltype(B))
     mul!(similar(B, TS, (size(A, 1), size(B, 2))),
          copymutable_oftype(A, TS), # remove AdjOrTrans to use reinterpret trick below
-         wrapperop(B)(convert(AbstractArray{real(TS)}, _unwrap(B))))
+         _wrapperop(B)(convert(AbstractArray{real(TS)}, _unwrap(B))))
 end
 # the following case doesn't seem to benefit from the translation A*B = (B' * A')'
 function (*)(A::StridedMatrix{<:BlasReal}, B::StridedMatrix{<:BlasComplex})
@@ -412,51 +412,59 @@ lmul!(A, B)
 
 _vec_or_mat_str(s::Tuple{Any}) = "vector"
 _vec_or_mat_str(s::Tuple{Any,Any}) = "matrix"
-@noinline function matmul_size_check(sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
+function matmul_size_check(sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
     szA2 = get(sizeA, 2, 1)
     if szA2 != sizeB[1]
-        strA = _vec_or_mat_str(sizeA)
-        strB = _vec_or_mat_str(sizeB)
-        B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
-        size_or_len_str_B = B_size_len isa Integer ? "length" : "size"
-        dim_or_len_str_B = B_size_len isa Integer ? "length" : "first dimension"
-        pos_str_A = LazyString(length(sizeA) == length(sizeB) ? "first " : "", strA)
-        pos_str_B = LazyString(length(sizeA) == length(sizeB) ? "second " : "", strB)
-        throw(DimensionMismatch(
-            LazyString(
-                lazy"incompatible dimensions for matrix multiplication: ",
-                lazy"tried to multiply a $strA of size $sizeA with a $strB of $size_or_len_str_B $B_size_len. ",
-                lazy"The second dimension of the $pos_str_A: $szA2, does not match the $dim_or_len_str_B of the $pos_str_B: $(sizeB[1])."
-            )
-            )
-        )
+        matmul_size_check_error(sizeA, sizeB)
     end
     return nothing
 end
-@noinline function matmul_size_check(sizeC::Tuple{Integer,Vararg{Integer}}, sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
+@noinline function matmul_size_check_error(sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
+    strA = _vec_or_mat_str(sizeA)
+    strB = _vec_or_mat_str(sizeB)
+    szA2 = get(sizeA, 2, 1)
+    B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
+    size_or_len_str_B = B_size_len isa Integer ? "length" : "size"
+    dim_or_len_str_B = B_size_len isa Integer ? "length" : "first dimension"
+    pos_str_A = LazyString(length(sizeA) == length(sizeB) ? "first " : "", strA)
+    pos_str_B = LazyString(length(sizeA) == length(sizeB) ? "second " : "", strB)
+    throw(DimensionMismatch(
+        LazyString(
+            "incompatible dimensions for matrix multiplication: ",
+            lazy"tried to multiply a $strA of size $sizeA with a $strB of $size_or_len_str_B $B_size_len. ",
+            lazy"The second dimension of the $pos_str_A: $szA2, does not match the $dim_or_len_str_B of the $pos_str_B: $(sizeB[1])."
+        )
+        )
+    )
+end
+function matmul_size_check(sizeC::Tuple{Integer,Vararg{Integer}}, sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
     matmul_size_check(sizeA, sizeB)
     szB2 = get(sizeB, 2, 1)
     szC2 = get(sizeC, 2, 1)
     if sizeC[1] != sizeA[1] || szC2 != szB2
-        strA = _vec_or_mat_str(sizeA)
-        strB = _vec_or_mat_str(sizeB)
-        strC = _vec_or_mat_str(sizeC)
-        C_size_len = length(sizeC) == 1 ? sizeC[1] : sizeC
-        size_or_len_str_C = C_size_len isa Integer ? "length" : "size"
-        B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
-        size_or_len_str_B = B_size_len isa Integer ? "length" : "size"
-        destsize = length(sizeB) == length(sizeC) == 1 ? sizeA[1] : (sizeA[1], szB2)
-        size_or_len_str_dest = destsize isa Integer ? "length" : "size"
-        throw(DimensionMismatch(
-                LazyString(
-                "incompatible destination size: ",
-                lazy"the destination $strC of $size_or_len_str_C $C_size_len is incomatible with the product of a $strA of size $sizeA and a $strB of $size_or_len_str_B $B_size_len. ",
-                lazy"The destination must be of $size_or_len_str_dest $destsize."
-               )
-            )
-        )
+        matmul_size_check_error(sizeC, sizeA, sizeB)
     end
     return nothing
+end
+@noinline function matmul_size_check_error(sizeC::Tuple{Integer,Vararg{Integer}}, sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
+    strA = _vec_or_mat_str(sizeA)
+    strB = _vec_or_mat_str(sizeB)
+    strC = _vec_or_mat_str(sizeC)
+    szB2 = get(sizeB, 2, 1)
+    C_size_len = length(sizeC) == 1 ? sizeC[1] : sizeC
+    size_or_len_str_C = C_size_len isa Integer ? "length" : "size"
+    B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
+    size_or_len_str_B = B_size_len isa Integer ? "length" : "size"
+    destsize = length(sizeB) == length(sizeC) == 1 ? sizeA[1] : (sizeA[1], szB2)
+    size_or_len_str_dest = destsize isa Integer ? "length" : "size"
+    throw(DimensionMismatch(
+            LazyString(
+            "incompatible destination size: ",
+            lazy"the destination $strC of $size_or_len_str_C $C_size_len is incomatible with the product of a $strA of size $sizeA and a $strB of $size_or_len_str_B $B_size_len. ",
+            lazy"The destination must be of $size_or_len_str_dest $destsize."
+            )
+        )
+    )
 end
 
 # We may inline the matmul2x2! and matmul3x3! calls for `α == true`
@@ -488,14 +496,13 @@ end
 
 # THE one big BLAS dispatch. This is split into two methods to improve latency
 Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
-                                    α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:BlasFloat}
+                                    α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:Number}
     mA, nA = lapack_size(tA, A)
     mB, nB = lapack_size(tB, B)
     if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
         matmul_size_check(size(C), (mA, nA), (mB, nB))
         return _rmul_or_fill!(C, β)
     end
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
     _syrk_herk_gemm_wrapper!(C, tA, tB, A, B, α, β, val)
     return C
 end
@@ -568,6 +575,70 @@ function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.HEMM})
 end
 Base.@constprop :aggressive function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.NONE})
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
+end
+
+"""
+    generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bool, aat::Bool, α, β) where {T<:Number}
+
+Computes syrk/herk for generic number types. If `conjugate` is false computes syrk, i.e.,
+``A transpose(A) α + C β`` if `aat` is true, and ``transpose(A) A α + C β`` otherwise.
+If `conjugate` is true computes herk, i.e., ``A A' α + C β`` if `aat` is true, and
+``A' A α + C β`` otherwise. Only the upper triangular is computed.
+"""
+function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bool, aat::Bool, α, β) where {T<:Number}
+    require_one_based_indexing(C, A)
+    nC = checksquare(C)
+    m, n = size(A, 1), size(A, 2)
+    mA = aat ? m : n
+    if nC != mA
+        throw(DimensionMismatch(lazy"output matrix has size: $(size(C)), but should have size $((mA, mA))"))
+    end
+
+    _rmul_or_fill!(C, β)
+    @inbounds if !conjugate
+        if aat
+            for k ∈ 1:n, j ∈ 1:m
+                αA_jk = A[j, k] * α
+                for i ∈ 1:j
+                    C[i, j] += A[i, k] * αA_jk
+                end
+            end
+        else
+            for j ∈ 1:n, i ∈ 1:j
+                temp = A[1, i] * A[1, j]
+                for k ∈ 2:m
+                    temp += A[k, i] * A[k, j]
+                end
+                C[i, j] += temp * α
+            end
+        end
+    else
+        if aat
+            for k ∈ 1:n, j ∈ 1:m
+                αA_jk_bar = conj(A[j, k]) * α
+                for i ∈ 1:j-1
+                    C[i, j] += A[i, k] * αA_jk_bar
+                end
+                C[j, j] += abs2(A[j, k]) * α
+            end
+        else
+            for j ∈ 1:n
+                for i ∈ 1:j-1
+                    temp = conj(A[1, i]) * A[1, j]
+                    for k ∈ 2:m
+                        temp += conj(A[k, i]) * A[k, j]
+                    end
+                    C[i, j] += temp * α
+                end
+                temp = abs2(A[1, j])
+                for k ∈ 2:m
+                    temp += abs2(A[k, j])
+                end
+                C[j, j] += temp * α
+            end
+        end
+    end
+    return C
 end
 
 # legacy method
@@ -713,11 +784,26 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
         if (alpha isa Union{Bool,T} &&
                 beta isa Union{Bool,T} &&
                 stride(A, 1) == stride(C, 1) == 1 &&
-                _fullstride2(A) && _fullstride2(C))
-            return copytri!(BLAS.syrk!('U', tA, alpha, A, beta, C), 'U')
+                _fullstride2(A) && _fullstride2(C)) &&
+                max(nA, mA) ≥ 4
+            BLAS.syrk!('U', tA, alpha, A, beta, C)
+        else
+            generic_syrk!(C, A, false, tA_uc == 'N', alpha, beta)
         end
+        return copytri!(C, 'U')
     end
     return gemm_wrapper!(C, tA, tAt, A, A, α, β)
+end
+Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
+        α::Number, β::Number) where {T<:Number}
+
+    tA_uc = uppercase(tA) # potentially strip a WrapperChar
+    aat = (tA_uc == 'N')
+    if T <: Union{Real,Complex} && (iszero(β) || issymmetric(C))
+        return copytri!(generic_syrk!(C, A, false, aat, α, β), 'U')
+    end
+    tAt = aat ? 'T' : 'N'
+    return _generic_matmatmul!(C, wrap(A, tA), wrap(A, tAt), α, β)
 end
 # legacy method
 syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T}, _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
@@ -725,8 +811,9 @@ syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T}, _add
 
 # the aggressive constprop pushes tA and tB into gemm_wrapper!, which is needed for wrap calls within it
 # to be concretely inferred
-Base.@constprop :aggressive function herk_wrapper!(C::Union{StridedMatrix{T}, StridedMatrix{Complex{T}}}, tA::AbstractChar, A::Union{StridedVecOrMat{T}, StridedVecOrMat{Complex{T}}},
-        α::Number, β::Number) where {T<:BlasReal}
+Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{TC}, tA::AbstractChar, A::StridedVecOrMat{TC},
+        α::Number, β::Number) where {TC<:BlasComplex}
+    T = real(TC)
     nC = checksquare(C)
     tA_uc = uppercase(tA) # potentially convert a WrapperChar to a Char
     if tA_uc == 'C'
@@ -740,19 +827,31 @@ Base.@constprop :aggressive function herk_wrapper!(C::Union{StridedMatrix{T}, St
         throw(DimensionMismatch(lazy"output matrix has size: $(size(C)), but should have size $((mA, mA))"))
     end
 
-    # Result array does not need to be initialized as long as beta==0
-    #    C = Matrix{T}(undef, mA, mA)
-
-    if iszero(β) || ishermitian(C)
+    # BLAS.herk! only updates hermitian C, alpha and beta need to be real
+    if isreal(α) && isreal(β) && (iszero(β) || ishermitian(C))
         alpha, beta = promote(α, β, zero(T))
-        if (alpha isa Union{Bool,T} &&
-                beta isa Union{Bool,T} &&
+        if (alpha isa T && beta isa T &&
                 stride(A, 1) == stride(C, 1) == 1 &&
-                _fullstride2(A) && _fullstride2(C))
-            return copytri!(BLAS.herk!('U', tA, alpha, A, beta, C), 'U', true)
+                _fullstride2(A) && _fullstride2(C)) &&
+                max(nA, mA) ≥ 4
+            BLAS.herk!('U', tA, alpha, A, beta, C)
+        else
+            generic_syrk!(C, A, true, tA_uc == 'N', alpha, beta)
         end
+        return copytri!(C, 'U', true)
     end
     return gemm_wrapper!(C, tA, tAt, A, A, α, β)
+end
+Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
+        α::Number, β::Number) where {T<:Number}
+
+    tA_uc = uppercase(tA) # potentially strip a WrapperChar
+    aat = (tA_uc == 'N')
+    if isreal(α) && isreal(β) && (iszero(β) || ishermitian(C))
+        return copytri!(generic_syrk!(C, A, true, aat, α, β), 'U', true)
+    end
+    tAt = aat ? 'C' : 'N'
+    return _generic_matmatmul!(C, wrap(A, tA), wrap(A, tAt), α, β)
 end
 # legacy method
 herk_wrapper!(C::Union{StridedMatrix{T}, StridedMatrix{Complex{T}}}, tA::AbstractChar, A::Union{StridedVecOrMat{T}, StridedVecOrMat{Complex{T}}},
@@ -787,6 +886,7 @@ Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::Ab
     mB, nB = lapack_size(tB, B)
 
     matmul_size_check(size(C), (mA, nA), (mB, nB))
+    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
 
     if C === A || B === C
         throw(ArgumentError("output matrix must not be aliased with input matrix"))
@@ -805,6 +905,13 @@ end
 gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
         A::StridedVecOrMat{T}, B::StridedVecOrMat{T}, _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
     gemm_wrapper!(C, tA, tB, A, B, _add.alpha, _add.beta)
+# fallback for generic types
+Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
+                       A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
+                       α::Number, β::Number) where {T<:Number}
+    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
+end
 
 # Aggressive constprop helps propagate the values of tA and tB into wrap, which
 # makes the calls concretely inferred
@@ -1031,7 +1138,7 @@ end
 function _generic_matmatmul_adjtrans!(C, A, B, alpha, beta)
     _rmul_or_fill!(C, beta)
     (iszero(alpha) || isempty(A) || isempty(B)) && return C
-    t = wrapperop(A)
+    t = _wrapperop(A)
     pB = parent(B)
     pA = parent(A)
     tmp = similar(C, axes(C, 2))

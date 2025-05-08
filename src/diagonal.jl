@@ -191,7 +191,7 @@ end
 Return the appropriate zero element `A[i, j]` corresponding to a banded matrix `A`.
 """
 diagzero(A::AbstractMatrix, i, j) = zero(eltype(A))
-diagzero(A::AbstractMatrix{M}, i, j) where {M<:AbstractMatrix} =
+@propagate_inbounds diagzero(A::AbstractMatrix{M}, i, j) where {M<:AbstractMatrix} =
     zeroslike(M, axes(A[i,i], 1), axes(A[j,j], 2))
 diagzero(A::AbstractMatrix, inds...) = diagzero(A, to_indices(A, inds)...)
 # dispatching on the axes permits specializing on the axis types to return something other than an Array
@@ -218,7 +218,7 @@ zeroslike(::Type{M}, sz::Tuple{Integer, Vararg{Integer}}) where {M<:AbstractMatr
     r
 end
 
-function setindex!(D::Diagonal, v, i::Int, j::Int)
+@inline function setindex!(D::Diagonal, v, i::Int, j::Int)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds D.diag[i] = v
@@ -228,6 +228,15 @@ function setindex!(D::Diagonal, v, i::Int, j::Int)
     return D
 end
 
+@inline function setindex!(D::Diagonal, v, b::BandIndex)
+    @boundscheck checkbounds(D, b)
+    if b.band == 0
+        @inbounds D.diag[b.index] = v
+    elseif !iszero(v)
+        throw(ArgumentError(lazy"cannot set off-diagonal entry $(to_indices(D, (b,))) to a nonzero value ($v)"))
+    end
+    return D
+end
 
 ## structured matrix methods ##
 function Base.replace_in_print_matrix(A::Diagonal,i::Integer,j::Integer,s::AbstractString)
@@ -255,6 +264,8 @@ factorize(D::Diagonal) = D
 
 real(D::Diagonal) = Diagonal(real(D.diag))
 imag(D::Diagonal) = Diagonal(imag(D.diag))
+
+isreal(D::Diagonal) = isreal(D.diag)
 
 iszero(D::Diagonal) = all(iszero, D.diag)
 isone(D::Diagonal) = all(isone, D.diag)
@@ -331,14 +342,14 @@ function (*)(D::Diagonal, V::AbstractVector)
 end
 
 function mul(A::AdjOrTransAbsMat, D::Diagonal)
-    adj = wrapperop(A)
+    adj = _wrapperop(A)
     copy(adj(adj(D) * adj(A)))
 end
 function mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Number})
     @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
 end
 function mul(D::Diagonal, A::AdjOrTransAbsMat)
-    adj = wrapperop(A)
+    adj = _wrapperop(A)
     copy(adj(adj(A) * adj(D)))
 end
 function mul(D::Diagonal{<:Number}, A::AdjOrTransAbsMat{<:Number, <:StridedMatrix})
@@ -356,7 +367,7 @@ end
 # A' = A' * D => A = D' * A
 # This uses the fact that D' is a Diagonal
 function rmul!(A::AdjOrTransAbsMat, D::Diagonal)
-    f = wrapperop(A)
+    f = _wrapperop(A)
     lmul!(f(D), f(A))
     A
 end
@@ -404,7 +415,7 @@ end
 # A' = D * A' => A = A * D'
 # This uses the fact that D' is a Diagonal
 function lmul!(D::Diagonal, A::AdjOrTransAbsMat)
-    f = wrapperop(A)
+    f = _wrapperop(A)
     rmul!(f(A), f(D))
     A
 end
@@ -438,10 +449,13 @@ function _lmul!(D::Diagonal, A::UpperOrLowerTriangular)
     return TriWrapper(P)
 end
 
+@propagate_inbounds _modify_nonzeroalpha!(x, out, ind, alpha, beta) = @stable_muladdmul _modify!(MulAddMul(alpha,beta), x, out, ind)
+@propagate_inbounds _modify_nonzeroalpha!(x, out, ind, ::Bool, beta) = @stable_muladdmul _modify!(MulAddMul(true,beta), x, out, ind)
+
 @inline function __muldiag_nonzeroalpha!(out, D::Diagonal, B, alpha::Number, beta::Number)
     @inbounds for j in axes(B, 2)
         @simd for i in axes(B, 1)
-            @stable_muladdmul _modify!(MulAddMul(alpha,beta), D.diag[i] * B[i,j], out, (i,j))
+            _modify_nonzeroalpha!(D.diag[i] * B[i,j], out, (i,j), alpha, beta)
         end
     end
     return out
@@ -465,28 +479,31 @@ function __muldiag_nonzeroalpha!(out, D::Diagonal, B::UpperOrLowerTriangular, al
     for j in axes(B, 2)
         # store the diagonal separately for unit triangular matrices
         if isunit
-            @inbounds @stable_muladdmul _modify!(MulAddMul(alpha,beta), D.diag[j] * B[j,j], out, (j,j))
+            @inbounds _modify_nonzeroalpha!(D.diag[j] * B[j,j], out, (j,j), alpha, beta)
         end
         # The indices of out corresponding to the stored indices of B
         rowrange = _rowrange_tri_stored(B, j)
         @inbounds @simd for i in rowrange
-            @stable_muladdmul _modify!(MulAddMul(alpha,beta), D.diag[i] * B_maybeparent[i,j], out_maybeparent, (i,j))
+            _modify_nonzeroalpha!(D.diag[i] * B_maybeparent[i,j], out_maybeparent, (i,j), alpha, beta)
         end
         # Fill the indices of out corresponding to the zeros of B
         # we only fill these if out and B don't have matching zeros
         if !_has_matching_zeros(out, B)
             rowrange = _rowrange_tri_zeros(B, j)
             @inbounds @simd for i in rowrange
-                @stable_muladdmul _modify!(MulAddMul(alpha,beta), D.diag[i] * B[i,j], out, (i,j))
+                _modify_nonzeroalpha!(D.diag[i] * B[i,j], out, (i,j), alpha, beta)
             end
         end
     end
     return out
 end
 
+@inline _djalpha_nonzero(dj, alpha) = @stable_muladdmul MulAddMul(alpha,false)(dj)
+@inline _djalpha_nonzero(dj, ::Bool) = dj
+
 @inline function __muldiag_nonzeroalpha_right!(out, A, D::Diagonal, alpha::Number, beta::Number)
     @inbounds for j in axes(A, 2)
-        dja = @stable_muladdmul MulAddMul(alpha,false)(D.diag[j])
+        dja = _djalpha_nonzero(D.diag[j], alpha)
         @simd for i in axes(A, 1)
             @stable_muladdmul _modify!(MulAddMul(true,beta), A[i,j] * dja, out, (i,j))
         end
@@ -503,7 +520,7 @@ function __muldiag_nonzeroalpha!(out, A::UpperOrLowerTriangular, D::Diagonal, al
     # we may directly read and write from the parents
     out_maybeparent, A_maybeparent = _has_matching_zeros(out, A) ? (parent(out), parent(A)) : (out, A)
     for j in axes(A, 2)
-        dja = @stable_muladdmul MulAddMul(alpha,false)(@inbounds D.diag[j])
+        dja = @inbounds _djalpha_nonzero(D.diag[j], alpha)
         # store the diagonal separately for unit triangular matrices
         if isunit
             # since alpha is multiplied to the diagonal element of D,
@@ -539,7 +556,7 @@ end
     d2 = D2.diag
     outd = out.diag
     @inbounds @simd for i in eachindex(d1, d2, outd)
-        @stable_muladdmul _modify!(MulAddMul(alpha,beta), d1[i] * d2[i], outd, i)
+        _modify_nonzeroalpha!(d1[i] * d2[i], outd, i, alpha, beta)
     end
     return out
 end

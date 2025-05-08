@@ -2,6 +2,8 @@
 
 module TestTriangular
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: errorbounds, transpose!, BandIndex
 
@@ -12,6 +14,9 @@ using .Main.SizedArrays
 
 isdefined(Main, :FillArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "FillArrays.jl"))
 using .Main.FillArrays
+
+isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
+using .Main.ImmutableArrays
 
 n = 9
 Random.seed!(123)
@@ -240,9 +245,6 @@ end
 
 # dimensional correctness:
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
-
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
 
 @testset "AbstractArray constructor should preserve underlying storage type" begin
     # tests corresponding to #34995
@@ -734,15 +736,16 @@ end
 end
 
 @testset "istriu/istril forwards to parent" begin
-    @testset "$(nameof(typeof(M)))" for M in [Tridiagonal(rand(n-1), rand(n), rand(n-1)),
+    @testset "$(nameof(typeof(M)))" for M in Any[Tridiagonal(rand(n-1), rand(n), rand(n-1)),
                 Tridiagonal(zeros(n-1), zeros(n), zeros(n-1)),
                 Diagonal(randn(n)),
                 Diagonal(zeros(n)),
+                rand(n,n), zeros(n,n), diagm(1=>1:n-1), diagm(-2=>1:n-2),
                 ]
         @testset for TriT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
             U = TriT(M)
             A = Array(U)
-            for k in -n:n
+            @testset for k in -n:n
                 @test istriu(U, k) == istriu(A, k)
                 @test istril(U, k) == istril(A, k)
             end
@@ -757,6 +760,19 @@ end
         @testset for k in -n:n
             @test istriu(U, k) == istriu(A, k)
             @test istril(U, k) == istril(A, k)
+        end
+    end
+
+    @testset "partly initialized in unit triangular" begin
+        for (T, f) in ((UnitUpperTriangular, istril), (UnitLowerTriangular, istriu))
+            A = Matrix{BigFloat}(undef, 2, 2)
+            isupper = T === UnitUpperTriangular
+            A[1+!isupper, 1+isupper] = 3
+            UU = T(A)
+            UUA = Array(UU)
+            for k in -size(A,1):size(A,2)
+                @test f(UU, k) == f(UUA, k)
+            end
         end
     end
 

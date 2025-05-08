@@ -1,3 +1,5 @@
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using LinearAlgebra, Test, Random
 
 tc(r1::NTuple{N,Any}, r2::NTuple{N,Any}) where {N} = all(x->tc(x...), [zip(r1,r2)...])

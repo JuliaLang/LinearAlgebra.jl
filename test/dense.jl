@@ -2,6 +2,8 @@
 
 module TestDense
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal
 using Test: GenericArray
@@ -9,6 +11,9 @@ using Test: GenericArray
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
 isdefined(Main, :FillArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "FillArrays.jl"))
 import Main.FillArrays
+
+isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
+using Main.SizedArrays
 
 @testset "Check that non-floats are correctly promoted" begin
     @test [1 0 0; 0 1 0]\[1,1] ≈ [1;1;0]
@@ -1396,6 +1401,21 @@ end
     end
 
     @test_throws ArgumentError LinearAlgebra.copytri_maybe_inplace(Rc, 'X')
+end
+
+@testset "matrix exponentiation for immutable" begin
+    A = SizedArray{(2,2)}(reshape(1:4,2,2))
+    @test 2^A == 2^Matrix(A)
+end
+
+@testset "triu/tril for block matrices" begin
+    O = ones(2,2)
+    Z = zero(O)
+    M = fill(O, 3, 3)
+    res = fill(Z, size(M))
+    res[1,2] = res[1,3] = res[2,3] = O
+    @test triu(GenericArray(M),1) == res
+    @test tril(GenericArray(M),-1) == res'
 end
 
 end # module TestDense

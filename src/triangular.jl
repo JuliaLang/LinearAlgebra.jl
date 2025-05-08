@@ -144,6 +144,8 @@ const LowerOrUnitLowerTriangular{T,S<:AbstractMatrix{T}} = Union{LowerTriangular
 const UpperOrLowerTriangular{T,S<:AbstractMatrix{T}} = Union{UpperOrUnitUpperTriangular{T,S}, LowerOrUnitLowerTriangular{T,S}}
 const UnitUpperOrUnitLowerTriangular{T,S<:AbstractMatrix{T}} = Union{UnitUpperTriangular{T,S}, UnitLowerTriangular{T,S}}
 
+const UpperOrLowerTriangularStrided{T,S<:StridedMatrix{T}} = UpperOrLowerTriangular{T,S}
+
 uppertriangular(M) = UpperTriangular(M)
 lowertriangular(M) = LowerTriangular(M)
 
@@ -151,6 +153,12 @@ uppertriangular(U::UpperOrUnitUpperTriangular) = U
 lowertriangular(U::LowerOrUnitLowerTriangular) = U
 
 Base.dataids(A::UpperOrLowerTriangular) = Base.dataids(A.data)
+
+function Matrix{T}(U::UpperOrLowerTriangular) where {T}
+    M = Matrix{T}(undef, size(U))
+    copy!(M, U)
+    return M
+end
 
 imag(A::UpperTriangular) = UpperTriangular(imag(A.data))
 imag(A::LowerTriangular) = LowerTriangular(imag(A.data))
@@ -178,7 +186,7 @@ end
 parent(A::UpperOrLowerTriangular) = A.data
 
 # For strided matrices, we may only loop over the filled triangle
-copy(A::UpperOrLowerTriangular{<:Any, <:StridedMaybeAdjOrTransMat}) = copyto!(similar(A), A)
+copy(A::UpperOrLowerTriangular{<:Any, <:StridedMaybeAdjOrTransMat}) = copy!(similar(A), A)
 
 # then handle all methods that requires specific handling of upper/lower and unit diagonal
 
@@ -376,6 +384,11 @@ istril(A::Transpose, k::Integer=0) = istriu(A.parent, -k)
 istriu(A::Adjoint, k::Integer=0) = istril(A.parent, -k)
 istriu(A::Transpose, k::Integer=0) = istril(A.parent, -k)
 
+istril(U::UpperTriangular, k::Integer=0) = istril(parent(U), max(-1, k))
+istril(U::UnitUpperTriangular, k::Integer=0) = k < 0 ? false : istril(parent(U), k)
+istriu(U::LowerTriangular, k::Integer=0) = istriu(parent(U), min(1, k))
+istriu(U::UnitLowerTriangular, k::Integer=0) = k > 0 ? false : istriu(parent(U), k)
+
 function tril!(A::UpperTriangular{T}, k::Integer=0) where {T}
     if k < 0
         fill!(A.data, zero(T))
@@ -527,30 +540,34 @@ for T in (:UpperOrUnitUpperTriangular, :LowerOrUnitLowerTriangular)
         if axes(dest) != axes(U)
             @invoke copyto!(dest::AbstractArray, U::AbstractArray)
         else
-            _copyto!(dest, U)
+            copy!(dest, U)
         end
         return dest
+    end
+    @eval function copy!(dest::$T, U::$T)
+        axes(dest) == axes(U) || throw(ArgumentError(
+            "arrays must have the same axes for copy! (consider using `copyto!`)"))
+        _copy!(dest, U)
     end
 end
 
 # copy and scale
 for (T, UT) in ((:UpperTriangular, :UnitUpperTriangular), (:LowerTriangular, :UnitLowerTriangular))
-    @eval @inline function _copyto!(A::$T, B::$T)
-        @boundscheck checkbounds(A, axes(B)...)
+    @eval @inline function _copy!(A::$T, B::$T)
         copytrito!(parent(A), parent(B), uplo_char(A))
         return A
     end
-    @eval @inline function _copyto!(A::$UT, B::$T)
+    @eval @inline function _copy!(A::$UT, B::$T)
         for dind in diagind(A, IndexStyle(A))
             if A[dind] != B[dind]
                 throw_nononeerror(typeof(A), B[dind], Tuple(dind)...)
             end
         end
-        _copyto!($T(parent(A)), B)
+        _copy!($T(parent(A)), B)
         return A
     end
 end
-@inline function _copyto!(A::UpperOrUnitUpperTriangular, B::UnitUpperTriangular)
+@inline function _copy!(A::UpperOrUnitUpperTriangular, B::UnitUpperTriangular)
     @boundscheck checkbounds(A, axes(B)...)
     B2 = Base.unalias(A, B)
     Ap = parent(A)
@@ -565,7 +582,7 @@ end
     end
     return A
 end
-@inline function _copyto!(A::LowerOrUnitLowerTriangular, B::UnitLowerTriangular)
+@inline function _copy!(A::LowerOrUnitLowerTriangular, B::UnitLowerTriangular)
     @boundscheck checkbounds(A, axes(B)...)
     B2 = Base.unalias(A, B)
     Ap = parent(A)
@@ -590,45 +607,72 @@ _triangularize!(::LowerOrUnitLowerTriangular) = tril!
     if axes(dest) != axes(U)
         @invoke copyto!(dest::StridedMatrix, U::AbstractArray)
     else
-        _copyto!(dest, U)
+        copy!(dest, U)
     end
     return dest
 end
-@propagate_inbounds function _copyto!(dest::StridedMatrix, U::UpperOrLowerTriangular)
+
+function copy!(dest::StridedMatrix, U::UpperOrLowerTriangular)
+    axes(dest) == axes(U) || throw(ArgumentError(
+            "arrays must have the same axes for copy! (consider using `copyto!`)"))
+    _copy!(dest, U)
+end
+
+@propagate_inbounds function _copy!(dest::StridedMatrix, U::UpperOrLowerTriangular)
     copytrito!(dest, parent(U), U isa UpperOrUnitUpperTriangular ? 'U' : 'L')
     copytrito!(dest, U, U isa UpperOrUnitUpperTriangular ? 'L' : 'U')
     return dest
 end
-@propagate_inbounds function _copyto!(dest::StridedMatrix, U::UpperOrLowerTriangular{<:Any, <:StridedMatrix})
+@propagate_inbounds function _copy!(dest::StridedMatrix, U::UpperOrLowerTriangular{<:Any, <:StridedMatrix})
     U2 = Base.unalias(dest, U)
-    copyto_unaliased!(dest, U2)
+    copy_unaliased!(dest, U2)
     return dest
 end
 # for strided matrices, we explicitly loop over the arrays to improve cache locality
 # This fuses the copytrito! for the two halves
-@inline function copyto_unaliased!(dest::StridedMatrix, U::UpperOrUnitUpperTriangular{<:Any, <:StridedMatrix})
+@propagate_inbounds function copy_unaliased_stored!(dest, U::UpperTriangular, col)
+    for row in firstindex(dest,1):col
+        dest[row,col] = U.data[row,col]
+    end
+    dest
+end
+@propagate_inbounds function copy_unaliased_stored!(dest, U::UnitUpperTriangular, col)
+    for row in firstindex(dest,1):col-1
+        dest[row,col] = U.data[row,col]
+    end
+    dest[col, col] = U[BandIndex(0,col)]
+    dest
+end
+@propagate_inbounds function copy_unaliased_stored!(dest, L::LowerTriangular, col)
+    for row in col:lastindex(dest,1)
+        dest[row,col] = L.data[row,col]
+    end
+    dest
+end
+@propagate_inbounds function copy_unaliased_stored!(dest, L::UnitLowerTriangular, col)
+    dest[col, col] = L[BandIndex(0,col)]
+    for row in col+1:lastindex(dest,1)
+        dest[row,col] = L.data[row,col]
+    end
+    dest
+end
+@inline function copy_unaliased!(dest::StridedMatrix, U::UpperOrUnitUpperTriangular{<:Any, <:StridedMatrix})
     @boundscheck checkbounds(dest, axes(U)...)
-    isunit = U isa UnitUpperTriangular
     for col in axes(dest,2)
-        for row in firstindex(dest,1):col-isunit
-            @inbounds dest[row,col] = U.data[row,col]
-        end
-        for row in col+!isunit:lastindex(dest,1)
-            @inbounds dest[row,col] = U[row,col]
+        @inbounds copy_unaliased_stored!(dest, U, col)
+        for row in col+1:lastindex(dest,1)
+            @inbounds dest[row,col] = diagzero(U,row,col)
         end
     end
     return dest
 end
-@inline function copyto_unaliased!(dest::StridedMatrix, L::LowerOrUnitLowerTriangular{<:Any, <:StridedMatrix})
+@inline function copy_unaliased!(dest::StridedMatrix, L::LowerOrUnitLowerTriangular{<:Any, <:StridedMatrix})
     @boundscheck checkbounds(dest, axes(L)...)
-    isunit = L isa UnitLowerTriangular
     for col in axes(dest,2)
-        for row in firstindex(dest,1):col-!isunit
-            @inbounds dest[row,col] = L[row,col]
+        for row in firstindex(dest,1):col-1
+            @inbounds dest[row,col] = diagzero(L,row,col)
         end
-        for row in col+isunit:lastindex(dest,1)
-            @inbounds dest[row,col] = L.data[row,col]
-        end
+        @inbounds copy_unaliased_stored!(dest, L, col)
     end
     return dest
 end
@@ -640,7 +684,7 @@ Base.@constprop :aggressive function copytrito_triangular!(Bdata, Adata, uplo, u
         BLAS.chkuplo(uplo)
         LAPACK.lacpy_size_check(size(Bdata), sz)
         # only the diagonal is copied in this case
-        copyto!(diagview(Bdata), diagview(Adata))
+        copy!(diagview(Bdata), diagview(Adata))
     end
     return Bdata
 end
@@ -658,10 +702,8 @@ end
 
 uppertridata(A) = A
 lowertridata(A) = A
-# we restrict these specializations only to strided matrices to avoid cases where an UpperTriangular type
-# doesn't share its indexing with the parent
-uppertridata(A::UpperTriangular{<:Any, <:StridedMatrix}) = parent(A)
-lowertridata(A::LowerTriangular{<:Any, <:StridedMatrix}) = parent(A)
+uppertridata(A::UpperTriangular) = parent(A)
+lowertridata(A::LowerTriangular) = parent(A)
 
 @inline _rscale_add!(A::AbstractTriangular, B::AbstractTriangular, C::Number, alpha::Number, beta::Number) =
     @stable_muladdmul _triscale!(A, B, C, MulAddMul(alpha, beta))
@@ -676,7 +718,7 @@ end
 
 function _triscale!(A::UpperTriangular, B::UpperTriangular, c::Number, _add)
     checksize1(A, B)
-    iszero(_add.alpha) && return _rmul_or_fill!(A, _add.beta)
+    _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
         for i in firstindex(B.data,1):j
             @inbounds _modify!(_add, B.data[i,j] * c, A.data, (i,j))
@@ -686,7 +728,7 @@ function _triscale!(A::UpperTriangular, B::UpperTriangular, c::Number, _add)
 end
 function _triscale!(A::UpperTriangular, c::Number, B::UpperTriangular, _add)
     checksize1(A, B)
-    iszero(_add.alpha) && return _rmul_or_fill!(A, _add.beta)
+    _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
         for i in firstindex(B.data,1):j
             @inbounds _modify!(_add, c * B.data[i,j], A.data, (i,j))
@@ -696,7 +738,7 @@ function _triscale!(A::UpperTriangular, c::Number, B::UpperTriangular, _add)
 end
 function _triscale!(A::UpperOrUnitUpperTriangular, B::UnitUpperTriangular, c::Number, _add)
     checksize1(A, B)
-    iszero(_add.alpha) && return _rmul_or_fill!(A, _add.beta)
+    _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
         @inbounds _modify!(_add, c, A, (j,j))
         for i in firstindex(B.data,1):(j - 1)
@@ -707,7 +749,7 @@ function _triscale!(A::UpperOrUnitUpperTriangular, B::UnitUpperTriangular, c::Nu
 end
 function _triscale!(A::UpperOrUnitUpperTriangular, c::Number, B::UnitUpperTriangular, _add)
     checksize1(A, B)
-    iszero(_add.alpha) && return _rmul_or_fill!(A, _add.beta)
+    _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
         @inbounds _modify!(_add, c, A, (j,j))
         for i in firstindex(B.data,1):(j - 1)
@@ -718,7 +760,7 @@ function _triscale!(A::UpperOrUnitUpperTriangular, c::Number, B::UnitUpperTriang
 end
 function _triscale!(A::LowerTriangular, B::LowerTriangular, c::Number, _add)
     checksize1(A, B)
-    iszero(_add.alpha) && return _rmul_or_fill!(A, _add.beta)
+    _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
         for i in j:lastindex(B.data,1)
             @inbounds _modify!(_add, B.data[i,j] * c, A.data, (i,j))
@@ -728,7 +770,7 @@ function _triscale!(A::LowerTriangular, B::LowerTriangular, c::Number, _add)
 end
 function _triscale!(A::LowerTriangular, c::Number, B::LowerTriangular, _add)
     checksize1(A, B)
-    iszero(_add.alpha) && return _rmul_or_fill!(A, _add.beta)
+    _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
         for i in j:lastindex(B.data,1)
             @inbounds _modify!(_add, c * B.data[i,j], A.data, (i,j))
@@ -738,7 +780,7 @@ function _triscale!(A::LowerTriangular, c::Number, B::LowerTriangular, _add)
 end
 function _triscale!(A::LowerOrUnitLowerTriangular, B::UnitLowerTriangular, c::Number, _add)
     checksize1(A, B)
-    iszero(_add.alpha) && return _rmul_or_fill!(A, _add.beta)
+    _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
         @inbounds _modify!(_add, c, A, (j,j))
         for i in (j + 1):lastindex(B.data,1)
@@ -749,7 +791,7 @@ function _triscale!(A::LowerOrUnitLowerTriangular, B::UnitLowerTriangular, c::Nu
 end
 function _triscale!(A::LowerOrUnitLowerTriangular, c::Number, B::UnitLowerTriangular, _add)
     checksize1(A, B)
-    iszero(_add.alpha) && return _rmul_or_fill!(A, _add.beta)
+    _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
         @inbounds _modify!(_add, c, A, (j,j))
         for i in (j + 1):lastindex(B.data,1)
@@ -1050,29 +1092,31 @@ isunit_char(::UnitUpperTriangular) = 'U'
 isunit_char(::LowerTriangular) = 'N'
 isunit_char(::UnitLowerTriangular) = 'U'
 
+_copy_or_copyto!(dest, src) = ndims(dest) == ndims(src) ? copy!(dest, src) : copyto!(dest, src)
+
 # generic fallback for AbstractTriangular matrices outside of the four subtypes provided here
 _trimul!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVector) =
-    lmul!(A, copyto!(C, B))
+    lmul!(A, _copy_or_copyto!(C, B))
 _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractMatrix) =
-    lmul!(A, copyto!(C, B))
+    lmul!(A, copy!(C, B))
 _trimul!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) =
-    rmul!(copyto!(C, A), B)
+    rmul!(copy!(C, A), B)
 _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractTriangular) =
-    lmul!(A, copyto!(C, B))
+    lmul!(A, copy!(C, B))
 # redirect for UpperOrLowerTriangular
 _trimul!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVector) =
-    generic_trimatmul!(C, uplo_char(A), isunit_char(A), wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
 _trimul!(C::AbstractMatrix, A::UpperOrLowerTriangular, B::AbstractMatrix) =
-    generic_trimatmul!(C, uplo_char(A), isunit_char(A), wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
 _trimul!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
-    generic_mattrimul!(C, uplo_char(B), isunit_char(B), wrapperop(parent(B)), A, _unwrap_at(parent(B)))
+    generic_mattrimul!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 _trimul!(C::AbstractMatrix, A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
-    generic_trimatmul!(C, uplo_char(A), isunit_char(A), wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
 # disambiguation with AbstractTriangular
 _trimul!(C::AbstractMatrix, A::UpperOrLowerTriangular, B::AbstractTriangular) =
-    generic_trimatmul!(C, uplo_char(A), isunit_char(A), wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
 _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::UpperOrLowerTriangular) =
-    generic_mattrimul!(C, uplo_char(B), isunit_char(B), wrapperop(parent(B)), A, _unwrap_at(parent(B)))
+    generic_mattrimul!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 # methods for LinearAlgebra.jl's own triangular types, to avoid `istriu` checks
 lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _trimul!(B, A, B)
@@ -1111,22 +1155,31 @@ for (TA, TB) in ((:AbstractTriangular, :AbstractMatrix),
         if isone(alpha) && iszero(beta)
             return _trimul!(C, A, B)
         else
-            return generic_matmatmul!(C, 'N', 'N', A, B, alpha, beta)
+            return generic_matmatmul_NN!(C, A, B, alpha, beta)
         end
     end
+end
+
+generic_matmatmul_NN!(C, A, B, alpha, beta) = generic_matmatmul!(C, 'N', 'N', A, B, alpha, beta)
+# Optimization for strided matrices, where we know that _generic_matmatmul! will be taken 
+for (TA, TB) in ((:UpperOrLowerTriangularStrided, :StridedMatrix),
+                    (:StridedMatrix, :UpperOrLowerTriangularStrided),
+                    (:UpperOrLowerTriangularStrided, :UpperOrLowerTriangularStrided)
+                )
+    @eval generic_matmatmul_NN!(C, A::$TA, B::$TB, alpha, beta) = _generic_matmatmul!(C, A, B, alpha, beta)
 end
 
 ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) = _ldiv!(C, A, B)
 # generic fallback for AbstractTriangular, directs to 2-arg [l/r]div!
 _ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) =
-    ldiv!(A, copyto!(C, B))
+    ldiv!(A, _copy_or_copyto!(C, B))
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) =
-    rdiv!(copyto!(C, A), B)
+    rdiv!(copy!(C, A), B)
 # redirect for UpperOrLowerTriangular to generic_*div!
 _ldiv!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
-    generic_trimatdiv!(C, uplo_char(A), isunit_char(A), wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatdiv!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
-    generic_mattridiv!(C, uplo_char(B), isunit_char(B), wrapperop(parent(B)), A, _unwrap_at(parent(B)))
+    generic_mattridiv!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
     if istriu(A)
@@ -1199,7 +1252,7 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
             elseif p == Inf
                 return inv(LAPACK.trcon!('I', $uploc, $isunitc, A.data))
             else # use fallback
-                return cond(copyto!(similar(parent(A)), A), p)
+                return cond(copy!(similar(parent(A)), A), p)
             end
         end
     end
@@ -1207,17 +1260,17 @@ end
 
 # multiplication
 generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector{T}) where {T<:BlasFloat} =
-    BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copyto!(c, b))
+    BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copy!(c, b))
 function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix{T}) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1
-        BLAS.trmm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copyto!(C, B))
+        BLAS.trmm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copy!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatmul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
 function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat}
     if stride(C,1) == stride(B,1) == 1
-        BLAS.trmm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copyto!(C, A))
+        BLAS.trmm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
         @invoke generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
@@ -1225,14 +1278,14 @@ end
 # division
 function generic_trimatdiv!(C::StridedVecOrMat{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVecOrMat{T}) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1
-        LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : copyto!(C, B))
+        LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : _copy_or_copyto!(C, B))
     else # incompatible with LAPACK
         @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
     end
 end
 function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat}
     if stride(C,1) == stride(B,1) == 1
-        BLAS.trsm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copyto!(C, A))
+        BLAS.trsm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
         @invoke generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
@@ -1347,7 +1400,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
     @inbounds if uploc == 'U'
         if tfun === identity
             for j in axes(B,2)
-                for i in axes(B,1)
+                for i in axes(A,1)
                     Cij = (unit ? oA : A[i,i]) * B[i,j]
                     for k in i + 1:lastindex(B,1)
                         Cij += A[i,k] * B[k,j]
@@ -1369,7 +1422,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
     else # uploc == 'L'
         if tfun === identity
             for j in axes(B,2)
-                for i in reverse(axes(B,1))
+                for i in reverse(axes(A,1))
                     Cij = (unit ? oA : A[i,i]) * B[i,j]
                     for k in firstindex(B,1):i - 1
                         Cij += A[i,k] * B[k,j]
@@ -1379,7 +1432,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
             end
         else # tfun in (transpose, adjoint)
             for j in axes(B,2)
-                for i in axes(B,1)
+                for i in axes(A,2)
                     Cij = (unit ? oA : tfun(A[i,i])) * B[i,j]
                     for k in i + 1:lastindex(B,1)
                         Cij += tfun(A[k,i]) * B[k,j]
@@ -1400,7 +1453,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
     unit = isunitc == 'U'
     @inbounds if uploc == 'U'
         for j in axes(B,2)
-            for i in axes(B,1)
+            for i in axes(A,1)
                 Cij = (unit ? oA : conj(A[i,i])) * B[i,j]
                 for k in i + 1:lastindex(B,1)
                     Cij += conj(A[i,k]) * B[k,j]
@@ -1410,7 +1463,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
         end
     else # uploc == 'L'
         for j in axes(B,2)
-            for i in reverse(axes(B,1))
+            for i in reverse(axes(A,1))
                 Cij = (unit ? oA : conj(A[i,i])) * B[i,j]
                 for k in firstindex(B,1):i - 1
                     Cij += conj(A[i,k]) * B[k,j]
@@ -1430,7 +1483,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
     @inbounds if uploc == 'U'
         if tfun === identity
             for i in axes(A,1)
-                for j in reverse(axes(A,2))
+                for j in reverse(axes(B,2))
                     Cij = A[i,j] * (unit ? oB : B[j,j])
                     for k in firstindex(A,2):j - 1
                         Cij += A[i,k] * B[k,j]
@@ -1440,7 +1493,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
             end
         else # tfun in (transpose, adjoint)
             for i in axes(A,1)
-                for j in axes(A,2)
+                for j in axes(B,1)
                     Cij = A[i,j] * (unit ? oB : tfun(B[j,j]))
                     for k in j + 1:lastindex(A,2)
                         Cij += A[i,k] * tfun(B[j,k])
@@ -1452,7 +1505,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
     else # uploc == 'L'
         if tfun === identity
             for i in axes(A,1)
-                for j in axes(A,2)
+                for j in axes(B,2)
                     Cij = A[i,j] * (unit ? oB : B[j,j])
                     for k in j + 1:lastindex(A,2)
                         Cij += A[i,k] * B[k,j]
@@ -1462,7 +1515,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
             end
         else # tfun in (transpose, adjoint)
             for i in axes(A,1)
-                for j in reverse(axes(A,2))
+                for j in reverse(axes(B,1))
                     Cij = A[i,j] * (unit ? oB : tfun(B[j,j]))
                     for k in firstindex(A,2):j - 1
                         Cij += A[i,k] * tfun(B[j,k])
@@ -1483,7 +1536,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
     unit = isunitc == 'U'
     @inbounds if uploc == 'U'
         for i in axes(A,1)
-            for j in reverse(axes(A,2))
+            for j in reverse(axes(B,2))
                 Cij = A[i,j] * (unit ? oB : conj(B[j,j]))
                 for k in firstindex(A,2):j - 1
                     Cij += A[i,k] * conj(B[k,j])
@@ -1493,7 +1546,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
         end
     else # uploc == 'L'
         for i in axes(A,1)
-            for j in axes(A,2)
+            for j in axes(B,2)
                 Cij = A[i,j] * (unit ? oB : conj(B[j,j]))
                 for k in j + 1:lastindex(A,2)
                     Cij += A[i,k] * conj(B[k,j])
@@ -1957,7 +2010,7 @@ function powm!(A0::UpperTriangular, p::Real)
         for i in axes(S,1)
             @inbounds S[i, i] = S[i, i] + 1
         end
-        copyto!(Stmp, S)
+        copy!(Stmp, S)
         mul!(S, A, c)
         ldiv!(Stmp, S)
 
@@ -1965,14 +2018,14 @@ function powm!(A0::UpperTriangular, p::Real)
         for i in axes(S,1)
             @inbounds S[i, i] = S[i, i] + 1
         end
-        copyto!(Stmp, S)
+        copy!(Stmp, S)
         mul!(S, A, c)
         ldiv!(Stmp, S)
     end
     for i in axes(S,1)
         S[i, i] = S[i, i] + 1
     end
-    copyto!(Stmp, S)
+    copy!(Stmp, S)
     mul!(S, A, -p)
     ldiv!(Stmp, S)
     for i in axes(S,1)
@@ -1982,7 +2035,7 @@ function powm!(A0::UpperTriangular, p::Real)
     blockpower!(A0, S, p/(2^s))
     for m = 1:s
         mul!(Stmp.data, S, S)
-        copyto!(S, Stmp)
+        copy!(S, Stmp)
         blockpower!(A0, S, p/(2^(s-m)))
     end
     rmul!(S, normA0^p)
@@ -2169,7 +2222,7 @@ function _find_params_log_quasitriu!(A)
             break
         end
         _sqrt_quasitriu!(A isa UpperTriangular ? parent(A) : A, A)
-        copyto!(AmI, A)
+        copy!(AmI, A)
         for i in axes(AmI,1)
             @inbounds AmI[i,i] -= 1
         end

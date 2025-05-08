@@ -10,12 +10,12 @@ module LinearAlgebra
 import Base: \, /, //, *, ^, +, -, ==
 import Base: USE_BLAS64, abs, acos, acosh, acot, acoth, acsc, acsch, adjoint, asec, asech,
     asin, asinh, atan, atanh, axes, big, broadcast, cbrt, ceil, cis, collect, conj, convert,
-    copy, copyto!, copymutable, cos, cosh, cot, coth, csc, csch, eltype, exp, fill!, floor,
+    copy, copy!, copyto!, copymutable, cos, cosh, cot, coth, csc, csch, eltype, exp, fill!, floor,
     getindex, hcat, getproperty, imag, inv, invpermuterows!, isapprox, isequal, isone, iszero,
     IndexStyle, kron, kron!, length, log, map, ndims, one, oneunit, parent, permutecols!,
-    permutedims, permuterows!, power_by_squaring, promote_rule, real, sec, sech, setindex!,
+    permutedims, permuterows!, power_by_squaring, promote_rule, real, isreal, sec, sech, setindex!,
     show, similar, sin, sincos, sinh, size, sqrt, strides, stride, tan, tanh, transpose, trunc,
-    typed_hcat, vec, view, zero
+    typed_hcat, vec, view, zero, CartesianIndex
 import Base: AbstractArray, AbstractMatrix, Array, Matrix
 using Base: IndexLinear, promote_eltype, promote_op, print_matrix,
     @propagate_inbounds, reduce, typed_hvcat, typed_vcat, require_one_based_indexing,
@@ -179,7 +179,8 @@ public AbstractTriangular,
         symmetric,
         symmetric_type,
         zeroslike,
-        matprod_dest
+        matprod_dest,
+        fillstored!
 
 const BlasFloat = Union{Float64,Float32,ComplexF64,ComplexF32}
 const BlasReal = Union{Float64,Float32}
@@ -508,21 +509,29 @@ struct BandIndex
     band :: Int
     index :: Int
 end
-function _cartinds(b::BandIndex)
+function _torowcol(b::BandIndex)
     (; band, index) = b
-    bandg0 = max(band,0)
-    row = index - band + bandg0
-    col = index + bandg0
-    CartesianIndex(row, col)
+    minband0, maxband0 = minmax(band,0)
+    row = index - minband0
+    col = index + maxband0
+    row, col
 end
-function Base.to_indices(A, inds, t::Tuple{BandIndex, Vararg{Any}})
-    to_indices(A, inds, (_cartinds(first(t)), Base.tail(t)...))
+CartesianIndex(b::BandIndex) = CartesianIndex{2}(b)
+CartesianIndex{2}(b::BandIndex) = CartesianIndex{2}(_torowcol(b))
+function BandIndex(c::CartesianIndex{2})
+    row, col = Tuple(c)
+    band = col - row
+    index = min(row, col)
+    BandIndex(band, index)
+end
+function Base.to_indices(A, inds, t::Tuple{BandIndex, Vararg})
+    to_indices(A, inds, (_torowcol(first(t))..., Base.tail(t)...))
 end
 function Base.checkbounds(::Type{Bool}, A::AbstractMatrix, b::BandIndex)
-    checkbounds(Bool, A, _cartinds(b))
+    checkbounds(Bool, A, _torowcol(b)...)
 end
 function Base.checkbounds(A::Broadcasted, b::BandIndex)
-    checkbounds(A, _cartinds(b))
+    checkbounds(A, CartesianIndex(b))
 end
 
 include("adjtrans.jl")
@@ -706,9 +715,9 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
 
     if n > size(B, 1)
         # Underdetermined
-        copyto!(view(BB, 1:m, :), B)
+        copy!(view(BB, axes(B,1), ntuple(_->:, ndims(B)-1)...), B)
     else
-        copyto!(BB, B)
+        copy!(BB, B)
     end
 
     ldiv!(FF, BB)
@@ -725,6 +734,8 @@ end
     ldiv(F, B)
 (\)(F::TransposeFactorization{T,<:LU}, B::VecOrMat{Complex{T}}) where {T<:BlasReal} =
     ldiv(F, B)
+
+const default_peakflops_size = Int === Int32 ? 2048 : 4096
 
 """
     LinearAlgebra.peakflops(n::Integer=4096; eltype::DataType=Float64, ntrials::Integer=3, parallel::Bool=false)
@@ -750,10 +761,10 @@ of the problem that is solved on each processor.
     This function requires at least Julia 1.1. In Julia 1.0 it is available from
     the standard library `InteractiveUtils`.
 """
-function peakflops(n::Integer=4096; eltype::DataType=Float64, ntrials::Integer=3, parallel::Bool=false)
+function peakflops(n::Integer=default_peakflops_size; eltype::Type{ElType}=Float64, ntrials::Integer=3, parallel::Bool=false) where {ElType}
     t = zeros(Float64, ntrials)
     for i=1:ntrials
-        a = ones(eltype,n,n)
+        a = ones(ElType,n,n)
         t[i] = @elapsed a2 = a*a
         @assert a2[1,1] == n
     end
@@ -786,31 +797,22 @@ function versioninfo(io::IO=stdout)
     println(io, indent, "LinearAlgebra.BLAS.get_num_threads() = ", BLAS.get_num_threads())
     println(io, "Relevant environment variables:")
     env_var_names = [
-        "JULIA_NUM_THREADS",
-        "MKL_DYNAMIC",
-        "MKL_NUM_THREADS",
+        ["JULIA_NUM_THREADS"],
+        ["MKL_DYNAMIC"],
+        ["MKL_NUM_THREADS"],
          # OpenBLAS has a hierarchy of environment variables for setting the
          # number of threads, see
          # https://github.com/xianyi/OpenBLAS/blob/c43ec53bdd00d9423fc609d7b7ecb35e7bf41b85/README.md#setting-the-number-of-threads-using-environment-variables
-        ("OPENBLAS_NUM_THREADS", "GOTO_NUM_THREADS", "OMP_NUM_THREADS"),
+        ["OPENBLAS_NUM_THREADS", "GOTO_NUM_THREADS", "OMP_NUM_THREADS"],
     ]
     printed_at_least_one_env_var = false
     print_var(io, indent, name) = println(io, indent, name, " = ", ENV[name])
     for name in env_var_names
-        if name isa Tuple
-            # If `name` is a Tuple, then find the first environment which is
-            # defined, and disregard the following ones.
-            for nm in name
-                if haskey(ENV, nm)
-                    print_var(io, indent, nm)
-                    printed_at_least_one_env_var = true
-                    break
-                end
-            end
-        else
-            if haskey(ENV, name)
-                print_var(io, indent, name)
+        for nm in name
+            if haskey(ENV, nm)
+                print_var(io, indent, nm)
                 printed_at_least_one_env_var = true
+                break
             end
         end
     end

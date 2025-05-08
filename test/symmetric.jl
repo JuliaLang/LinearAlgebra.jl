@@ -2,6 +2,8 @@
 
 module TestSymmetric
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
@@ -11,6 +13,9 @@ using .Main.Quaternions
 
 isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
 using .Main.SizedArrays
+
+isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
+using .Main.ImmutableArrays
 
 Random.seed!(1010)
 
@@ -720,10 +725,6 @@ end
     end
 end
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
-
 @testset "Conversion to AbstractArray" begin
     # tests corresponding to #34995
     immutablemat = ImmutableArray([1 2 3; 4 5 6; 7 8 9])
@@ -1175,6 +1176,26 @@ end
             copyto!(H2, H1)
             @test H2 == H1
         end
+    end
+end
+
+@testset "block-symmetric setindex!" begin
+    A = fill([1 2; 3 4], 2, 2)
+    v = [1 2; 3 4]
+    H = Hermitian(A)
+    h_msg = "cannot set a diagonal element of a hermitian matrix to a non-hermitian value"
+    @test_throws h_msg H[1,1] = v
+    S = Symmetric(A)
+    s_msg = "cannot set a diagonal element of a symmetric matrix to an asymmetric value"
+    @test_throws s_msg S[1,1] = v
+end
+
+@testset "fillstored!" begin
+    A = zeros(4,4)
+    for T in (Symmetric, Hermitian)
+        A .= 0
+        LinearAlgebra.fillstored!(T(A), 2)
+        @test all(==(2), T(A))
     end
 end
 

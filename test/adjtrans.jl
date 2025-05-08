@@ -2,12 +2,17 @@
 
 module TestAdjointTranspose
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra
 
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
 
 isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "OffsetArrays.jl"))
 using .Main.OffsetArrays
+
+isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
+using .Main.ImmutableArrays
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
@@ -247,9 +252,6 @@ end
     @test convert(Transpose{Float64,Vector{Float64}}, Transpose(intvec))::Transpose{Float64,Vector{Float64}} == Transpose(intvec)
     @test convert(Transpose{Float64,Matrix{Float64}}, Transpose(intmat))::Transpose{Float64,Matrix{Float64}} == Transpose(intmat)
 end
-
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
 
 @testset "Adjoint and Transpose convert methods to AbstractArray" begin
     # tests corresponding to #34995
@@ -591,9 +593,6 @@ end
     @test pointer(Transpose(D)) === pointer(D)
 end
 
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "OffsetArrays.jl"))
-using .Main.OffsetArrays
-
 @testset "offset axes" begin
     s = Base.Slice(-3:3)'
     @test axes(s) === (Base.OneTo(1), Base.IdentityUnitRange(-3:3))
@@ -744,6 +743,48 @@ end
     for (t1, t2) in Any[(A, v), (v, A), (A, B)]
         @test_throws "axes of the destination are incompatible with that of the source" transpose!(t1, t2)
         @test_throws "axes of the destination are incompatible with that of the source" adjoint!(t1, t2)
+    end
+end
+
+@testset "band indexing" begin
+    n = 3
+    A = UnitUpperTriangular(Matrix(reshape(1:n^2, n, n)))
+    @testset "every index" begin
+        Aadj = Adjoint(A)
+        for k in -(n-1):n-1
+            di = diagind(Aadj, k, IndexStyle(Aadj))
+            for (i,d) in enumerate(di)
+                @test Aadj[LinearAlgebra.BandIndex(k,i)] == Aadj[d]
+                if k < 0 # the adjoint is a unit lower triangular
+                    Aadj[LinearAlgebra.BandIndex(k,i)] = n^2 + i
+                    @test Aadj[d] == n^2 + i
+                end
+            end
+        end
+    end
+    @testset "inference for structured matrices" begin
+        function f(A, i, ::Val{band}) where {band}
+            x = Adjoint(A)[LinearAlgebra.BandIndex(band,i)]
+            Val(x)
+        end
+        v = @inferred f(A, 1, Val(0))
+        @test v == Val(1)
+        v = @inferred f(A, 1, Val(1))
+        @test v == Val(0)
+    end
+    @testset "non-square matrix" begin
+        r = reshape(1:6, 2, 3)
+        for d in (r, r*im)
+            @test d'[LinearAlgebra.BandIndex(1,1)] == adjoint(d[2,1])
+            @test d'[LinearAlgebra.BandIndex(-1,2)] == adjoint(d[2,3])
+            @test transpose(d)[LinearAlgebra.BandIndex(1,1)] == transpose(d[2,1])
+            @test transpose(d)[LinearAlgebra.BandIndex(-1,2)] == transpose(d[2,3])
+        end
+    end
+    @testset "block matrix" begin
+        B = reshape([[1 2; 3 4]*i for i in 1:4], 2, 2)
+        @test B'[LinearAlgebra.BandIndex(1,1)] == adjoint(B[2,1])
+        @test transpose(B)[LinearAlgebra.BandIndex(1,1)] == transpose(B[2,1])
     end
 end
 
