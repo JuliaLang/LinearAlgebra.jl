@@ -1316,7 +1316,7 @@ issymmetric(A::AbstractMatrix{<:Real}) = ishermitian(A)
 """
     issymmetric(A) -> Bool
 
-Test whether a matrix is symmetric.
+Test whether a matrix or number is symmetric.
 
 # Examples
 ```jldoctest
