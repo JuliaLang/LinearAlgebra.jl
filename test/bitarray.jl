@@ -1,3 +1,7 @@
+# This file is a part of Julia. License is MIT: https://julialang.org/license
+
+module TestBitArray
+
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using LinearAlgebra, Test, Random
@@ -95,3 +99,5 @@ b2 = bitrand(v1)
 
 b1 = bitrand(n1, n1)
 @check_bit_operation diag(b1)
+
+end # module
