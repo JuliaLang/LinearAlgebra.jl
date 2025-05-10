@@ -392,15 +392,13 @@ control over the factorization of `A`.
 
 # Examples
 ```jldoctest
-julia> A = [1 2.2 4; 3.1 0.2 3; 4 1 2];
+julia> A, B = [1 2.2 4; 3.1 0.2 3; 4 1 2], [1, 2.5, 3];
 
-julia> X = [1; 2.5; 3];
+julia> Y = copy(B);
 
-julia> Y = zero(X);
+julia> ldiv!(Y, qr(A), B); # also try qr!(A) for the 2nd arg
 
-julia> ldiv!(Y, qr(A), X);
-
-julia> Y ≈ A\\X
+julia> Y ≈ A \ B
 true
 ```
 """
@@ -424,15 +422,13 @@ control over the factorization of `A`.
 
 # Examples
 ```jldoctest
-julia> A = [1 2.2 4; 3.1 0.2 3; 4 1 2];
+julia> A, B = [1 2.2 4; 3.1 0.2 3; 4 1 2], [1, 2.5, 3];
 
-julia> X = [1; 2.5; 3];
+julia> B0 = copy(B);
 
-julia> Y = copy(X);
+julia> ldiv!(lu(A), B); # also try lu!(A) for the 1st arg
 
-julia> ldiv!(qr(A), X);
-
-julia> X ≈ A\\Y
+julia> B ≈ A \ B0
 true
 ```
 """
