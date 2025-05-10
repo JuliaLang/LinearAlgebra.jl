@@ -398,7 +398,7 @@ julia> Y = copy(B);
 
 julia> ldiv!(Y, qr(A), B); # also try qr!(A) for the 2nd arg
 
-julia> Y ≈ A \ B
+julia> Y ≈ A \\ B
 true
 ```
 """
@@ -428,7 +428,7 @@ julia> B0 = copy(B);
 
 julia> ldiv!(lu(A), B); # also try lu!(A) for the 1st arg
 
-julia> B ≈ A \ B0
+julia> B ≈ A \\ B0
 true
 ```
 """
