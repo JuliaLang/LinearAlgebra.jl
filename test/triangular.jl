@@ -934,4 +934,62 @@ end
     end
 end
 
+@testset "indexing checks" begin
+    P = [1 2; 3 4]
+    @testset "getindex" begin
+        U = UnitUpperTriangular(P)
+        @test_throws BoundsError U[0,0]
+        @test_throws BoundsError U[1,0]
+        @test_throws BoundsError U[BandIndex(0,0)]
+        @test_throws BoundsError U[BandIndex(-1,0)]
+
+        U = UpperTriangular(P)
+        @test_throws BoundsError U[1,0]
+        @test_throws BoundsError U[BandIndex(-1,0)]
+
+        L = UnitLowerTriangular(P)
+        @test_throws BoundsError L[0,0]
+        @test_throws BoundsError L[0,1]
+        @test_throws BoundsError U[BandIndex(0,0)]
+        @test_throws BoundsError U[BandIndex(1,0)]
+
+        L = LowerTriangular(P)
+        @test_throws BoundsError L[0,1]
+        @test_throws BoundsError L[BandIndex(1,0)]
+    end
+    @testset "setindex!" begin
+        A = SizedArrays.SizedArray{(2,2)}(P)
+        M = fill(A, 2, 2)
+        U = UnitUpperTriangular(M)
+        @test_throws "Cannot `convert` an object of type $Int" U[1,1] = 1
+        L = UnitLowerTriangular(M)
+        @test_throws "Cannot `convert` an object of type $Int" L[1,1] = 1
+
+        U = UnitUpperTriangular(P)
+        @test_throws BoundsError U[0,0] = 1
+        @test_throws BoundsError U[1,0] = 0
+
+        U = UpperTriangular(P)
+        @test_throws BoundsError U[1,0] = 0
+
+        L = UnitLowerTriangular(P)
+        @test_throws BoundsError L[0,0] = 1
+        @test_throws BoundsError L[0,1] = 0
+
+        L = LowerTriangular(P)
+        @test_throws BoundsError L[0,1] = 0
+    end
+end
+
+@testset "unit triangular l/rdiv!" begin
+    A = rand(3,3)
+    @testset for (UT,T) in ((UnitUpperTriangular, UpperTriangular),
+                            (UnitLowerTriangular, LowerTriangular))
+        UnitTri = UT(A)
+        Tri = T(LinearAlgebra.full(UnitTri))
+        @test 2 \ UnitTri ≈ 2 \ Tri
+        @test UnitTri / 2 ≈ Tri / 2
+    end
+end
+
 end # module TestTriangular
