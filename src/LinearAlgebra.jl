@@ -394,13 +394,13 @@ control over the factorization of `A`.
 ```jldoctest
 julia> A = [1 2.2 4; 3.1 0.2 3; 4 1 2];
 
-julia> X = [1; 2.5; 3];
+julia> B = [1, 2.5, 3];
 
-julia> Y = zero(X);
+julia> Y = similar(B); # use similar since there is no need to read from it
 
-julia> ldiv!(Y, qr(A), X);
+julia> ldiv!(Y, qr(A), B); # you may also try qr!(A) to further reduce allocation
 
-julia> Y ≈ A\\X
+julia> Y ≈ A \\ B
 true
 ```
 """
@@ -426,13 +426,13 @@ control over the factorization of `A`.
 ```jldoctest
 julia> A = [1 2.2 4; 3.1 0.2 3; 4 1 2];
 
-julia> X = [1; 2.5; 3];
+julia> B = [1, 2.5, 3];
 
-julia> Y = copy(X);
+julia> B0 = copy(B); # a backup copy to facilitate testing
 
-julia> ldiv!(qr(A), X);
+julia> ldiv!(lu(A), B); # you may also try lu!(A) to further reduce allocation
 
-julia> X ≈ A\\Y
+julia> B ≈ A \\ B0
 true
 ```
 """
