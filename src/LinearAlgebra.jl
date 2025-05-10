@@ -392,11 +392,13 @@ control over the factorization of `A`.
 
 # Examples
 ```jldoctest
-julia> A, B = [1 2.2 4; 3.1 0.2 3; 4 1 2], [1, 2.5, 3];
+julia> A = [1 2.2 4; 3.1 0.2 3; 4 1 2];
+
+julia> B = [1, 2.5, 3];
 
 julia> Y = copy(B);
 
-julia> ldiv!(Y, qr(A), B); # also try qr!(A) for the 2nd arg
+julia> ldiv!(Y, qr(A), B); # you may also try qr!(A) to further reduce allocation
 
 julia> Y ≈ A \\ B
 true
@@ -422,11 +424,13 @@ control over the factorization of `A`.
 
 # Examples
 ```jldoctest
-julia> A, B = [1 2.2 4; 3.1 0.2 3; 4 1 2], [1, 2.5, 3];
+julia> A = [1 2.2 4; 3.1 0.2 3; 4 1 2];
+
+julia> B = [1, 2.5, 3];
 
 julia> B0 = copy(B);
 
-julia> ldiv!(lu(A), B); # also try lu!(A) for the 1st arg
+julia> ldiv!(lu(A), B); # you may also try lu!(A) to further reduce allocation
 
 julia> B ≈ A \\ B0
 true
