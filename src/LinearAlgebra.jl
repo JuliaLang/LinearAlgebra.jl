@@ -396,7 +396,7 @@ julia> A = [1 2.2 4; 3.1 0.2 3; 4 1 2];
 
 julia> B = [1, 2.5, 3];
 
-julia> Y = copy(B);
+julia> Y = similar(B); # use similar since there is no need to read from it
 
 julia> ldiv!(Y, qr(A), B); # you may also try qr!(A) to further reduce allocation
 
@@ -428,7 +428,7 @@ julia> A = [1 2.2 4; 3.1 0.2 3; 4 1 2];
 
 julia> B = [1, 2.5, 3];
 
-julia> B0 = copy(B);
+julia> B0 = copy(B); # a backup copy to facilitate testing
 
 julia> ldiv!(lu(A), B); # you may also try lu!(A) to further reduce allocation
 
