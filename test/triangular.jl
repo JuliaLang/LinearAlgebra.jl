@@ -973,7 +973,10 @@ end
         if U isa UnitUpperTriangular
             @test_throws ArgumentError LinearAlgebra.fillband!(U, 2, 0, 1)
         end
-        @test iszero(U)
+        # check that the error paths do not mutate the array
+        if U isa UpperTriangular
+            @test iszero(U)
+        end
 
         LinearAlgebra.fillband!(U, 1, 0, 1)
         @test all(==(1), diagview(U,0))
@@ -1003,7 +1006,10 @@ end
         if L isa UnitLowerTriangular
             @test_throws ArgumentError LinearAlgebra.fillband!(L, 2, -1, 0)
         end
-        @test iszero(L)
+        # check that the error paths do not mutate the array
+        if L isa LowerTriangular
+            @test iszero(L)
+        end
 
         LinearAlgebra.fillband!(L, 1, -1, 0)
         @test all(==(1), diagview(L,0))
