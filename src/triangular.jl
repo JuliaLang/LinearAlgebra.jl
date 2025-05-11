@@ -801,38 +801,38 @@ function _triscale!(A::LowerOrUnitLowerTriangular, c::Number, B::UnitLowerTriang
     return A
 end
 
-function _trirdiv!(A::UpperTriangular, B::UpperOrUnitUpperTriangular, c::Number)
+function _trirdiv!(A::UpperTriangular, B::UpperTriangular, c::Number)
     checksize1(A, B)
     for j in axes(B,2)
         for i in firstindex(B,1):j
-            @inbounds A[i, j] = B[i, j] / c
+            @inbounds A.data[i, j] = B.data[i, j] / c
         end
     end
     return A
 end
-function _trirdiv!(A::LowerTriangular, B::LowerOrUnitLowerTriangular, c::Number)
+function _trirdiv!(A::LowerTriangular, B::LowerTriangular, c::Number)
     checksize1(A, B)
     for j in axes(B,2)
         for i in j:lastindex(B,1)
-            @inbounds A[i, j] = B[i, j] / c
+            @inbounds A.data[i, j] = B.data[i, j] / c
         end
     end
     return A
 end
-function _trildiv!(A::UpperTriangular, c::Number, B::UpperOrUnitUpperTriangular)
+function _trildiv!(A::UpperTriangular, c::Number, B::UpperTriangular)
     checksize1(A, B)
     for j in axes(B,2)
         for i in firstindex(B,1):j
-            @inbounds A[i, j] = c \ B[i, j]
+            @inbounds A.data[i, j] = c \ B.data[i, j]
         end
     end
     return A
 end
-function _trildiv!(A::LowerTriangular, c::Number, B::LowerOrUnitLowerTriangular)
+function _trildiv!(A::LowerTriangular, c::Number, B::LowerTriangular)
     checksize1(A, B)
     for j in axes(B,2)
         for i in j:lastindex(B,1)
-            @inbounds A[i, j] = c \ B[i, j]
+            @inbounds A.data[i, j] = c \ B.data[i, j]
         end
     end
     return A
