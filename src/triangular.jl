@@ -773,7 +773,7 @@ function _triscale!(A::UpperOrUnitUpperTriangular, B::UnitUpperTriangular, c::Nu
     checksize1(A, B)
     _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
-        @inbounds _modify!(_add, c, A, (j,j))
+        @inbounds _modify!(_add, B[BandIndex(0,j)] * c, A, (j,j))
         for i in firstindex(B.data,1):(j - 1)
             @inbounds _modify!(_add, B.data[i,j] * c, A.data, (i,j))
         end
@@ -784,7 +784,7 @@ function _triscale!(A::UpperOrUnitUpperTriangular, c::Number, B::UnitUpperTriang
     checksize1(A, B)
     _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
-        @inbounds _modify!(_add, c, A, (j,j))
+        @inbounds _modify!(_add, c * B[BandIndex(0,j)], A, (j,j))
         for i in firstindex(B.data,1):(j - 1)
             @inbounds _modify!(_add, c * B.data[i,j], A.data, (i,j))
         end
@@ -815,7 +815,7 @@ function _triscale!(A::LowerOrUnitLowerTriangular, B::UnitLowerTriangular, c::Nu
     checksize1(A, B)
     _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
-        @inbounds _modify!(_add, c, A, (j,j))
+        @inbounds _modify!(_add, B[BandIndex(0,j)] *c, A, (j,j))
         for i in (j + 1):lastindex(B.data,1)
             @inbounds _modify!(_add, B.data[i,j] * c, A.data, (i,j))
         end
@@ -826,7 +826,7 @@ function _triscale!(A::LowerOrUnitLowerTriangular, c::Number, B::UnitLowerTriang
     checksize1(A, B)
     _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
-        @inbounds _modify!(_add, c, A, (j,j))
+        @inbounds _modify!(_add, c * B[BandIndex(0,j)], A, (j,j))
         for i in (j + 1):lastindex(B.data,1)
             @inbounds _modify!(_add, c * B.data[i,j], A.data, (i,j))
         end
