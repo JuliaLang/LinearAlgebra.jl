@@ -816,7 +816,7 @@ function _triscale!(A::LowerOrUnitLowerTriangular, B::UnitLowerTriangular, c::Nu
     checksize1(A, B)
     _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
-        @inbounds _modify!(_add, B[BandIndex(0,j)] *c, A, (j,j))
+        @inbounds _modify!(_add, B[BandIndex(0,j)] * c, A, (j,j))
         for i in (j + 1):lastindex(B.data,1)
             @inbounds _modify!(_add, B.data[i,j] * c, A.data, (i,j))
         end
