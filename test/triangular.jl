@@ -950,6 +950,10 @@ end
     @test 2\U == 2\M
     @test U*2 == M*2
     @test 2*U == 2*M
+
+    U2 = copy(U)
+    @test rmul!(U, 1) == U2
+    @test lmul!(1, U) == U2
 end
 
 @testset "scaling partly initialized unit triangular" begin
