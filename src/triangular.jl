@@ -837,7 +837,6 @@ end
 
 function _trirdiv!(A::UpperTriangular, B::UpperTriangular, c::Number)
     checksize1(A, B)
-    isunit = B isa UnitUpperTriangular
     for j in axes(B,2)
         for i in firstindex(B,1):j
             @inbounds A.data[i, j] = B.data[i, j] / c
@@ -847,7 +846,6 @@ function _trirdiv!(A::UpperTriangular, B::UpperTriangular, c::Number)
 end
 function _trirdiv!(A::LowerTriangular, B::LowerTriangular, c::Number)
     checksize1(A, B)
-    isunit = B isa UnitLowerTriangular
     for j in axes(B,2)
         for i in j:lastindex(B,1)
             @inbounds A.data[i, j] = B.data[i, j] / c
@@ -857,7 +855,6 @@ function _trirdiv!(A::LowerTriangular, B::LowerTriangular, c::Number)
 end
 function _trildiv!(A::UpperTriangular, c::Number, B::UpperTriangular)
     checksize1(A, B)
-    isunit = B isa UnitUpperTriangular
     for j in axes(B,2)
         for i in firstindex(B,1):j
             @inbounds A.data[i, j] = c \ B.data[i, j]
@@ -867,7 +864,6 @@ function _trildiv!(A::UpperTriangular, c::Number, B::UpperTriangular)
 end
 function _trildiv!(A::LowerTriangular, c::Number, B::LowerTriangular)
     checksize1(A, B)
-    isunit = B isa UnitLowerTriangular
     for j in axes(B,2)
         for i in j:lastindex(B,1)
             @inbounds A.data[i, j] = c \ B.data[i, j]
