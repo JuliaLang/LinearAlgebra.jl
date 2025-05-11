@@ -931,6 +931,36 @@ fillstored!(A::UnitLowerTriangular, x) = (fillband!(A.data, x, 1-size(A,1), -1);
 fillstored!(A::UpperTriangular, x)     = (fillband!(A.data, x, 0, size(A,2)-1); A)
 fillstored!(A::UnitUpperTriangular, x) = (fillband!(A.data, x, 1, size(A,2)-1); A)
 
+function fillband!(A::LowerOrUnitLowerTriangular, x, l, u)
+    if l > u
+        return A
+    end
+    if u > 0 && !iszero(x)
+        throw_fillband_error(l, u, x)
+    end
+    isunit = A isa UnitLowerTriangular
+    if isunit && u >= 0 && x != oneunit(x)
+        throw(ArgumentError(lazy"cannot set the diagonal band to a non-unit value ($x)"))
+    end
+    fillband!(A.data, x, l, min(u, -isunit))
+    return A
+end
+
+function fillband!(A::UpperOrUnitUpperTriangular, x, l, u)
+    if l > u
+        return A
+    end
+    if l < 0 && !iszero(x)
+        throw_fillband_error(l, u, x)
+    end
+    isunit = A isa UnitUpperTriangular
+    if isunit && l <= 0 && x != oneunit(x)
+        throw(ArgumentError(lazy"cannot set the diagonal band to a non-unit value ($x)"))
+    end
+    fillband!(A.data, x, max(l, isunit), u)
+    return A
+end
+
 # Binary operations
 # use broadcasting if the parents are strided, where we loop only over the triangular part
 function +(A::UpperTriangular, B::UpperTriangular)

@@ -1543,3 +1543,30 @@ function Base._sum(A::Bidiagonal, dims::Integer)
     end
     res
 end
+
+function fillband!(B::Bidiagonal, x, l, u)
+    if l > u
+        return B
+    end
+    if ((B.uplo == 'U' && (l < 0 || u > 1)) ||
+            (B.uplo == 'L' && (l < -1 || u > 0))) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    else
+        if B.uplo == 'U'
+            if l <= 1 <= u
+                fill!(B.ev, x)
+            end
+            if l <= 0 <= u
+                fill!(B.dv, x)
+            end
+        else # B.uplo == 'L'
+            if l <= 0 <= u
+                fill!(B.dv, x)
+            end
+            if l <= -1 <= u
+                fill!(B.ev, x)
+            end
+        end
+    end
+    return B
+end

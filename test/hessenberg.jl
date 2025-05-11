@@ -300,4 +300,24 @@ end
     @test_throws DimensionMismatch hessenberg(zeros(0,0)).Q * ones(1, 2)
 end
 
+@testset "fillband" begin
+    U = UpperHessenberg(zeros(4,4))
+    @test_throws ArgumentError LinearAlgebra.fillband!(U, 1, -2, 1)
+    @test iszero(U)
+
+    LinearAlgebra.fillband!(U, 10, -1, 2)
+    @test all(==(10), diagview(U,-1))
+    @test all(==(10), diagview(U,2))
+    @test all(==(0), diagview(U,3))
+
+    LinearAlgebra.fillband!(U, 0, -5, 5)
+    @test iszero(U)
+
+    U2 = copy(U)
+    LinearAlgebra.fillband!(U, -10, 1, -2)
+    @test U == U2
+    LinearAlgebra.fillband!(U, -10, 10, 10)
+    @test U == U2
+end
+
 end # module TestHessenberg

@@ -1542,4 +1542,26 @@ end
     end
 end
 
+@testset "fillband!" begin
+    D = Diagonal(zeros(4))
+    LinearAlgebra.fillband!(D, 2, 0, 0)
+    @test all(==(2), diagview(D,0))
+    @test all(==(0), diagview(D,-1))
+    @test_throws ArgumentError LinearAlgebra.fillband!(D, 3, -2, 2)
+
+    LinearAlgebra.fillstored!(D, 1)
+    LinearAlgebra.fillband!(D, 0, -3, 3)
+    @test iszero(D)
+    LinearAlgebra.fillstored!(D, 1)
+    LinearAlgebra.fillband!(D, 0, -10, 10)
+    @test iszero(D)
+
+    LinearAlgebra.fillstored!(D, 1)
+    D2 = copy(D)
+    LinearAlgebra.fillband!(D, 0, -1, -3)
+    @test D == D2
+    LinearAlgebra.fillband!(D, 0, 10, 10)
+    @test D == D2
+end
+
 end # module TestDiagonal

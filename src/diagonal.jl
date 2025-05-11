@@ -1216,3 +1216,18 @@ end
 
 uppertriangular(D::Diagonal) = D
 lowertriangular(D::Diagonal) = D
+
+throw_fillband_error(l, u, x) = throw(ArgumentError(lazy"cannot set bands $l:$u to a nonzero value ($x)"))
+
+function fillband!(D::Diagonal, x, l, u)
+    if l > u
+        return D
+    end
+    if (l < 0 || u > 0) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    end
+    if l <= 0 <= u
+        fill!(D.diag, x)
+    end
+    return D
+end
