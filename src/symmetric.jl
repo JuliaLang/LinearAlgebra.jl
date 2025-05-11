@@ -841,10 +841,11 @@ end
 ^(A::Hermitian, p::Integer) = sympow(A, p)
 function sympow(A, p::Integer)
     if p < 0
-        return wrappertype(A)(Base.power_by_squaring(inv(A), -p))
+        retmat = Base.power_by_squaring(inv(A), -p)
     else
-        return wrappertype(A)(Base.power_by_squaring(A, p))
+        retmat = Base.power_by_squaring(A, p)
     end
+    return wrappertype(A)(retmat)
 end
 function ^(A::SelfAdjoint, p::Real)
     isinteger(p) && return integerpow(A, p)
