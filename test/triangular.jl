@@ -1003,7 +1003,7 @@ end
         if L isa UnitLowerTriangular
             @test_throws ArgumentError LinearAlgebra.fillband!(L, 2, -1, 0)
         end
-        @test iszero(U)
+        @test iszero(L)
 
         LinearAlgebra.fillband!(L, 1, -1, 0)
         @test all(==(1), diagview(L,0))
