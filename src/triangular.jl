@@ -836,52 +836,36 @@ end
 
 function _trirdiv!(A::UpperTriangular, B::UpperOrUnitUpperTriangular, c::Number)
     checksize1(A, B)
-    isunit = B isa UnitUpperTriangular
     for j in axes(B,2)
-        for i in firstindex(B,1):j-isunit
-            @inbounds A.data[i, j] = B.data[i, j] / c
-        end
-        if isunit
-            @inbounds A.data[j, j] = B[BandIndex(0,j)] / c
+        for i in firstindex(B,1):j
+            @inbounds A[i, j] = B[i, j] / c
         end
     end
     return A
 end
 function _trirdiv!(A::LowerTriangular, B::LowerOrUnitLowerTriangular, c::Number)
     checksize1(A, B)
-    isunit = B isa UnitLowerTriangular
     for j in axes(B,2)
-        if isunit
-            @inbounds A.data[j, j] = B[BandIndex(0,j)] / c
-        end
-        for i in j+isunit:lastindex(B,1)
-            @inbounds A.data[i, j] = B.data[i, j] / c
+        for i in j:lastindex(B,1)
+            @inbounds A[i, j] = B[i, j] / c
         end
     end
     return A
 end
 function _trildiv!(A::UpperTriangular, c::Number, B::UpperOrUnitUpperTriangular)
     checksize1(A, B)
-    isunit = B isa UnitUpperTriangular
     for j in axes(B,2)
-        for i in firstindex(B,1):j-isunit
-            @inbounds A.data[i, j] = c \ B.data[i, j]
-        end
-        if isunit
-            @inbounds A.data[j, j] = c \ B[BandIndex(0,j)]
+        for i in firstindex(B,1):j
+            @inbounds A[i, j] = c \ B[i, j]
         end
     end
     return A
 end
 function _trildiv!(A::LowerTriangular, c::Number, B::LowerOrUnitLowerTriangular)
     checksize1(A, B)
-    isunit = B isa UnitLowerTriangular
     for j in axes(B,2)
-        if isunit
-            @inbounds A.data[j, j] = c \ B[BandIndex(0,j)]
-        end
-        for i in j+isunit:lastindex(B,1)
-            @inbounds A.data[i, j] = c \ B.data[i, j]
+        for i in j:lastindex(B,1)
+            @inbounds A[i, j] = c \ B[i, j]
         end
     end
     return A
