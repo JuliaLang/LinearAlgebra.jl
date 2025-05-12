@@ -1421,6 +1421,8 @@ end
 @testset "log for diagonal" begin
     D = diagm([-2.0, 2.0])
     @test log(D) ≈ log(UpperTriangular(D))
+    D = diagm([-2.0, 0.0])
+    @test log(D) ≈ log(UpperTriangular(D))
     D = diagm([2.0, 2.0])
     @test log(D) ≈ log(UpperTriangular(D))
     D = diagm([2.0, 2.0*im])
