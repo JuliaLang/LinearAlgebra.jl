@@ -1323,15 +1323,6 @@ end
 # Generic routines #
 ####################
 
-function _set_diag!(B::UpperOrLowerTriangular, x)
-    # get a mutable array to modify the diagonal
-    Bm = parent(B) isa StridedArray ? B : copy!(similar(B), B)
-    for i in diagind(Bm.data, IndexStyle(Bm.data))
-        Bm.data[i] = x
-    end
-    Bm
-end
-
 for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
                    (LowerTriangular, UnitLowerTriangular))
     tstrided = t{<:Any, <:StridedMaybeAdjOrTransMat}
@@ -1344,8 +1335,8 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
         end
 
         function (*)(A::$unitt, x::Number)
-            B = $t(A.data)*x
-            _set_diag!(B, oneunit(eltype(A)) * x)
+            B = copy!(similar($t(A.data)), A)
+            B * x
         end
 
         (*)(x::Number, A::$t) = $t(x*A.data)
@@ -1356,8 +1347,8 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
         end
 
         function (*)(x::Number, A::$unitt)
-            B = x*$t(A.data)
-            _set_diag!(B, x * oneunit(eltype(A)))
+            B = copy!(similar($t(A.data)), A)
+            x * B
         end
 
         (/)(A::$t, x::Number) = $t(A.data/x)
@@ -1368,8 +1359,8 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
         end
 
         function (/)(A::$unitt, x::Number)
-            B = $t(A.data)/x
-            _set_diag!(B, oneunit(eltype(A)) / x)
+            B = copy!(similar($t(A.data)), A)
+            B / x
         end
 
         (\)(x::Number, A::$t) = $t(x\A.data)
@@ -1380,8 +1371,8 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
         end
 
         function (\)(x::Number, A::$unitt)
-            B = x\$t(A.data)
-            _set_diag!(B, x \ oneunit(eltype(A)))
+            B = copy!(similar($t(A.data)), A)
+            x \ B
         end
     end
 end
