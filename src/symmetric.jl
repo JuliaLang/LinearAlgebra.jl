@@ -918,7 +918,7 @@ end
 
 function log(A::SelfAdjoint)
     F = eigen(A)
-    if all(λ -> λ > 0, F.values)
+    if all(λ -> λ ≥ 0, F.values)
         retmat = (F.vectors * Diagonal(log.(F.values))) * F.vectors'
         return wrappertype(A)(retmat)
     else
