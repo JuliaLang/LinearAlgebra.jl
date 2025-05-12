@@ -650,6 +650,16 @@ end
             @test_throws "cannot set index in the upper triangular part" copyto!(A, B)
         end
     end
+
+    @testset "partly initialized unit triangular" begin
+        for T in (UnitUpperTriangular, UnitLowerTriangular)
+            isupper = T == UnitUpperTriangular
+            M = Matrix{BigFloat}(undef, 2, 2)
+            M[1+isupper,1+!isupper] = 3
+            U = T(M')
+            @test copyto!(similar(M), U) == U
+        end
+    end
 end
 
 @testset "getindex with Integers" begin

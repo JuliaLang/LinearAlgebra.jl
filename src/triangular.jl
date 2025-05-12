@@ -623,7 +623,8 @@ end
     copytrito!(dest, U, U isa UpperOrUnitUpperTriangular ? 'L' : 'U')
     return dest
 end
-@propagate_inbounds function _copy!(dest::StridedMatrix, U::UpperOrLowerTriangular{<:Any, <:StridedMatrix})
+@propagate_inbounds function _copy!(dest::StridedMatrix,
+        U::Union{UnitUpperOrUnitLowerTriangular, UpperOrLowerTriangularStrided})
     U2 = Base.unalias(dest, U)
     copy_unaliased!(dest, U2)
     return dest
@@ -656,7 +657,7 @@ end
     end
     dest
 end
-@inline function copy_unaliased!(dest::StridedMatrix, U::UpperOrUnitUpperTriangular{<:Any, <:StridedMatrix})
+@inline function copy_unaliased!(dest::StridedMatrix, U::UpperOrUnitUpperTriangular)
     @boundscheck checkbounds(dest, axes(U)...)
     for col in axes(dest,2)
         @inbounds copy_unaliased_stored!(dest, U, col)
@@ -666,7 +667,7 @@ end
     end
     return dest
 end
-@inline function copy_unaliased!(dest::StridedMatrix, L::LowerOrUnitLowerTriangular{<:Any, <:StridedMatrix})
+@inline function copy_unaliased!(dest::StridedMatrix, L::LowerOrUnitLowerTriangular)
     @boundscheck checkbounds(dest, axes(L)...)
     for col in axes(dest,2)
         for row in firstindex(dest,1):col-1
