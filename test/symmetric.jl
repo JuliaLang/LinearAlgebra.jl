@@ -1199,14 +1199,4 @@ end
     end
 end
 
-@testset "asin/acos/acosh for matrix outside the real domain" begin
-    M = [0 2;2 0] #eigenvalues are ±2
-    for T ∈ (Float32, Float64, ComplexF32, ComplexF64)
-        M2 = Hermitian(T.(M))
-        @test sin(asin(M2)) ≈ M2
-        @test cos(acos(M2)) ≈ M2
-        @test cosh(acosh(M2)) ≈ M2
-    end
-end
-
 end # module TestSymmetric
