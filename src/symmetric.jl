@@ -833,10 +833,10 @@ function svdvals!(A::RealHermSymComplexHerm)
     return sort!(vals, rev = true)
 end
 
-#computes U * Diagonal(abs2.(v)) * U', destroying U
-function _psd_spectral_product!(v, U)
-    rmul!(U, Diagonal(v))
-    return U * U'
+#computes U * Diagonal(abs2.(v)) * U'
+function _psd_spectral_product(v, U)
+    Uv = U * Diagonal(v)
+    return Uv * Uv'
 end
 
 # Matrix functions
@@ -854,8 +854,8 @@ function ^(A::SelfAdjoint, p::Real)
     isinteger(p) && return integerpow(A, p)
     F = eigen(A)
     if all(λ -> λ ≥ 0, F.values)
-        map!(λ -> λ^0.5p, F.values)
-        retmat = _psd_spectral_product!(F.values, F.vectors)
+        rootpower = map(λ -> λ^0.5p, F.values)
+        retmat = _psd_spectral_product(rootpower, F.vectors)
         return wrappertype(A)(retmat)
     else
         retmat = (F.vectors * Diagonal(complex.(F.values).^p)) * F.vectors'
@@ -879,8 +879,8 @@ end
 
 function exp(A::SelfAdjoint)
     F = eigen(A)
-    map!(λ -> exp(0.5λ), F.values)
-    retmat = _psd_spectral_product!(F.values, F.vectors)
+    rootexp = map(λ -> exp(0.5λ), F.values)
+    retmat = _psd_spectral_product(rootexp, F.vectors)
     return wrappertype(A)(retmat)
 end
 
@@ -943,8 +943,8 @@ function sqrt(A::SelfAdjoint; rtol = eps(real(float(eltype(A)))) * size(A, 1))
     F = eigen(A)
     λ₀ = -maximum(abs, F.values) * rtol # treat λ ≥ λ₀ as "zero" eigenvalues up to roundoff
     if all(λ -> λ ≥ λ₀, F.values)
-        map!(λ -> λ < 0 ? zero(λ) : fourthroot(λ), F.values)
-        retmat = _psd_spectral_product!(F.values, F.vectors)
+        rootroot = map(λ -> λ < 0 ? zero(λ) : fourthroot(λ), F.values)
+        retmat = _psd_spectral_product(rootroot, F.vectors)
         return wrappertype(A)(retmat)
     else
         retmat = (F.vectors * Diagonal(sqrt.(complex.(F.values)))) * F.vectors'
