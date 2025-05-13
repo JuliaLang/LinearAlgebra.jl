@@ -6,6 +6,7 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: errorbounds, transpose!, BandIndex
+using Test: GenericArray
 
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
 
@@ -648,6 +649,16 @@ end
             A = LowerTriangular(Ap)
             B = LowerTriangular(Bp)
             @test_throws "cannot set index in the upper triangular part" copyto!(A, B)
+        end
+    end
+
+    @testset "partly initialized unit triangular" begin
+        for T in (UnitUpperTriangular, UnitLowerTriangular)
+            isupper = T == UnitUpperTriangular
+            M = Matrix{BigFloat}(undef, 2, 2)
+            M[1+!isupper,1+isupper] = 3
+            U = T(GenericArray(M))
+            @test copyto!(similar(M), U) == U
         end
     end
 end
