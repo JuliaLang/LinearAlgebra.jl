@@ -18,7 +18,9 @@ ClosedScalar = Union{T, Complex{T}} where T <: ClosedReal
 
 Matrix factorization type of the Bunch-Kaufman factorization of a symmetric or
 Hermitian matrix `A` as `P'UDU'P` or `P'LDL'P`, depending on whether the upper
-(the default) or the lower triangle is stored in `A`. If `A` is complex symmetric
+(the default) or the lower triangle is stored in `A`. Here, `U` and `L` are
+respectively upper and lower triangular, `P` is a permutation matrix, and `D`
+is block diagonal with 1-by-1 and 2-by-2 blocks. If `A` is complex symmetric
 then `U'` and `L'` denote the unconjugated transposes, i.e. `transpose(U)` and
 `transpose(L)`, respectively. This is the return type of [`bunchkaufman`](@ref),
 the corresponding matrix factorization function.
@@ -136,6 +138,8 @@ bkcopy_oftype(A::Symmetric{<:Complex}, S) = Symmetric(copytrito!(similar(parent(
 Compute the Bunch-Kaufman [^Bunch1977] factorization of a symmetric or
 Hermitian matrix `A` as `P'*U*D*U'*P` or `P'*L*D*L'*P`, depending on
 which triangle is stored in `A`, and return a [`BunchKaufman`](@ref) object.
+Here, `U` and `L` are respectively upper and lower triangular, `P` is a
+permutation matrix, and `D` is block diagonal with 1-by-1 and 2-by-2 blocks.
 Note that if `A` is complex symmetric then `U'` and `L'` denote
 the unconjugated transposes, i.e. `transpose(U)` and `transpose(L)`.
 
@@ -706,18 +710,20 @@ LD<:AbstractMatrix, ipiv<:AbstractVector{Integer}, info::BlasInt
 
 Computes the Bunch-Kaufman factorization of a symmetric or Hermitian
 matrix `A` of size `NxN` as `P'*U*D*U'*P` or `P'*L*D*L'*P`, depending on
-which triangle is stored in `A`. Note that if `A` is complex symmetric
-then `U'` and `L'` denote the unconjugated transposes, i.e.
-`transpose(U)` and `transpose(L)`. The resulting `U` or `L` and D are
-stored in-place in `A`, LAPACK style. `LD` is just a reference to `A`
-(that is, `LD===A`). `ipiv` stores the permutation information of the
-algorithm in LAPACK format. `info` indicates whether the factorization
-was successful and non-singular when `info==0`, or else `info` takes a
-different value. The outputs `LD`, `ipiv`, `info` follow the format of
-the LAPACK functions of the Bunch-Kaufman factorization (`dsytrf`,
-`csytrf`, `chetrf`, etc.), so this function can (ideally) be used
-interchangeably with its LAPACK counterparts `LAPACK.sytrf!`,
-`LAPACK.sytrf_rook!`, etc.
+which triangle is stored in `A`. Here, `U` and `L` are
+respectively upper and lower triangular, `P` is a permutation matrix,
+and `D` is block diagonal with 1-by-1 and 2-by-2 blocks. Note that if
+`A` is complex symmetric then `U'` and `L'` denote the unconjugated
+transposes, i.e. `transpose(U)` and `transpose(L)`. The resulting `U` or
+`L` and `D` are stored in-place in `A`, LAPACK style. `LD` is just a
+reference to `A` (that is, `LD===A`). `ipiv` stores the permutation
+information of the algorithm in LAPACK format. `info` indicates whether
+the factorization was successful and non-singular when `info==0`, or
+else `info` takes a different value. The outputs `LD`, `ipiv`, `info`
+follow the format of the LAPACK functions of the Bunch-Kaufman
+factorization (`dsytrf`, `csytrf`, `chetrf`, etc.), so this function can
+(ideally) be used interchangeably with its LAPACK counterparts
+`LAPACK.sytrf!`, `LAPACK.sytrf_rook!`, etc.
 
 `uplo` is a character, either `'U'` or `'L'`, indicating whether the
 matrix is stored in the upper triangular part (`uplo=='U'`) or in the
