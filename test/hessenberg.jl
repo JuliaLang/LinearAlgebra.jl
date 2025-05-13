@@ -2,6 +2,8 @@
 
 module TestHessenberg
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
@@ -283,5 +285,5 @@ end
         @test Q2'Q2 ≈ I
     end
 end
-    
+
 end # module TestHessenberg

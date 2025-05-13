@@ -16,8 +16,7 @@ steps:
           version: "nightly"
           arch: "i686"
     command: |
-      julia --color=yes --project=.ci -e 'using Pkg; Pkg.instantiate()'
-      julia --color=yes --project=.ci .ci/create_sysimage_and_run_tests.jl
+      julia --color=yes --code-coverage=@ .ci/run_tests.jl
     agents:
       queue: "julia"
       os: "linux"
@@ -40,8 +39,7 @@ steps:
       - JuliaCI/julia#v1:
           version: "nightly"
     command: |
-      julia --color=yes --project=.ci --code-coverage=@ -e 'using Pkg; Pkg.instantiate()'
-      julia --color=yes --project=.ci --code-coverage=@ .ci/create_sysimage_and_run_tests.jl
+      julia --color=yes --code-coverage=@ .ci/run_tests.jl
     agents:
       queue: "julia"
       os: "linux"
@@ -55,8 +53,7 @@ steps:
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
-      julia --color=yes --project=.ci --code-coverage=@ -e 'using Pkg; Pkg.instantiate()'
-      julia --color=yes --project=.ci --code-coverage=@ .ci/create_sysimage_and_run_tests.jl
+      julia --color=yes --code-coverage=@ .ci/run_tests.jl
     agents:
       queue: "julia"
       os: "macos"
@@ -69,8 +66,7 @@ steps:
       - JuliaCI/julia-coverage#v1:
           codecov: true
     command: |
-      julia --color=yes --project=.ci --code-coverage=@ -e 'using Pkg; Pkg.instantiate()'
-      julia --color=yes --project=.ci --code-coverage=@ .ci/create_sysimage_and_run_tests.jl
+      julia --color=yes --code-coverage=@ .ci/run_tests.jl
     agents:
       queue: "julia"
       os: "windows"
