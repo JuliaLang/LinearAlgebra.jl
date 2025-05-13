@@ -297,6 +297,9 @@ Return a view into the `k`th diagonal of the matrix `M`.
 
 See also [`diag`](@ref), [`diagind`](@ref).
 
+!!! compat "Julia 1.12"
+    This function requires Julia 1.12 or later.
+
 # Examples
 ```jldoctest
 julia> A = [1 2 3; 4 5 6; 7 8 9]
