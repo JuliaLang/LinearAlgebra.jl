@@ -934,4 +934,14 @@ end
     end
 end
 
+@testset "block unit triangular scaling" begin
+    m = SizedArrays.SizedArray{(2,2)}([1 2; 3 4])
+    U = UnitUpperTriangular(fill(m, 4, 4))
+    M = Matrix{eltype(U)}(U)
+    @test U/2 == M/2
+    @test 2\U == 2\M
+    @test U*2 == M*2
+    @test 2*U == 2*M
+end
+
 end # module TestTriangular

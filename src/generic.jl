@@ -1152,6 +1152,8 @@ Matrix inverse. Computes matrix `N` such that
 Computed by solving the left-division
 `N = M \\ I`.
 
+A [`SingularException`](@ref) is thrown if `M` fails numerical inversion.
+
 # Examples
 ```jldoctest
 julia> M = [2 5; 1 3]
@@ -1314,7 +1316,7 @@ issymmetric(A::AbstractMatrix{<:Real}) = ishermitian(A)
 """
     issymmetric(A) -> Bool
 
-Test whether a matrix is symmetric.
+Test whether a matrix or number is symmetric.
 
 # Examples
 ```jldoctest
