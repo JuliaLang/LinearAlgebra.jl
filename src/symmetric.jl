@@ -834,11 +834,8 @@ function svdvals!(A::RealHermSymComplexHerm)
 end
 
 # Matrix functions
-^(A::Symmetric{<:Real}, p::Integer) = sympow(A, p)
-^(A::Symmetric{<:Complex}, p::Integer) = sympow(A, p)
-^(A::SymTridiagonal{<:Real}, p::Integer) = sympow(A, p)
-^(A::SymTridiagonal{<:Complex}, p::Integer) = sympow(A, p)
-^(A::Hermitian, p::Integer) = sympow(A, p)
+^(A::SymSymTri{<:Complex}, p::Integer) = sympow(A, p)
+^(A::SelfAdjoint, p::Integer) = sympow(A, p)
 function sympow(A, p::Integer)
     if p < 0
         retmat = Base.power_by_squaring(inv(A), -p)
