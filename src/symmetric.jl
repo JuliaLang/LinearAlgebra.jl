@@ -835,9 +835,7 @@ end
 
 #computes U * Diagonal(abs2.(v)) * U', destroying U
 function _psd_spectral_product!(v, U)
-    @inbounds for j ∈ axes(U, 2), i ∈ axes(U, 1)
-        U[i, j] *= v[j]
-    end
+    rmul!(U, Diagonal(v))
     return U * U'
 end
 
