@@ -854,7 +854,7 @@ function ^(A::SelfAdjoint, p::Real)
     isinteger(p) && return integerpow(A, p)
     F = eigen(A)
     if all(λ -> λ ≥ 0, F.values)
-        rootpower = map(λ -> λ^0.5p, F.values)
+        rootpower = map(λ -> λ^(p / 2), F.values)
         retmat = _psd_spectral_product(rootpower, F.vectors)
         return wrappertype(A)(retmat)
     else
@@ -879,7 +879,7 @@ end
 
 function exp(A::SelfAdjoint)
     F = eigen(A)
-    rootexp = map(λ -> exp(0.5λ), F.values)
+    rootexp = map(λ -> exp(λ / 2), F.values)
     retmat = _psd_spectral_product(rootexp, F.vectors)
     return wrappertype(A)(retmat)
 end
