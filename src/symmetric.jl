@@ -836,7 +836,7 @@ end
 #computes U * Diagonal(abs2.(v)) * U'
 function _psd_spectral_product(v, U)
     Uv = U * Diagonal(v)
-    return Uv * Uv'
+    return Uv * Uv' # often faster than generic matmul by calling BLAS.herk
 end
 
 # Matrix functions
