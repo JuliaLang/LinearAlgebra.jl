@@ -901,8 +901,12 @@ julia> log(A)
 """
 function log(A::AbstractMatrix)
     # If possible, use diagonalization
-    if isdiag(A)
-        return applydiagonal(log, A)
+    if isdiag(A) && eltype(A) <: Union{Real,Complex}
+        if eltype(A) <: Real && all(>=(0), diagview(A))
+            return applydiagonal(log, A)
+        else
+            return applydiagonal(log∘complex, A)
+        end
     elseif ishermitian(A)
         logHermA = log(Hermitian(A))
         return ishermitian(logHermA) ? copytri!(parent(logHermA), 'U', true) : parent(logHermA)
