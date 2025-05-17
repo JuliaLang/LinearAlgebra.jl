@@ -2,6 +2,8 @@
 
 module TestDense
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal
 using Test: GenericArray
@@ -1370,6 +1372,27 @@ end
     A = [1 im 2; -im 0  3; 2 3 im]
     @test factorize(A) isa LU{ComplexF64, Matrix{ComplexF64}, Vector{Int}}
     @test !any(LinearAlgebra.getstructure(A))
+end
+
+@testset "triu/tril for block matrices" begin
+    O = ones(2,2)
+    Z = zero(O)
+    M = fill(O, 3, 3)
+    res = fill(Z, size(M))
+    res[1,2] = res[1,3] = res[2,3] = O
+    @test triu(GenericArray(M),1) == res
+    @test tril(GenericArray(M),-1) == res'
+end
+
+@testset "log for diagonal" begin
+    D = diagm([-2.0, 2.0])
+    @test log(D) ≈ log(UpperTriangular(D))
+    D = diagm([-2.0, 0.0])
+    @test log(D) ≈ log(UpperTriangular(D))
+    D = diagm([2.0, 2.0])
+    @test log(D) ≈ log(UpperTriangular(D))
+    D = diagm([2.0, 2.0*im])
+    @test log(D) ≈ log(UpperTriangular(D))
 end
 
 end # module TestDense

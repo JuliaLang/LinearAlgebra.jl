@@ -2,6 +2,8 @@
 
 module TestHessenberg
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
@@ -283,5 +285,12 @@ end
         @test Q2'Q2 ≈ I
     end
 end
-    
+
+@testset "multiplication with empty HessenbergQ" begin
+    @test ones(2, 0)*hessenberg(zeros(0,0)).Q == zeros(2,0)
+    @test_throws DimensionMismatch ones(2, 1)*hessenberg(zeros(0,0)).Q
+    @test hessenberg(zeros(0,0)).Q * ones(0, 2) == zeros(0,2)
+    @test_throws DimensionMismatch hessenberg(zeros(0,0)).Q * ones(1, 2)
+end
+
 end # module TestHessenberg

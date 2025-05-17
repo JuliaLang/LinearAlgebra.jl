@@ -599,14 +599,15 @@ end
     copytrito!(dest, U, U isa UpperOrUnitUpperTriangular ? 'L' : 'U')
     return dest
 end
-@propagate_inbounds function _copyto!(dest::StridedMatrix, U::UpperOrLowerTriangular{<:Any, <:StridedMatrix})
+@propagate_inbounds function _copyto!(dest::StridedMatrix,
+    U::Union{UnitUpperOrUnitLowerTriangular, UpperOrLowerTriangular{<:Any, <:StridedMatrix}})
     U2 = Base.unalias(dest, U)
     copyto_unaliased!(dest, U2)
     return dest
 end
 # for strided matrices, we explicitly loop over the arrays to improve cache locality
 # This fuses the copytrito! for the two halves
-@inline function copyto_unaliased!(dest::StridedMatrix, U::UpperOrUnitUpperTriangular{<:Any, <:StridedMatrix})
+@inline function copyto_unaliased!(dest::StridedMatrix, U::UpperOrUnitUpperTriangular)
     @boundscheck checkbounds(dest, axes(U)...)
     isunit = U isa UnitUpperTriangular
     for col in axes(dest,2)
@@ -619,7 +620,7 @@ end
     end
     return dest
 end
-@inline function copyto_unaliased!(dest::StridedMatrix, L::LowerOrUnitLowerTriangular{<:Any, <:StridedMatrix})
+@inline function copyto_unaliased!(dest::StridedMatrix, L::LowerOrUnitLowerTriangular)
     @boundscheck checkbounds(dest, axes(L)...)
     isunit = L isa UnitLowerTriangular
     for col in axes(dest,2)
@@ -658,10 +659,8 @@ end
 
 uppertridata(A) = A
 lowertridata(A) = A
-# we restrict these specializations only to strided matrices to avoid cases where an UpperTriangular type
-# doesn't share its indexing with the parent
-uppertridata(A::UpperTriangular{<:Any, <:StridedMatrix}) = parent(A)
-lowertridata(A::LowerTriangular{<:Any, <:StridedMatrix}) = parent(A)
+uppertridata(A::UpperTriangular) = parent(A)
+lowertridata(A::LowerTriangular) = parent(A)
 
 @inline _rscale_add!(A::AbstractTriangular, B::AbstractTriangular, C::Number, alpha::Number, beta::Number) =
     @stable_muladdmul _triscale!(A, B, C, MulAddMul(alpha, beta))
@@ -1272,6 +1271,15 @@ end
 # Generic routines #
 ####################
 
+function _set_diag!(B::UpperOrLowerTriangular, x)
+    # get a mutable array to modify the diagonal
+    Bm = parent(B) isa StridedArray ? B : copy!(similar(B), B)
+    for i in diagind(Bm.data, IndexStyle(Bm.data))
+        Bm.data[i] = x
+    end
+    Bm
+end
+
 for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
                    (LowerTriangular, UnitLowerTriangular))
     tstrided = t{<:Any, <:StridedMaybeAdjOrTransMat}
@@ -1285,10 +1293,7 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
 
         function (*)(A::$unitt, x::Number)
             B = $t(A.data)*x
-            for i in axes(A, 1)
-                B.data[i,i] = x
-            end
-            return B
+            _set_diag!(B, oneunit(eltype(A)) * x)
         end
 
         (*)(x::Number, A::$t) = $t(x*A.data)
@@ -1300,10 +1305,7 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
 
         function (*)(x::Number, A::$unitt)
             B = x*$t(A.data)
-            for i in axes(A, 1)
-                B.data[i,i] = x
-            end
-            return B
+            _set_diag!(B, x * oneunit(eltype(A)))
         end
 
         (/)(A::$t, x::Number) = $t(A.data/x)
@@ -1315,11 +1317,7 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
 
         function (/)(A::$unitt, x::Number)
             B = $t(A.data)/x
-            invx = inv(x)
-            for i in axes(A, 1)
-                B.data[i,i] = invx
-            end
-            return B
+            _set_diag!(B, oneunit(eltype(A)) / x)
         end
 
         (\)(x::Number, A::$t) = $t(x\A.data)
@@ -1331,11 +1329,7 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
 
         function (\)(x::Number, A::$unitt)
             B = x\$t(A.data)
-            invx = inv(x)
-            for i in axes(A, 1)
-                B.data[i,i] = invx
-            end
-            return B
+            _set_diag!(B, x \ oneunit(eltype(A)))
         end
     end
 end

@@ -2,6 +2,8 @@
 
 module TestSymmetric
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 
 const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
@@ -1160,6 +1162,15 @@ end
         @test SC[2] ≈ cos(B)
         @test cos(A) ≈ real(exp(im*A))
         @test sin(A) ≈ imag(exp(im*A))
+    end
+end
+
+@testset "fillstored!" begin
+    A = zeros(4,4)
+    for T in (Symmetric, Hermitian)
+        A .= 0
+        LinearAlgebra.fillstored!(T(A), 2)
+        @test all(==(2), T(A))
     end
 end
 

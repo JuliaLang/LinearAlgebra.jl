@@ -2,6 +2,8 @@
 
 module TestAddmul
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Base: rtoldefault
 using Test
 using LinearAlgebra

@@ -1,3 +1,7 @@
+withenv("JULIA_PRUNE_OLD_LA" => "true") do
+    include("../test/prune_old_LA.jl")
+end
+
 using LinearAlgebra
 using Documenter: DocMeta, makedocs, deploydocs, HTML
 

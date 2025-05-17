@@ -2,6 +2,8 @@
 
 module TestBidiagonal
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasReal, BlasFloat
 
@@ -504,6 +506,10 @@ Random.seed!(1)
     end
     BD = Bidiagonal(dv, ev, :U)
     @test Matrix{ComplexF64}(BD) == BD
+end
+
+@testset "Constructors with Char uplo" begin
+    @test Bidiagonal(Int8[1,2], [1], 'U') == Bidiagonal(Int8[1,2], [1], :U)
 end
 
 # Issue 10742 and similar

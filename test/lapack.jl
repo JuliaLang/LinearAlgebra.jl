@@ -2,6 +2,8 @@
 
 module TestLAPACK
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasInt
 
@@ -677,7 +679,7 @@ end
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         local n = 10
         a = randn(elty, n, n)
-        A = a'*a
+        A = a'*a + I
         B = rand(elty, n, n)
         D = copy(A)
         C = copy(B)
