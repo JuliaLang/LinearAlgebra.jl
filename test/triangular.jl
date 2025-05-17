@@ -955,4 +955,18 @@ end
     @test 2*U == 2*M
 end
 
+@testset "scaling partly initialized unit triangular" begin
+    for T in (UnitUpperTriangular, UnitLowerTriangular)
+        isupper = T == UnitUpperTriangular
+        M = Matrix{BigFloat}(undef,2,2)
+        M[1+!isupper, 1+isupper] = 3
+        U = T(M)
+        C = Matrix(U)
+        @test U * 2 == C * 2
+        @test 2 * U == 2 * C
+        @test U / 2 == C / 2
+        @test 2 \ U == 2 \ C
+    end
+end
+
 end # module TestTriangular
