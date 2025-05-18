@@ -1068,7 +1068,7 @@ end
     @test lyap(1.0+2.0im, 3.0+4.0im) == -1.5 - 2.0im
 end
 
-@testset "$elty Matrix to real power" for elty in (Float64, ComplexF64)
+@testset "$elty Matrix to real power" for elty in (Float32, Float64, ComplexF32, ComplexF64)
     # Tests proposed at Higham, Deadman: Testing Matrix Function Algorithms Using Identities, March 2014
     #Aa : only positive real eigenvalues
     Aa = convert(Matrix{elty}, [5 4 2 1; 0 1 -1 -1; -1 -1 3 0; 1 1 -1 2])
@@ -1094,7 +1094,13 @@ end
         ADi += [im 0; 0 im]
     end
 
-    for A in (Aa, Ab, Ac, Ad, Ah, ADi)
+    #ADin : negative Diagonal Matrix
+    ADin = convert(Matrix{elty}, [-3 0; 0 3])
+    if elty <: LinearAlgebra.BlasComplex
+        ADin += [im 0; 0 im]
+    end
+
+    for A in (Aa, Ab, Ac, Ad, Ah, ADi, ADin)
         @test A^(1/2) ≈ sqrt(A)
         @test A^(-1/2) ≈ inv(sqrt(A))
         @test A^(3/4) ≈ sqrt(A) * sqrt(sqrt(A))
@@ -1107,7 +1113,7 @@ end
     end
 
     Tschurpow = Union{Matrix{real(elty)}, Matrix{complex(elty)}}
-    @test (@inferred Tschurpow LinearAlgebra.schurpow(Aa, 2.0)) ≈ Aa^2
+    @test (@inferred Tschurpow LinearAlgebra.schurpow(Aa, real(elty)(2.0))) ≈ Aa^2
 end
 
 @testset "BigFloat triangular real power" begin
