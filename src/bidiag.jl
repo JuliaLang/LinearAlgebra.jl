@@ -311,19 +311,13 @@ isreal(M::Bidiagonal) = isreal(M.dv) && isreal(M.ev)
 adjoint(B::Bidiagonal{<:Number}) = Bidiagonal(vec(adjoint(B.dv)), vec(adjoint(B.ev)), B.uplo == 'U' ? :L : :U)
 adjoint(B::Bidiagonal{<:Number, <:Base.ReshapedArray{<:Number,1,<:Adjoint}}) =
     Bidiagonal(adjoint(parent(B.dv)), adjoint(parent(B.ev)), B.uplo == 'U' ? :L : :U)
+adjoint(B::Bidiagonal) = Bidiagonal(adjoint.(B.dv), adjoint.(B.ev), B.uplo == 'U' ? :L : :U)
 transpose(B::Bidiagonal{<:Number}) = Bidiagonal(B.dv, B.ev, B.uplo == 'U' ? :L : :U)
+transpose(B::Bidiagonal) = Bidiagonal(transpose.(B.dv), transpose.(B.ev), B.uplo == 'U' ? :L : :U)
 permutedims(B::Bidiagonal) = Bidiagonal(B.dv, B.ev, B.uplo == 'U' ? 'L' : 'U')
 function permutedims(B::Bidiagonal, perm)
     Base.checkdims_perm(axes(B), axes(B), perm)
     NTuple{2}(perm) == (2, 1) ? permutedims(B) : B
-end
-function Base.copy(aB::Adjoint{<:Any,<:Bidiagonal})
-    B = aB.parent
-    return Bidiagonal(map(x -> copy.(adjoint.(x)), (B.dv, B.ev))..., B.uplo == 'U' ? :L : :U)
-end
-function Base.copy(tB::Transpose{<:Any,<:Bidiagonal})
-    B = tB.parent
-    return Bidiagonal(map(x -> copy.(transpose.(x)), (B.dv, B.ev))..., B.uplo == 'U' ? :L : :U)
 end
 
 @noinline function throw_zeroband_error(A)
@@ -1362,14 +1356,10 @@ function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     end
     return c
 end
-ldiv!(A::AdjOrTrans{<:Any,<:Bidiagonal}, b::AbstractVecOrMat) = @inline ldiv!(b, A, b)
-ldiv!(c::AbstractVecOrMat, A::AdjOrTrans{<:Any,<:Bidiagonal}, b::AbstractVecOrMat) =
-    (t = wrapperop(A); _rdiv!(t(c), t(b), t(A)); return c)
 
 ### Generic promotion methods and fallbacks
 \(A::Bidiagonal, B::AbstractVecOrMat) =
     ldiv!(matprod_dest(A, B, promote_op(\, eltype(A), eltype(B))), A, B)
-\(xA::AdjOrTrans{<:Any,<:Bidiagonal}, B::AbstractVecOrMat) = copy(xA) \ B
 
 ### Triangular specializations
 for tri in (:UpperTriangular, :UnitUpperTriangular)
@@ -1441,9 +1431,6 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     C
 end
 rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
-rdiv!(A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) = @inline _rdiv!(A, A, B)
-_rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) =
-    (t = wrapperop(B); ldiv!(t(C), t(B), t(A)); return C)
 
 /(A::AbstractMatrix, B::Bidiagonal) =
     _rdiv!(similar(A, promote_op(/, eltype(A), eltype(B)), size(A)), A, B)
@@ -1476,15 +1463,9 @@ function /(D::Diagonal, B::Bidiagonal)
     return B.uplo == 'U' ? UpperTriangular(A) : LowerTriangular(A)
 end
 
-/(A::AbstractMatrix, B::Transpose{<:Any,<:Bidiagonal}) = A / copy(B)
-/(A::AbstractMatrix, B::Adjoint{<:Any,<:Bidiagonal}) = A / copy(B)
 # disambiguation
 /(A::AdjointAbsVec, B::Bidiagonal) = adjoint(adjoint(B) \ parent(A))
 /(A::TransposeAbsVec, B::Bidiagonal) = transpose(transpose(B) \ parent(A))
-/(A::AdjointAbsVec, B::Transpose{<:Any,<:Bidiagonal}) = adjoint(adjoint(B) \ parent(A))
-/(A::TransposeAbsVec, B::Transpose{<:Any,<:Bidiagonal}) = transpose(transpose(B) \ parent(A))
-/(A::AdjointAbsVec, B::Adjoint{<:Any,<:Bidiagonal}) = adjoint(adjoint(B) \ parent(A))
-/(A::TransposeAbsVec, B::Adjoint{<:Any,<:Bidiagonal}) = transpose(transpose(B) \ parent(A))
 
 factorize(A::Bidiagonal) = A
 function inv(B::Bidiagonal{T}) where T
