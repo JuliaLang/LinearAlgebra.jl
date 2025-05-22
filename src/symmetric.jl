@@ -710,12 +710,14 @@ end
 mul(A::HermOrSym, B::HermOrSym) = A * copyto!(similar(parent(B)), B)
 # catch a few potential BLAS-cases
 function mul(A::HermOrSym{<:BlasFloat,<:StridedMatrix}, B::AdjOrTrans{<:BlasFloat,<:StridedMatrix})
+    matmul_size_check(size(A), size(B))
     T = promote_type(eltype(A), eltype(B))
     mul!(similar(B, T, (size(A, 1), size(B, 2))),
             convert(AbstractMatrix{T}, A),
             copy_oftype(B, T)) # make sure the AdjOrTrans wrapper is resolved
 end
 function mul(A::AdjOrTrans{<:BlasFloat,<:StridedMatrix}, B::HermOrSym{<:BlasFloat,<:StridedMatrix})
+    matmul_size_check(size(A), size(B))
     T = promote_type(eltype(A), eltype(B))
     mul!(similar(B, T, (size(A, 1), size(B, 2))),
             copy_oftype(A, T), # make sure the AdjOrTrans wrapper is resolved

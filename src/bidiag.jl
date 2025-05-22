@@ -1271,26 +1271,22 @@ function _dibimul_nonzeroalpha!(C::Bidiagonal, A::Diagonal, B::Bidiagonal, _add)
 end
 
 function mul(A::UpperOrUnitUpperTriangular, B::Bidiagonal)
-    TS = promote_op(matprod, eltype(A), eltype(B))
-    C = mul!(similar(A, TS, size(A)), A, B)
+    C = _mul(A, B)
     return B.uplo == 'U' ? UpperTriangular(C) : C
 end
 
 function mul(A::LowerOrUnitLowerTriangular, B::Bidiagonal)
-    TS = promote_op(matprod, eltype(A), eltype(B))
-    C = mul!(similar(A, TS, size(A)), A, B)
+    C = _mul(A, B)
     return B.uplo == 'L' ? LowerTriangular(C) : C
 end
 
 function mul(A::Bidiagonal, B::UpperOrUnitUpperTriangular)
-    TS = promote_op(matprod, eltype(A), eltype(B))
-    C = mul!(similar(B, TS, size(B)), A, B)
+    C = _mul(A, B)
     return A.uplo == 'U' ? UpperTriangular(C) : C
 end
 
 function mul(A::Bidiagonal, B::LowerOrUnitLowerTriangular)
-    TS = promote_op(matprod, eltype(A), eltype(B))
-    C = mul!(similar(B, TS, size(B)), A, B)
+    C = _mul(A, B)
     return A.uplo == 'L' ? LowerTriangular(C) : C
 end
 
