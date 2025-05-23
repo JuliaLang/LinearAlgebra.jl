@@ -1987,7 +1987,7 @@ function powm!(A0::UpperTriangular, p::Real)
         A[i, i] = -A[i, i]
     end
     # Compute the Padé approximant
-    c = 0.5 * (p - m) / (2 * m - 1)
+    c = (p - m) / (4 * m - 2)
     triu!(A)
     S = c * A
     Stmp = similar(S)
