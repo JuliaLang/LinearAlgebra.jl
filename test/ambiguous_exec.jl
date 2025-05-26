@@ -1,5 +1,9 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+module TestAmbiguity
+
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra
 let ambig = detect_ambiguities(LinearAlgebra; recursive=true)
     @test isempty(ambig)
@@ -19,3 +23,5 @@ let ambig = detect_ambiguities(LinearAlgebra; recursive=true)
     @test isempty(expect)
     @test good
 end
+
+end # module

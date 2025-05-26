@@ -65,16 +65,13 @@ julia> Bl = Bidiagonal(dv, ev, :L) # ev is on the first subdiagonal
  ⋅  ⋅  9  4
 ```
 """
-function Bidiagonal(dv::V, ev::V, uplo::Symbol) where {T,V<:AbstractVector{T}}
-    Bidiagonal{T,V}(dv, ev, uplo)
-end
-function Bidiagonal(dv::V, ev::V, uplo::AbstractChar) where {T,V<:AbstractVector{T}}
+function Bidiagonal(dv::V, ev::V, uplo::Union{Symbol, AbstractChar}) where {T,V<:AbstractVector{T}}
     Bidiagonal{T,V}(dv, ev, uplo)
 end
 
 #To allow Bidiagonal's where the "dv" is Vector{T} and "ev" Vector{S},
 #where T and S can be promoted
-function Bidiagonal(dv::Vector{T}, ev::Vector{S}, uplo::Symbol) where {T,S}
+function Bidiagonal(dv::Vector{T}, ev::Vector{S}, uplo::Union{Symbol, AbstractChar}) where {T,S}
     TS = promote_type(T,S)
     return Bidiagonal{TS,Vector{TS}}(dv, ev, uplo)
 end
@@ -963,7 +960,7 @@ function _mul_bitrisym!(C::AbstractVecOrMat, A::Bidiagonal, B::AbstractVecOrMat,
     if A.uplo == 'U'
         u = A.ev
         @inbounds begin
-            for j = 1:nB
+            for j in axes(B,2)
                 b₀, b₊ = B[1, j], B[2, j]
                 _modify!(_add, d[1]*b₀ + u[1]*b₊, C, (1, j))
                 for i = 2:nA - 1
@@ -976,7 +973,7 @@ function _mul_bitrisym!(C::AbstractVecOrMat, A::Bidiagonal, B::AbstractVecOrMat,
     else
         l = A.ev
         @inbounds begin
-            for j = 1:nB
+            for j in axes(B,2)
                 b₀, b₊ = B[1, j], B[2, j]
                 _modify!(_add, d[1]*b₀, C, (1, j))
                 for i = 2:nA - 1
@@ -996,7 +993,7 @@ function _mul_bitrisym!(C::AbstractVecOrMat, A::TriSym, B::AbstractVecOrMat, _ad
     d = _diag(A, 0)
     u = _diag(A, 1)
     @inbounds begin
-        for j = 1:nB
+        for j in axes(B,2)
             b₀, b₊ = B[1, j], B[2, j]
             _modify!(_add, d[1]*b₀ + u[1]*b₊, C, (1, j))
             for i = 2:nA - 1
@@ -1028,7 +1025,7 @@ function _mul!(C::AbstractMatrix, A::AbstractMatrix, B::TriSym, _add::MulAddMul)
         B21 = Bl[1]
         Bmm = Bd[m]
         Bm₋1m = Bu[m-1]
-        for i in 1:n
+        for i in axes(A,1)
             _modify!(_add, A[i,1] * B11 + A[i, 2] * B21, C, (i, 1))
             _modify!(_add, A[i, m-1] * Bm₋1m + A[i, m] * Bmm, C, (i, m))
         end
@@ -1037,7 +1034,7 @@ function _mul!(C::AbstractMatrix, A::AbstractMatrix, B::TriSym, _add::MulAddMul)
             Bj₋1j = Bu[j-1]
             Bjj = Bd[j]
             Bj₊1j = Bl[j]
-            for i = 1:n
+            for i in axes(A,1)
                 _modify!(_add, A[i, j-1] * Bj₋1j + A[i, j]*Bjj + A[i, j+1] * Bj₊1j, C, (i, j))
             end
         end
@@ -1052,17 +1049,17 @@ function _mul!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal, _add::MulAdd
     (iszero(m) || iszero(n)) && return C
     iszero(_add.alpha) && return _rmul_or_fill!(C, _add.beta)
     @inbounds if B.uplo == 'U'
-        for j in n:-1:2, i in 1:m
+        for j in reverse(axes(A,2)[2:end]), i in axes(A,1)
             _modify!(_add, A[i,j] * B.dv[j] + A[i,j-1] * B.ev[j-1], C, (i, j))
         end
-        for i in 1:m
+        for i in axes(A,1)
             _modify!(_add, A[i,1] * B.dv[1], C, (i, 1))
         end
     else # uplo == 'L'
-        for j in 1:n-1, i in 1:m
+        for j in axes(A,2)[1:end-1], i in axes(A,1)
             _modify!(_add, A[i,j] * B.dv[j] + A[i,j+1] * B.ev[j], C, (i, j))
         end
-        for i in 1:m
+        for i in axes(A,1)
             _modify!(_add, A[i,n] * B.dv[n], C, (i, n))
         end
     end
@@ -1138,7 +1135,7 @@ function _dibimul!(C::AbstractMatrix, A::Diagonal, B::Bidiagonal, _add)
             if B.uplo == 'L'
                 C[2,1] += _add(Ad[2]*Bev[1])
             end
-            for col in 2:n-1
+            for col in axes(A,1)[2:end-1]
                 evrow = col+rowshift
                 C[evrow, col] += _add(Ad[evrow]*Bev[col - evshift])
                 C[col, col] += _add(Ad[col]*Bdv[col])
@@ -1219,7 +1216,7 @@ function dot(x::AbstractVector, B::Bidiagonal, y::AbstractVector)
     @inbounds if B.uplo == 'U'
         x₀ = x[1]
         r = dot(x[1], dv[1], y[1])
-        for j in 2:nx-1
+        for j in eachindex(x)[2:end-1]
             x₋, x₀ = x₀, x[j]
             r += dot(adjoint(ev[j-1])*x₋ + adjoint(dv[j])*x₀, y[j])
         end
@@ -1229,7 +1226,7 @@ function dot(x::AbstractVector, B::Bidiagonal, y::AbstractVector)
         x₀ = x[1]
         x₊ = x[2]
         r = dot(adjoint(dv[1])*x₀ + adjoint(ev[1])*x₊, y[1])
-        for j in 2:nx-1
+        for j in eachindex(x)[2:end-1]
             x₀, x₊ = x₊, x[j+1]
             r += dot(adjoint(dv[j])*x₀ + adjoint(ev[j])*x₊, y[j])
         end
@@ -1260,15 +1257,15 @@ function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     zi = findfirst(iszero, A.dv)
     isnothing(zi) || throw(SingularException(zi))
 
-    @inbounds for j in 1:nb
+    @inbounds for j in axes(b,2)
         if A.uplo == 'L' #do colwise forward substitution
             c[1,j] = bi1 = A.dv[1] \ b[1,j]
-            for i in 2:N
+            for i in eachindex(A.dv)[2:end]
                 c[i,j] = bi1 = A.dv[i] \ (b[i,j] - A.ev[i - 1] * bi1)
             end
         else #do colwise backward substitution
             c[N,j] = bi1 = A.dv[N] \ b[N,j]
-            for i in (N - 1):-1:1
+            for i in reverse(eachindex(A.ev))
                 c[i,j] = bi1 = A.dv[i] \ (b[i,j] - A.ev[i] * bi1)
             end
         end

@@ -2,6 +2,8 @@
 
 module TestGeneric
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using Test: GenericArray
 using LinearAlgebra: isbanded
@@ -514,17 +516,17 @@ end
 
 @testset "generic functions for checking whether matrices have banded structure" begin
     pentadiag = [1 2 3; 4 5 6; 7 8 9]
-    tridiag   = [1 2 0; 4 5 6; 0 8 9]
-    tridiagG  = GenericArray([1 2 0; 4 5 6; 0 8 9])
+    tridiag   = diagm(-1=>1:6, 1=>1:6)
+    tridiagG  = GenericArray(tridiag)
     Tridiag   = Tridiagonal(tridiag)
     ubidiag   = [1 2 0; 0 5 6; 0 0 9]
-    ubidiagG  = GenericArray([1 2 0; 0 5 6; 0 0 9])
+    ubidiagG  = GenericArray(ubidiag)
     uBidiag   = Bidiagonal(ubidiag, :U)
     lbidiag   = [1 0 0; 4 5 0; 0 8 9]
-    lbidiagG  = GenericArray([1 0 0; 4 5 0; 0 8 9])
+    lbidiagG  = GenericArray(lbidiag)
     lBidiag   = Bidiagonal(lbidiag, :L)
     adiag     = [1 0 0; 0 5 0; 0 0 9]
-    adiagG    = GenericArray([1 0 0; 0 5 0; 0 0 9])
+    adiagG    = GenericArray(adiag)
     aDiag     = Diagonal(adiag)
     @testset "istriu" begin
         @test !istriu(pentadiag)
@@ -617,6 +619,17 @@ end
                 @test istril(A,k) == istril(G,k) == isempty(A) || (k >= m)
             end
         end
+    end
+
+    tridiag   = diagm(-1=>1:6, 1=>1:6)
+    A = [tridiag zeros(size(tridiag,1), 2)]
+    G = GenericArray(A)
+    @testset for (kl,ku) in Iterators.product(-10:10, -10:10)
+        @test isbanded(A, kl, ku) == isbanded(G, kl, ku)
+    end
+    @testset for k in -10:10
+        @test istriu(A,k) == istriu(G,k)
+        @test istril(A,k) == istril(G,k)
     end
 end
 

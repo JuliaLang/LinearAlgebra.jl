@@ -446,7 +446,8 @@ julia> triu(a,-3)
  1.0  1.0  1.0  1.0
 ```
 """
-function triu(M::AbstractMatrix, k::Integer = 0)
+triu(M::AbstractMatrix, k::Integer = 0) = _triu(M, Val(haszero(eltype(M))), k)
+function _triu(M::AbstractMatrix, ::Val{true}, k::Integer)
     d = similar(M)
     A = triu!(d,k)
     if iszero(k)
@@ -457,6 +458,14 @@ function triu(M::AbstractMatrix, k::Integer = 0)
             A[rows, col] = @view M[rows, col]
         end
     end
+    return A
+end
+function _triu(M::AbstractMatrix, ::Val{false}, k::Integer)
+    d = similar(M)
+    # since the zero would need to be evaluated from the elements,
+    # we copy the array to avoid undefined references in triu!
+    copy!(d, M)
+    A = triu!(d,k)
     return A
 end
 
@@ -489,7 +498,8 @@ julia> tril(a,-3)
  1.0  0.0  0.0  0.0
 ```
 """
-function tril(M::AbstractMatrix,k::Integer=0)
+tril(M::AbstractMatrix,k::Integer=0) = _tril(M, Val(haszero(eltype(M))), k)
+function _tril(M::AbstractMatrix, ::Val{true}, k::Integer)
     d = similar(M)
     A = tril!(d,k)
     if iszero(k)
@@ -500,6 +510,14 @@ function tril(M::AbstractMatrix,k::Integer=0)
             A[rows, col] = @view M[rows, col]
         end
     end
+    return A
+end
+function _tril(M::AbstractMatrix, ::Val{false}, k::Integer)
+    d = similar(M)
+    # since the zero would need to be evaluated from the elements,
+    # we copy the array to avoid undefined references in tril!
+    copy!(d, M)
+    A = tril!(d,k)
     return A
 end
 
@@ -1116,6 +1134,8 @@ Matrix inverse. Computes matrix `N` such that
 Computed by solving the left-division
 `N = M \\ I`.
 
+A [`SingularException`](@ref) is thrown if `M` fails numerical inversion.
+
 # Examples
 ```jldoctest
 julia> M = [2 5; 1 3]
@@ -1486,6 +1506,24 @@ function _isbanded_impl(A, kl, ku)
     beyond ku, where the elements should all be zero. The reason we separate this from the
     third group is that we may loop over all the rows using A[:, col] instead of A[rowrange, col],
     which is usually faster.
+
+    E.g., in the following 6x10 matrix with (kl,ku) = (-1,1):
+     1  1  0  0  0  0  0  0  0  0
+     1  2  2  0  0  0  0  0  0  0
+     0  2  3  3  0  0  0  0  0  0
+     0  0  3  4  4  0  0  0  0  0
+     0  0  0  4  5  5  0  0  0  0
+     0  0  0  0  5  6  6  0  0  0
+
+    last_col_nonzeroblocks: 7, as every column beyond this is entirely zero
+    last_col_emptytoprows: 2, as there are zeros above the stored bands beyond this column
+    last_col_nonemptybottomrows: 4, as there are no zeros below the stored bands beyond this column
+    colrange_onlybottomrows: 1:2, as these columns only have zeros below the stored bands
+    colrange_topbottomrows: 3:4, as these columns have zeros both above and below the stored bands
+    colrange_onlytoprows_nonzero: 5:7, as these columns only have zeros above the stored bands
+    colrange_zero_block: 8:10, as every column in this range is filled with zeros
+
+    These are used to determine which rows to check for zeros in each column.
     =#
 
     last_col_nonzeroblocks = size(A,1) + ku # fully zero rectangular block beyond this column
@@ -1493,7 +1531,9 @@ function _isbanded_impl(A, kl, ku)
     last_col_nonemptybottomrows = size(A,1) + kl - 1 # empty bottom rows after this column
 
     colrange_onlybottomrows = firstindex(A,2):min(last_col_nonemptybottomrows, last_col_emptytoprows)
-    colrange_topbottomrows = max(last_col_emptytoprows, last(colrange_onlybottomrows))+1:last_col_nonzeroblocks
+    col_topbotrows_start = max(last_col_emptytoprows, last(colrange_onlybottomrows))+1
+    col_topbotrows_end = min(last_col_nonemptybottomrows, last_col_nonzeroblocks)
+    colrange_topbottomrows = col_topbotrows_start:col_topbotrows_end
     colrange_onlytoprows_nonzero = last(colrange_topbottomrows)+1:last_col_nonzeroblocks
     colrange_zero_block = last_col_nonzeroblocks+1:lastindex(A,2)
 

@@ -412,51 +412,59 @@ lmul!(A, B)
 
 _vec_or_mat_str(s::Tuple{Any}) = "vector"
 _vec_or_mat_str(s::Tuple{Any,Any}) = "matrix"
-@noinline function matmul_size_check(sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
+function matmul_size_check(sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
     szA2 = get(sizeA, 2, 1)
     if szA2 != sizeB[1]
-        strA = _vec_or_mat_str(sizeA)
-        strB = _vec_or_mat_str(sizeB)
-        B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
-        size_or_len_str_B = B_size_len isa Integer ? "length" : "size"
-        dim_or_len_str_B = B_size_len isa Integer ? "length" : "first dimension"
-        pos_str_A = LazyString(length(sizeA) == length(sizeB) ? "first " : "", strA)
-        pos_str_B = LazyString(length(sizeA) == length(sizeB) ? "second " : "", strB)
-        throw(DimensionMismatch(
-            LazyString(
-                lazy"incompatible dimensions for matrix multiplication: ",
-                lazy"tried to multiply a $strA of size $sizeA with a $strB of $size_or_len_str_B $B_size_len. ",
-                lazy"The second dimension of the $pos_str_A: $szA2, does not match the $dim_or_len_str_B of the $pos_str_B: $(sizeB[1])."
-            )
-            )
-        )
+        matmul_size_check_error(sizeA, sizeB)
     end
     return nothing
 end
-@noinline function matmul_size_check(sizeC::Tuple{Integer,Vararg{Integer}}, sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
+@noinline function matmul_size_check_error(sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
+    strA = _vec_or_mat_str(sizeA)
+    strB = _vec_or_mat_str(sizeB)
+    szA2 = get(sizeA, 2, 1)
+    B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
+    size_or_len_str_B = B_size_len isa Integer ? "length" : "size"
+    dim_or_len_str_B = B_size_len isa Integer ? "length" : "first dimension"
+    pos_str_A = LazyString(length(sizeA) == length(sizeB) ? "first " : "", strA)
+    pos_str_B = LazyString(length(sizeA) == length(sizeB) ? "second " : "", strB)
+    throw(DimensionMismatch(
+        LazyString(
+            "incompatible dimensions for matrix multiplication: ",
+            lazy"tried to multiply a $strA of size $sizeA with a $strB of $size_or_len_str_B $B_size_len. ",
+            lazy"The second dimension of the $pos_str_A: $szA2, does not match the $dim_or_len_str_B of the $pos_str_B: $(sizeB[1])."
+        )
+        )
+    )
+end
+function matmul_size_check(sizeC::Tuple{Integer,Vararg{Integer}}, sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
     matmul_size_check(sizeA, sizeB)
     szB2 = get(sizeB, 2, 1)
     szC2 = get(sizeC, 2, 1)
     if sizeC[1] != sizeA[1] || szC2 != szB2
-        strA = _vec_or_mat_str(sizeA)
-        strB = _vec_or_mat_str(sizeB)
-        strC = _vec_or_mat_str(sizeC)
-        C_size_len = length(sizeC) == 1 ? sizeC[1] : sizeC
-        size_or_len_str_C = C_size_len isa Integer ? "length" : "size"
-        B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
-        size_or_len_str_B = B_size_len isa Integer ? "length" : "size"
-        destsize = length(sizeB) == length(sizeC) == 1 ? sizeA[1] : (sizeA[1], szB2)
-        size_or_len_str_dest = destsize isa Integer ? "length" : "size"
-        throw(DimensionMismatch(
-                LazyString(
-                "incompatible destination size: ",
-                lazy"the destination $strC of $size_or_len_str_C $C_size_len is incomatible with the product of a $strA of size $sizeA and a $strB of $size_or_len_str_B $B_size_len. ",
-                lazy"The destination must be of $size_or_len_str_dest $destsize."
-               )
-            )
-        )
+        matmul_size_check_error(sizeC, sizeA, sizeB)
     end
     return nothing
+end
+@noinline function matmul_size_check_error(sizeC::Tuple{Integer,Vararg{Integer}}, sizeA::Tuple{Integer,Vararg{Integer}}, sizeB::Tuple{Integer,Vararg{Integer}})
+    strA = _vec_or_mat_str(sizeA)
+    strB = _vec_or_mat_str(sizeB)
+    strC = _vec_or_mat_str(sizeC)
+    szB2 = get(sizeB, 2, 1)
+    C_size_len = length(sizeC) == 1 ? sizeC[1] : sizeC
+    size_or_len_str_C = C_size_len isa Integer ? "length" : "size"
+    B_size_len = length(sizeB) == 1 ? sizeB[1] : sizeB
+    size_or_len_str_B = B_size_len isa Integer ? "length" : "size"
+    destsize = length(sizeB) == length(sizeC) == 1 ? sizeA[1] : (sizeA[1], szB2)
+    size_or_len_str_dest = destsize isa Integer ? "length" : "size"
+    throw(DimensionMismatch(
+            LazyString(
+            "incompatible destination size: ",
+            lazy"the destination $strC of $size_or_len_str_C $C_size_len is incomatible with the product of a $strA of size $sizeA and a $strB of $size_or_len_str_B $B_size_len. ",
+            lazy"The destination must be of $size_or_len_str_dest $destsize."
+            )
+        )
+    )
 end
 
 # We may inline the matmul2x2! and matmul3x3! calls for `α == true`
@@ -692,7 +700,7 @@ end
 # the aggressive constprop pushes tA and tB into gemm_wrapper!, which is needed for wrap calls within it
 # to be concretely inferred
 Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
-        alpha::Number, beta::Number) where {T<:BlasFloat}
+        α::Number, β::Number) where {T<:BlasFloat}
     nC = checksquare(C)
     tA_uc = uppercase(tA) # potentially convert a WrapperChar to a Char
     if tA_uc == 'T'
@@ -708,8 +716,8 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
 
     # BLAS.syrk! only updates symmetric C
     # alternatively, make non-zero β a show-stopper for BLAS.syrk!
-    if iszero(beta) || issymmetric(C)
-        α, β = promote(alpha, beta, zero(T))
+    if iszero(β) || issymmetric(C)
+        alpha, beta = promote(α, β, zero(T))
         if (alpha isa Union{Bool,T} &&
                 beta isa Union{Bool,T} &&
                 stride(A, 1) == stride(C, 1) == 1 &&
@@ -717,7 +725,7 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
             return copytri!(BLAS.syrk!('U', tA, alpha, A, beta, C), 'U')
         end
     end
-    return gemm_wrapper!(C, tA, tAt, A, A, alpha, beta)
+    return gemm_wrapper!(C, tA, tAt, A, A, α, β)
 end
 # legacy method
 syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T}, _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
@@ -743,7 +751,7 @@ Base.@constprop :aggressive function herk_wrapper!(C::Union{StridedMatrix{T}, St
     # Result array does not need to be initialized as long as beta==0
     #    C = Matrix{T}(undef, mA, mA)
 
-    if iszero(β) || issymmetric(C)
+    if iszero(β) || ishermitian(C)
         alpha, beta = promote(α, β, zero(T))
         if (alpha isa Union{Bool,T} &&
                 beta isa Union{Bool,T} &&
@@ -962,7 +970,7 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
         end
         for k = eachindex(B)
             aoffs = (k-1)*Astride
-            b = @stable_muladdmul MulAddMul(alpha,beta)(B[k])
+            b = @stable_muladdmul MulAddMul(alpha,false)(B[k])
             for i = eachindex(C)
                 C[i] += A[aoffs + i] * b
             end
