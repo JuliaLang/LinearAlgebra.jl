@@ -31,7 +31,7 @@ end
     eigen(A::Union{Hermitian, Symmetric}; alg::LinearAlgebra.Algorithm = LinearAlgebra.default_eigen_alg(A)) -> Eigen
 
 Compute the eigenvalue decomposition of `A`, returning an [`Eigen`](@ref) factorization object `F`
-which contains the eigenvalues in `F.values` and the eigenvectors in the columns of the
+which contains the eigenvalues in `F.values` and the orthonormal eigenvectors in the columns of the
 matrix `F.vectors`. (The `k`th eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
@@ -76,7 +76,7 @@ eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}, irange::UnitRange)
     eigen(A::Union{SymTridiagonal, Hermitian, Symmetric}, irange::UnitRange) -> Eigen
 
 Compute the eigenvalue decomposition of `A`, returning an [`Eigen`](@ref) factorization object `F`
-which contains the eigenvalues in `F.values` and the eigenvectors in the columns of the
+which contains the eigenvalues in `F.values` and the orthonormal eigenvectors in the columns of the
 matrix `F.vectors`. (The `k`th eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
@@ -101,7 +101,7 @@ eigen!(A::RealHermSymComplexHerm{T,<:StridedMatrix}, vl::Real, vh::Real) where {
     eigen(A::Union{SymTridiagonal, Hermitian, Symmetric}, vl::Real, vu::Real) -> Eigen
 
 Compute the eigenvalue decomposition of `A`, returning an [`Eigen`](@ref) factorization object `F`
-which contains the eigenvalues in `F.values` and the eigenvectors in the columns of the
+which contains the eigenvalues in `F.values` and the orthonormal eigenvectors in the columns of the
 matrix `F.vectors`. (The `k`th eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
