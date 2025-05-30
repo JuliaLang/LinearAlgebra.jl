@@ -338,7 +338,8 @@ function ==(A::AbstractMatrix, J::UniformScaling)
     size(A, 1) == size(A, 2) || return false
     iszero(J.λ) && return iszero(A)
     isone(J.λ) && return isone(A)
-    return A == J.λ*one(A)
+    isdiag(A) || return false
+    return all(==(J.λ), diagview(A))
 end
 function ==(A::StridedMatrix, J::UniformScaling)
     size(A, 1) == size(A, 2) || return false
