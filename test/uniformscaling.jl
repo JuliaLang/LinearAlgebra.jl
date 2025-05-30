@@ -335,6 +335,19 @@ let
                 @test @inferred(J - T) == J - Array(T)
             end
 
+            @testset for f in (transpose, adjoint)
+                if isa(A, Array)
+                    T = f(randn(ComplexF64,3,3))
+                else
+                    T = f(view(randn(ComplexF64,3,3), 1:3, 1:3))
+                end
+                TA = Array(T)
+                @test @inferred(T + J) == TA + J
+                @test @inferred(J + T) == J + TA
+                @test @inferred(T - J) == TA - J
+                @test @inferred(J - T) == J - TA
+            end
+
             @test @inferred(I\A) == A
             @test @inferred(A\I) == inv(A)
             @test @inferred(λ\I) === UniformScaling(1/λ)

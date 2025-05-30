@@ -217,6 +217,22 @@ function (-)(J::UniformScaling{<:Complex}, A::Hermitian)
     return B
 end
 
+for f in (:+, :-)
+    @eval begin
+        function $f(A::AdjOrTransAbsMat, J::UniformScaling)
+            checksquare(A)
+            op = wrapperop(A)
+            op($f(op(A), op(J)))
+        end
+
+        function $f(J::UniformScaling, A::AdjOrTransAbsMat)
+            checksquare(A)
+            op = wrapperop(A)
+            op($f(op(J), op(A)))
+        end
+    end
+end
+
 function (+)(A::AbstractMatrix, J::UniformScaling)
     checksquare(A)
     B = copymutable_oftype(A, Base.promote_op(+, eltype(A), typeof(J)))
