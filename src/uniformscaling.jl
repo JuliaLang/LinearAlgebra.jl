@@ -217,20 +217,15 @@ function (-)(J::UniformScaling{<:Complex}, A::Hermitian)
     return B
 end
 
-for f in (:+, :-)
-    @eval begin
-        function $f(A::AdjOrTransAbsMat, J::UniformScaling)
-            checksquare(A)
-            op = wrapperop(A)
-            op($f(op(A), op(J)))
-        end
-
-        function $f(J::UniformScaling, A::AdjOrTransAbsMat)
-            checksquare(A)
-            op = wrapperop(A)
-            op($f(op(J), op(A)))
-        end
-    end
+function (+)(A::AdjOrTransAbsMat, J::UniformScaling)
+    checksquare(A)
+    op = wrapperop(A)
+    op(op(A) + op(J))
+end
+function (-)(J::UniformScaling, A::AdjOrTransAbsMat)
+    checksquare(A)
+    op = wrapperop(A)
+    op(op(J) - op(A))
 end
 
 function (+)(A::AbstractMatrix, J::UniformScaling)
