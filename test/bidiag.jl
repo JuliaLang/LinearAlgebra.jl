@@ -1240,4 +1240,17 @@ end
     @test_throws BoundsError B[LinearAlgebra.BandIndex(0,size(B,1)+1)]
 end
 
+@testset "lazy adjtrans" begin
+    B = Bidiagonal(fill([1 2; 3 4], 3), fill([5 6; 7 8], 2), :U)
+    m = [2 4; 6 8]
+    for op in (transpose, adjoint)
+        C = op(B)
+        el = op(m)
+        C[1,1] = el
+        @test B[1,1] == m
+        C[2,1] = el
+        @test B[1,2] == m
+    end
+end
+
 end # module TestBidiagonal

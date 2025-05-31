@@ -308,12 +308,12 @@ for func in (:conj, :copy, :real, :imag)
 end
 isreal(M::Bidiagonal) = isreal(M.dv) && isreal(M.ev)
 
-adjoint(B::Bidiagonal{<:Number}) = Bidiagonal(vec(adjoint(B.dv)), vec(adjoint(B.ev)), B.uplo == 'U' ? :L : :U)
-adjoint(B::Bidiagonal{<:Number, <:Base.ReshapedArray{<:Number,1,<:Adjoint}}) =
+adjoint(B::Bidiagonal) = Bidiagonal(vec(adjoint(B.dv)), vec(adjoint(B.ev)), B.uplo == 'U' ? :L : :U)
+adjoint(B::Bidiagonal{<:Any, <:Base.ReshapedArray{<:Any,1,<:AdjointAbsVec}}) =
     Bidiagonal(adjoint(parent(B.dv)), adjoint(parent(B.ev)), B.uplo == 'U' ? :L : :U)
-adjoint(B::Bidiagonal) = Bidiagonal(adjoint.(B.dv), adjoint.(B.ev), B.uplo == 'U' ? :L : :U)
-transpose(B::Bidiagonal{<:Number}) = Bidiagonal(B.dv, B.ev, B.uplo == 'U' ? :L : :U)
-transpose(B::Bidiagonal) = Bidiagonal(transpose.(B.dv), transpose.(B.ev), B.uplo == 'U' ? :L : :U)
+transpose(B::Bidiagonal) = Bidiagonal(vec(transpose(B.dv)), vec(transpose(B.ev)), B.uplo == 'U' ? :L : :U)
+transpose(B::Bidiagonal{<:Any, <:Base.ReshapedArray{<:Any,1,<:TransposeAbsVec}}) =
+    Bidiagonal(transpose(parent(B.dv)), transpose(parent(B.ev)), B.uplo == 'U' ? :L : :U)
 permutedims(B::Bidiagonal) = Bidiagonal(B.dv, B.ev, B.uplo == 'U' ? 'L' : 'U')
 function permutedims(B::Bidiagonal, perm)
     Base.checkdims_perm(axes(B), axes(B), perm)
