@@ -1515,4 +1515,15 @@ end
     @test_throws BoundsError D[LinearAlgebra.BandIndex(0,size(D,1)+1)]
 end
 
+@testset "lazy adjtrans" begin
+    D = Diagonal(fill([1 2; 3 4], 3))
+    m = [2 4; 6 8]
+    for op in (transpose, adjoint)
+        C = op(D)
+        el = op(m)
+        C[1,1] = el
+        @test D[1,1] == m
+    end
+end
+
 end # module TestDiagonal
