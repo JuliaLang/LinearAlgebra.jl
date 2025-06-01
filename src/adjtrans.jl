@@ -564,6 +564,7 @@ _vectranspose(A::AbstractVector) = vec(transpose(A))
 _vectranspose(A::Base.ReshapedArray{<:Any,1,<:TransposeAbsVec}) = transpose(parent(A))
 """
     _vecadjoint(A::AbstractVector)::AbstractVector
+
 Compute `vec(adjoint(A))`, but avoid an allocating reshape if possible
 """
 _vecadjoint(A::AbstractVector) = vec(adjoint(A))
