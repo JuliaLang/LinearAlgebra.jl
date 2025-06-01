@@ -1220,43 +1220,43 @@ end
         for f in (x->x^real(T)(0.3), sqrt, log, asin, acos, acosh, atanh)
             if T <: Real
                 @test @inferred(Matrix{Complex{T}}, f(a)) isa Matrix
-                @test @inferred Symmetric{Complex{T}} f(syma) isa Symmetric
-                @test @inferred Symmetric{Complex{T}} f(symtria) isa Symmetric
-                @test @inferred Symmetric{Complex{T}} f(herma) isa Union{Symmetric{Complex{T}}, Hermitian{T}}
+                @test @inferred(Symmetric{Complex{T}} f(syma)) isa Symmetric
+                @test @inferred(Symmetric{Complex{T}} f(symtria)) isa Symmetric
+                @test @inferred(Symmetric{Complex{T}} f(herma)) isa Union{Symmetric{Complex{T}}, Hermitian{T}}
             else
-                @test @inferred f(a) isa Matrix{T}
-                @test @inferred Matrix{T} f(herma) isa Union{Matrix{T}, Hermitian{T}}
+                @test @inferred(f(a)) isa Matrix{T}
+                @test @inferred(Matrix{T} f(herma)) isa Union{Matrix{T}, Hermitian{T}}
             end
         end
         #nice functions
         for f in (x->x^2, exp, cos, sin, tan, cosh, sinh, tanh, atan, asinh, cbrt)
             if T <: Real
-                @test @inferred f(a) isa Matrix{T}
-                @test @inferred f(syma) isa Symmetric{T}
-                @test @inferred f(symtria) isa Symmetric{T}
-                @test @inferred f(herma) isa Hermitian{T}
+                @test @inferred(f(a)) isa Matrix{T}
+                @test @inferred(f(syma)) isa Symmetric{T}
+                @test @inferred(f(symtria)) isa Symmetric{T}
+                @test @inferred(f(herma)) isa Hermitian{T}
             else
-                f != cbrt && @test @inferred f(a) isa Matrix{T}
-                @test @inferred f(herma) isa Hermitian{T}
+                f != cbrt && @test @inferred(f(a)) isa Matrix{T}
+                @test @inferred(f(herma)) isa Hermitian{T}
             end
         end
         #special case cis
         if T <: Real
-            @test @inferred cis(a) isa Matrix{Complex{T}}
-            @test @inferred cis(syma) isa Symmetric{Complex{T}}
-            @test @inferred cis(symtria) isa Symmetric{Complex{T}}
-            @test @inferred cis(herma) isa Symmetric{Complex{T}}
+            @test @inferred(cis(a)) isa Matrix{Complex{T}}
+            @test @inferred(cis(syma)) isa Symmetric{Complex{T}}
+            @test @inferred(cis(symtria)) isa Symmetric{Complex{T}}
+            @test @inferred(cis(herma)) isa Symmetric{Complex{T}}
         else
-            @test @inferred cis(a) isa Matrix{T}
-            @test @inferred cis(herma) isa Matrix{T}
+            @test @inferred(cis(a)) isa Matrix{T}
+            @test @inferred(cis(herma)) isa Matrix{T}
         end
         #special case sincos
         if T <: Real
-            @test @inferred sincos(syma) isa Tuple{Symmetric{T}, Symmetric{T}}
-            @test @inferred sincos(symtria) isa Tuple{Symmetric{T}, Symmetric{T}}
+            @test @inferred(sincos(syma)) isa Tuple{Symmetric{T}, Symmetric{T}}
+            @test @inferred(sincos(symtria)) isa Tuple{Symmetric{T}, Symmetric{T}}
         end
-        @test @inferred sincos(a) isa Tuple{Matrix{T}, Matrix{T}}
-        @test @inferred sincos(herma) isa Tuple{Hermitian{T}, Hermitian{T}}
+        @test @inferred(sincos(a)) isa Tuple{Matrix{T}, Matrix{T}}
+        @test @inferred(sincos(herma)) isa Tuple{Hermitian{T}, Hermitian{T}}
     end
 end
 
