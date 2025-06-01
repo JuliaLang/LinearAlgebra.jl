@@ -10,9 +10,9 @@ eigencopy_oftype(A::Symmetric{<:Complex}, S) = copyto!(similar(parent(A), S), A)
     default_eigen_alg(A)
 
 Return the default algorithm used to solve the eigensystem `A v = λ v` for a symmetric matrix `A`.
-Defaults to `LinearAlegbra.DivideAndConquer()`, which corresponds to the LAPACK function `LAPACK.syevd!`.
+Defaults to `LinearAlegbra.RobustRepresentations()`, which corresponds to the LAPACK function `LAPACK.syevr!`.
 """
-default_eigen_alg(@nospecialize(A)) = DivideAndConquer()
+default_eigen_alg(@nospecialize(A)) = RobustRepresentations()
 
 # Eigensolvers for symmetric and Hermitian matrices
 function eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=nothing)
@@ -37,9 +37,9 @@ matrix `F.vectors`. (The `k`th eigenvector can be obtained from the slice `F.vec
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
 
 `alg` specifies which algorithm and LAPACK method to use for eigenvalue decomposition:
-- `alg = DivideAndConquer()` (default): Calls `LAPACK.syevd!`.
+- `alg = DivideAndConquer()`: Calls `LAPACK.syevd!`.
 - `alg = QRIteration()`: Calls `LAPACK.syev!`.
-- `alg = RobustRepresentations()`: Multiple relatively robust representations method, Calls `LAPACK.syevr!`.
+- `alg = RobustRepresentations()` (default): Multiple relatively robust representations method, Calls `LAPACK.syevr!`.
 
 See James W. Demmel et al, SIAM J. Sci. Comput. 30, 3, 1508 (2008) for
 a comparison of the accuracy and performance of different algorithms.
@@ -140,14 +140,18 @@ end
 Return the eigenvalues of `A`.
 
 `alg` specifies which algorithm and LAPACK method to use for eigenvalue decomposition:
-- `alg = DivideAndConquer()` (default): Calls `LAPACK.syevd!`.
+- `alg = DivideAndConquer()`: Calls `LAPACK.syevd!`.
 - `alg = QRIteration()`: Calls `LAPACK.syev!`.
-- `alg = RobustRepresentations()`: Multiple relatively robust representations method, Calls `LAPACK.syevr!`.
+- `alg = RobustRepresentations()` (default): Multiple relatively robust representations method, Calls `LAPACK.syevr!`.
 
 See James W. Demmel et al, SIAM J. Sci. Comput. 30, 3, 1508 (2008) for
 a comparison of the accuracy and performance of different methods.
 
 The default `alg` used may change in the future.
+
+!!! compat "Julia 1.12"
+    The `alg` keyword argument requires Julia 1.12 or later.
+
 """
 function eigvals(A::RealHermSymComplexHerm; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=nothing)
     S = eigtype(eltype(A))
