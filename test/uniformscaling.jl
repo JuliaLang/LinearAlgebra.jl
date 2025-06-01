@@ -589,4 +589,11 @@ end
     @test A\J ≈ cA\J
 end
 
+@testset "block matrix equality" begin
+    A = Diagonal(fill(I(2), 4))
+    @test isone(A)
+    @test A != I
+    @test 0*A != 0*I
+end
+
 end # module TestUniformscaling
