@@ -614,7 +614,9 @@ function (^)(A::AbstractMatrix{T}, p::Real) where T
 
     # If possible, use diagonalization
     if ishermitian(A)
-        return parent(Hermitian(A)^p)
+        powerHermA = Hermitian(A)^p
+        PP = parent(powerHermA)
+        return ishermitian(powerHermA) ? copytri_maybe_inplace(PP, 'U', true) : PP
     end
 
     # Otherwise, use Schur decomposition
@@ -744,7 +746,7 @@ function exp!(A::StridedMatrix{T}) where T<:BlasFloat
         end
         return A
     elseif ishermitian(A)
-        return parent(exp(Hermitian(A)))
+        return copytri!(parent(exp(Hermitian(A))), 'U', true)
     end
     ilo, ihi, scale = LAPACK.gebal!('B', A)    # modifies A
     nA   = opnorm(A, 1)
@@ -1010,7 +1012,9 @@ function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
             return applydiagonal(sqrt, A)
         end
     elseif ishermitian(A)
-        return parent(sqrt(Hermitian(A)))
+        sqrtHermA = sqrt(Hermitian(A))
+        PS = parent(sqrtHermA)
+        return ishermitian(sqrtHermA) ? copytri_maybe_inplace(PS, 'U', true) : PS
     elseif istriu(A)
         return triu!(parent(sqrt(UpperTriangular(A))))
     elseif isreal(A)
@@ -1077,7 +1081,7 @@ function cbrt(A::AbstractMatrix{<:Real})
     elseif isdiag(A)
         return applydiagonal(cbrt, A)
     elseif issymmetric(A)
-        return copytri!(parent(cbrt(Symmetric(A))), 'U')
+        return copytri_maybe_inplace(parent(cbrt(Symmetric(A))), 'U')
     else
         S = schur(A)
         return S.Z * _cbrt_quasi_triu!(S.T) * S.Z'
