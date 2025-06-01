@@ -1523,6 +1523,8 @@ end
         el = op(m)
         C[1,1] = el
         @test D[1,1] == m
+        @test (@allocated op(D)) == 0
+        @test (@allocated op(op(D))) == 0
     end
 end
 

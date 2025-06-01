@@ -1250,6 +1250,8 @@ end
         @test B[1,1] == m
         C[2,1] = el
         @test B[1,2] == m
+        @test (@allocated op(B)) == 0
+        @test (@allocated op(op(B))) == 0
     end
 end
 

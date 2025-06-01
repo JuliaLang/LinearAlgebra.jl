@@ -555,9 +555,16 @@ end
 
 # Special adjoint/transpose methods for Adjoint/Transpose that have been reshaped as a vector
 # these are used in transposing banded matrices by forwarding the operation to the bands
-# compute vec(transpose(A)), but avoid an allocating reshape if possible
+"""
+    _vectranspose(A::AbstractVector)::AbstractVector
+
+Compute `vec(transpose(A))`, but avoid an allocating reshape if possible
+"""
 _vectranspose(A::AbstractVector) = vec(transpose(A))
 _vectranspose(A::Base.ReshapedArray{<:Any,1,<:TransposeAbsVec}) = transpose(parent(A))
-# compute vec(adjoint(A)), but avoid an allocating reshape if possible
+"""
+    _vecadjoint(A::AbstractVector)::AbstractVector
+Compute `vec(adjoint(A))`, but avoid an allocating reshape if possible
+"""
 _vecadjoint(A::AbstractVector) = vec(adjoint(A))
 _vecadjoint(A::Base.ReshapedArray{<:Any,1,<:AdjointAbsVec}) = adjoint(parent(A))
