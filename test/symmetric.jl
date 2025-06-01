@@ -1219,7 +1219,7 @@ end
         #nasty functions
         for f in (x->x^real(T)(0.3), sqrt, log, asin, acos, acosh, atanh)
             if T <: Real
-                @test @inferred Matrix{Complex{T}} f(a) isa Matrix
+                @test @inferred(Matrix{Complex{T}}, f(a)) isa Matrix
                 @test @inferred Symmetric{Complex{T}} f(syma) isa Symmetric
                 @test @inferred Symmetric{Complex{T}} f(symtria) isa Symmetric
                 @test @inferred Symmetric{Complex{T}} f(herma) isa Union{Symmetric{Complex{T}}, Hermitian{T}}
