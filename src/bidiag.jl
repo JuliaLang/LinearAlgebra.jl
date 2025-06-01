@@ -308,12 +308,8 @@ for func in (:conj, :copy, :real, :imag)
 end
 isreal(M::Bidiagonal) = isreal(M.dv) && isreal(M.ev)
 
-adjoint(B::Bidiagonal) = Bidiagonal(vec(adjoint(B.dv)), vec(adjoint(B.ev)), B.uplo == 'U' ? :L : :U)
-adjoint(B::Bidiagonal{<:Any, <:Base.ReshapedArray{<:Any,1,<:AdjointAbsVec}}) =
-    Bidiagonal(adjoint(parent(B.dv)), adjoint(parent(B.ev)), B.uplo == 'U' ? :L : :U)
-transpose(B::Bidiagonal) = Bidiagonal(vec(transpose(B.dv)), vec(transpose(B.ev)), B.uplo == 'U' ? :L : :U)
-transpose(B::Bidiagonal{<:Any, <:Base.ReshapedArray{<:Any,1,<:TransposeAbsVec}}) =
-    Bidiagonal(transpose(parent(B.dv)), transpose(parent(B.ev)), B.uplo == 'U' ? :L : :U)
+adjoint(B::Bidiagonal) = Bidiagonal(_vecadjoint(B.dv), _vecadjoint(B.ev), B.uplo == 'U' ? :L : :U)
+transpose(B::Bidiagonal) = Bidiagonal(_vectranspose(B.dv), _vectranspose(B.ev), B.uplo == 'U' ? :L : :U)
 permutedims(B::Bidiagonal) = Bidiagonal(B.dv, B.ev, B.uplo == 'U' ? 'L' : 'U')
 function permutedims(B::Bidiagonal, perm)
     Base.checkdims_perm(axes(B), axes(B), perm)

@@ -906,10 +906,8 @@ end
 end
 
 conj(D::Diagonal) = Diagonal(conj(D.diag))
-transpose(D::Diagonal) = Diagonal(vec(transpose(D.diag)))
-transpose(D::Diagonal{<:Any,<:Base.ReshapedArray{<:Any,1,<:TransposeAbsVec}}) = Diagonal(transpose(parent(D.diag)))
-adjoint(D::Diagonal) = Diagonal(vec(adjoint(D.diag)))
-adjoint(D::Diagonal{<:Any,<:Base.ReshapedArray{<:Any,1,<:AdjointAbsVec}}) = Diagonal(adjoint(parent(D.diag)))
+transpose(D::Diagonal) = Diagonal(_vectranspose(D.diag))
+adjoint(D::Diagonal) = Diagonal(_vecadjoint(D.diag))
 permutedims(D::Diagonal) = D
 permutedims(D::Diagonal, perm) = (Base.checkdims_perm(axes(D), axes(D), perm); D)
 
