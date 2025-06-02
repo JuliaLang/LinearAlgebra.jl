@@ -628,7 +628,7 @@ function _safe_parent(fA)
     elseif isa(fA, Symmetric)
         return copytri_maybe_inplace(parentfA, 'U')
     else
-        return parentfA
+        return fA
     end
 end
 """
