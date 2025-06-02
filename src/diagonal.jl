@@ -192,8 +192,8 @@ Return the appropriate zero element `A[i, j]` corresponding to a banded matrix `
 """
 diagzero(A::AbstractMatrix, i, j) = zero(eltype(A))
 @propagate_inbounds diagzero(A::AbstractMatrix{M}, i, j) where {M<:AbstractMatrix} =
-    zeroslike(M, axes(A[i,i], 1), axes(A[j,j], 2))
-diagzero(A::AbstractMatrix, inds...) = diagzero(A, to_indices(A, inds)...)
+    zeroslike(M, axes(A[BandIndex(0, i)], 1), axes(A[BandIndex(0, j)], 2))
+@propagate_inbounds diagzero(A::AbstractMatrix, inds...) = diagzero(A, to_indices(A, inds)...)
 # dispatching on the axes permits specializing on the axis types to return something other than an Array
 zeroslike(M::Type, ax::Vararg{Union{AbstractUnitRange, Integer}}) = zeroslike(M, ax)
 """
@@ -906,11 +906,8 @@ end
 end
 
 conj(D::Diagonal) = Diagonal(conj(D.diag))
-transpose(D::Diagonal{<:Number}) = D
-transpose(D::Diagonal) = Diagonal(transpose.(D.diag))
-adjoint(D::Diagonal{<:Number}) = Diagonal(vec(adjoint(D.diag)))
-adjoint(D::Diagonal{<:Number,<:Base.ReshapedArray{<:Number,1,<:Adjoint}}) = Diagonal(adjoint(parent(D.diag)))
-adjoint(D::Diagonal) = Diagonal(adjoint.(D.diag))
+transpose(D::Diagonal) = Diagonal(_vectranspose(D.diag))
+adjoint(D::Diagonal) = Diagonal(_vecadjoint(D.diag))
 permutedims(D::Diagonal) = D
 permutedims(D::Diagonal, perm) = (Base.checkdims_perm(axes(D), axes(D), perm); D)
 

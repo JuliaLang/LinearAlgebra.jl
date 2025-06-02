@@ -623,7 +623,8 @@ end
     copytrito!(dest, U, U isa UpperOrUnitUpperTriangular ? 'L' : 'U')
     return dest
 end
-@propagate_inbounds function _copy!(dest::StridedMatrix, U::UpperOrLowerTriangular{<:Any, <:StridedMatrix})
+@propagate_inbounds function _copy!(dest::StridedMatrix,
+        U::Union{UnitUpperOrUnitLowerTriangular, UpperOrLowerTriangularStrided})
     U2 = Base.unalias(dest, U)
     copy_unaliased!(dest, U2)
     return dest
@@ -656,7 +657,7 @@ end
     end
     dest
 end
-@inline function copy_unaliased!(dest::StridedMatrix, U::UpperOrUnitUpperTriangular{<:Any, <:StridedMatrix})
+@inline function copy_unaliased!(dest::StridedMatrix, U::UpperOrUnitUpperTriangular)
     @boundscheck checkbounds(dest, axes(U)...)
     for col in axes(dest,2)
         @inbounds copy_unaliased_stored!(dest, U, col)
@@ -666,7 +667,7 @@ end
     end
     return dest
 end
-@inline function copy_unaliased!(dest::StridedMatrix, L::LowerOrUnitLowerTriangular{<:Any, <:StridedMatrix})
+@inline function copy_unaliased!(dest::StridedMatrix, L::LowerOrUnitLowerTriangular)
     @boundscheck checkbounds(dest, axes(L)...)
     for col in axes(dest,2)
         for row in firstindex(dest,1):col-1
@@ -801,38 +802,38 @@ function _triscale!(A::LowerOrUnitLowerTriangular, c::Number, B::UnitLowerTriang
     return A
 end
 
-function _trirdiv!(A::UpperTriangular, B::UpperOrUnitUpperTriangular, c::Number)
+function _trirdiv!(A::UpperTriangular, B::UpperTriangular, c::Number)
     checksize1(A, B)
     for j in axes(B,2)
         for i in firstindex(B,1):j
-            @inbounds A[i, j] = B[i, j] / c
+            @inbounds A.data[i, j] = B.data[i, j] / c
         end
     end
     return A
 end
-function _trirdiv!(A::LowerTriangular, B::LowerOrUnitLowerTriangular, c::Number)
+function _trirdiv!(A::LowerTriangular, B::LowerTriangular, c::Number)
     checksize1(A, B)
     for j in axes(B,2)
         for i in j:lastindex(B,1)
-            @inbounds A[i, j] = B[i, j] / c
+            @inbounds A.data[i, j] = B.data[i, j] / c
         end
     end
     return A
 end
-function _trildiv!(A::UpperTriangular, c::Number, B::UpperOrUnitUpperTriangular)
+function _trildiv!(A::UpperTriangular, c::Number, B::UpperTriangular)
     checksize1(A, B)
     for j in axes(B,2)
         for i in firstindex(B,1):j
-            @inbounds A[i, j] = c \ B[i, j]
+            @inbounds A.data[i, j] = c \ B.data[i, j]
         end
     end
     return A
 end
-function _trildiv!(A::LowerTriangular, c::Number, B::LowerOrUnitLowerTriangular)
+function _trildiv!(A::LowerTriangular, c::Number, B::LowerTriangular)
     checksize1(A, B)
     for j in axes(B,2)
         for i in j:lastindex(B,1)
-            @inbounds A[i, j] = c \ B[i, j]
+            @inbounds A.data[i, j] = c \ B.data[i, j]
         end
     end
     return A
@@ -1335,11 +1336,8 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
         end
 
         function (*)(A::$unitt, x::Number)
-            B = $t(A.data)*x
-            for i in axes(A, 1)
-                B.data[i,i] = x
-            end
-            return B
+            B = copy!(similar($t(A.data)), A)
+            B * x
         end
 
         (*)(x::Number, A::$t) = $t(x*A.data)
@@ -1350,11 +1348,8 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
         end
 
         function (*)(x::Number, A::$unitt)
-            B = x*$t(A.data)
-            for i in axes(A, 1)
-                B.data[i,i] = x
-            end
-            return B
+            B = copy!(similar($t(A.data)), A)
+            x * B
         end
 
         (/)(A::$t, x::Number) = $t(A.data/x)
@@ -1365,12 +1360,8 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
         end
 
         function (/)(A::$unitt, x::Number)
-            B = $t(A.data)/x
-            invx = inv(x)
-            for i in axes(A, 1)
-                B.data[i,i] = invx
-            end
-            return B
+            B = copy!(similar($t(A.data)), A)
+            B / x
         end
 
         (\)(x::Number, A::$t) = $t(x\A.data)
@@ -1381,12 +1372,8 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
         end
 
         function (\)(x::Number, A::$unitt)
-            B = x\$t(A.data)
-            invx = inv(x)
-            for i in axes(A, 1)
-                B.data[i,i] = invx
-            end
-            return B
+            B = copy!(similar($t(A.data)), A)
+            x \ B
         end
     end
 end

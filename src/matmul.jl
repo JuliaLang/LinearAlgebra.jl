@@ -51,11 +51,13 @@ end
 
 # Matrix-vector multiplication
 function (*)(A::StridedMaybeAdjOrTransMat{T}, x::StridedVector{S}) where {T<:BlasFloat,S<:Real}
+    matmul_size_check(size(A), size(x))
     TS = promote_op(matprod, T, S)
     y = isconcretetype(TS) ? convert(AbstractVector{TS}, x) : x
     mul!(similar(x, TS, size(A,1)), A, y)
 end
 function (*)(A::AbstractMatrix{T}, x::AbstractVector{S}) where {T,S}
+    matmul_size_check(size(A), size(x))
     TS = promote_op(matprod, T, S)
     mul!(similar(x, TS, axes(A,1)), A, x)
 end
@@ -113,7 +115,10 @@ julia> [1 1; 0 1] * [1 0; 1 1]
 """
 (*)(A::AbstractMatrix, B::AbstractMatrix) = mul(A, B)
 # we add an extra level of indirection to avoid ambiguities in *
-function mul(A::AbstractMatrix, B::AbstractMatrix)
+# We also define the core functionality within _mul to reuse the code elsewhere
+mul(A::AbstractMatrix, B::AbstractMatrix) = _mul(A, B)
+function _mul(A::AbstractMatrix, B::AbstractMatrix)
+    matmul_size_check(size(A), size(B))
     TS = promote_op(matprod, eltype(A), eltype(B))
     mul!(matprod_dest(A, B, TS), A, B)
 end

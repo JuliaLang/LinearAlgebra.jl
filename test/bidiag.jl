@@ -512,6 +512,10 @@ Random.seed!(1)
     @test Matrix{ComplexF64}(BD) == BD
 end
 
+@testset "Constructors with Char uplo" begin
+    @test Bidiagonal(Int8[1,2], [1], 'U') == Bidiagonal(Int8[1,2], [1], :U)
+end
+
 # Issue 10742 and similar
 let A = Bidiagonal([1,2,3], [0,0], :U)
     @test istril(A)
@@ -803,7 +807,7 @@ end
     @test convert(AbstractMatrix{Float64}, Bl)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bl
 end
 
-@testset "block-bidiagonal matrix indexing" begin
+@testset "block-bidiagonal matrix" begin
     dv = [ones(4,3), ones(2,2).*2, ones(2,3).*3, ones(4,4).*4]
     evu = [ones(4,2), ones(2,3).*2, ones(2,4).*3]
     evl = [ones(2,3), ones(2,2).*2, ones(4,3).*3]
@@ -842,6 +846,18 @@ end
         B = Bidiagonal(fill(s,4), fill(s,3), :U)
         @test @inferred(B[2,1]) isa typeof(s)
         @test all(iszero, B[2,1])
+    end
+
+    @testset "adjoint/transpose" begin
+        m = rand(Int, 2, 2)
+        for uplo in [:U, :L]
+            B = Bidiagonal(fill(m,4), fill(m,3), uplo)
+            A = Array{Matrix{Int}}(B)
+            @testset for f in (adjoint, transpose)
+                @test f(B) == f(A)
+                @test f(f(B)) == B
+            end
+        end
     end
 end
 
@@ -1222,6 +1238,21 @@ end
 
     @test_throws BoundsError B[LinearAlgebra.BandIndex(size(B,1),1)]
     @test_throws BoundsError B[LinearAlgebra.BandIndex(0,size(B,1)+1)]
+end
+
+@testset "lazy adjtrans" begin
+    B = Bidiagonal(fill([1 2; 3 4], 3), fill([5 6; 7 8], 2), :U)
+    m = [2 4; 6 8]
+    for op in (transpose, adjoint)
+        C = op(B)
+        el = op(m)
+        C[1,1] = el
+        @test B[1,1] == m
+        C[2,1] = el
+        @test B[1,2] == m
+        @test (@allocated op(B)) == 0
+        @test (@allocated op(op(B))) == 0
+    end
 end
 
 end # module TestBidiagonal

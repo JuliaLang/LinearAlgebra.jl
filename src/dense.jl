@@ -297,6 +297,9 @@ Return a view into the `k`th diagonal of the matrix `M`.
 
 See also [`diag`](@ref), [`diagind`](@ref).
 
+!!! compat "Julia 1.12"
+    This function requires Julia 1.12 or later.
+
 # Examples
 ```jldoctest
 julia> A = [1 2 3; 4 5 6; 7 8 9]
@@ -914,8 +917,12 @@ julia> log(A)
 """
 function log(A::AbstractMatrix)
     # If possible, use diagonalization
-    if isdiag(A)
-        return applydiagonal(log, A)
+    if isdiag(A) && eltype(A) <: Union{Real,Complex}
+        if eltype(A) <: Real && all(>=(0), diagview(A))
+            return applydiagonal(log, A)
+        else
+            return applydiagonal(log∘complex, A)
+        end
     elseif ishermitian(A)
         logHermA = log(Hermitian(A))
         PH = parent(logHermA)

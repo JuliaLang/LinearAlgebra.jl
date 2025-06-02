@@ -224,10 +224,14 @@ const RealHermSymSymTri{T<:Real} = Union{RealHermSym{T}, SymTridiagonal{T}}
 const RealHermSymComplexHerm{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, Hermitian{Complex{T},S}}
 const RealHermSymComplexSym{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, Symmetric{Complex{T},S}}
 const RealHermSymSymTriComplexHerm{T<:Real} = Union{RealHermSymComplexSym{T}, SymTridiagonal{T}}
-const SelfAdjoint = Union{Symmetric{<:Real}, Hermitian{<:Number}}
+const SelfAdjoint = Union{SymTridiagonal{<:Real}, Symmetric{<:Real}, Hermitian}
 
 wrappertype(::Union{Symmetric, SymTridiagonal}) = Symmetric
 wrappertype(::Hermitian) = Hermitian
+
+nonhermitianwrappertype(::SymSymTri{<:Real}) = Symmetric
+nonhermitianwrappertype(::Hermitian{<:Real}) = Symmetric
+nonhermitianwrappertype(::Hermitian) = identity
 
 size(A::HermOrSym) = size(A.data)
 axes(A::HermOrSym) = axes(A.data)
@@ -706,12 +710,14 @@ end
 mul(A::HermOrSym, B::HermOrSym) = A * copyto!(similar(parent(B)), B)
 # catch a few potential BLAS-cases
 function mul(A::HermOrSym{<:BlasFloat,<:StridedMatrix}, B::AdjOrTrans{<:BlasFloat,<:StridedMatrix})
+    matmul_size_check(size(A), size(B))
     T = promote_type(eltype(A), eltype(B))
     mul!(similar(B, T, (size(A, 1), size(B, 2))),
             convert(AbstractMatrix{T}, A),
             copy_oftype(B, T)) # make sure the AdjOrTrans wrapper is resolved
 end
 function mul(A::AdjOrTrans{<:BlasFloat,<:StridedMatrix}, B::HermOrSym{<:BlasFloat,<:StridedMatrix})
+    matmul_size_check(size(A), size(B))
     T = promote_type(eltype(A), eltype(B))
     mul!(similar(B, T, (size(A, 1), size(B, 2))),
             copy_oftype(A, T), # make sure the AdjOrTrans wrapper is resolved
@@ -829,124 +835,90 @@ function svdvals!(A::RealHermSymComplexHerm)
     return sort!(vals, rev = true)
 end
 
+#computes U * Diagonal(abs2.(v)) * U'
+function _psd_spectral_product(v, U)
+    Uv = U * Diagonal(v)
+    return Uv * Uv' # often faster than generic matmul by calling BLAS.herk
+end
+
 # Matrix functions
-^(A::Symmetric{<:Real}, p::Integer) = sympow(A, p)
-^(A::Symmetric{<:Complex}, p::Integer) = sympow(A, p)
-^(A::SymTridiagonal{<:Real}, p::Integer) = sympow(A, p)
-^(A::SymTridiagonal{<:Complex}, p::Integer) = sympow(A, p)
-function sympow(A::SymSymTri, p::Integer)
-    if p < 0
-        return Symmetric(Base.power_by_squaring(inv(A), -p))
-    else
-        return Symmetric(Base.power_by_squaring(A, p))
-    end
-end
-for hermtype in (:Symmetric, :SymTridiagonal)
-    @eval begin
-        function ^(A::$hermtype{<:Real}, p::Real)
-            isinteger(p) && return integerpow(A, p)
-            F = eigen(A)
-            if all(λ -> λ ≥ 0, F.values)
-                return Symmetric((F.vectors * Diagonal((F.values).^p)) * F.vectors')
-            else
-                return Symmetric((F.vectors * Diagonal(complex.(F.values).^p)) * F.vectors')
-            end
-        end
-        function ^(A::$hermtype{<:Complex}, p::Real)
-            isinteger(p) && return integerpow(A, p)
-            return Symmetric(schurpow(A, p))
-        end
-    end
-end
-function ^(A::Hermitian, p::Integer)
+^(A::SymSymTri{<:Complex}, p::Integer) = sympow(A, p)
+^(A::SelfAdjoint, p::Integer) = sympow(A, p)
+function sympow(A, p::Integer)
     if p < 0
         retmat = Base.power_by_squaring(inv(A), -p)
     else
         retmat = Base.power_by_squaring(A, p)
     end
-    return Hermitian(retmat)
+    return wrappertype(A)(retmat)
 end
-function ^(A::Hermitian{T}, p::Real) where T
+function ^(A::SelfAdjoint, p::Real)
     isinteger(p) && return integerpow(A, p)
     F = eigen(A)
     if all(λ -> λ ≥ 0, F.values)
-        retmat = (F.vectors * Diagonal((F.values).^p)) * F.vectors'
-        return Hermitian(retmat)
+        rootpower = map(λ -> λ^(p / 2), F.values)
+        retmat = _psd_spectral_product(rootpower, F.vectors)
+        return wrappertype(A)(retmat)
     else
-        retmat = (F.vectors * Diagonal((complex.(F.values).^p))) * F.vectors'
-        if T <: Real
-            return Symmetric(retmat)
-        else
-            return retmat
-        end
+        retmat = (F.vectors * Diagonal(complex.(F.values).^p)) * F.vectors'
+        return nonhermitianwrappertype(A)(retmat)
     end
 end
+function ^(A::SymSymTri{<:Complex}, p::Real)
+    isinteger(p) && return integerpow(A, p)
+    return Symmetric(schurpow(A, p))
+end
 
-for func in (:exp, :cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :atanh, :cbrt)
+for func in (:cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :atanh, :cbrt)
     @eval begin
-        function ($func)(A::RealHermSymSymTri)
-            F = eigen(A)
-            return wrappertype(A)((F.vectors * Diagonal(($func).(F.values))) * F.vectors')
-        end
-        function ($func)(A::Hermitian{<:Complex})
+        function ($func)(A::SelfAdjoint)
             F = eigen(A)
             retmat = (F.vectors * Diagonal(($func).(F.values))) * F.vectors'
-            return Hermitian(retmat)
+            return wrappertype(A)(retmat)
         end
     end
 end
 
-function cis(A::RealHermSymSymTri)
+function exp(A::SelfAdjoint)
     F = eigen(A)
-    return Symmetric(F.vectors .* cis.(F.values') * F.vectors')
-end
-function cis(A::Hermitian{<:Complex})
-    F = eigen(A)
-    return F.vectors .* cis.(F.values') * F.vectors'
+    rootexp = map(λ -> exp(λ / 2), F.values)
+    retmat = _psd_spectral_product(rootexp, F.vectors)
+    return wrappertype(A)(retmat)
 end
 
+function cis(A::SelfAdjoint)
+    F = eigen(A)
+    retmat = F.vectors .* cis.(F.values') * F.vectors'
+    return nonhermitianwrappertype(A)(retmat)
+end
 
 for func in (:acos, :asin)
     @eval begin
-        function ($func)(A::RealHermSymSymTri)
-            F = eigen(A)
-            if all(λ -> -1 ≤ λ ≤ 1, F.values)
-                return wrappertype(A)((F.vectors * Diagonal(($func).(F.values))) * F.vectors')
-            else
-                return Symmetric((F.vectors * Diagonal(($func).(complex.(F.values)))) * F.vectors')
-            end
-        end
-        function ($func)(A::Hermitian{<:Complex})
+        function ($func)(A::SelfAdjoint)
             F = eigen(A)
             if all(λ -> -1 ≤ λ ≤ 1, F.values)
                 retmat = (F.vectors * Diagonal(($func).(F.values))) * F.vectors'
-                return Hermitian(retmat)
+                return wrappertype(A)(retmat)
             else
-                return (F.vectors * Diagonal(($func).(complex.(F.values)))) * F.vectors'
+                retmat = (F.vectors * Diagonal(($func).(complex.(F.values)))) * F.vectors'
+                return nonhermitianwrappertype(A)(retmat)
             end
         end
     end
 end
 
-function acosh(A::RealHermSymSymTri)
-    F = eigen(A)
-    if all(λ -> λ ≥ 1, F.values)
-        return wrappertype(A)((F.vectors * Diagonal(acosh.(F.values))) * F.vectors')
-    else
-        return Symmetric((F.vectors * Diagonal(acosh.(complex.(F.values)))) * F.vectors')
-    end
-end
-function acosh(A::Hermitian{<:Complex})
+function acosh(A::SelfAdjoint)
     F = eigen(A)
     if all(λ -> λ ≥ 1, F.values)
         retmat = (F.vectors * Diagonal(acosh.(F.values))) * F.vectors'
-        return Hermitian(retmat)
+        return wrappertype(A)(retmat)
     else
-        return (F.vectors * Diagonal(acosh.(complex.(F.values)))) * F.vectors'
+        retmat = (F.vectors * Diagonal(acosh.(complex.(F.values)))) * F.vectors'
+        return nonhermitianwrappertype(A)(retmat)
     end
 end
 
-function sincos(A::RealHermSymSymTri)
+function sincos(A::SelfAdjoint)
     n = checksquare(A)
     F = eigen(A)
     T = float(eltype(F.values))
@@ -956,49 +928,29 @@ function sincos(A::RealHermSymSymTri)
     end
     return wrappertype(A)((F.vectors * S) * F.vectors'), wrappertype(A)((F.vectors * C) * F.vectors')
 end
-function sincos(A::Hermitian{<:Complex})
-    n = checksquare(A)
+
+function log(A::SelfAdjoint)
     F = eigen(A)
-    T = float(eltype(F.values))
-    S, C = Diagonal(similar(A, T, (n,))), Diagonal(similar(A, T, (n,)))
-    for i in eachindex(S.diag, C.diag, F.values)
-        S.diag[i], C.diag[i] = sincos(F.values[i])
+    if all(λ -> λ ≥ 0, F.values)
+        retmat = (F.vectors * Diagonal(log.(F.values))) * F.vectors'
+        return wrappertype(A)(retmat)
+    else
+        retmat = (F.vectors * Diagonal(log.(complex.(F.values)))) * F.vectors'
+        return nonhermitianwrappertype(A)(retmat)
     end
-    retmatS, retmatC = (F.vectors * S) * F.vectors', (F.vectors * C) * F.vectors'
-    for i in diagind(retmatS, IndexStyle(retmatS))
-        retmatS[i] = real(retmatS[i])
-        retmatC[i] = real(retmatC[i])
-    end
-    return Hermitian(retmatS), Hermitian(retmatC)
 end
 
-
-for func in (:log, :sqrt)
-    # sqrt has rtol arg to handle matrices that are semidefinite up to roundoff errors
-    rtolarg = func === :sqrt ? Any[Expr(:kw, :(rtol::Real), :(eps(real(float(one(T))))*size(A,1)))] : Any[]
-    rtolval = func === :sqrt ? :(-maximum(abs, F.values) * rtol) : 0
-    @eval begin
-        function ($func)(A::RealHermSymSymTri{T}; $(rtolarg...)) where {T<:Real}
-            F = eigen(A)
-            λ₀ = $rtolval # treat λ ≥ λ₀ as "zero" eigenvalues up to roundoff
-            if all(λ -> λ ≥ λ₀, F.values)
-                return wrappertype(A)((F.vectors * Diagonal(($func).(max.(0, F.values)))) * F.vectors')
-            else
-                return Symmetric((F.vectors * Diagonal(($func).(complex.(F.values)))) * F.vectors')
-            end
-        end
-        function ($func)(A::Hermitian{T}; $(rtolarg...)) where {T<:Complex}
-            n = checksquare(A)
-            F = eigen(A)
-            λ₀ = $rtolval # treat λ ≥ λ₀ as "zero" eigenvalues up to roundoff
-            if all(λ -> λ ≥ λ₀, F.values)
-                retmat = (F.vectors * Diagonal(($func).(max.(0, F.values)))) * F.vectors'
-                return Hermitian(retmat)
-            else
-                retmat = (F.vectors * Diagonal(($func).(complex.(F.values)))) * F.vectors'
-                return retmat
-            end
-        end
+# sqrt has rtol kwarg to handle matrices that are semidefinite up to roundoff errors
+function sqrt(A::SelfAdjoint; rtol = eps(real(float(eltype(A)))) * size(A, 1))
+    F = eigen(A)
+    λ₀ = -maximum(abs, F.values) * rtol # treat λ ≥ λ₀ as "zero" eigenvalues up to roundoff
+    if all(λ -> λ ≥ λ₀, F.values)
+        rootroot = map(λ -> λ < 0 ? zero(λ) : fourthroot(λ), F.values)
+        retmat = _psd_spectral_product(rootroot, F.vectors)
+        return wrappertype(A)(retmat)
+    else
+        retmat = (F.vectors * Diagonal(sqrt.(complex.(F.values)))) * F.vectors'
+        return nonhermitianwrappertype(A)(retmat)
     end
 end
 

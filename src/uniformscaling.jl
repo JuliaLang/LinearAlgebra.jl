@@ -217,6 +217,17 @@ function (-)(J::UniformScaling{<:Complex}, A::Hermitian)
     return B
 end
 
+function (+)(A::AdjOrTransAbsMat, J::UniformScaling)
+    checksquare(A)
+    op = wrapperop(A)
+    op(op(A) + op(J))
+end
+function (-)(J::UniformScaling, A::AdjOrTransAbsMat)
+    checksquare(A)
+    op = wrapperop(A)
+    op(op(J) - op(A))
+end
+
 function (+)(A::AbstractMatrix, J::UniformScaling)
     checksquare(A)
     B = copymutable_oftype(A, Base.promote_op(+, eltype(A), typeof(J)))
@@ -338,7 +349,8 @@ function ==(A::AbstractMatrix, J::UniformScaling)
     size(A, 1) == size(A, 2) || return false
     iszero(J.λ) && return iszero(A)
     isone(J.λ) && return isone(A)
-    return A == J.λ*one(A)
+    isdiag(A) || return false
+    return all(==(J.λ), diagview(A))
 end
 function ==(A::StridedMatrix, J::UniformScaling)
     size(A, 1) == size(A, 2) || return false
