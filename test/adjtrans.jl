@@ -788,4 +788,15 @@ end
     end
 end
 
+@testset "diagview" begin
+    for A in (rand(4, 4), rand(ComplexF64,4,4),
+                fill([1 2; 3 4], 4, 4))
+        for k in -3:3
+            @test diagview(A', k) == diagview(copy(A'), k)
+            @test diagview(transpose(A), k) == diagview(copy(transpose(A)), k)
+        end
+        @test IndexStyle(diagview(A')) == IndexLinear()
+    end
+end
+
 end # module TestAdjointTranspose
