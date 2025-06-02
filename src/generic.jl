@@ -1252,7 +1252,7 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
             return UpperTriangular(A) \ B
         end
         if isbanded(A, -1, 1)
-            T = Tridiagonal(diagview(A,-1), diagview(A, 0), diagview(A, 1))
+            T = Tridiagonal(A)
             if issymmetric(T)
                 return SymTridiagonal(T) \ B
             end
