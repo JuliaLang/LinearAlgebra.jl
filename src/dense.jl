@@ -616,7 +616,13 @@ function (^)(A::AbstractMatrix{T}, p::Real) where T
     if ishermitian(A)
         powerHermA = Hermitian(A)^p
         PP = parent(powerHermA)
-        return ishermitian(powerHermA) ? copytri_maybe_inplace(PP, 'U', true) : PP
+        if isa(powerHermA, Hermitian) || isa(powerHermA, Symmetric{<:Real})
+            return copytri_maybe_inplace(PP, 'U', true)
+        elseif isa(powerHermA, Symmetric)
+            return copytri_maybe_inplace(PP, 'U')
+        else
+            return PP
+        end
     end
 
     # Otherwise, use Schur decomposition
