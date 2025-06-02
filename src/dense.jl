@@ -614,21 +614,23 @@ function (^)(A::AbstractMatrix{T}, p::Real) where T
 
     # If possible, use diagonalization
     if ishermitian(A)
-        powerHermA = Hermitian(A)^p
-        PP = parent(powerHermA)
-        if isa(powerHermA, Hermitian) || isa(powerHermA, Symmetric{<:Real})
-            return copytri_maybe_inplace(PP, 'U', true)
-        elseif isa(powerHermA, Symmetric)
-            return copytri_maybe_inplace(PP, 'U')
-        else
-            return PP
-        end
+        return _safe_parent(Hermitian(A)^p)
     end
 
     # Otherwise, use Schur decomposition
     return schurpow(A, p)
 end
 
+function _safe_parent(fA)
+    parentfA = parent(fA)
+    if isa(fA, Hermitian) || isa(fA, Symmetric{<:Real})
+        return copytri_maybe_inplace(parentfA, 'U', true)
+    elseif isa(fA, Symmetric)
+        return copytri_maybe_inplace(parentfA, 'U')
+    else
+        return parentfA
+    end
+end
 """
     ^(A::AbstractMatrix, p::Number)
 
@@ -931,9 +933,7 @@ function log(A::AbstractMatrix)
             return applydiagonal(log, A)
         end
     elseif ishermitian(A)
-        logHermA = log(Hermitian(A))
-        PH = parent(logHermA)
-        return ishermitian(logHermA) ? copytri_maybe_inplace(PH, 'U', true) : PH
+        return _safe_parent(log(Hermitian(A)))
     elseif istriu(A)
         return triu!(parent(log(UpperTriangular(A))))
     elseif isreal(A)
@@ -1018,9 +1018,7 @@ function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
             return applydiagonal(sqrt, A)
         end
     elseif ishermitian(A)
-        sqrtHermA = sqrt(Hermitian(A))
-        PS = parent(sqrtHermA)
-        return ishermitian(sqrtHermA) ? copytri_maybe_inplace(PS, 'U', true) : PS
+        return _safe_parent(sqrt(Hermitian(A)))
     elseif istriu(A)
         return triu!(parent(sqrt(UpperTriangular(A))))
     elseif isreal(A)
@@ -1386,9 +1384,7 @@ function acos(A::AbstractMatrix)
     if isdiag(A)
         return applydiagonal(acos, A)
     elseif ishermitian(A)
-        acosHermA = acos(Hermitian(A))
-        P = parent(acosHermA)
-        return isa(acosHermA, Hermitian) ? copytri_maybe_inplace(P, 'U', true) : P
+        return _safe_parent(acos(Hermitian(A)))
     end
     SchurF = Schur{Complex}(schur(A))
     U = UpperTriangular(SchurF.T)
@@ -1480,9 +1476,7 @@ function acosh(A::AbstractMatrix)
     if isdiag(A)
         return applydiagonal(acosh, A)
     elseif ishermitian(A)
-        acoshHermA = acosh(Hermitian(A))
-        P = parent(acoshHermA)
-        return isa(acoshHermA, Hermitian) ? copytri_maybe_inplace(P, 'U', true) : P
+        return _safe_parent(acosh(Hermitian(A)))
     end
     SchurF = Schur{Complex}(schur(A))
     U = UpperTriangular(SchurF.T)
@@ -1528,8 +1522,7 @@ function atanh(A::AbstractMatrix)
     if isdiag(A)
         return applydiagonal(atanh, A)
     elseif ishermitian(A)
-        P = parent(atanh(Hermitian(A)))
-        return copytri_maybe_inplace(P, 'U', true)
+        return _safe_parent(atanh(Hermitian(A)))
     end
     SchurF = Schur{Complex}(schur(A))
     U = UpperTriangular(SchurF.T)
