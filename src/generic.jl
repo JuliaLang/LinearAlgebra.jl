@@ -1239,12 +1239,24 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istril(A)
             if istriu(A)
                 return Diagonal(A) \ B
+            elseif istriu(A, -1)
+                return Bidiagonal(A, :L) \ B
             else
                 return LowerTriangular(A) \ B
             end
         end
         if istriu(A)
+            if istril(A, 1)
+                return Bidiagonal(A, :U) \ B
+            end
             return UpperTriangular(A) \ B
+        end
+        if istriu(A, -1) && istril(A, 1)
+            T = Tridiagonal(A)
+            if issymmetric(T)
+                return SymTridiagonal(T) \ B
+            end
+            return T \ B
         end
         return lu(A) \ B
     end

@@ -937,4 +937,16 @@ end
     @test B == A2
 end
 
+@testset "linear solve for dense banded matrices" begin
+    b = randn(5)
+    for A in (diagm(0=>1:5, -1=>1:4, 1=>1:4), # SymTridiagonal
+              diagm(0=>1:5, -1=>1:4, 1=>5:8), # Tridiagonal
+              diagm(0=>1:5, 1=>1:4), # Upper Bidiagonal
+              diagm(0=>1:5, -1=>1:4), # Lower Bidiagonal
+            )
+        x = A \ b
+        @test A * x ≈ b
+    end
+end
+
 end # module TestGeneric
