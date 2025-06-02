@@ -1256,6 +1256,7 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
             if issymmetric(T)
                 return SymTridiagonal(T) \ B
             end
+            return lu(T) \ B
         end
         return lu(A) \ B
     end
