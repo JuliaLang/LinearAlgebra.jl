@@ -1119,11 +1119,6 @@ function ldiv!(A::Tridiagonal, B::AbstractVecOrMat)
     return B
 end
 
-function Base.:(\)(A::Tridiagonal, B::AbstractVecOrMat)
-    T = Base.promote_op(\, eltype(A), eltype(B))
-    ldiv!(T.(A), copy(B))
-end
-
 # combinations of Tridiagonal and Symtridiagonal
 # copyto! for matching axes
 function _copyto_banded!(A::Tridiagonal, B::SymTridiagonal)

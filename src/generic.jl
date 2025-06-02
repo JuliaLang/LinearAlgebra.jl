@@ -1251,12 +1251,11 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
             end
             return UpperTriangular(A) \ B
         end
-        if istriu(A, -1) && istril(A, 1)
-            T = Tridiagonal(A)
+        if isbanded(A, -1, 1)
+            T = Tridiagonal(diagview(A,-1), diagview(A, 0), diagview(A, 1))
             if issymmetric(T)
                 return SymTridiagonal(T) \ B
             end
-            return T \ B
         end
         return lu(A) \ B
     end
