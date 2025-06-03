@@ -1236,27 +1236,23 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
     if m == n
-        if istril(A)
-            if istriu(A)
-                return Diagonal(A) \ B
-            elseif istriu(A, -1)
+        istrium1 = istriu(A, -1)
+        istril1 = istril(A, 1)
+        if istril1 && iszero(diagview(A,1)) # istril(A)
+            if istrium1
+                if iszero(diagview(A, -1))
+                    return Diagonal(A) \ B
+                end
                 return Bidiagonal(A, :L) \ B
             else
                 return LowerTriangular(A) \ B
             end
         end
-        if istriu(A)
-            if istril(A, 1)
+        if istrium1 && iszero(diagview(A, -1)) # istriu(A)
+            if istril1
                 return Bidiagonal(A, :U) \ B
             end
             return UpperTriangular(A) \ B
-        end
-        if isbanded(A, -1, 1)
-            T = Tridiagonal(A)
-            if issymmetric(T)
-                return SymTridiagonal(T) \ B
-            end
-            return lu(T) \ B
         end
         return lu(A) \ B
     end
