@@ -300,6 +300,7 @@ function preprocess_broadcasted(::Type{T}, bc::Broadcasted) where {T}
 end
 _preprocess_broadcasted(::Type{LowerTriangular}, A) = lowertridata(A)
 _preprocess_broadcasted(::Type{UpperTriangular}, A) = uppertridata(A)
+_preprocess_broadcasted(::Type{UpperHessenberg}, A) = upperhessenbergdata(A)
 
 function copyto!(dest::LowerTriangular, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
@@ -331,9 +332,10 @@ function copyto!(dest::UpperHessenberg, bc::Broadcasted{<:StructuredMatrixStyle}
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
+    bc_unwrapped = preprocess_broadcasted(UpperHessenberg, bc)
     for j in axs[2]
         for i in 1:min(size(dest.data,1), j+1)
-            @inbounds dest.data[i,j] = bc[CartesianIndex(i, j)]
+            @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
         end
     end
     return dest
