@@ -869,7 +869,7 @@ function ^(A::SymSymTri{<:Complex}, p::Real)
     return Symmetric(schurpow(A, p))
 end
 
-for func in (:cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :atanh, :cbrt)
+for func in (:cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :cbrt)
     @eval begin
         function ($func)(A::SelfAdjoint)
             F = eigen(A)
@@ -892,7 +892,7 @@ function cis(A::SelfAdjoint)
     return nonhermitianwrappertype(A)(retmat)
 end
 
-for func in (:acos, :asin)
+for func in (:acos, :asin, :atanh)
     @eval begin
         function ($func)(A::SelfAdjoint)
             F = eigen(A)

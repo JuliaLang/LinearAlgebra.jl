@@ -592,7 +592,7 @@ function schurpow(A::AbstractMatrix, p)
     end
 
     # if A has nonpositive real eigenvalues, retmat is a nonprincipal matrix power.
-    if isreal(retmat)
+    if eltype(A) <: Real && isreal(retmat)
         return real(retmat)
     else
         return retmat
@@ -602,12 +602,11 @@ function (^)(A::AbstractMatrix{T}, p::Real) where T
     checksquare(A)
     # Quicker return if A is diagonal
     if isdiag(A)
-        TT = promote_op(^, T, typeof(p))
-        retmat = copymutable_oftype(A, TT)
-        for i in diagind(retmat, IndexStyle(retmat))
-            retmat[i] = retmat[i] ^ p
+        if T <: Real && any(<(0), diagview(A))
+            return applydiagonal(x -> complex(x)^p, A)
+        else
+            return applydiagonal(x -> x^p, A)
         end
-        return retmat
     end
 
     # For integer powers, use power_by_squaring
@@ -615,13 +614,23 @@ function (^)(A::AbstractMatrix{T}, p::Real) where T
 
     # If possible, use diagonalization
     if ishermitian(A)
-        return (Hermitian(A)^p)
+        return _safe_parent(Hermitian(A)^p)
     end
 
     # Otherwise, use Schur decomposition
     return schurpow(A, p)
 end
 
+function _safe_parent(fA)
+    parentfA = parent(fA)
+    if isa(fA, Hermitian) || isa(fA, Symmetric{<:Real})
+        return copytri_maybe_inplace(parentfA, 'U', true)
+    elseif isa(fA, Symmetric)
+        return copytri_maybe_inplace(parentfA, 'U')
+    else
+        return fA
+    end
+end
 """
     ^(A::AbstractMatrix, p::Number)
 
@@ -918,15 +927,13 @@ julia> log(A)
 function log(A::AbstractMatrix)
     # If possible, use diagonalization
     if isdiag(A) && eltype(A) <: Union{Real,Complex}
-        if eltype(A) <: Real && all(>=(0), diagview(A))
-            return applydiagonal(log, A)
+        if eltype(A) <: Real && any(<(0), diagview(A))
+            return applydiagonal(log ∘ complex, A)
         else
-            return applydiagonal(log∘complex, A)
+            return applydiagonal(log, A)
         end
     elseif ishermitian(A)
-        logHermA = log(Hermitian(A))
-        PH = parent(logHermA)
-        return ishermitian(logHermA) ? copytri_maybe_inplace(PH, 'U', true) : PH
+        return _safe_parent(log(Hermitian(A)))
     elseif istriu(A)
         return triu!(parent(log(UpperTriangular(A))))
     elseif isreal(A)
@@ -1004,13 +1011,14 @@ sqrt(::AbstractMatrix)
 function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
     if checksquare(A) == 0
         return copy(float(A))
-    elseif isdiag(A) && (T <: Complex || all(x -> x ≥ zero(x), diagview(A)))
-        # Real Diagonal sqrt requires each diagonal element to be positive
-        return applydiagonal(sqrt, A)
+    elseif isdiag(A)
+        if T <: Real && any(<(0), diagview(A))
+            return applydiagonal(sqrt ∘ complex, A)
+        else
+            return applydiagonal(sqrt, A)
+        end
     elseif ishermitian(A)
-        sqrtHermA = sqrt(Hermitian(A))
-        PS = parent(sqrtHermA)
-        return ishermitian(sqrtHermA) ? copytri_maybe_inplace(PS, 'U', true) : PS
+        return _safe_parent(sqrt(Hermitian(A)))
     elseif istriu(A)
         return triu!(parent(sqrt(UpperTriangular(A))))
     elseif isreal(A)
@@ -1044,7 +1052,7 @@ sqrt(A::TransposeAbsMat) = transpose(sqrt(parent(A)))
 Computes the real-valued cube root of a real-valued matrix `A`. If `T = cbrt(A)`, then
 we have `T*T*T ≈ A`, see example given below.
 
-If `A` is symmetric, i.e., of type `HermOrSym{<:Real}`, then ([`eigen`](@ref)) is used to
+If `A` is real-symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
 find the cube root. Otherwise, a specialized version of the p-th root algorithm [^S03] is
 utilized, which exploits the real-valued Schur decomposition ([`schur`](@ref))
 to compute the cube root.
@@ -1077,7 +1085,7 @@ function cbrt(A::AbstractMatrix{<:Real})
     elseif isdiag(A)
         return applydiagonal(cbrt, A)
     elseif issymmetric(A)
-        return cbrt(Symmetric(A, :U))
+        return copytri_maybe_inplace(parent(cbrt(Symmetric(A))), 'U')
     else
         S = schur(A)
         return S.Z * _cbrt_quasi_triu!(S.T) * S.Z'
@@ -1118,7 +1126,7 @@ end
 
 Compute the matrix cosine of a square matrix `A`.
 
-If `A` is symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
+If `A` is real-symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
 compute the cosine. Otherwise, the cosine is determined by calling [`exp`](@ref).
 
 # Examples
@@ -1160,7 +1168,7 @@ end
 
 Compute the matrix sine of a square matrix `A`.
 
-If `A` is symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
+If `A` is real-symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
 compute the sine. Otherwise, the sine is determined by calling [`exp`](@ref).
 
 # Examples
@@ -1265,7 +1273,7 @@ end
 
 Compute the matrix tangent of a square matrix `A`.
 
-If `A` is symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
+If `A` is real-symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
 compute the tangent. Otherwise, the tangent is determined by calling [`exp`](@ref).
 
 # Examples
@@ -1357,7 +1365,7 @@ _subadd!!(X, Y) = X - Y, X + Y
 
 Compute the inverse matrix cosine of a square matrix `A`.
 
-If `A` is symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
+If `A` is real-symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
 compute the inverse cosine. Otherwise, the inverse cosine is determined by using
 [`log`](@ref) and [`sqrt`](@ref).  For the theory and logarithmic formulas used to compute
 this function, see [^AH16_1].
@@ -1376,9 +1384,7 @@ function acos(A::AbstractMatrix)
     if isdiag(A)
         return applydiagonal(acos, A)
     elseif ishermitian(A)
-        acosHermA = acos(Hermitian(A))
-        P = parent(acosHermA)
-        return isa(acosHermA, Hermitian) ? copytri_maybe_inplace(P, 'U', true) : P
+        return _safe_parent(acos(Hermitian(A)))
     end
     SchurF = Schur{Complex}(schur(A))
     U = UpperTriangular(SchurF.T)
@@ -1391,7 +1397,7 @@ end
 
 Compute the inverse matrix sine of a square matrix `A`.
 
-If `A` is symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
+If `A` is real-symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
 compute the inverse sine. Otherwise, the inverse sine is determined by using [`log`](@ref)
 and [`sqrt`](@ref).  For the theory and logarithmic formulas used to compute this function,
 see [^AH16_2].
@@ -1425,7 +1431,7 @@ end
 
 Compute the inverse matrix tangent of a square matrix `A`.
 
-If `A` is symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
+If `A` is real-symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used to
 compute the inverse tangent. Otherwise, the inverse tangent is determined by using
 [`log`](@ref).  For the theory and logarithmic formulas used to compute this function, see
 [^AH16_3].
@@ -1436,8 +1442,8 @@ compute the inverse tangent. Otherwise, the inverse tangent is determined by usi
 ```julia-repl
 julia> atan(tan([0.5 0.1; -0.2 0.3]))
 2×2 Matrix{ComplexF64}:
-  0.5+1.38778e-17im  0.1-2.77556e-17im
- -0.2+6.93889e-17im  0.3-4.16334e-17im
+  0.5  0.1
+ -0.2  0.3
 ```
 """
 function atan(A::AbstractMatrix)
@@ -1450,7 +1456,12 @@ function atan(A::AbstractMatrix)
     SchurF = Schur{Complex}(schur(A))
     U = im * UpperTriangular(SchurF.T)
     R = triu!(parent(log((I + U) / (I - U)) / 2im))
-    return SchurF.Z * R * SchurF.Z'
+    retmat = SchurF.Z * R * SchurF.Z'
+    if eltype(A) <: Real
+        return real(retmat)
+    else
+        return retmat
+    end
 end
 
 """
@@ -1465,9 +1476,7 @@ function acosh(A::AbstractMatrix)
     if isdiag(A)
         return applydiagonal(acosh, A)
     elseif ishermitian(A)
-        acoshHermA = acosh(Hermitian(A))
-        P = parent(acoshHermA)
-        return isa(acoshHermA, Hermitian) ? copytri_maybe_inplace(P, 'U', true) : P
+        return _safe_parent(acosh(Hermitian(A)))
     end
     SchurF = Schur{Complex}(schur(A))
     U = UpperTriangular(SchurF.T)
@@ -1493,7 +1502,12 @@ function asinh(A::AbstractMatrix)
     SchurF = Schur{Complex}(schur(A))
     U = UpperTriangular(SchurF.T)
     R = triu!(parent(log(U + sqrt(I + U^2))))
-    return SchurF.Z * R * SchurF.Z'
+    retmat = SchurF.Z * R * SchurF.Z'
+    if eltype(A) <: Real
+        return real(retmat)
+    else
+        return retmat
+    end
 end
 
 """
@@ -1508,8 +1522,7 @@ function atanh(A::AbstractMatrix)
     if isdiag(A)
         return applydiagonal(atanh, A)
     elseif ishermitian(A)
-        P = parent(atanh(Hermitian(A)))
-        return copytri_maybe_inplace(P, 'U', true)
+        return _safe_parent(atanh(Hermitian(A)))
     end
     SchurF = Schur{Complex}(schur(A))
     U = UpperTriangular(SchurF.T)
