@@ -100,9 +100,9 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
         @test typeof(convert(Diagonal{ComplexF32},D)) <: Diagonal{ComplexF32}
         @test typeof(convert(AbstractMatrix{ComplexF32},D)) <: Diagonal{ComplexF32}
 
-        @test Array(real(D)) == real(M)
-        @test Array(abs.(D)) == abs.(M)
-        @test Array(imag(D)) == imag(M)
+        @test convert(Array, real(D)) == real(M)
+        @test convert(Array, abs.(D)) == abs.(M)
+        @test convert(Array, imag(D)) == imag(M)
 
         @test parent(D) == dd
         @test D[1,1] == dd[1]
@@ -242,9 +242,9 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
             @test Array(D*a) ≈ DM*a
             @test Array(D/a) ≈ DM/a
             if elty <: Real
-                @test Array(abs.(D)^a) ≈ abs.(DM)^a
+                @test convert(Array, abs.(D)^a) ≈ abs.(DM)^a
             else
-                @test Array(D^a) ≈ DM^a rtol=max(eps(relty), 1e-15) # TODO: improve precision
+                @test convert(Array, D^a) ≈ DM^a rtol=max(eps(relty), 1e-15) # TODO: improve precision
             end
             @test Diagonal(1:100)^2 == Diagonal((1:100).^2)
             p = 3
@@ -285,24 +285,25 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
         Mherm = Array(Aherm)
         for op in (+, -)
             @test op(Asym, D) isa Symmetric
-            @test Array(op(Asym, D)) ≈ Array(Symmetric(op(Msym, M)))
+            @test convert(Array, op(Asym, D)) ≈ Array(Symmetric(op(Msym, M)))
             @test op(D, Asym) isa Symmetric
-            @test Array(op(D, Asym)) ≈ Array(Symmetric(op(M, Msym)))
+            @test convert(Array, op(D, Asym)) ≈ Array(Symmetric(op(M, Msym)))
             if !(elty <: Real)
                 Dr = real(D)
                 Mr = Array(Dr)
                 @test op(Aherm, Dr) isa Hermitian
-                @test Array(op(Aherm, Dr)) ≈ Array(Hermitian(op(Mherm, Mr)))
+                @test convert(Array, op(Aherm, Dr)) ≈ Array(Hermitian(op(Mherm, Mr)))
                 @test op(Dr, Aherm) isa Hermitian
-                @test Array(op(Dr, Aherm)) ≈ Array(Hermitian(op(Mr, Mherm)))
+                @test convert(Array, op(Dr, Aherm)) ≈ Array(Hermitian(op(Mr, Mherm)))
             end
         end
-        @test Array(D*transpose(Asym)) ≈ M * Array(transpose(Asym))
+        Msym = Array(Asym)
+        @test Array(D*transpose(Asym)) ≈ M * transpose(Msym)
         @test Array(D*adjoint(Asym)) ≈ M * Array(adjoint(Asym))
         @test Array(D*transpose(Aherm)) ≈ M * Array(transpose(Aherm))
         @test Array(D*adjoint(Aherm)) ≈ M * Array(adjoint(Aherm))
-        @test Array(transpose(Asym)*transpose(D)) ≈ Array(transpose(Asym)) * Array(transpose(D))
-        @test Array(transpose(D)*transpose(Asym)) ≈ Array(transpose(D)) * Array(transpose(Asym))
+        @test Array(Asym*transpose(D)) ≈ Msym * Array(transpose(D))
+        @test Array(transpose(D)*Asym) ≈ Array(transpose(D)) * Msym
         @test Array(adjoint(Aherm)*adjoint(D)) ≈ Array(adjoint(Aherm)) * Array(adjoint(D))
         @test Array(adjoint(D)*adjoint(Aherm)) ≈ Array(adjoint(D)) * Array(adjoint(Aherm))
 
