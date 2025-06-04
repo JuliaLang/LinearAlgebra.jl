@@ -11,13 +11,12 @@ const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-using Main.LinearAlgebraTestHelpers
-using .Quaternions
-using .InfiniteArrays
-using .FillArrays
-using .OffsetArrays
-using .SizedArrays
-using .ImmutableArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.InfiniteArrays
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 include("testutils.jl") # test_approx_eq_modphase
 

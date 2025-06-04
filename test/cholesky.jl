@@ -12,8 +12,7 @@ const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-using Main.LinearAlgebraTestHelpers
-using .Quaternions
+using Main.LinearAlgebraTestHelpers.Quaternions
 
 function unary_ops_tests(a, ca, tol; n=size(a, 1))
     @test inv(ca)*a ≈ Matrix(I, n, n)
