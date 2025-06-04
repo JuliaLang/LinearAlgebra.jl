@@ -9,14 +9,14 @@ using Test, LinearAlgebra, Random
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($TESTHELPERS, "Quaternions.jl"))
-using .Main.Quaternions
+include(joinpath(TESTHELPERS, "Quaternions.jl"))
+using .Quaternions
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using .Main.SizedArrays
+include(joinpath(TESTHELPERS, "SizedArrays.jl"))
+using .SizedArrays
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($TESTHELPERS, "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
+using .ImmutableArrays
 
 Random.seed!(1010)
 

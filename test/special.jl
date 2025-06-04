@@ -10,8 +10,8 @@ using LinearAlgebra: rmul!, BandIndex
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using .Main.SizedArrays
+include(joinpath(TESTHELPERS, "SizedArrays.jl"))
+using .SizedArrays
 
 n= 10 #Size of matrix to test
 Random.seed!(1)

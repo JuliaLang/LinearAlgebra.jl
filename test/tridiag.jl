@@ -9,23 +9,23 @@ using Test, LinearAlgebra, Random
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($TESTHELPERS, "Quaternions.jl"))
-using .Main.Quaternions
+include(joinpath(TESTHELPERS, "Quaternions.jl"))
+using .Quaternions
 
-isdefined(Main, :InfiniteArrays) || @eval Main include(joinpath($TESTHELPERS, "InfiniteArrays.jl"))
-using .Main.InfiniteArrays
+include(joinpath(TESTHELPERS, "InfiniteArrays.jl"))
+using .InfiniteArrays
 
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($TESTHELPERS, "FillArrays.jl"))
-using .Main.FillArrays
+include(joinpath(TESTHELPERS, "FillArrays.jl"))
+using .FillArrays
 
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($TESTHELPERS, "OffsetArrays.jl"))
-using .Main.OffsetArrays
+include(joinpath(TESTHELPERS, "OffsetArrays.jl"))
+using .OffsetArrays
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using .Main.SizedArrays
+include(joinpath(TESTHELPERS, "SizedArrays.jl"))
+using .SizedArrays
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($TESTHELPERS, "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
+using .ImmutableArrays
 
 include("testutils.jl") # test_approx_eq_modphase
 

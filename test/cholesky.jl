@@ -11,8 +11,8 @@ using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted,
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($TESTHELPERS, "Quaternions.jl"))
-using .Main.Quaternions
+include(joinpath(TESTHELPERS, "Quaternions.jl"))
+using .Quaternions
 
 function unary_ops_tests(a, ca, tol; n=size(a, 1))
     @test inv(ca)*a ≈ Matrix(I, n, n)

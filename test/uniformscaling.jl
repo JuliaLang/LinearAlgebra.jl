@@ -9,10 +9,11 @@ using Test, LinearAlgebra, Random
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($TESTHELPERS, "Quaternions.jl"))
-using .Main.Quaternions
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($TESTHELPERS, "OffsetArrays.jl"))
-using .Main.OffsetArrays
+include(joinpath(TESTHELPERS, "Quaternions.jl"))
+using .Quaternions
+
+include(joinpath(TESTHELPERS, "OffsetArrays.jl"))
+using .OffsetArrays
 
 Random.seed!(1234543)
 

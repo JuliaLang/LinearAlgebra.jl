@@ -9,8 +9,8 @@ using Test, LinearAlgebra
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using .Main.SizedArrays
+include(joinpath(TESTHELPERS, "SizedArrays.jl"))
+using .SizedArrays
 
 @testset "broadcast[!] over combinations of scalars, structured matrices, and dense vectors/matrices" begin
     @testset for N in (0,1,2,10) # some edge cases, and a structured case

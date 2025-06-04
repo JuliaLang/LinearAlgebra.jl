@@ -9,10 +9,10 @@ using Test, LinearAlgebra
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($TESTHELPERS, "OffsetArrays.jl"))
+include(joinpath(TESTHELPERS, "OffsetArrays.jl"))
 using .Main.OffsetArrays
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($TESTHELPERS, "ImmutableArrays.jl"))
+include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
 using .Main.ImmutableArrays
 
 @testset "Adjoint and Transpose inner constructor basics" begin

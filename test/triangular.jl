@@ -11,14 +11,14 @@ using Test: GenericArray
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using .Main.SizedArrays
+include(joinpath(TESTHELPERS, "SizedArrays.jl"))
+using .SizedArrays
 
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($TESTHELPERS, "FillArrays.jl"))
-using .Main.FillArrays
+include(joinpath(TESTHELPERS, "FillArrays.jl"))
+using .FillArrays
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($TESTHELPERS, "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
+using .ImmutableArrays
 
 n = 9
 Random.seed!(123)

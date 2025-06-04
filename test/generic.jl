@@ -11,20 +11,20 @@ using LinearAlgebra: isbanded
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($TESTHELPERS, "Quaternions.jl"))
-using .Main.Quaternions
+include(joinpath(TESTHELPERS, "Quaternions.jl"))
+using .Quaternions
 
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($TESTHELPERS, "OffsetArrays.jl"))
-using .Main.OffsetArrays
+include(joinpath(TESTHELPERS, "OffsetArrays.jl"))
+using .OffsetArrays
 
-isdefined(Main, :DualNumbers) || @eval Main include(joinpath($TESTHELPERS, "DualNumbers.jl"))
-using .Main.DualNumbers
+include(joinpath(TESTHELPERS, "DualNumbers.jl"))
+using .DualNumbers
 
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($TESTHELPERS, "FillArrays.jl"))
-using .Main.FillArrays
+include(joinpath(TESTHELPERS, "FillArrays.jl"))
+using .FillArrays
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using .Main.SizedArrays
+include(joinpath(TESTHELPERS, "SizedArrays.jl"))
+using .SizedArrays
 
 Random.seed!(123)
 

@@ -9,11 +9,11 @@ using Test, LinearAlgebra, Random
 const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using .Main.SizedArrays
+include(joinpath(TESTHELPERS, "SizedArrays.jl"))
+using .SizedArrays
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($TESTHELPERS, "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
+using .ImmutableArrays
 
 # for tuple tests below
 ≅(x,y) = all(p -> p[1] ≈ p[2], zip(x,y))
