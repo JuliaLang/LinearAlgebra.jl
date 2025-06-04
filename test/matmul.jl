@@ -8,8 +8,8 @@ using Base: rtoldefault
 using Test, LinearAlgebra, Random
 using LinearAlgebra: mul!, Symmetric, Hermitian
 
-const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
 
 include(joinpath(TESTHELPERS, "SizedArrays.jl"))
 using .SizedArrays

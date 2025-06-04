@@ -6,8 +6,8 @@ using Test, LinearAlgebra, Random
 
 Random.seed!(1234321)
 
-const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
 
 include(joinpath(TESTHELPERS, "Furlongs.jl"))
 using .Furlongs

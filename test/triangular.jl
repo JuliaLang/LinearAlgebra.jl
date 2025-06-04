@@ -8,8 +8,8 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: errorbounds, transpose!, BandIndex
 using Test: GenericArray
 
-const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
 
 include(joinpath(TESTHELPERS, "SizedArrays.jl"))
 using .SizedArrays
@@ -246,7 +246,7 @@ end
 end
 
 # dimensional correctness:
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
 
 @testset "AbstractArray constructor should preserve underlying storage type" begin
     # tests corresponding to #34995
