@@ -2004,7 +2004,12 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     atol::Real=0,
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
-    d = norm_x_minus_y(x, y)
+    d = if isempty(x) && isempty(y)
+        Base.promote_shape(size(x), size(y)) # ensure same size
+        norm(zero(eltype(x)) - zero(eltype(y)))
+    else
+        norm_x_minus_y(x, y)
+    end
     if isfinite(d)
         return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
     else
