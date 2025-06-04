@@ -9,10 +9,10 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: mul!, Symmetric, Hermitian
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-include(joinpath(TESTHELPERS, "SizedArrays.jl"))
-using .SizedArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 ## Test Julia fallbacks to BLAS routines
 

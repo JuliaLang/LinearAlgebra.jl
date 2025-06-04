@@ -9,22 +9,14 @@ using Test: GenericArray
 using LinearAlgebra: isbanded
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-include(joinpath(TESTHELPERS, "Quaternions.jl"))
-using .Quaternions
-
-include(joinpath(TESTHELPERS, "OffsetArrays.jl"))
-using .OffsetArrays
-
-include(joinpath(TESTHELPERS, "DualNumbers.jl"))
-using .DualNumbers
-
-include(joinpath(TESTHELPERS, "FillArrays.jl"))
-using .FillArrays
-
-include(joinpath(TESTHELPERS, "SizedArrays.jl"))
-using .SizedArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.DualNumbers
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 Random.seed!(123)
 

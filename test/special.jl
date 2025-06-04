@@ -8,10 +8,10 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: rmul!, BandIndex
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-include(joinpath(TESTHELPERS, "SizedArrays.jl"))
-using .SizedArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 n= 10 #Size of matrix to test
 Random.seed!(1)

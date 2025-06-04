@@ -9,13 +9,11 @@ using LinearAlgebra: BlasComplex, BlasFloat, BlasReal
 using Test: GenericArray
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-include(joinpath(TESTHELPERS, "FillArrays.jl"))
-import .FillArrays
-
-include(joinpath(TESTHELPERS, "SizedArrays.jl"))
-using .SizedArrays
+import Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 @testset "Check that non-floats are correctly promoted" begin
     @test [1 0 0; 0 1 0]\[1,1] ≈ [1;1;0]

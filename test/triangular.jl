@@ -9,16 +9,12 @@ using LinearAlgebra: errorbounds, transpose!, BandIndex
 using Test: GenericArray
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-include(joinpath(TESTHELPERS, "SizedArrays.jl"))
-using .SizedArrays
-
-include(joinpath(TESTHELPERS, "FillArrays.jl"))
-using .FillArrays
-
-include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
-using .ImmutableArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 n = 9
 Random.seed!(123)

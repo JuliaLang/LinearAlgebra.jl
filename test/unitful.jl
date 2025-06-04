@@ -7,10 +7,10 @@ using Test, LinearAlgebra, Random
 Random.seed!(1234321)
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-include(joinpath(TESTHELPERS, "Furlongs.jl"))
-using .Furlongs
+using Main.LinearAlgebraTestHelpers.Furlongs
 
 LinearAlgebra.sylvester(a::Furlong,b::Furlong,c::Furlong) = -c / (a + b)
 

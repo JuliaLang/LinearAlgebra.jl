@@ -7,25 +7,15 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra, Random
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-include(joinpath(TESTHELPERS, "Quaternions.jl"))
-using .Quaternions
-
-include(joinpath(TESTHELPERS, "InfiniteArrays.jl"))
-using .InfiniteArrays
-
-include(joinpath(TESTHELPERS, "FillArrays.jl"))
-using .FillArrays
-
-include(joinpath(TESTHELPERS, "OffsetArrays.jl"))
-using .OffsetArrays
-
-include(joinpath(TESTHELPERS, "SizedArrays.jl"))
-using .SizedArrays
-
-include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
-using .ImmutableArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.InfiniteArrays
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 include("testutils.jl") # test_approx_eq_modphase
 

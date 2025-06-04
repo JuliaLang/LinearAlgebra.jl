@@ -9,9 +9,10 @@ using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted,
     PosDefException, RankDeficientException, chkfullrank
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-include(joinpath(TESTHELPERS, "Quaternions.jl"))
+using Main.LinearAlgebraTestHelpers
 using .Quaternions
 
 function unary_ops_tests(a, ca, tol; n=size(a, 1))

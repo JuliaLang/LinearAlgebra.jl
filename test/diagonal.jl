@@ -8,22 +8,14 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasFloat, BlasComplex
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-include(joinpath(TESTHELPERS, "OffsetArrays.jl"))
-using .OffsetArrays
-
-include(joinpath(TESTHELPERS, "InfiniteArrays.jl"))
-using .InfiniteArrays
-
-include(joinpath(TESTHELPERS, "FillArrays.jl"))
-using .FillArrays
-
-include(joinpath(TESTHELPERS, "SizedArrays.jl"))
-using .SizedArrays
-
-include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
-using .ImmutableArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.InfiniteArrays
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 const n=12 # Size of matrix problem to test
 Random.seed!(1)
