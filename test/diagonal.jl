@@ -178,8 +178,8 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
             @test D*v ≈ DM*v atol=n*eps(relty)*(1+(elty<:Complex))
             @test D*U ≈ DM*U atol=n^2*eps(relty)*(1+(elty<:Complex))
 
-            @test transpose(U)*D ≈ transpose(U)*Array(D)
-            @test U'*D ≈ U'*Array(D)
+            @test transpose(U)*D ≈ transpose(U)*M
+            @test U'*D ≈ U'*M
 
             if relty != BigFloat
                 atol_two = 2n^2 * eps(relty) * (1 + (elty <: Complex))
@@ -214,12 +214,12 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
                 @test_throws DimensionMismatch ldiv!(D, fill(elty(1), n + 1))
                 @test_throws SingularException ldiv!(Diagonal(zeros(relty, n)), copy(v))
                 b = rand(elty, n, n)
-                @test ldiv!(D, copy(b)) ≈ Array(D)\Array(b)
+                @test ldiv!(D, copy(b)) ≈ M\b
                 @test_throws SingularException ldiv!(Diagonal(zeros(elty, n)), copy(b))
                 b = view(rand(elty, n), Vector(1:n))
                 b2 = copy(b)
                 c = ldiv!(D, b)
-                d = Array(D)\b2
+                d = M\b2
                 @test c ≈ d
                 @test_throws SingularException ldiv!(Diagonal(zeros(elty, n)), b)
                 b = rand(elty, n+1, n+1)
@@ -256,17 +256,17 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
 
         if relty <: BlasFloat
             for b in (rand(elty,n,n), rand(elty,n))
-                @test lmul!(copy(D), copy(b)) ≈ Array(D)*Array(b)
-                @test lmul!(transpose(copy(D)), copy(b)) ≈ transpose(Array(D))*Array(b)
-                @test lmul!(adjoint(copy(D)), copy(b)) ≈ Array(D)'*Array(b)
+                @test lmul!(copy(D), copy(b)) ≈ M*b
+                @test lmul!(transpose(copy(D)), copy(b)) ≈ transpose(M)*b
+                @test lmul!(adjoint(copy(D)), copy(b)) ≈ M'*b
             end
         end
 
         #a few missing mults
         bd = Bidiagonal(D2)
-        @test D*transpose(D2) ≈ Array(D)*transpose(Array(D2))
-        @test D2*transpose(D) ≈ Array(D2)*transpose(Array(D))
-        @test D2*D' ≈ Array(D2)*Array(D)'
+        @test D*transpose(D2) ≈ M*transpose(DM2)
+        @test D2*transpose(D) ≈ DM2*transpose(M)
+        @test D2*D' ≈ DM2*M'
 
         #division of two Diagonals
         @test D/D2 ≈ Diagonal(D.diag./D2.diag)
@@ -281,23 +281,26 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
         A     = rand(elty, n, n)
         Asym  = Symmetric(A + transpose(A), :U)
         Aherm = Hermitian(A + adjoint(A), :U)
+        Msym = Array(Asym)
+        Mherm = Array(Aherm)
         for op in (+, -)
             @test op(Asym, D) isa Symmetric
-            @test Array(op(Asym, D)) ≈ Array(Symmetric(op(Array(Asym), Array(D))))
+            @test Array(op(Asym, D)) ≈ Array(Symmetric(op(Msym, M)))
             @test op(D, Asym) isa Symmetric
-            @test Array(op(D, Asym)) ≈ Array(Symmetric(op(Array(D), Array(Asym))))
+            @test Array(op(D, Asym)) ≈ Array(Symmetric(op(M, Msym)))
             if !(elty <: Real)
                 Dr = real(D)
+                Mr = Array(Dr)
                 @test op(Aherm, Dr) isa Hermitian
-                @test Array(op(Aherm, Dr)) ≈ Array(Hermitian(op(Array(Aherm), Array(Dr))))
+                @test Array(op(Aherm, Dr)) ≈ Array(Hermitian(op(Mherm, Mr)))
                 @test op(Dr, Aherm) isa Hermitian
-                @test Array(op(Dr, Aherm)) ≈ Array(Hermitian(op(Array(Dr), Array(Aherm))))
+                @test Array(op(Dr, Aherm)) ≈ Array(Hermitian(op(Mr, Mherm)))
             end
         end
-        @test Array(D*transpose(Asym)) ≈ Array(D) * Array(transpose(Asym))
-        @test Array(D*adjoint(Asym)) ≈ Array(D) * Array(adjoint(Asym))
-        @test Array(D*transpose(Aherm)) ≈ Array(D) * Array(transpose(Aherm))
-        @test Array(D*adjoint(Aherm)) ≈ Array(D) * Array(adjoint(Aherm))
+        @test Array(D*transpose(Asym)) ≈ M * Array(transpose(Asym))
+        @test Array(D*adjoint(Asym)) ≈ M * Array(adjoint(Asym))
+        @test Array(D*transpose(Aherm)) ≈ M * Array(transpose(Aherm))
+        @test Array(D*adjoint(Aherm)) ≈ M * Array(adjoint(Aherm))
         @test Array(transpose(Asym)*transpose(D)) ≈ Array(transpose(Asym)) * Array(transpose(D))
         @test Array(transpose(D)*transpose(Asym)) ≈ Array(transpose(D)) * Array(transpose(Asym))
         @test Array(adjoint(Aherm)*adjoint(D)) ≈ Array(adjoint(Aherm)) * Array(adjoint(D))
@@ -305,9 +308,9 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
 
         # Performance specialisations for A*_mul_B!
         vvv = similar(vv)
-        @test (r = Matrix(D) * vv   ; mul!(vvv, D, vv)  ≈ r ≈ vvv)
-        @test (r = Matrix(D)' * vv  ; mul!(vvv, adjoint(D), vv) ≈ r ≈ vvv)
-        @test (r = transpose(Matrix(D)) * vv ; mul!(vvv, transpose(D), vv) ≈ r ≈ vvv)
+        @test (r = M * vv   ; mul!(vvv, D, vv)  ≈ r ≈ vvv)
+        @test (r = M' * vv  ; mul!(vvv, adjoint(D), vv) ≈ r ≈ vvv)
+        @test (r = transpose(M) * vv ; mul!(vvv, transpose(D), vv) ≈ r ≈ vvv)
 
         UUU = similar(UU)
         for transformA in (identity, adjoint, transpose)
@@ -319,55 +322,62 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
 
         alpha = elty(randn())  # randn(elty) does not work with BigFloat
         beta = elty(randn())
-        @test begin
+        @testset begin
             vvv = similar(vv)
             vvv .= randn(size(vvv))  # randn!(vvv) does not work with BigFloat
-            r = alpha * Matrix(D) * vv + beta * vvv
-            mul!(vvv, D, vv, alpha, beta)  ≈ r ≈ vvv
+            r = alpha * M * vv + beta * vvv
+            @test mul!(vvv, D, vv, alpha, beta) === vvv
+            @test r ≈ vvv
         end
-        @test begin
+        @testset begin
             vvv = similar(vv)
             vvv .= randn(size(vvv))  # randn!(vvv) does not work with BigFloat
-            r = alpha * Matrix(D)' * vv + beta * vvv
-            mul!(vvv, adjoint(D), vv, alpha, beta) ≈ r ≈ vvv
+            r = alpha * M' * vv + beta * vvv
+            @test mul!(vvv, adjoint(D), vv, alpha, beta) === vvv
+            @test r ≈ vvv
         end
-        @test begin
+        @testset begin
             vvv = similar(vv)
             vvv .= randn(size(vvv))  # randn!(vvv) does not work with BigFloat
-            r = alpha * transpose(Matrix(D)) * vv + beta * vvv
-            mul!(vvv, transpose(D), vv, alpha, beta) ≈ r ≈ vvv
+            r = alpha * transpose(M) * vv + beta * vvv
+            @test mul!(vvv, transpose(D), vv, alpha, beta) === vvv
+            @test r ≈ vvv
         end
 
-        @test begin
+        @testset begin
             UUU = similar(UU)
             UUU .= randn(size(UUU))  # randn!(UUU) does not work with BigFloat
-            r = alpha * Matrix(D) * UU + beta * UUU
-            mul!(UUU, D, UU, alpha, beta) ≈ r ≈ UUU
+            r = alpha * M * UU + beta * UUU
+            @test mul!(UUU, D, UU, alpha, beta) === UUU
+            @test r ≈ UUU
         end
-        @test begin
+        @testset begin
             UUU = similar(UU)
             UUU .= randn(size(UUU))  # randn!(UUU) does not work with BigFloat
-            r = alpha * Matrix(D)' * UU + beta * UUU
-            mul!(UUU, adjoint(D), UU, alpha, beta) ≈ r ≈ UUU
+            r = alpha * M' * UU + beta * UUU
+            @test mul!(UUU, adjoint(D), UU, alpha, beta) === UUU
+            @test r ≈ UUU
         end
-        @test begin
+        @testset begin
             UUU = similar(UU)
             UUU .= randn(size(UUU))  # randn!(UUU) does not work with BigFloat
-            r = alpha * transpose(Matrix(D)) * UU + beta * UUU
-            mul!(UUU, transpose(D), UU, alpha, beta) ≈ r ≈ UUU
+            r = alpha * transpose(M) * UU + beta * UUU
+            @test mul!(UUU, transpose(D), UU, alpha, beta) === UUU
+            @test r ≈ UUU
         end
 
         # make sure that mul!(A, {Adj|Trans}(B)) works with B as a Diagonal
         VV = Array(D)
-        DD = copy(D)
-        r  = VV * Matrix(D)
-        @test Array(rmul!(VV, DD)) ≈ r ≈ Array(D)*Array(D)
-        DD = copy(D)
-        r  = VV * transpose(Array(D))
-        @test Array(rmul!(VV, transpose(DD))) ≈ r
-        DD = copy(D)
-        r  = VV * Array(D)'
-        @test Array(rmul!(VV, adjoint(DD))) ≈ r
+        r  = VV * M
+        @test rmul!(VV, D) ≈ r ≈ M*M
+        if transpose(D) !== D
+            r  = VV * transpose(M)
+            @test rmul!(VV, transpose(D)) ≈ r
+        end
+        if adjoint(D) !== D
+            r  = VV * M'
+            @test rmul!(VV, adjoint(D)) ≈ r
+        end
 
         # kron
         D3 = Diagonal(convert(Vector{elty}, rand(n÷2)))
@@ -545,16 +555,17 @@ Base.size(x::SimpleVector) = size(x.vec)
 
 @testset "kron (issue #46456)" for repr in Any[identity, SimpleVector]
     A = Diagonal(repr(randn(10)))
+    M = Array(A)
     BL = Bidiagonal(repr(randn(10)), repr(randn(9)), :L)
     BU = Bidiagonal(repr(randn(10)), repr(randn(9)), :U)
     C = SymTridiagonal(repr(randn(10)), repr(randn(9)))
     Cl = SymTridiagonal(repr(randn(10)), repr(randn(10)))
     D = Tridiagonal(repr(randn(9)), repr(randn(10)), repr(randn(9)))
-    @test kron(A, BL)::Bidiagonal == kron(Array(A), Array(BL))
-    @test kron(A, BU)::Bidiagonal == kron(Array(A), Array(BU))
-    @test kron(A, C)::SymTridiagonal == kron(Array(A), Array(C))
-    @test kron(A, Cl)::SymTridiagonal == kron(Array(A), Array(Cl))
-    @test kron(A, D)::Tridiagonal == kron(Array(A), Array(D))
+    @test kron(A, BL)::Bidiagonal == kron(M, Array(BL))
+    @test kron(A, BU)::Bidiagonal == kron(M, Array(BU))
+    @test kron(A, C)::SymTridiagonal == kron(M, Array(C))
+    @test kron(A, Cl)::SymTridiagonal == kron(M, Array(Cl))
+    @test kron(A, D)::Tridiagonal == kron(M, Array(D))
 end
 
 @testset "svdvals and eigvals (#11120/#11247)" begin
@@ -627,9 +638,10 @@ end
 
 @testset "Test reverse" begin
     D = Diagonal(randn(5))
-    @test reverse(D, dims=1) == reverse(Matrix(D), dims=1)
-    @test reverse(D, dims=2) == reverse(Matrix(D), dims=2)
-    @test reverse(D)::Diagonal == reverse(Matrix(D))
+    M = Matrix(D)
+    @test reverse(D, dims=1) == reverse(M, dims=1)
+    @test reverse(D, dims=2) == reverse(M, dims=2)
+    @test reverse(D)::Diagonal == reverse(M)
 end
 
 @testset "inverse" begin
@@ -645,8 +657,9 @@ end
 @testset "pseudoinverse" begin
     for d in Any[randn(n), zeros(n), Int[], [0, 2, 0.003], [0im, 1+2im, 0.003im], [0//1, 2//1, 3//100], [0//1, 1//1+2im, 3im//100]]
         D = Diagonal(d)
-        @test pinv(D) ≈ pinv(Array(D))
-        @test pinv(D, 1.0e-2) ≈ pinv(Array(D), 1.0e-2)
+        M = Array(D)
+        @test pinv(D) ≈ pinv(M)
+        @test pinv(D, 1.0e-2) ≈ pinv(M, 1.0e-2)
     end
 end
 
@@ -662,18 +675,20 @@ end
 @test Matrix(1.0I, 5, 5) \ Diagonal(fill(1.,5)) == Matrix(I, 5, 5)
 
 @testset "Triangular and Diagonal" begin
-    function _test_matrix(type)
+    function _randomarray(type, ::Val{N} = Val(2)) where {N}
+        sz = ntuple(_->5, N)
         if type == Int
-            return rand(1:9, 5, 5)
+            return rand(1:9, sz...)
         else
-            return randn(type, 5, 5)
+            return randn(type, sz...)
         end
     end
     types = (Float64, Int, ComplexF64)
     for ta in types
-        D = Diagonal(_test_matrix(ta))
+        D = Diagonal(_randomarray(ta, Val(1)))
+        M = Matrix(D)
         for tb in types
-            B = _test_matrix(tb)
+            B = _randomarray(tb, Val(2))
             Tmats = (LowerTriangular(B), UnitLowerTriangular(B), UpperTriangular(B), UnitUpperTriangular(B))
             restypes = (LowerTriangular, LowerTriangular, UpperTriangular, UpperTriangular)
             for (T, rtype) in zip(Tmats, restypes)
@@ -681,32 +696,33 @@ end
 
                 # Triangular * Diagonal
                 R = T * D
-                @test R ≈ Array(T) * Array(D)
+                TA = Array(T)
+                @test R ≈ TA * M
                 @test isa(R, rtype)
 
                 # Diagonal * Triangular
                 R = D * T
-                @test R ≈ Array(D) * Array(T)
+                @test R ≈ M * TA
                 @test isa(R, rtype)
 
                 # Adjoint of Triangular * Diagonal
                 R = T' * D
-                @test R ≈ Array(T)' * Array(D)
+                @test R ≈ TA' * M
                 @test isa(R, adjtype)
 
                 # Diagonal * Adjoint of Triangular
                 R = D * T'
-                @test R ≈ Array(D) * Array(T)'
+                @test R ≈ M * TA'
                 @test isa(R, adjtype)
 
                 # Transpose of Triangular * Diagonal
                 R = transpose(T) * D
-                @test R ≈ transpose(Array(T)) * Array(D)
+                @test R ≈ transpose(TA) * M
                 @test isa(R, adjtype)
 
                 # Diagonal * Transpose of Triangular
                 R = D * transpose(T)
-                @test R ≈ Array(D) * transpose(Array(T))
+                @test R ≈ M * transpose(TA)
                 @test isa(R, adjtype)
             end
         end
@@ -1333,7 +1349,7 @@ end
 end
 
 @testset "diagonal triple multiplication (#49005)" begin
-    n = 10
+    local n = 10
     @test *(Diagonal(ones(n)), Diagonal(1:n), Diagonal(ones(n))) isa Diagonal
     @test_throws DimensionMismatch (*(Diagonal(ones(n)), Diagonal(1:n), Diagonal(ones(n+1))))
     @test_throws DimensionMismatch (*(Diagonal(ones(n)), Diagonal(1:n+1), Diagonal(ones(n+1))))
@@ -1449,10 +1465,12 @@ end
     for p in ([1 2; 3 4], [1 2+im; 2-im 4+2im])
         m = SizedArrays.SizedArray{(2,2)}(p)
         D = Diagonal(fill(m, 2))
+        M = Matrix(D)
         for T in (Symmetric, Hermitian)
             S = T(fill(m, 2, 2))
-            @test D + S == Array(D) + Array(S)
-            @test S + D == Array(S) + Array(D)
+            SA = Array(S)
+            @test D + S == M + SA
+            @test S + D == SA + M
         end
     end
 end
@@ -1464,12 +1482,14 @@ end
 
 @testset "zeros in kron with block matrices" begin
     D = Diagonal(1:4)
+    M = Matrix(D)
     B = reshape([ones(2,2), ones(3,2), ones(2,3), ones(3,3)], 2, 2)
-    @test kron(D, B) == kron(Array(D), B)
-    @test kron(B, D) == kron(B, Array(D))
+    @test kron(D, B) == kron(M, B)
+    @test kron(B, D) == kron(B, M)
     D2 = Diagonal([ones(2,2), ones(3,3)])
-    @test kron(D, D2) == kron(D, Array{eltype(D2)}(D2))
-    @test kron(D2, D) == kron(Array{eltype(D2)}(D2), D)
+    M2 = Array{eltype(D2)}(D2)
+    @test kron(D, D2) == kron(D, M2)
+    @test kron(D2, D) == kron(M2, D)
 end
 
 @testset "opnorms" begin
