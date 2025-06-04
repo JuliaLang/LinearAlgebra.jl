@@ -298,14 +298,14 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
             end
         end
         Msym = Array(Asym)
-        @test Array(D*transpose(Asym)) ≈ M * transpose(Msym)
-        @test Array(D*adjoint(Asym)) ≈ M * Array(adjoint(Asym))
-        @test Array(D*transpose(Aherm)) ≈ M * Array(transpose(Aherm))
-        @test Array(D*adjoint(Aherm)) ≈ M * Array(adjoint(Aherm))
-        @test Array(Asym*transpose(D)) ≈ Msym * Array(transpose(D))
-        @test Array(transpose(D)*Asym) ≈ Array(transpose(D)) * Msym
-        @test Array(adjoint(Aherm)*adjoint(D)) ≈ Array(adjoint(Aherm)) * Array(adjoint(D))
-        @test Array(adjoint(D)*adjoint(Aherm)) ≈ Array(adjoint(D)) * Array(adjoint(Aherm))
+        @test convert(Array, D*transpose(Asym)) ≈ M * convert(Array, transpose(Msym))
+        @test convert(Array, D*adjoint(Asym)) ≈ M * convert(Array, adjoint(Asym))
+        @test convert(Array, D*transpose(Aherm)) ≈ M * convert(Array, transpose(Aherm))
+        @test convert(Array, D*adjoint(Aherm)) ≈ M * convert(Array, adjoint(Aherm))
+        @test convert(Array, Asym*transpose(D)) ≈ Msym * convert(Array, transpose(D))
+        @test convert(Array, transpose(D)*Asym) ≈ convert(Array, transpose(D)) * Msym
+        @test convert(Array, adjoint(Aherm)*adjoint(D)) ≈ convert(Array, adjoint(Aherm)) * convert(Array, adjoint(D))
+        @test convert(Array, adjoint(D)*adjoint(Aherm)) ≈ convert(Array, adjoint(D)) * convert(Array, adjoint(Aherm))
 
         # Performance specialisations for A*_mul_B!
         vvv = similar(vv)
