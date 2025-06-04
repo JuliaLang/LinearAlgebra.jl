@@ -2004,7 +2004,7 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     atol::Real=0,
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
-    d = norm(x - y)
+    d = norm_x_minus_y(x, y)
     if isfinite(d)
         return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
     else
@@ -2012,6 +2012,12 @@ function isapprox(x::AbstractArray, y::AbstractArray;
         # (mapreduce instead of all for greater generality [#44893])
         return mapreduce((a, b) -> isapprox(a, b; rtol=rtol, atol=atol, nans=nans), &, x, y)
     end
+end
+
+norm_x_minus_y(x, y) = norm(x - y)
+function norm_x_minus_y(x::Array, y::Array)
+    Base.promote_shape(size(x), size(y)) # ensure same size
+    norm(Iterators.map(splat(-), zip(x,y)))
 end
 
 """
