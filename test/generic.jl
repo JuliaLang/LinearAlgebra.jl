@@ -938,4 +938,12 @@ end
     @test B == A2
 end
 
+@testset "isapprox for Arrays" begin
+    A = rand(3,3)
+    isapprox(A, A)
+    n = @allocated isapprox(A, A)
+    @test n == 0
+    @test Int[] ≈ Int[]
+end
+
 end # module TestGeneric
