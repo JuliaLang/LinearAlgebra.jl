@@ -7,11 +7,11 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra, Random
 using LinearAlgebra: rmul!, BandIndex
 
-const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using .Main.SizedArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 n= 10 #Size of matrix to test
 Random.seed!(1)

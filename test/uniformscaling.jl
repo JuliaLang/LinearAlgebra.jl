@@ -6,13 +6,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 
-const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($TESTHELPERS, "Quaternions.jl"))
-using .Main.Quaternions
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($TESTHELPERS, "OffsetArrays.jl"))
-using .Main.OffsetArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.OffsetArrays
 
 Random.seed!(1234543)
 

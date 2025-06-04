@@ -6,14 +6,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra
 
-const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($TESTHELPERS, "OffsetArrays.jl"))
-using .Main.OffsetArrays
-
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($TESTHELPERS, "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]

@@ -8,23 +8,15 @@ using Test, LinearAlgebra, Random
 using Test: GenericArray
 using LinearAlgebra: isbanded
 
-const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($TESTHELPERS, "Quaternions.jl"))
-using .Main.Quaternions
-
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($TESTHELPERS, "OffsetArrays.jl"))
-using .Main.OffsetArrays
-
-isdefined(Main, :DualNumbers) || @eval Main include(joinpath($TESTHELPERS, "DualNumbers.jl"))
-using .Main.DualNumbers
-
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($TESTHELPERS, "FillArrays.jl"))
-using .Main.FillArrays
-
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using .Main.SizedArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.DualNumbers
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 Random.seed!(123)
 

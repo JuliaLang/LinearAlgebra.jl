@@ -8,14 +8,12 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal
 using Test: GenericArray
 
-const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($TESTHELPERS, "FillArrays.jl"))
-import Main.FillArrays
-
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($TESTHELPERS, "SizedArrays.jl"))
-using Main.SizedArrays
+import Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 @testset "Check that non-floats are correctly promoted" begin
     @test [1 0 0; 0 1 0]\[1,1] ≈ [1;1;0]
