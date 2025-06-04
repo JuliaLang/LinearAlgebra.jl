@@ -26,7 +26,7 @@ include(joinpath(TESTHELPERS, "SizedArrays.jl"))
 using .SizedArrays
 
 include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+using .ImmutableArrays
 
 include("testutils.jl") # test_approx_eq_modphase
 

@@ -10,10 +10,10 @@ const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
 
 include(joinpath(TESTHELPERS, "OffsetArrays.jl"))
-using .Main.OffsetArrays
+using .OffsetArrays
 
 include(joinpath(TESTHELPERS, "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+using .ImmutableArrays
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
