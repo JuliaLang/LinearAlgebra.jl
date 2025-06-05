@@ -2188,7 +2188,7 @@ for (geevx, ggev, ggev3, elty) in
         function ggev!(jobvl::AbstractChar, jobvr::AbstractChar, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             require_one_based_indexing(A, B)
             chkstride1(A,B)
-            n, m = checksquare(A,B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
@@ -2252,7 +2252,7 @@ for (geevx, ggev, ggev3, elty) in
         function ggev3!(jobvl::AbstractChar, jobvr::AbstractChar, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             require_one_based_indexing(A, B)
             chkstride1(A,B)
-            n, m = checksquare(A,B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
