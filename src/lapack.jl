@@ -2188,7 +2188,7 @@ for (geevx, ggev, ggev3, elty) in
         function ggev!(jobvl::AbstractChar, jobvr::AbstractChar, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             require_one_based_indexing(A, B)
             chkstride1(A,B)
-            n, m = checksquare(A,B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
@@ -2252,7 +2252,7 @@ for (geevx, ggev, ggev3, elty) in
         function ggev3!(jobvl::AbstractChar, jobvr::AbstractChar, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             require_one_based_indexing(A, B)
             chkstride1(A,B)
-            n, m = checksquare(A,B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
@@ -2403,7 +2403,7 @@ for (geevx, ggev, ggev3, elty, relty) in
         function ggev!(jobvl::AbstractChar, jobvr::AbstractChar, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             require_one_based_indexing(A, B)
             chkstride1(A, B)
-            n, m = checksquare(A, B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
@@ -2468,7 +2468,7 @@ for (geevx, ggev, ggev3, elty, relty) in
         function ggev3!(jobvl::AbstractChar, jobvr::AbstractChar, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             require_one_based_indexing(A, B)
             chkstride1(A, B)
-            n, m = checksquare(A, B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
@@ -5492,7 +5492,7 @@ for (syev, syevr, syevd, sygvd, elty) in
             @chkvalidparam 2 jobz ('N', 'V')
             chkuplo(uplo)
             chkstride1(A, B)
-            n, m = checksquare(A, B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
@@ -5708,7 +5708,7 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
             chkstride1(A, B)
             chkuplofinite(A, uplo)
             chkuplofinite(B, uplo)
-            n, m = checksquare(A, B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
@@ -6485,7 +6485,7 @@ for (gees, gges, gges3, elty) in
             @chkvalidparam 1 jobvsl ('N', 'V')
             @chkvalidparam 2 jobvsr ('N', 'V')
             chkstride1(A, B)
-            n, m = checksquare(A, B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
@@ -6537,7 +6537,7 @@ for (gees, gges, gges3, elty) in
             @chkvalidparam 1 jobvsl ('N', 'V')
             @chkvalidparam 2 jobvsr ('N', 'V')
             chkstride1(A, B)
-            n, m = checksquare(A, B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
@@ -6637,7 +6637,7 @@ for (gees, gges, gges3, elty, relty) in
             @chkvalidparam 1 jobvsl ('N', 'V')
             @chkvalidparam 2 jobvsr ('N', 'V')
             chkstride1(A, B)
-            n, m = checksquare(A, B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
@@ -6690,7 +6690,7 @@ for (gees, gges, gges3, elty, relty) in
             @chkvalidparam 1 jobvsl ('N', 'V')
             @chkvalidparam 2 jobvsr ('N', 'V')
             chkstride1(A, B)
-            n, m = checksquare(A, B)
+            n, m = map(checksquare, (A, B))
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
