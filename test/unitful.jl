@@ -6,11 +6,11 @@ using Test, LinearAlgebra, Random
 
 Random.seed!(1234321)
 
-const BASE_TEST_PATH = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(BASE_TEST_PATH, "testhelpers")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :Furlongs) || @eval Main include(joinpath($TESTHELPERS, "Furlongs.jl"))
-using .Main.Furlongs
+using Main.LinearAlgebraTestHelpers.Furlongs
 
 LinearAlgebra.sylvester(a::Furlong,b::Furlong,c::Furlong) = -c / (a + b)
 
