@@ -347,15 +347,17 @@ end
 function ==(A::AbstractMatrix, J::UniformScaling)
     require_one_based_indexing(A)
     size(A, 1) == size(A, 2) || return false
-    iszero(J.λ) && return iszero(A)
-    isone(J.λ) && return isone(A)
-    isdiag(A) || return false
-    return all(==(J.λ), diagview(A))
+    isempty(A) && return true
+    # Check that the elements of A are equal to those of J,
+    # this ensures that if A == J, their elements are equal as well
+    iszero(J.λ) && return first(A) == J.λ && iszero(A)
+    isone(J.λ) && return first(A) == J.λ && isone(A)
+    return _isequalto_uniformscaling(A, J)
 end
-function ==(A::StridedMatrix, J::UniformScaling)
-    size(A, 1) == size(A, 2) || return false
-    iszero(J.λ) && return iszero(A)
-    isone(J.λ) && return isone(A)
+function _isequalto_uniformscaling(A::AbstractMatrix, J::UniformScaling)
+    return isdiag(A) && all(==(J.λ), diagview(A))
+end
+function _isequalto_uniformscaling(A::StridedMatrix, J::UniformScaling)
     for j in axes(A, 2), i in axes(A, 1)
         ifelse(i == j, A[i, j] == J.λ, iszero(A[i, j])) || return false
     end
