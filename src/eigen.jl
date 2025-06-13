@@ -182,7 +182,7 @@ end
     eigen(A; permute::Bool=true, scale::Bool=true, sortby) -> Eigen
 
 Compute the eigenvalue decomposition of `A`, returning an [`Eigen`](@ref) factorization object `F`
-which contains the eigenvalues in `F.values` and the eigenvectors in the columns of the
+which contains the eigenvalues in `F.values` and the normalized eigenvectors in the columns of the
 matrix `F.vectors`. This corresponds to solving an eigenvalue problem of the form
 `Ax =  λx`, where `A` is a matrix, `x` is an eigenvector, and `λ` is an eigenvalue.
 (The `k`th eigenvector can be obtained from the slice `F.vectors[:, k]`.)
