@@ -798,4 +798,15 @@ end
     end
 end
 
+@testset "triu!/tril!" begin
+    @testset for sz in ((4,4), (3,4), (4,3))
+        A = rand(sz...)
+        B = similar(A)
+        @testset for f in (adjoint, transpose), k in -3:3
+            @test triu!(f(copy!(B, A)), k) == triu(f(A), k)
+            @test tril!(f(copy!(B, A)), k) == tril!(f(A), k)
+        end
+    end
+end
+
 end # module TestAdjointTranspose
