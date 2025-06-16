@@ -28,4 +28,7 @@ AbstractArray{T,N}(A::ImmutableArray{S,N}) where {S,T,N} = ImmutableArray(Abstra
 Base.copy(A::ImmutableArray) = ImmutableArray(copy(A.data))
 Base.zero(A::ImmutableArray) = ImmutableArray(zero(A.data))
 
+Base.adjoint(A::ImmutableArray) = ImmutableArray(adjoint(A.data))
+Base.transpose(A::ImmutableArray) = ImmutableArray(transpose(A.data))
+
 end

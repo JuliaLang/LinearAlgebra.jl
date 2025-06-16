@@ -1351,16 +1351,7 @@ end
 end
 
 @testset "triu/tril with immutable arrays" begin
-    struct ImmutableMatrix{T,A<:AbstractMatrix{T}} <: AbstractMatrix{T}
-        a :: A
-    end
-    Base.size(A::ImmutableMatrix) = size(A.a)
-    Base.getindex(A::ImmutableMatrix, i::Int, j::Int) = getindex(A.a, i, j)
-    Base.copy(A::ImmutableMatrix) = A
-    LinearAlgebra.adjoint(A::ImmutableMatrix) = ImmutableMatrix(adjoint(A.a))
-    LinearAlgebra.transpose(A::ImmutableMatrix) = ImmutableMatrix(transpose(A.a))
-
-    A = ImmutableMatrix([1 2; 3 4])
+    A = ImmutableArray([1 2; 3 4])
     for T in (Symmetric, Hermitian), uplo in (:U, :L)
         H = T(A, uplo)
         MH = Matrix(H)
