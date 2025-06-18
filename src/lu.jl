@@ -652,7 +652,7 @@ end
 
     # Initialize variables
     info = 0
-    fill!(du2, 0)
+    fill!(du2, zero(eltype(du2)))
 
     @inbounds begin
         for i = 1:n

@@ -2,14 +2,17 @@
 
 module TestMatmul
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Base: rtoldefault
 using Test, LinearAlgebra, Random
 using LinearAlgebra: mul!, Symmetric, Hermitian
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 ## Test Julia fallbacks to BLAS routines
 
@@ -549,6 +552,10 @@ end
         @test mul!(copy(C), A', A, true, 2) ≈ 3C
         D = Matrix(Hermitian(A * A'))
         @test mul!(copy(D), A, A', true, 3) ≈ 4D
+        if T <: Complex
+            @test mul!(2C, A', A, im, 2) ≈ (4 + im) * C
+            @test mul!(2D, A, A', im, 3) ≈ (6 + im) * D
+        end
     end
 end
 

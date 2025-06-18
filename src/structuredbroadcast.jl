@@ -61,8 +61,8 @@ Broadcast.BroadcastStyle(T::StructuredMatrixStyle{Matrix}, ::StructuredMatrixSty
 Broadcast.BroadcastStyle(::StructuredMatrixStyle, ::StructuredMatrixStyle) = DefaultArrayStyle{2}()
 
 # And a definition akin to similar using the structured type:
-structured_broadcast_alloc(bc, ::Type{Diagonal}, ::Type{ElType}, n) where {ElType} =
-    Diagonal(Array{ElType}(undef, n))
+structured_broadcast_alloc(bc, ::Type{Diagonal}, ::Type{ElType}, sz::NTuple{2,Integer}) where {ElType} =
+    Diagonal(Array{ElType}(undef, sz[1]))
 # Bidiagonal is tricky as we need to know if it's upper or lower. The promotion
 # system will return Tridiagonal when there's more than one Bidiagonal, but when
 # there's only one, we need to make figure out upper or lower
@@ -75,7 +75,9 @@ find_uplo(a::Bidiagonal) = a.uplo
 find_uplo(a) = nothing
 find_uplo(bc::Broadcasted) = mapfoldl(find_uplo, merge_uplos, Broadcast.cat_nested(bc), init=nothing)
 
-function structured_broadcast_alloc(bc, ::Type{Bidiagonal}, ::Type{ElType}, n) where {ElType}
+function structured_broadcast_alloc(bc, ::Type{Bidiagonal},
+        ::Type{ElType}, sz::NTuple{2,Integer}) where {ElType}
+    n = sz[1]
     uplo = n > 0 ? find_uplo(bc) : 'U'
     n1 = max(n - 1, 0)
     if count_structedmatrix(Bidiagonal, bc) > 1 && uplo == 'T'
@@ -83,20 +85,23 @@ function structured_broadcast_alloc(bc, ::Type{Bidiagonal}, ::Type{ElType}, n) w
     end
     return Bidiagonal(Array{ElType}(undef, n),Array{ElType}(undef, n1), uplo)
 end
-structured_broadcast_alloc(bc, ::Type{SymTridiagonal}, ::Type{ElType}, n) where {ElType} =
-    SymTridiagonal(Array{ElType}(undef, n),Array{ElType}(undef, n-1))
-structured_broadcast_alloc(bc, ::Type{Tridiagonal}, ::Type{ElType}, n) where {ElType} =
-    Tridiagonal(Array{ElType}(undef, n-1),Array{ElType}(undef, n),Array{ElType}(undef, n-1))
-structured_broadcast_alloc(bc, ::Type{LowerTriangular}, ::Type{ElType}, n) where {ElType} =
-    LowerTriangular(Array{ElType}(undef, n, n))
-structured_broadcast_alloc(bc, ::Type{UpperTriangular}, ::Type{ElType}, n) where {ElType} =
-    UpperTriangular(Array{ElType}(undef, n, n))
-structured_broadcast_alloc(bc, ::Type{UnitLowerTriangular}, ::Type{ElType}, n) where {ElType} =
-    UnitLowerTriangular(Array{ElType}(undef, n, n))
-structured_broadcast_alloc(bc, ::Type{UnitUpperTriangular}, ::Type{ElType}, n) where {ElType} =
-    UnitUpperTriangular(Array{ElType}(undef, n, n))
-structured_broadcast_alloc(bc, ::Type{Matrix}, ::Type{ElType}, n) where {ElType} =
-    Array{ElType}(undef, n, n)
+function structured_broadcast_alloc(bc, ::Type{SymTridiagonal},
+        ::Type{ElType}, sz::NTuple{2,Integer}) where {ElType}
+    n = sz[1]
+    SymTridiagonal(Array{ElType}(undef, n),Array{ElType}(undef, max(0,n-1)))
+end
+function structured_broadcast_alloc(bc, ::Type{Tridiagonal},
+        ::Type{ElType}, sz::NTuple{2,Integer}) where {ElType}
+    n = sz[1]
+    n1 = max(0,n-1)
+    Tridiagonal(Array{ElType}(undef, n1),Array{ElType}(undef, n),Array{ElType}(undef, n1))
+end
+function structured_broadcast_alloc(bc, ::Type{T}, ::Type{ElType},
+        sz::NTuple{2,Integer}) where {ElType,T<:UpperOrLowerTriangular}
+    T(Array{ElType}(undef, sz))
+end
+structured_broadcast_alloc(bc, ::Type{Matrix}, ::Type{ElType}, sz::NTuple{2,Integer}) where {ElType} =
+    Array{ElType}(undef, sz)
 
 # A _very_ limited list of structure-preserving functions known at compile-time. This list is
 # derived from the formerly-implemented `broadcast` methods in 0.6. Note that this must
@@ -172,7 +177,7 @@ function Base.similar(bc::Broadcasted{StructuredMatrixStyle{T}}, ::Type{ElType})
     inds = axes(bc)
     fzerobc = fzeropreserving(bc)
     if isstructurepreserving(bc) || (fzerobc && !(T <: Union{UnitLowerTriangular,UnitUpperTriangular}))
-        return structured_broadcast_alloc(bc, T, ElType, length(inds[1]))
+        return structured_broadcast_alloc(bc, T, ElType, map(length, inds))
     elseif fzerobc && T <: UnitLowerTriangular
         return similar(convert(Broadcasted{StructuredMatrixStyle{LowerTriangular}}, bc), ElType)
     elseif fzerobc && T <: UnitUpperTriangular
@@ -194,7 +199,7 @@ isvalidstructbc(dest::Bidiagonal, bc::Broadcasted{StructuredMatrixStyle{Bidiagon
     @inbounds Broadcast._broadcast_getindex(bc, b)
 end
 
-Broadcast.newindex(A, b::BandIndex) = Broadcast.newindex(A, _cartinds(b))
+Broadcast.newindex(A, b::BandIndex) = Broadcast.newindex(A, CartesianIndex(b))
 function Broadcast.newindex(A::StructuredMatrix, b::BandIndex)
     # we use the fact that a StructuredMatrix is square,
     # and we apply newindex to both the axes at once to obtain the result
@@ -207,7 +212,7 @@ function copyto!(dest::Diagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
-    for i in axs[1]
+    for i in eachindex(dest.diag)
         dest.diag[i] = @inbounds bc[BandIndex(0, i)]
     end
     return dest
@@ -217,15 +222,15 @@ function copyto!(dest::Bidiagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
-    for i in axs[1]
+    for i in eachindex(dest.dv)
         dest.dv[i] = @inbounds bc[BandIndex(0, i)]
     end
     if dest.uplo == 'U'
-        for i = 1:size(dest, 1)-1
+        for i in eachindex(dest.ev)
             dest.ev[i] = @inbounds bc[BandIndex(1, i)]
         end
     else
-        for i = 1:size(dest, 1)-1
+        for i in eachindex(dest.ev)
             dest.ev[i] = @inbounds bc[BandIndex(-1, i)]
         end
     end
@@ -252,25 +257,36 @@ function copyto!(dest::Tridiagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
-    for i in axs[1]
+    for i in eachindex(dest.d)
         dest.d[i] = @inbounds bc[BandIndex(0, i)]
     end
-    for i = 1:size(dest, 1)-1
+    for i in eachindex(dest.du)
         dest.du[i] = @inbounds bc[BandIndex(1, i)]
     end
-    for i = 1:size(dest, 1)-1
+    for i in eachindex(dest.dl)
         dest.dl[i] = @inbounds bc[BandIndex(-1, i)]
     end
     return dest
 end
 
+# Recursively replace wrapped matrices by their parents to improve broadcasting performance
+# We may do this because the indexing within `copyto!` is restricted to the stored indices
+preprocess_broadcasted(::Type{T}, A) where {T} = _preprocess_broadcasted(T, A)
+function preprocess_broadcasted(::Type{T}, bc::Broadcasted) where {T}
+    args = map(x -> preprocess_broadcasted(T, x), bc.args)
+    Broadcast.Broadcasted(bc.f, args, bc.axes)
+end
+_preprocess_broadcasted(::Type{LowerTriangular}, A) = lowertridata(A)
+_preprocess_broadcasted(::Type{UpperTriangular}, A) = uppertridata(A)
+
 function copyto!(dest::LowerTriangular, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
+    bc_unwrapped = preprocess_broadcasted(LowerTriangular, bc)
     for j in axs[2]
         for i in j:axs[1][end]
-            @inbounds dest.data[i,j] = bc[CartesianIndex(i, j)]
+            @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
         end
     end
     return dest
@@ -280,9 +296,10 @@ function copyto!(dest::UpperTriangular, bc::Broadcasted{<:StructuredMatrixStyle}
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
+    bc_unwrapped = preprocess_broadcasted(UpperTriangular, bc)
     for j in axs[2]
         for i in 1:j
-            @inbounds dest.data[i,j] = bc[CartesianIndex(i, j)]
+            @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
         end
     end
     return dest

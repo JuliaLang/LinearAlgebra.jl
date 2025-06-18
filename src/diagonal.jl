@@ -192,8 +192,8 @@ Return the appropriate zero element `A[i, j]` corresponding to a banded matrix `
 """
 diagzero(A::AbstractMatrix, i, j) = zero(eltype(A))
 @propagate_inbounds diagzero(A::AbstractMatrix{M}, i, j) where {M<:AbstractMatrix} =
-    zeroslike(M, axes(A[i,i], 1), axes(A[j,j], 2))
-diagzero(A::AbstractMatrix, inds...) = diagzero(A, to_indices(A, inds)...)
+    zeroslike(M, axes(A[BandIndex(0, i)], 1), axes(A[BandIndex(0, j)], 2))
+@propagate_inbounds diagzero(A::AbstractMatrix, inds...) = diagzero(A, to_indices(A, inds)...)
 # dispatching on the axes permits specializing on the axis types to return something other than an Array
 zeroslike(M::Type, ax::Vararg{Union{AbstractUnitRange, Integer}}) = zeroslike(M, ax)
 """
@@ -218,7 +218,7 @@ zeroslike(::Type{M}, sz::Tuple{Integer, Vararg{Integer}}) where {M<:AbstractMatr
     r
 end
 
-function setindex!(D::Diagonal, v, i::Int, j::Int)
+@inline function setindex!(D::Diagonal, v, i::Int, j::Int)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds D.diag[i] = v
@@ -228,6 +228,15 @@ function setindex!(D::Diagonal, v, i::Int, j::Int)
     return D
 end
 
+@inline function setindex!(D::Diagonal, v, b::BandIndex)
+    @boundscheck checkbounds(D, b)
+    if b.band == 0
+        @inbounds D.diag[b.index] = v
+    elseif !iszero(v)
+        throw(ArgumentError(lazy"cannot set off-diagonal entry $(to_indices(D, (b,))) to a nonzero value ($v)"))
+    end
+    return D
+end
 
 ## structured matrix methods ##
 function Base.replace_in_print_matrix(A::Diagonal,i::Integer,j::Integer,s::AbstractString)
@@ -333,14 +342,14 @@ function (*)(D::Diagonal, V::AbstractVector)
 end
 
 function mul(A::AdjOrTransAbsMat, D::Diagonal)
-    adj = wrapperop(A)
+    adj = _wrapperop(A)
     copy(adj(adj(D) * adj(A)))
 end
 function mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Number})
     @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
 end
 function mul(D::Diagonal, A::AdjOrTransAbsMat)
-    adj = wrapperop(A)
+    adj = _wrapperop(A)
     copy(adj(adj(A) * adj(D)))
 end
 function mul(D::Diagonal{<:Number}, A::AdjOrTransAbsMat{<:Number, <:StridedMatrix})
@@ -358,7 +367,7 @@ end
 # A' = A' * D => A = D' * A
 # This uses the fact that D' is a Diagonal
 function rmul!(A::AdjOrTransAbsMat, D::Diagonal)
-    f = wrapperop(A)
+    f = _wrapperop(A)
     lmul!(f(D), f(A))
     A
 end
@@ -406,7 +415,7 @@ end
 # A' = D * A' => A = A * D'
 # This uses the fact that D' is a Diagonal
 function lmul!(D::Diagonal, A::AdjOrTransAbsMat)
-    f = wrapperop(A)
+    f = _wrapperop(A)
     rmul!(f(A), f(D))
     A
 end
@@ -470,19 +479,19 @@ function __muldiag_nonzeroalpha!(out, D::Diagonal, B::UpperOrLowerTriangular, al
     for j in axes(B, 2)
         # store the diagonal separately for unit triangular matrices
         if isunit
-            @inbounds @stable_muladdmul _modify!(MulAddMul(alpha,beta), D.diag[j] * B[j,j], out, (j,j))
+            @inbounds _modify_nonzeroalpha!(D.diag[j] * B[j,j], out, (j,j), alpha, beta)
         end
         # The indices of out corresponding to the stored indices of B
         rowrange = _rowrange_tri_stored(B, j)
         @inbounds @simd for i in rowrange
-            @stable_muladdmul _modify!(MulAddMul(alpha,beta), D.diag[i] * B_maybeparent[i,j], out_maybeparent, (i,j))
+            _modify_nonzeroalpha!(D.diag[i] * B_maybeparent[i,j], out_maybeparent, (i,j), alpha, beta)
         end
         # Fill the indices of out corresponding to the zeros of B
         # we only fill these if out and B don't have matching zeros
         if !_has_matching_zeros(out, B)
             rowrange = _rowrange_tri_zeros(B, j)
             @inbounds @simd for i in rowrange
-                @stable_muladdmul _modify!(MulAddMul(alpha,beta), D.diag[i] * B[i,j], out, (i,j))
+                _modify_nonzeroalpha!(D.diag[i] * B[i,j], out, (i,j), alpha, beta)
             end
         end
     end
@@ -511,7 +520,7 @@ function __muldiag_nonzeroalpha!(out, A::UpperOrLowerTriangular, D::Diagonal, al
     # we may directly read and write from the parents
     out_maybeparent, A_maybeparent = _has_matching_zeros(out, A) ? (parent(out), parent(A)) : (out, A)
     for j in axes(A, 2)
-        dja = @stable_muladdmul MulAddMul(alpha,false)(@inbounds D.diag[j])
+        dja = @inbounds _djalpha_nonzero(D.diag[j], alpha)
         # store the diagonal separately for unit triangular matrices
         if isunit
             # since alpha is multiplied to the diagonal element of D,
@@ -547,7 +556,7 @@ end
     d2 = D2.diag
     outd = out.diag
     @inbounds @simd for i in eachindex(d1, d2, outd)
-        @stable_muladdmul _modify!(MulAddMul(alpha,beta), d1[i] * d2[i], outd, i)
+        _modify_nonzeroalpha!(d1[i] * d2[i], outd, i, alpha, beta)
     end
     return out
 end
@@ -897,11 +906,8 @@ end
 end
 
 conj(D::Diagonal) = Diagonal(conj(D.diag))
-transpose(D::Diagonal{<:Number}) = D
-transpose(D::Diagonal) = Diagonal(transpose.(D.diag))
-adjoint(D::Diagonal{<:Number}) = Diagonal(vec(adjoint(D.diag)))
-adjoint(D::Diagonal{<:Number,<:Base.ReshapedArray{<:Number,1,<:Adjoint}}) = Diagonal(adjoint(parent(D.diag)))
-adjoint(D::Diagonal) = Diagonal(adjoint.(D.diag))
+transpose(D::Diagonal) = Diagonal(_vectranspose(D.diag))
+adjoint(D::Diagonal) = Diagonal(_vecadjoint(D.diag))
 permutedims(D::Diagonal) = D
 permutedims(D::Diagonal, perm) = (Base.checkdims_perm(axes(D), axes(D), perm); D)
 

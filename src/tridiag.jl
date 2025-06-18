@@ -310,7 +310,7 @@ eigmin(A::SymTridiagonal) = eigvals(A, 1:1)[1]
 
 #Compute selected eigenvectors only corresponding to particular eigenvalues
 """
-    eigvecs(A::SymTridiagonal[, eigvals]) -> Matrix
+    eigvecs(A::Union{Symmetric, Hermitian, SymTridiagonal}[, eigvals])::Matrix
 
 Return a matrix `M` whose columns are the eigenvectors of `A`. (The `k`th eigenvector can
 be obtained from the slice `M[:, k]`.)
@@ -345,7 +345,7 @@ julia> eigvecs(A, [1.])
  -0.5547001962252291
 ```
 """
-eigvecs(A::SymTridiagonal{<:BlasFloat,<:StridedVector}, eigvals::Vector{<:Real}) = LAPACK.stein!(A.dv, A.ev, eigvals)
+eigvecs(A::SymTridiagonal{<:BlasFloat,<:StridedVector}, eigvals::StridedVector{<:Real}) = LAPACK.stein!(A.dv, A.ev, eigvals)
 
 function svdvals!(A::SymTridiagonal)
     vals = eigvals!(A)
@@ -504,6 +504,17 @@ Base._reverse!(A::SymTridiagonal, dims::Colon) = (reverse!(A.dv); reverse!(A.ev)
         @inbounds A.dv[i] = x
     else
         throw(ArgumentError(lazy"cannot set off-diagonal entry ($i, $j)"))
+    end
+    return A
+end
+
+@inline function setindex!(A::SymTridiagonal, x, b::BandIndex)
+    @boundscheck checkbounds(A, b)
+    if b.band == 0
+        issymmetric(x) || throw(ArgumentError("cannot set a diagonal entry of a SymTridiagonal to an asymmetric value"))
+        @inbounds A.dv[b.index] = x
+    else
+        throw(ArgumentError(lazy"cannot set off-diagonal entry $(to_indices(A, (b,)))"))
     end
     return A
 end
@@ -770,6 +781,21 @@ end
         @inbounds A.du[i] = x
     elseif !iszero(x)
         throw(ArgumentError(LazyString(lazy"cannot set entry ($i, $j) off ",
+            lazy"the tridiagonal band to a nonzero value ($x)")))
+    end
+    return A
+end
+
+@inline function setindex!(A::Tridiagonal, x, b::BandIndex)
+    @boundscheck checkbounds(A, b)
+    if b.band == 0
+        @inbounds A.d[b.index] = x
+    elseif b.band == -1
+        @inbounds A.dl[b.index] = x
+    elseif b.band == 1
+        @inbounds A.du[b.index] = x
+    elseif !iszero(x)
+        throw(ArgumentError(LazyString(lazy"cannot set entry $(to_indices(A, (b,))) off ",
             lazy"the tridiagonal band to a nonzero value ($x)")))
     end
     return A

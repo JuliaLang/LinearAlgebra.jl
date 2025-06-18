@@ -10,9 +10,9 @@ eigencopy_oftype(A::Symmetric{<:Complex}, S) = copyto!(similar(parent(A), S), A)
     default_eigen_alg(A)
 
 Return the default algorithm used to solve the eigensystem `A v = λ v` for a symmetric matrix `A`.
-Defaults to `LinearAlegbra.DivideAndConquer()`, which corresponds to the LAPACK function `LAPACK.syevd!`.
+Defaults to `LinearAlegbra.RobustRepresentations()`, which corresponds to the LAPACK function `LAPACK.syevr!`.
 """
-default_eigen_alg(@nospecialize(A)) = DivideAndConquer()
+default_eigen_alg(@nospecialize(A)) = RobustRepresentations()
 
 # Eigensolvers for symmetric and Hermitian matrices
 function eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=nothing)
@@ -31,15 +31,15 @@ end
     eigen(A::Union{Hermitian, Symmetric}; alg::LinearAlgebra.Algorithm = LinearAlgebra.default_eigen_alg(A)) -> Eigen
 
 Compute the eigenvalue decomposition of `A`, returning an [`Eigen`](@ref) factorization object `F`
-which contains the eigenvalues in `F.values` and the eigenvectors in the columns of the
+which contains the eigenvalues in `F.values` and the orthonormal eigenvectors in the columns of the
 matrix `F.vectors`. (The `k`th eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
 
 `alg` specifies which algorithm and LAPACK method to use for eigenvalue decomposition:
-- `alg = DivideAndConquer()` (default): Calls `LAPACK.syevd!`.
+- `alg = DivideAndConquer()`: Calls `LAPACK.syevd!`.
 - `alg = QRIteration()`: Calls `LAPACK.syev!`.
-- `alg = RobustRepresentations()`: Multiple relatively robust representations method, Calls `LAPACK.syevr!`.
+- `alg = RobustRepresentations()` (default): Multiple relatively robust representations method, Calls `LAPACK.syevr!`.
 
 See James W. Demmel et al, SIAM J. Sci. Comput. 30, 3, 1508 (2008) for
 a comparison of the accuracy and performance of different algorithms.
@@ -76,7 +76,7 @@ eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}, irange::UnitRange)
     eigen(A::Union{SymTridiagonal, Hermitian, Symmetric}, irange::UnitRange) -> Eigen
 
 Compute the eigenvalue decomposition of `A`, returning an [`Eigen`](@ref) factorization object `F`
-which contains the eigenvalues in `F.values` and the eigenvectors in the columns of the
+which contains the eigenvalues in `F.values` and the orthonormal eigenvectors in the columns of the
 matrix `F.vectors`. (The `k`th eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
@@ -101,7 +101,7 @@ eigen!(A::RealHermSymComplexHerm{T,<:StridedMatrix}, vl::Real, vh::Real) where {
     eigen(A::Union{SymTridiagonal, Hermitian, Symmetric}, vl::Real, vu::Real) -> Eigen
 
 Compute the eigenvalue decomposition of `A`, returning an [`Eigen`](@ref) factorization object `F`
-which contains the eigenvalues in `F.values` and the eigenvectors in the columns of the
+which contains the eigenvalues in `F.values` and the orthonormal eigenvectors in the columns of the
 matrix `F.vectors`. (The `k`th eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
@@ -140,14 +140,18 @@ end
 Return the eigenvalues of `A`.
 
 `alg` specifies which algorithm and LAPACK method to use for eigenvalue decomposition:
-- `alg = DivideAndConquer()` (default): Calls `LAPACK.syevd!`.
+- `alg = DivideAndConquer()`: Calls `LAPACK.syevd!`.
 - `alg = QRIteration()`: Calls `LAPACK.syev!`.
-- `alg = RobustRepresentations()`: Multiple relatively robust representations method, Calls `LAPACK.syevr!`.
+- `alg = RobustRepresentations()` (default): Multiple relatively robust representations method, Calls `LAPACK.syevr!`.
 
 See James W. Demmel et al, SIAM J. Sci. Comput. 30, 3, 1508 (2008) for
 a comparison of the accuracy and performance of different methods.
 
 The default `alg` used may change in the future.
+
+!!! compat "Julia 1.12"
+    The `alg` keyword argument requires Julia 1.12 or later.
+
 """
 function eigvals(A::RealHermSymComplexHerm; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=nothing)
     S = eigtype(eltype(A))
@@ -330,6 +334,12 @@ function eigvals!(A::Hermitian{T,S}, B::Hermitian{T,S}; sortby::Union{Function,N
     return vals
 end
 eigvecs(A::HermOrSym) = eigvecs(eigen(A))
+
+function eigvecs(A::RealHermSymComplexHerm, eigvals::AbstractVector{<:Real})
+    F = hessenberg(A) # transform to SymTridiagonal form
+    X = eigvecs(F.H, eigvals)
+    return F.Q * X    # transform eigvecs of F.H back to eigvecs of A
+end
 
 function eigvals(A::AbstractMatrix, C::Cholesky; sortby::Union{Function,Nothing}=nothing)
     if ishermitian(A)

@@ -103,8 +103,8 @@ Base._reverse(A::UpperHessenberg, dims) = reverse!(Matrix(A); dims)
 
 Base.@propagate_inbounds function setindex!(A::UpperHessenberg, x, i::Integer, j::Integer)
     if i > j+1
-        x == 0 || throw(ArgumentError("cannot set index in the lower triangular part " *
-            lazy"($i, $j) of an UpperHessenberg matrix to a nonzero value ($x)"))
+        iszero(x) || throw(ArgumentError(LazyString("cannot set index in the lower triangular part ",
+            lazy"($i, $j) of an UpperHessenberg matrix to a nonzero value ($x)")))
     else
         A.data[i,j] = x
     end
@@ -176,6 +176,36 @@ function \(U::UnitUpperTriangular, H::UpperHessenberg)
     HH = ldiv!(matprod_dest(U, H, promote_op(\, eltype(U), eltype(H))), U, H)
     UpperHessenberg(HH)
 end
+
+AdjUpperHessenberg{T,S<:UpperHessenberg{T}} = Adjoint{T, S}
+TransUpperHessenberg{T,S<:UpperHessenberg{T}} = Transpose{T, S}
+AdjOrTransUpperHessenberg{T,S<:UpperHessenberg{T}} = AdjOrTrans{T, S}
+
+function (\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat)
+    TFB = typeof(oneunit(eltype(H)) \ oneunit(eltype(B)))
+    return ldiv!(H, copy_similar(B, TFB))
+end
+
+(/)(B::AbstractMatrix, H::UpperHessenberg) = _rdiv(B, H)
+(/)(B::AbstractMatrix, H::AdjUpperHessenberg) = _rdiv(B, H)
+(/)(B::AbstractMatrix, H::TransUpperHessenberg) = _rdiv(B, H)
+function _rdiv(B, H)
+    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(H)))
+    return rdiv!(copy_similar(B, TFB), H)
+end
+
+ldiv!(H::AdjOrTransUpperHessenberg, B::AbstractVecOrMat) =
+    (rdiv!(wrapperop(H)(B), parent(H)); B)
+rdiv!(B::AbstractVecOrMat, H::AdjOrTransUpperHessenberg) =
+    (ldiv!(parent(H), wrapperop(H)(B)); B)
+
+# fix method ambiguities for right division, from adjtrans.jl:
+/(u::AdjointAbsVec, A::UpperHessenberg) = adjoint(adjoint(A) \ u.parent)
+/(u::TransposeAbsVec, A::UpperHessenberg) = transpose(transpose(A) \ u.parent)
+/(u::AdjointAbsVec, A::AdjUpperHessenberg) = adjoint(adjoint(A) \ u.parent)
+/(u::TransposeAbsVec, A::TransUpperHessenberg) = transpose(transpose(A) \ u.parent)
+/(u::AdjointAbsVec, A::TransUpperHessenberg) = adjoint(conj(A.parent) \ u.parent) # technically should be adjoint(copy(adjoint(copy(A))) \ u.parent)
+/(u::TransposeAbsVec, A::AdjUpperHessenberg) = transpose(conj(A.parent) \ u.parent)
 
 # Solving (H+µI)x = b: we can do this in O(m²) time and O(m) memory
 # (in-place in x) by the RQ algorithm from:

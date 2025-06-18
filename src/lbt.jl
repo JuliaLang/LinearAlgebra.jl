@@ -188,7 +188,7 @@ function Base.show(io::IO, mime::MIME{Symbol("text/plain")}, lbt::LBTConfig)
             "UNKWN"
         end
         print(io, char, " [", interface_str,"] ", basename(l.libname))
-        i !== length(lbt.loaded_libs) && println()
+        i !== length(lbt.loaded_libs) && println(io)
     end
 end
 

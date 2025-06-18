@@ -217,6 +217,17 @@ function (-)(J::UniformScaling{<:Complex}, A::Hermitian)
     return B
 end
 
+function (+)(A::AdjOrTransAbsMat, J::UniformScaling)
+    checksquare(A)
+    op = wrapperop(A)
+    op(op(A) + op(J))
+end
+function (-)(J::UniformScaling, A::AdjOrTransAbsMat)
+    checksquare(A)
+    op = wrapperop(A)
+    op(op(J) - op(A))
+end
+
 function (+)(A::AbstractMatrix, J::UniformScaling)
     checksquare(A)
     B = copymutable_oftype(A, Base.promote_op(+, eltype(A), typeof(J)))
@@ -336,14 +347,17 @@ end
 function ==(A::AbstractMatrix, J::UniformScaling)
     require_one_based_indexing(A)
     size(A, 1) == size(A, 2) || return false
-    iszero(J.λ) && return iszero(A)
-    isone(J.λ) && return isone(A)
-    return A == J.λ*one(A)
+    isempty(A) && return true
+    # Check that the elements of A are equal to those of J,
+    # this ensures that if A == J, their elements are equal as well
+    iszero(J.λ) && return first(A) == J.λ && iszero(A)
+    isone(J.λ) && return first(A) == J.λ && isone(A)
+    return _isequalto_uniformscaling(A, J)
 end
-function ==(A::StridedMatrix, J::UniformScaling)
-    size(A, 1) == size(A, 2) || return false
-    iszero(J.λ) && return iszero(A)
-    isone(J.λ) && return isone(A)
+function _isequalto_uniformscaling(A::AbstractMatrix, J::UniformScaling)
+    return isdiag(A) && all(==(J.λ), diagview(A))
+end
+function _isequalto_uniformscaling(A::StridedMatrix, J::UniformScaling)
     for j in axes(A, 2), i in axes(A, 1)
         ifelse(i == j, A[i, j] == J.λ, iszero(A[i, j])) || return false
     end

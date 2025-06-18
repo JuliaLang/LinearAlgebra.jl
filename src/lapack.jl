@@ -6135,10 +6135,11 @@ for (ormhr, elty) in
             chkside(side)
             chktrans(trans)
             n = checksquare(A)
+            ntau = length(tau)
             mC, nC = size(C, 1), size(C, 2)
 
-            if n - length(tau) != 1
-                throw(DimensionMismatch(lazy"tau has length $(length(tau)), needs $(n - 1)"))
+            if max(n - 1, 0) != ntau
+                throw(DimensionMismatch(lazy"tau has length $ntau, needs $(n - 1)"))
             end
             if (side == 'L' && mC != n) || (side == 'R' && nC != n)
                 throw(DimensionMismatch("A and C matrices are not conformable"))

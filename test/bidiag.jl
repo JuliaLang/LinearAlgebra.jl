@@ -2,25 +2,21 @@
 
 module TestBidiagonal
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasReal, BlasFloat
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "Quaternions.jl"))
-using .Main.Quaternions
-
-isdefined(Main, :InfiniteArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "InfiniteArrays.jl"))
-using .Main.InfiniteArrays
-
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "FillArrays.jl"))
-using .Main.FillArrays
-
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "OffsetArrays.jl"))
-using .Main.OffsetArrays
-
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.InfiniteArrays
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 include("testutils.jl") # test_approx_eq_modphase
 
@@ -507,6 +503,10 @@ Random.seed!(1)
     @test Matrix{ComplexF64}(BD) == BD
 end
 
+@testset "Constructors with Char uplo" begin
+    @test Bidiagonal(Int8[1,2], [1], 'U') == Bidiagonal(Int8[1,2], [1], :U)
+end
+
 # Issue 10742 and similar
 let A = Bidiagonal([1,2,3], [0,0], :U)
     @test istril(A)
@@ -785,9 +785,6 @@ end
     @test c \ A ≈ c \ Matrix(A)
 end
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
-
 @testset "Conversion to AbstractArray" begin
     # tests corresponding to #34995
     dv = ImmutableArray([1, 2, 3, 4])
@@ -801,7 +798,7 @@ using .Main.ImmutableArrays
     @test convert(AbstractMatrix{Float64}, Bl)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bl
 end
 
-@testset "block-bidiagonal matrix indexing" begin
+@testset "block-bidiagonal matrix" begin
     dv = [ones(4,3), ones(2,2).*2, ones(2,3).*3, ones(4,4).*4]
     evu = [ones(4,2), ones(2,3).*2, ones(2,4).*3]
     evl = [ones(2,3), ones(2,2).*2, ones(4,3).*3]
@@ -840,6 +837,18 @@ end
         B = Bidiagonal(fill(s,4), fill(s,3), :U)
         @test @inferred(B[2,1]) isa typeof(s)
         @test all(iszero, B[2,1])
+    end
+
+    @testset "adjoint/transpose" begin
+        m = rand(Int, 2, 2)
+        for uplo in [:U, :L]
+            B = Bidiagonal(fill(m,4), fill(m,3), uplo)
+            A = Array{Matrix{Int}}(B)
+            @testset for f in (adjoint, transpose)
+                @test f(B) == f(A)
+                @test f(f(B)) == B
+            end
+        end
     end
 end
 
@@ -996,7 +1005,9 @@ end
             @test A * D ≈ mul!(S, A, D) ≈ M * D
             @test D * A ≈ mul!(S, D, A) ≈ D * M
             @test mul!(copy(S), D, A, 2, 2) ≈ D * M * 2 + S * 2
+            @test mul!(copy(S), D, A, 0, 2) ≈ D * M * 0 + S * 2
             @test mul!(copy(S), A, D, 2, 2) ≈ M * D * 2 + S * 2
+            @test mul!(copy(S), A, D, 0, 2) ≈ M * D * 0 + S * 2
 
             A2 = Bidiagonal(dv, zero(ev), uplo)
             M2 = Array(A2)
@@ -1074,10 +1085,12 @@ end
             @test B * v ≈ M * v
             @test mul!(similar(v), B, v) ≈ M * v
             @test mul!(ones(size(v)), B, v, 2, 3) ≈ M * v * 2 .+ 3
+            @test mul!(ones(size(v)), B, v, 0, 3) ≈ M * v * 0 .+ 3
 
             @test B * B ≈ M * M
             @test mul!(similar(B, size(B)), B, B) ≈ M * M
             @test mul!(ones(size(B)), B, B, 2, 4) ≈ M * M * 2 .+ 4
+            @test mul!(ones(size(B)), B, B, 0, 4) ≈ M * M * 0 .+ 4
 
             for m in 0:6
                 AL = rand(m,n)
@@ -1199,6 +1212,38 @@ end
     D = Diagonal(ones(n))
     @test lmul!(D, B) == B2
     @test rmul!(B, D) == B2
+end
+
+@testset "setindex! with BandIndex" begin
+    B = Bidiagonal(zeros(3), zeros(2), :U)
+    B[LinearAlgebra.BandIndex(0,2)] = 1
+    @test B[2,2] == 1
+    B[LinearAlgebra.BandIndex(1,1)] = 2
+    @test B[1,2] == 2
+    @test_throws "cannot set entry $((1,3)) off the upper bidiagonal band" B[LinearAlgebra.BandIndex(2,1)] = 2
+
+    B = Bidiagonal(zeros(3), zeros(2), :L)
+    B[LinearAlgebra.BandIndex(-1,1)] = 2
+    @test B[2,1] == 2
+    @test_throws "cannot set entry $((3,1)) off the lower bidiagonal band" B[LinearAlgebra.BandIndex(-2,1)] = 2
+
+    @test_throws BoundsError B[LinearAlgebra.BandIndex(size(B,1),1)]
+    @test_throws BoundsError B[LinearAlgebra.BandIndex(0,size(B,1)+1)]
+end
+
+@testset "lazy adjtrans" begin
+    B = Bidiagonal(fill([1 2; 3 4], 3), fill([5 6; 7 8], 2), :U)
+    m = [2 4; 6 8]
+    for op in (transpose, adjoint)
+        C = op(B)
+        el = op(m)
+        C[1,1] = el
+        @test B[1,1] == m
+        C[2,1] = el
+        @test B[1,2] == m
+        @test (@allocated op(B)) == 0
+        @test (@allocated op(op(B))) == 0
+    end
 end
 
 end # module TestBidiagonal

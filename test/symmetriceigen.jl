@@ -2,6 +2,8 @@
 
 module TestSymmetricEigen
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra
 using LinearAlgebra: DivideAndConquer, QRIteration, RobustRepresentations
 
@@ -197,6 +199,25 @@ end
             @test A * v2 ≈ v2 * Diagonal(d2)
         end
     end
+end
+
+@testset "eigvecs for specific eigvals" begin
+    function testeigvecs(S, vals)
+        V = eigvecs(S, vals)
+        @test S * V ≈ V * Diagonal(vals)
+    end
+    for T in (Symmetric, Hermitian)
+        S = T(rand(3,3))
+        vals = eigvals(S)
+        testeigvecs(S, vals)
+        testeigvecs(S, vals[1:2])
+        testeigvecs(S, @view vals[2:2])
+    end
+    H = Hermitian(rand(ComplexF64,3,3))
+    vals = eigvals(H)
+    testeigvecs(H, vals)
+    testeigvecs(H, vals[1:2])
+    testeigvecs(H, @view vals[2:2])
 end
 
 end # module TestSymmetricEigen

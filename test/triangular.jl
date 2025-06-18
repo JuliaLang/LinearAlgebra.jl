@@ -2,16 +2,19 @@
 
 module TestTriangular
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: errorbounds, transpose!, BandIndex
+using Test: GenericArray
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
-
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "FillArrays.jl"))
-using .Main.FillArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 n = 9
 Random.seed!(123)
@@ -239,10 +242,7 @@ end
 end
 
 # dimensional correctness:
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
-
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+const TESTDIR = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
 
 @testset "AbstractArray constructor should preserve underlying storage type" begin
     # tests corresponding to #34995
@@ -648,6 +648,16 @@ end
             @test_throws "cannot set index in the upper triangular part" copyto!(A, B)
         end
     end
+
+    @testset "partly initialized unit triangular" begin
+        for T in (UnitUpperTriangular, UnitLowerTriangular)
+            isupper = T == UnitUpperTriangular
+            M = Matrix{BigFloat}(undef, 2, 2)
+            M[1+!isupper,1+isupper] = 3
+            U = T(GenericArray(M))
+            @test copyto!(similar(M), U) == U
+        end
+    end
 end
 
 @testset "getindex with Integers" begin
@@ -929,6 +939,30 @@ end
         C = similar(B, (4,4))
         @test_throws "incompatible destination size" mul!(C, A, B)
         @test_throws "incompatible destination size" mul!(C, B, A)
+    end
+end
+
+@testset "block unit triangular scaling" begin
+    m = SizedArrays.SizedArray{(2,2)}([1 2; 3 4])
+    U = UnitUpperTriangular(fill(m, 4, 4))
+    M = Matrix{eltype(U)}(U)
+    @test U/2 == M/2
+    @test 2\U == 2\M
+    @test U*2 == M*2
+    @test 2*U == 2*M
+end
+
+@testset "scaling partly initialized unit triangular" begin
+    for T in (UnitUpperTriangular, UnitLowerTriangular)
+        isupper = T == UnitUpperTriangular
+        M = Matrix{BigFloat}(undef,2,2)
+        M[1+!isupper, 1+isupper] = 3
+        U = T(M)
+        C = Matrix(U)
+        @test U * 2 == C * 2
+        @test 2 * U == 2 * C
+        @test U / 2 == C / 2
+        @test 2 \ U == 2 \ C
     end
 end
 

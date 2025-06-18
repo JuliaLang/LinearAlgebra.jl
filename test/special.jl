@@ -2,12 +2,16 @@
 
 module TestSpecial
 
+isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
+
 using Test, LinearAlgebra, Random
 using LinearAlgebra: rmul!, BandIndex
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 n= 10 #Size of matrix to test
 Random.seed!(1)
@@ -762,6 +766,12 @@ end
         end
         @test_throws BoundsError D[BandIndex(size(D,1),1)]
     end
+    @testset "BandIndex to CartesianIndex" begin
+        b = BandIndex(1, 2)
+        c = CartesianIndex(b)
+        @test c == CartesianIndex(2, 3)
+        @test BandIndex(c) == b
+    end
 end
 
 @testset "Partly filled Hermitian and Diagonal algebra" begin
@@ -831,6 +841,30 @@ end
             @test SD == T == SD
         end
     end
+end
+
+@testset "fillstored!" begin
+    dv, ev = zeros(4), zeros(3)
+    D = Diagonal(dv)
+    LinearAlgebra.fillstored!(D, 2)
+    @test D == diagm(fill(2, length(dv)))
+
+    dv .= 0
+    B = Bidiagonal(dv, ev, :U)
+    LinearAlgebra.fillstored!(B, 2)
+    @test B == diagm(0=>fill(2, length(dv)), 1=>fill(2, length(ev)))
+
+    dv .= 0
+    ev .= 0
+    T = Tridiagonal(ev, dv, ev)
+    LinearAlgebra.fillstored!(T, 2)
+    @test T == diagm(-1=>fill(2, length(ev)), 0=>fill(2, length(dv)), 1=>fill(2, length(ev)))
+
+    dv .= 0
+    ev .= 0
+    ST = SymTridiagonal(dv, ev)
+    LinearAlgebra.fillstored!(ST, 2)
+    @test ST == diagm(-1=>fill(2, length(ev)), 0=>fill(2, length(dv)), 1=>fill(2, length(ev)))
 end
 
 end # module TestSpecial
