@@ -1738,7 +1738,7 @@ algorithm instead uses pivoted QR factorization ([`qr`](@ref)).  To use an
 SVD-based algorithm, it is better to employ the SVD directly via `svd(M; rtol, atol) \\ b`,
 or to pass `rtol` and `atol` parameters via [`ldiv!`](@ref) with `svd(M)`.
 
-For more information, see [^issue8859], [^B96], [^S84], [^KY88].
+For more information, see [^pr1387], [^B96], [^S84], [^KY88].
 
 # Examples
 ```jldoctest
@@ -1758,7 +1758,7 @@ julia> M * N
  4.44089e-16   1.0
 ```
 
-[^issue8859]: Issue 8859, "Fix least squares", [https://github.com/JuliaLang/julia/pull/8859](https://github.com/JuliaLang/julia/pull/8859)
+[^pr1387]: PR 1387, "stable pinv least-squares", [https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387)
 
 [^B96]: Åke Björck, "Numerical Methods for Least Squares Problems",  SIAM Press, Philadelphia, 1996, "Other Titles in Applied Mathematics", Vol. 51. [doi:10.1137/1.9781611971484](http://epubs.siam.org/doi/book/10.1137/1.9781611971484)
 
