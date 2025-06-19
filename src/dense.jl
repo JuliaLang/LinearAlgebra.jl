@@ -1735,8 +1735,8 @@ For solving dense, ill-conditioned equations in a least-square sense, it
 is better to *not* explicitly form the pseudoinverse matrix, since this
 can lead to numerical instability at low tolerances.  The default `M \\ b`
 algorithm instead uses pivoted QR factorization ([`qr`](@ref)).  To use an
-SVD-based algorithm, it is better to employ the SVD directly via `svd(M; rtol, atol) \\ b`,
-or to pass `rtol` and `atol` parameters via [`ldiv!`](@ref) with `svd(M)`.
+SVD-based algorithm, it is better to employ the SVD directly via `svd(M; rtol, atol) \\ b`
+or `ldiv!(svd(M), b; rtol, atol)`.
 
 One can also pass `M = svd(A)` as the argument to `pinv` in order to re-use
 an existing [`SVD`](@ref) factorization.
