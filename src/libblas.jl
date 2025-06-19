@@ -1,8 +1,22 @@
-# --- Wrappers not generated because the Fortran routines are in F90 ---
-# The extension of crotg.f90 is not supported!
-# The extension of drotg.f90 is not supported!
-# The extension of srotg.f90 is not supported!
-# The extension of zrotg.f90 is not supported!
+function srotg(a, b, c, s)
+    @ccall libblastrampoline.srotg_(a::Ref{Float32}, b::Ref{Float32}, c::Ref{Float32},
+                                    s::Ref{Float32})::Cvoid
+end
+
+function drotg(a, b, c, s)
+    @ccall libblastrampoline.drotg_(a::Ref{Float64}, b::Ref{Float64}, c::Ref{Float64},
+                                    s::Ref{Float64})::Cvoid
+end
+
+function crotg(a, b, c, s)
+    @ccall libblastrampoline.crotg_(a::Ref{ComplexF32}, b::Ref{ComplexF32}, c::Ref{Float32},
+                                    s::Ref{ComplexF32})::Cvoid
+end
+
+function zrotg(a, b, c, s)
+    @ccall libblastrampoline.zrotg_(a::Ref{ComplexF64}, b::Ref{ComplexF64}, c::Ref{Float64},
+                                    s::Ref{ComplexF64})::Cvoid
+end
 
 function snrm2(n, x, incx)
     @ccall libblastrampoline.snrm2_(n::Ref{BlasInt}, x::Ptr{Float32},

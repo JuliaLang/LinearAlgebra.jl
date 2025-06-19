@@ -665,7 +665,7 @@ for (fname, elty) in ((:dgemv,:Float64),
             end
             lda >= size(A,1) || size(A,2) <= 1 || error("when `size(A,2) > 1`, `abs(stride(A,2))` must be at least `size(A,1)`")
             lda = max(1, size(A,1), lda)
-            GC.@preserve A X Y $fname(trans, size(A,1), size(A,2), alpha, pA, lda, pX, sX, beta, pY, sY, 1)
+            GC.@preserve A X Y $fname(trans, size(A,1), size(A,2), alpha, pA, lda, pX, sX, beta, pY, sY)
             Y
         end
         function gemv(trans::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, X::AbstractVector{$elty})
@@ -856,7 +856,7 @@ for (fname, elty) in ((:zhemv,:ComplexF64),
             lda = max(1, stride(A, 2))
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             py, sty = vec_pointer_stride(y, ArgumentError("dest vector with 0 stride is not allowed"))
-            GC.@preserve x y $fname(uplo, n, α, A, lda, px, stx, β, py, sty, 1)
+            GC.@preserve x y $fname(uplo, n, α, A, lda, px, stx, β, py, sty)
             y
         end
         function hemv(uplo::AbstractChar, α::($elty), A::AbstractMatrix{$elty}, x::AbstractVector{$elty})
@@ -1897,8 +1897,8 @@ or `transpose(A)*B + transpose(B)*A`, according to [`trans`](@ref stdlib-blas-tr
 """
 syr2k(uplo::AbstractChar, trans::AbstractChar, A::AbstractVecOrMat, B::AbstractVecOrMat) = syr2k(uplo, trans, one(eltype(A)), A, B)
 
-for (fname, elty1, elty2) in ((:zher2k_,:ComplexF64,:Float64),
-                              (:cher2k_,:ComplexF32,:Float32))
+for (fname, elty1, elty2) in ((:zher2k,:ComplexF64,:Float64),
+                              (:cher2k,:ComplexF32,:Float32))
     @eval begin
         # SUBROUTINE CHER2K(UPLO,TRANS,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
         #
