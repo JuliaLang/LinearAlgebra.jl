@@ -641,11 +641,11 @@ end
         @testset "error message" begin
             A = UpperTriangular(Ap)
             B = UpperTriangular(Bp)
-            @test_throws "cannot set index in the lower triangular part" copyto!(A, B)
+            @test_throws "cannot set index (3, 1) in the lower triangular part" copyto!(A, B)
 
             A = LowerTriangular(Ap)
             B = LowerTriangular(Bp)
-            @test_throws "cannot set index in the upper triangular part" copyto!(A, B)
+            @test_throws "cannot set index (1, 2) in the upper triangular part" copyto!(A, B)
         end
     end
 

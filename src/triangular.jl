@@ -278,12 +278,17 @@ Base.@constprop :aggressive @propagate_inbounds function getindex(A::Union{Lower
     end
 end
 
-@noinline function throw_nonzeroerror(Tn, @nospecialize(x), i, j)
-    Ts = Tn in (:UpperTriangular, :UnitUpperTriangular) ? "lower" : "upper"
+@noinline function throw_nonzeroerror(Tn::Symbol, @nospecialize(x), i, j)
+    zero_half = Tn in (:UpperTriangular, :UnitUpperTriangular) ? "lower" : "upper"
+    nstr = Tn === :UpperTriangular ? "n" : ""
     throw(ArgumentError(
-        lazy"cannot set index in the $Ts triangular part ($i, $j) of a $Tn matrix to a nonzero value ($x)"))
+        LazyString(
+            lazy"cannot set index ($i, $j) in the $zero_half triangular part ",
+            lazy"of a$nstr $Tn matrix to a nonzero value ($x)")
+        )
+    )
 end
-@noinline function throw_nonuniterror(Tn, @nospecialize(x), i, j)
+@noinline function throw_nonuniterror(Tn::Symbol, @nospecialize(x), i, j)
     throw(ArgumentError(
         lazy"cannot set index ($i, $j) on the diagonal of a $Tn matrix to a non-unit value ($x)"))
 end
