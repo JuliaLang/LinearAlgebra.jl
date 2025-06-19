@@ -809,4 +809,14 @@ end
     end
 end
 
+@testset "lmul!/rmul! by numbers" begin
+    for A in (rand(4, 4), rand(ComplexF64,4,4),
+                fill([1 2; 3 4], 4, 4))
+        B = copy(A)
+        @test lmul!(2, B) == 2 * A
+        B .= A
+        @test rmul!(B, 2) == A * 2
+    end
+end
+
 end # module TestAdjointTranspose
