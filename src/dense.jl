@@ -1731,8 +1731,12 @@ both with the value of `M` and the intended application of the pseudoinverse.
 The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest
 dimension of `M`, and `ϵ` is the [`eps`](@ref) of the element type of `M`.
 
-For inverting dense ill-conditioned matrices in a least-squares sense,
-`rtol = sqrt(eps(real(float(oneunit(eltype(M))))))` is recommended.
+For solving dense, ill-conditioned equations in a least-square sense, it
+is better to *not* explicitly form the pseudoinverse matrix, since this
+can lead to numerical instability at low tolerances.  The default `M \\ b`
+algorithm instead uses pivoted QR factorization ([`qr`](@ref)).  To use an
+SVD-based algorithm, it is better to employ the SVD directly via `svd(M; rtol, atol) \\ b`,
+or to pass `rtol` and `atol` parameters via [`ldiv!`](@ref) with `svd(M)`.
 
 For more information, see [^issue8859], [^B96], [^S84], [^KY88].
 
@@ -1762,7 +1766,7 @@ julia> M * N
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real = 0.0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Real = float(real(zero(T))), rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
     Tout = typeof(zero(T)/sqrt(oneunit(T) + oneunit(T)))
     if m == 0 || n == 0

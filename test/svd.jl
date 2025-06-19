@@ -235,7 +235,20 @@ end
     @test Uc * diagm(0=>Sc) * transpose(V) ≈ complex.(A) rtol=1e-3
 end
 
-@testset "Issue 40944. ldiV!(SVD) should update rhs" begin
+@testset "SVD pinv and truncation" begin
+    m, n = 10,5
+    A = randn(m,n) * [1/(i+j-1) for i = 1:n, j=1:n] # badly conditioned Hilbert matrix
+    @test pinv(A) ≈ pinv(svd(A))                                  rtol=1e-13
+    pinv_3 = pinv(A, rtol=1e-3)
+    @test pinv_3 ≈ pinv(svd(A), rtol=1e-3)                        rtol=1e-13
+    @test pinv_3 ≈ pinv(svd(A, rtol=1e-3))                        rtol=1e-13
+    b = A * (1:5)
+    @test pinv_3 * b ≈ svd(A, rtol=1e-3) \ b                      rtol=1e-13
+    @test pinv_3 * b ≈ ldiv!(svd(A), copy(b), rtol=1e-3)[1:5]     rtol=1e-13
+    @test pinv(A, atol=100) == pinv(svd(A), atol=100) == pinv(svd(A, atol=100)) == zeros(5,10)
+end
+
+@testset "Issue 40944. ldiv!(SVD) should update rhs" begin
     F = svd(randn(2, 2))
     b = randn(2)
     x = ldiv!(F, b)
