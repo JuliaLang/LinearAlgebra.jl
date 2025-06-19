@@ -288,6 +288,9 @@ Similar to the [`pinv`](@ref) function, the solution can be regularized by trunc
 dropping any singular values less than `max(atol, rtol*σ₁)` where `σ₁` is the largest singular value.
 The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest dimension of `M`, and
 `ϵ` is the [`eps`](@ref) of the element type of `M`.
+
+!!! compat "Julia 1.13"
+    The `atol` and `rtol` arguments require Julia 1.13 or later.
 """
 function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
     m, n = size(F)

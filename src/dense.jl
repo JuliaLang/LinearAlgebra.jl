@@ -1738,6 +1738,12 @@ algorithm instead uses pivoted QR factorization ([`qr`](@ref)).  To use an
 SVD-based algorithm, it is better to employ the SVD directly via `svd(M; rtol, atol) \\ b`,
 or to pass `rtol` and `atol` parameters via [`ldiv!`](@ref) with `svd(M)`.
 
+One can also pass `M = svd(A)` as the argument to `pinv` in order to re-use
+an existing [`SVD`](@ref) object.
+
+!!! compat "Julia 1.13"
+    Passing an `SVD` object to `pinv` requires Julia 1.13 or later.
+
 For more information, see [^pr1387], [^B96], [^S84], [^KY88].
 
 # Examples
