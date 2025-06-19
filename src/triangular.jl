@@ -316,10 +316,10 @@ end
         # however, the converted value is unused, and the compiler is free to remove
         # the conversion if the call is guaranteed to succeed
         convert(eltype(A), x)
-        if i > j
-            iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
-        else
+        if i == j # diagonal
             x == oneunit(eltype(A)) || throw_nonuniterror(nameof(typeof(A)), x, i, j)
+        else
+            iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
         end
     end
     return A
@@ -348,10 +348,10 @@ end
         # however, the converted value is unused, and the compiler is free to remove
         # the conversion if the call is guaranteed to succeed
         convert(eltype(A), x)
-        if i < j
-            iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
-        else
+        if i == j  # diagonal
             x == oneunit(eltype(A)) || throw_nonuniterror(nameof(typeof(A)), x, i, j)
+        else
+            iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
         end
     end
     return A
