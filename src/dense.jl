@@ -1758,7 +1758,7 @@ julia> M * N
  4.44089e-16   1.0
 ```
 
-[^pr1387]: PR 1387, "stable pinv least-squares", [https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387)
+[^pr1387]: PR 1387, "stable pinv least-squares", [LinearAlgebra.jl#1387](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387)
 
 [^B96]: Åke Björck, "Numerical Methods for Least Squares Problems",  SIAM Press, Philadelphia, 1996, "Other Titles in Applied Mathematics", Vol. 51. [doi:10.1137/1.9781611971484](http://epubs.siam.org/doi/book/10.1137/1.9781611971484)
 
