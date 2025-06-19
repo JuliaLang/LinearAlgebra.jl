@@ -243,9 +243,9 @@ end
     pinv_3 = pinv(A, rtol=1e-3)
     @test pinv_3 ≈ pinv(svd(A), rtol=1e-3)                        rtol=1e-13
     @test pinv_3 ≈ pinv(svd(A, rtol=1e-3))                        rtol=1e-13
-    b = A * (1:5)
+    b = float([1:m;]) # arbitrary rhs
     @test pinv_3 * b ≈ svd(A, rtol=1e-3) \ b                      rtol=1e-13
-    @test pinv_3 * b ≈ ldiv!(svd(A), copy(b), rtol=1e-3)[1:5]     rtol=1e-13
+    @test pinv_3 * b ≈ ldiv!(svd(A), copy(b), rtol=1e-3)[1:n]     rtol=1e-13
     @test pinv(A, atol=100) == pinv(svd(A), atol=100) == pinv(svd(A, atol=100)) == zeros(5,10)
 end
 
