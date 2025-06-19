@@ -810,12 +810,21 @@ end
 end
 
 @testset "lmul!/rmul! by numbers" begin
-    for A in (rand(4, 4), rand(ComplexF64,4,4),
+    @testset "$(eltype(A))" for A in (rand(4, 4), rand(ComplexF64,4,4),
                 fill([1 2; 3 4], 4, 4))
         B = copy(A)
-        @test lmul!(2, B) == 2 * A
-        B .= A
-        @test rmul!(B, 2) == A * 2
+        @testset for op in (transpose, adjoint)
+            A .= B
+            @test lmul!(2, op(A)) == 2 * op(B)
+            A .= B
+            @test rmul!(op(A), 2) == op(B) * 2
+            if eltype(A) <: Complex
+                A .= B
+                @test lmul!(-2im, op(A)) == -2im * op(B)
+                A .= B
+                @test rmul!(op(A), -2im) == op(B) * -2im
+            end
+        end
     end
 end
 

@@ -513,8 +513,8 @@ function _dot_nonrecursive(u, v)
     end
 end
 
-rmul!(X::AdjOrTrans, s::Number) = (rmul!(parent(X), s); X)
-lmul!(s::Number, X::AdjOrTrans) = (lmul!(s, parent(X)); X)
+rmul!(X::AdjOrTrans, s::Number) = (lmul!(wrapperop(X)(s), parent(X)); X)
+lmul!(s::Number, X::AdjOrTrans) = (rmul!(parent(X), wrapperop(X)(s)); X)
 
 # Adjoint/Transpose-vector * vector
 *(u::AdjointAbsVec{<:Number}, v::AbstractVector{<:Number}) = dot(u.parent, v)
