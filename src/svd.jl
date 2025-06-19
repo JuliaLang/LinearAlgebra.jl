@@ -271,7 +271,7 @@ and `ϵ` is the [`eps`](@ref) of the element type of `S`.
 !!! compat "Julia 1.12"
     The `rank(::SVD)` method requires at least Julia 1.12.
 """
-function rank(S::SVD; atol::Real = 0.0, rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
+function rank(S::SVD; atol::Real=0, rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
     tol = max(atol, rtol*S.S[1])
     count(>(tol), S.S)
 end
@@ -289,7 +289,7 @@ dropping any singular values less than `max(atol, rtol*σ₁)` where `σ₁` is 
 The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest dimension of `M`, and
 `ϵ` is the [`eps`](@ref) of the element type of `M`.
 """
-function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real = float(real(zero(T))), rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
+function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
     m, n = size(F)
     k = _count_svdvals(F.S, atol, rtol)
     if k == 0
@@ -300,7 +300,7 @@ function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real = float(real(zero(T)))
     return B
 end
 
-function pinv(F::SVD{T}; atol::Real = float(real(zero(T))), rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
+function pinv(F::SVD{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
     k = _count_svdvals(F.S, atol, rtol)
     @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
 end

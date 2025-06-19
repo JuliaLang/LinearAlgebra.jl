@@ -1766,7 +1766,7 @@ julia> M * N
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real = float(real(zero(T))), rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
     Tout = typeof(zero(T)/sqrt(oneunit(T) + oneunit(T)))
     if m == 0 || n == 0
@@ -1834,7 +1834,7 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real = 0.0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)
