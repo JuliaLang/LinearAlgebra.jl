@@ -998,8 +998,21 @@ end
         M = fill(A, 2, 2)
         U = UnitUpperTriangular(M)
         @test_throws "Cannot `convert` an object of type $Int" U[1,1] = 1
+        non_unit_msg = "cannot set index $((1,1)) on the diagonal of a UnitUpperTriangular matrix to a non-unit value"
+        @test_throws non_unit_msg U[1,1] = A
         L = UnitLowerTriangular(M)
         @test_throws "Cannot `convert` an object of type $Int" L[1,1] = 1
+        non_unit_msg = "cannot set index $((1,1)) on the diagonal of a UnitLowerTriangular matrix to a non-unit value"
+        @test_throws non_unit_msg L[1,1] = A
+
+        for UT in (UnitUpperTriangular, UpperTriangular)
+            U = UT(M)
+            @test_throws "Cannot `convert` an object of type $Int" U[2,1] = 0
+        end
+        for LT in (UnitLowerTriangular, LowerTriangular)
+            L = LT(M)
+            @test_throws "Cannot `convert` an object of type $Int" L[1,2] = 0
+        end
 
         U = UnitUpperTriangular(P)
         @test_throws BoundsError U[0,0] = 1

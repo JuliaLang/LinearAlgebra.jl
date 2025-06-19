@@ -278,30 +278,22 @@ Base.@constprop :aggressive @propagate_inbounds function getindex(A::Union{Lower
     end
 end
 
-_zero_triangular_half_str(::Type{<:UpperOrUnitUpperTriangular}) = "lower"
-_zero_triangular_half_str(::Type{<:LowerOrUnitLowerTriangular}) = "upper"
-
-@noinline function throw_nonzeroerror(T, @nospecialize(x), i, j)
-    Ts = _zero_triangular_half_str(T)
-    Tn = nameof(T)
+@noinline function throw_nonzeroerror(Tn, @nospecialize(x), i, j)
+    Ts = Tn in (:UpperTriangular, :UnitUpperTriangular) ? "lower" : "upper"
     throw(ArgumentError(
-        lazy"cannot set index in the $Ts triangular part ($i, $j) of an $Tn matrix to a nonzero value ($x)"))
+        lazy"cannot set index in the $Ts triangular part ($i, $j) of a $Tn matrix to a nonzero value ($x)"))
 end
-@noinline function throw_nonuniterror(T, @nospecialize(x), i, j)
-    check_compatible_type(T, x)
-    Tn = nameof(T)
+@noinline function throw_nonuniterror(Tn, @nospecialize(x), i, j)
     throw(ArgumentError(
-        lazy"cannot set index on the diagonal ($i, $j) of an $Tn matrix to a non-unit value ($x)"))
-end
-function check_compatible_type(T, @nospecialize(x))
-    ET = eltype(T)
-    convert(ET, x) # check that the types are compatible with setindex!
+        lazy"cannot set index ($i, $j) on the diagonal of a $Tn matrix to a non-unit value ($x)"))
 end
 
 @propagate_inbounds function setindex!(A::UpperTriangular, x, i::Integer, j::Integer)
     if i > j
         @boundscheck checkbounds(A, i, j)
-        iszero(x) || throw_nonzeroerror(typeof(A), x, i, j)
+        # the value must be convertible to the eltype for setindex! to be meaningful
+        xT = convert(eltype(A), x)
+        iszero(xT) || throw_nonzeroerror(:UpperTriangular, x, i, j)
     else
         A.data[i,j] = x
     end
@@ -309,12 +301,15 @@ end
 end
 
 @propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Integer, j::Integer)
-    if i > j
+    if i >= j
         @boundscheck checkbounds(A, i, j)
-        iszero(x) || throw_nonzeroerror(typeof(A), x, i, j)
-    elseif i == j
-        @boundscheck checkbounds(A, i, j)
-        x == oneunit(eltype(A)) || throw_nonuniterror(typeof(A), x, i, j)
+        # the value must be convertible to the eltype for setindex! to be meaningful
+        xT = convert(eltype(A), x)
+        if i > j
+            iszero(xT) || throw_nonzeroerror(:UnitUpperTriangular, x, i, j)
+        else
+            xT == oneunit(eltype(A)) || throw_nonuniterror(:UnitUpperTriangular, x, i, j)
+        end
     else
         A.data[i,j] = x
     end
@@ -324,7 +319,9 @@ end
 @propagate_inbounds function setindex!(A::LowerTriangular, x, i::Integer, j::Integer)
     if i < j
         @boundscheck checkbounds(A, i, j)
-        iszero(x) || throw_nonzeroerror(typeof(A), x, i, j)
+        # the value must be convertible to the eltype for setindex! to be meaningful
+        xT = convert(eltype(A), x)
+        iszero(xT) || throw_nonzeroerror(:LowerTriangular, x, i, j)
     else
         A.data[i,j] = x
     end
@@ -332,12 +329,15 @@ end
 end
 
 @propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Integer, j::Integer)
-    if i < j
+    if i <= j
         @boundscheck checkbounds(A, i, j)
-        iszero(x) || throw_nonzeroerror(typeof(A), x, i, j)
-    elseif i == j
-        @boundscheck checkbounds(A, i, j)
-        x == oneunit(eltype(A)) || throw_nonuniterror(typeof(A), x, i, j)
+        # the value must be convertible to the eltype for setindex! to be meaningful
+        xT = convert(eltype(A), x)
+        if i < j
+            iszero(xT) || throw_nonzeroerror(:UnitLowerTriangular, x, i, j)
+        else
+            xT == oneunit(eltype(A)) || throw_nonuniterror(:UnitLowerTriangular, x, i, j)
+        end
     else
         A.data[i,j] = x
     end
@@ -593,7 +593,7 @@ for (T, UT) in ((:UpperTriangular, :UnitUpperTriangular), (:LowerTriangular, :Un
     @eval @inline function _copy!(A::$UT, B::$T)
         for dind in diagind(A, IndexStyle(A))
             if A[dind] != B[dind]
-                throw_nonuniterror(typeof(A), B[dind], Tuple(dind)...)
+                throw_nonuniterror(nameof(typeof(A)), B[dind], Tuple(dind)...)
             end
         end
         _copy!($T(parent(A)), B)
