@@ -289,57 +289,65 @@ end
 end
 
 @propagate_inbounds function setindex!(A::UpperTriangular, x, i::Integer, j::Integer)
-    if i > j
+    if _shouldforwardindex(A, i, j)
+        A.data[i,j] = x
+    else
         @boundscheck checkbounds(A, i, j)
         # the value must be convertible to the eltype for setindex! to be meaningful
-        xT = convert(eltype(A), x)
-        iszero(xT) || throw_nonzeroerror(:UpperTriangular, x, i, j)
-    else
-        A.data[i,j] = x
+        # however, the converted value is unused, and the compiler is free to remove
+        # the conversion if the call is guaranteed to succeed
+        convert(eltype(A), x)
+        iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
     end
     return A
 end
 
 @propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Integer, j::Integer)
-    if i >= j
+    if _shouldforwardindex(A, i, j)
+        A.data[i,j] = x
+    else
         @boundscheck checkbounds(A, i, j)
         # the value must be convertible to the eltype for setindex! to be meaningful
-        xT = convert(eltype(A), x)
+        # however, the converted value is unused, and the compiler is free to remove
+        # the conversion if the call is guaranteed to succeed
+        convert(eltype(A), x)
         if i > j
-            iszero(xT) || throw_nonzeroerror(:UnitUpperTriangular, x, i, j)
+            iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
         else
-            xT == oneunit(eltype(A)) || throw_nonuniterror(:UnitUpperTriangular, x, i, j)
+            x == oneunit(eltype(A)) || throw_nonuniterror(nameof(typeof(A)), x, i, j)
         end
-    else
-        A.data[i,j] = x
     end
     return A
 end
 
 @propagate_inbounds function setindex!(A::LowerTriangular, x, i::Integer, j::Integer)
-    if i < j
+    if _shouldforwardindex(A, i, j)
+        A.data[i,j] = x
+    else
         @boundscheck checkbounds(A, i, j)
         # the value must be convertible to the eltype for setindex! to be meaningful
-        xT = convert(eltype(A), x)
-        iszero(xT) || throw_nonzeroerror(:LowerTriangular, x, i, j)
-    else
-        A.data[i,j] = x
+        # however, the converted value is unused, and the compiler is free to remove
+        # the conversion if the call is guaranteed to succeed
+        convert(eltype(A), x)
+        iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
     end
     return A
 end
 
 @propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Integer, j::Integer)
-    if i <= j
+    if _shouldforwardindex(A, i, j)
+        A.data[i,j] = x
+    else
         @boundscheck checkbounds(A, i, j)
         # the value must be convertible to the eltype for setindex! to be meaningful
-        xT = convert(eltype(A), x)
+        # however, the converted value is unused, and the compiler is free to remove
+        # the conversion if the call is guaranteed to succeed
+        convert(eltype(A), x)
         if i < j
-            iszero(xT) || throw_nonzeroerror(:UnitLowerTriangular, x, i, j)
+            iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
         else
-            xT == oneunit(eltype(A)) || throw_nonuniterror(:UnitLowerTriangular, x, i, j)
+            x == oneunit(eltype(A)) || throw_nonuniterror(nameof(typeof(A)), x, i, j)
         end
-    else
-        A.data[i,j] = x
     end
     return A
 end
