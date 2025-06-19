@@ -1417,7 +1417,7 @@ Return the updated `C`.
 """
 function gemmt! end
 
-for (gemmt, elty) in
+for (fname, elty) in
         ((:dgemmt,:Float64),
          (:sgemmt,:Float32),
          (:zgemmt,:ComplexF64),
@@ -1488,7 +1488,7 @@ Update `C` as `alpha*A*B + beta*C` or the other three variants according to
 """
 function gemm! end
 
-for (gemm, elty) in
+for (fname, elty) in
         ((:dgemm,:Float64),
          (:sgemm,:Float32),
          (:zgemm,:ComplexF64),
@@ -1595,9 +1595,9 @@ for (mfname, elty) in ((:dsymm,:Float64),
             chkstride1(A)
             chkstride1(B)
             chkstride1(C)
-            $fname(side, uplo, m, n,
-                   alpha, A, max(1,stride(A,2)), B,
-                   max(1,stride(B,2)), beta, C, max(1,stride(C,2)))
+            $mfname(side, uplo, m, n,
+                    alpha, A, max(1,stride(A,2)), B,
+                    max(1,stride(B,2)), beta, C, max(1,stride(C,2)))
             C
         end
         function symm(side::AbstractChar, uplo::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
