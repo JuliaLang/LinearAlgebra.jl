@@ -1198,4 +1198,26 @@ end
     @test_throws BoundsError S[LinearAlgebra.BandIndex(0,size(S,1)+1)]
 end
 
+@testset "lazy adjtrans" begin
+    dv = fill([1 2; 3 4], 3)
+    ev = fill([5 6; 7 8], 2)
+    T = Tridiagonal(ev, dv, ev)
+    S = SymTridiagonal(dv, ev)
+    m = [2 4; 4 2]
+    for B in (copy(T), copy(S))
+        for op in (transpose, adjoint)
+            C = op(B)
+            el = op(m)
+            C[1,1] = el
+            @test B[1,1] == m
+            if B isa Tridiagonal
+                C[2,1] = el
+                @test B[1,2] == m
+            end
+            @test (@allocated op(B)) == 0
+            @test (@allocated op(op(B))) == 0
+        end
+    end
+end
+
 end # module TestTridiagonal
