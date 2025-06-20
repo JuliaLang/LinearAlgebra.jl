@@ -940,7 +940,6 @@ end
 
 @testset "isapprox for Arrays" begin
     A = rand(3,3)
-    isapprox(A, A)
     n = @allocated isapprox(A, A)
     @test n == 0
     @test Int[] ≈ Int[]
