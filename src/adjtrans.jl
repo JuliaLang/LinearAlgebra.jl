@@ -576,3 +576,8 @@ diagview(A::Adjoint, k::Integer = 0) = _vecadjoint(diagview(parent(A), -k))
 # triu and tril
 triu!(A::AdjOrTransAbsMat, k::Integer = 0) = wrapperop(A)(tril!(parent(A), -k))
 tril!(A::AdjOrTransAbsMat, k::Integer = 0) = wrapperop(A)(triu!(parent(A), -k))
+
+function fillstored!(A::AdjOrTransAbsMat, v)
+    fillstored!(parent(A), wrapperop(A)(v))
+    return A
+end

@@ -218,6 +218,8 @@ function fillband!(A::AbstractMatrix{T}, x, l, u) where T
     return A
 end
 
+fillstored!(A::AbstractMatrix, v) = fill!(A, v)
+
 diagind(m::Integer, n::Integer, k::Integer=0) = diagind(IndexLinear(), m, n, k)
 diagind(::IndexLinear, m::Integer, n::Integer, k::Integer=0) =
     k <= 0 ? range(1-k, step=m+1, length=min(m+k, n)) : range(k*m+1, step=m+1, length=min(m, n-k))
