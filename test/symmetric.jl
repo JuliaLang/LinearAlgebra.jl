@@ -1257,4 +1257,24 @@ end
     end
 end
 
+@testset "fillband!" begin
+    A = zeros(4,4)
+    @testset for T in (Symmetric, Hermitian), uplo in (:U, :L)
+        A .= 0
+        S = T(A, uplo)
+        LinearAlgebra.fillband!(S, 2, -2, 2)
+        @test all(all(==(2), diagview(S, k)) for k in -2:2)
+        @test iszero(diagview(S, -3))
+        @test iszero(diagview(S, 3))
+        LinearAlgebra.fillband!(S, 4, -1, 1)
+        @test all(all(==(4), diagview(S, k)) for k in -1:1)
+        @test all(==(2), diagview(S, -2))
+        @test all(==(2), diagview(S, 2))
+    end
+    msg = "cannot fill Hermitian matrix with a non-hermitian value"
+    @test_throws msg LinearAlgebra.fillband!(Hermitian(A), 2im, -3, 3)
+    msg = "lower and upper bands must be equal in magnitude and opposite in sign, got l=0, u=1"
+    @test_throws msg LinearAlgebra.fillband!(Symmetric(A), 2, 0, 1)
+end
+
 end # module TestSymmetric

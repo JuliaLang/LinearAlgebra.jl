@@ -414,6 +414,19 @@ function fillstored!(A::HermOrSym{T}, x) where T
     return A
 end
 
+function fillband!(A::HermOrSym, x, l, u)
+    if isa(A, Hermitian)
+        ishermitian(x) || throw(ArgumentError("cannot fill Hermitian matrix with a non-hermitian value"))
+    elseif isa(A, Symmetric)
+        issymmetric(x) || throw(ArgumentError("cannot fill Symmetric matrix with an asymmetric value"))
+    end
+    l == -u || throw(ArgumentError(lazy"lower and upper bands must be equal in magnitude and opposite in sign, got l=$(l), u=$(u)"))
+    lp = A.uplo == 'U' ? 0 : l
+    up = A.uplo == 'U' ? u : 0
+    applytri(A -> fillband!(A, x, lp, up), A)
+    return A
+end
+
 Base.isreal(A::HermOrSym{<:Real}) = true
 function Base.isreal(A::HermOrSym)
     n = size(A, 1)
