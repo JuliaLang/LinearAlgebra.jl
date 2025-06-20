@@ -2020,8 +2020,9 @@ function isapprox(x::AbstractArray, y::AbstractArray;
 end
 
 norm_x_minus_y(x, y) = norm(x - y)
-const ArrayOrFastContiguousSubArrayStrided = Union{Array, FastContiguousSubArrayStrided}
-function norm_x_minus_y(x::ArrayOrFastContiguousSubArrayStrided, y::ArrayOrFastContiguousSubArrayStrided)
+FastContiguousArrayView{T,N,P<:Array,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
+const ArrayOrFastContiguousArrayView = Union{Array, FastContiguousArrayView}
+function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView)
     norm(Iterators.map(splat(-), zip(x,y)))
 end
 
