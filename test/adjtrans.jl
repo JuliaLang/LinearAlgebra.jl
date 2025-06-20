@@ -809,4 +809,15 @@ end
     end
 end
 
+@testset "fillstored!" begin
+    A = rand(ComplexF64, 4, 4)
+    U = UpperTriangular(A)
+    @testset for op in (adjoint, transpose)
+        @test LinearAlgebra.fillstored!(op(A), 1) == op(fill(1, size(A)))
+        @test LinearAlgebra.fillstored!(op(A), 2im) == op(fill(op(2im), size(A)))
+        @test LinearAlgebra.fillstored!(op(U), 1) == op(triu(fill(1, size(U))))
+        @test LinearAlgebra.fillstored!(op(U), 2im) == op(triu(fill(op(2im), size(U))))
+    end
+end
+
 end # module TestAdjointTranspose
