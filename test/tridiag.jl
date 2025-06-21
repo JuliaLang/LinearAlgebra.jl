@@ -1198,4 +1198,32 @@ end
     @test_throws BoundsError S[LinearAlgebra.BandIndex(0,size(S,1)+1)]
 end
 
+@testset "special functions" begin
+    _dv = Float64[1,-2,3,-4]
+    _ev = Float64[1,2,3]
+    @testset "$(typeof(dv))" for (dv, ev) in ((_dv, _ev), ImmutableArray.((_dv, _ev)))
+        dl = -ev
+        T = Tridiagonal(dl, dv, ev)
+        MT = Matrix(T)
+        S = SymTridiagonal(dv, ev)
+        MS = Matrix(S)
+
+        @testset for f in Any[sin, cos, tan,
+                    asin, acos, atan,
+                    sinh, cosh, tanh,
+                    asinh, acosh, atanh,
+                    exp, log, sqrt, cbrt,
+                    ]
+            @test f(T) ≈ f(MT)
+            @test f(S) ≈ f(MS)
+        end
+        for (ST, MST) in ((S, MS), (T, MT))
+            sT, cT = sincos(ST)
+            sMT, cMT = sincos(MST)
+            @test sT ≈ sMT
+            @test cT ≈ cMT
+        end
+    end
+end
+
 end # module TestTridiagonal
