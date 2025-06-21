@@ -513,6 +513,10 @@ function _dot_nonrecursive(u, v)
     end
 end
 
+# we use (n A^T) = (A n)^T, which holds if the product of n and the elements of A is commutative
+rmul!(X::AdjOrTrans{<:Union{Real,Complex}}, s::Union{Real,Complex}) = (lmul!(wrapperop(X)(s), parent(X)); X)
+lmul!(s::Union{Real,Complex}, X::AdjOrTrans{<:Union{Real,Complex}}) = (rmul!(parent(X), wrapperop(X)(s)); X)
+
 # Adjoint/Transpose-vector * vector
 *(u::AdjointAbsVec{<:Number}, v::AbstractVector{<:Number}) = dot(u.parent, v)
 *(u::TransposeAbsVec{T}, v::AbstractVector{T}) where {T<:Real} = dot(u.parent, v)
