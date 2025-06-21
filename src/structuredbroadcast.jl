@@ -8,8 +8,12 @@ struct StructuredMatrixStyle{T} <: Broadcast.AbstractArrayStyle{2} end
 StructuredMatrixStyle{T}(::Val{2}) where {T} = StructuredMatrixStyle{T}()
 StructuredMatrixStyle{T}(::Val{N}) where {T,N} = Broadcast.DefaultArrayStyle{N}()
 
-const StructuredMatrix{T} = Union{Diagonal{T},Bidiagonal{T},SymTridiagonal{T},Tridiagonal{T},LowerTriangular{T},UnitLowerTriangular{T},UpperTriangular{T},UnitUpperTriangular{T}}
-for ST in (Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal,LowerTriangular,UnitLowerTriangular,UpperTriangular,UnitUpperTriangular)
+const StructuredMatrix{T} = Union{Diagonal{T},Bidiagonal{T},SymTridiagonal{T},Tridiagonal{T},
+            LowerTriangular{T},UnitLowerTriangular{T},UpperTriangular{T},UnitUpperTriangular{T},
+            UpperHessenberg{T}}
+for ST in (Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal,
+            LowerTriangular,UnitLowerTriangular,UpperTriangular,UnitUpperTriangular,
+            UpperHessenberg)
     @eval Broadcast.BroadcastStyle(::Type{<:$ST}) = $(StructuredMatrixStyle{ST}())
 end
 
@@ -27,28 +31,46 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixSt
     StructuredMatrixStyle{LowerTriangular}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular}}) =
     StructuredMatrixStyle{UpperTriangular}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
 
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Bidiagonal}, ::StructuredMatrixStyle{Diagonal}) =
     StructuredMatrixStyle{Bidiagonal}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Bidiagonal}, ::StructuredMatrixStyle{<:Union{Bidiagonal,SymTridiagonal,Tridiagonal}}) =
     StructuredMatrixStyle{Tridiagonal}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Bidiagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
+
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{<:Union{Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal}}) =
     StructuredMatrixStyle{Tridiagonal}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Tridiagonal}, ::StructuredMatrixStyle{<:Union{Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal}}) =
     StructuredMatrixStyle{Tridiagonal}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Tridiagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
 
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{LowerTriangular}, ::StructuredMatrixStyle{<:Union{Diagonal,LowerTriangular,UnitLowerTriangular}}) =
     StructuredMatrixStyle{LowerTriangular}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{UpperTriangular}, ::StructuredMatrixStyle{<:Union{Diagonal,UpperTriangular,UnitUpperTriangular}}) =
     StructuredMatrixStyle{UpperTriangular}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{UpperTriangular}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{UnitLowerTriangular}, ::StructuredMatrixStyle{<:Union{Diagonal,LowerTriangular,UnitLowerTriangular}}) =
     StructuredMatrixStyle{LowerTriangular}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{UnitUpperTriangular}, ::StructuredMatrixStyle{<:Union{Diagonal,UpperTriangular,UnitUpperTriangular}}) =
     StructuredMatrixStyle{UpperTriangular}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{UnitUpperTriangular}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
 
-Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}, ::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular}}) =
+function Broadcast.BroadcastStyle(::StructuredMatrixStyle{UpperHessenberg},
+        ::StructuredMatrixStyle{<:Union{Diagonal,Bidiagonal,Tridiagonal,SymTridiagonal,UnitUpperTriangular,UpperTriangular}})
+    StructuredMatrixStyle{UpperHessenberg}()
+end
+
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}, ::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular,UpperHessenberg}}) =
     StructuredMatrixStyle{Matrix}()
-Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular}}, ::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}) =
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular,UpperHessenberg}}, ::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}) =
     StructuredMatrixStyle{Matrix}()
 
 # Make sure that `StructuredMatrixStyle{Matrix}` doesn't ever end up falling
@@ -97,7 +119,7 @@ function structured_broadcast_alloc(bc, ::Type{Tridiagonal},
     Tridiagonal(Array{ElType}(undef, n1),Array{ElType}(undef, n),Array{ElType}(undef, n1))
 end
 function structured_broadcast_alloc(bc, ::Type{T}, ::Type{ElType},
-        sz::NTuple{2,Integer}) where {ElType,T<:UpperOrLowerTriangular}
+        sz::NTuple{2,Integer}) where {ElType,T<:Union{UpperOrLowerTriangular, UpperHessenberg}}
     T(Array{ElType}(undef, sz))
 end
 structured_broadcast_alloc(bc, ::Type{Matrix}, ::Type{ElType}, sz::NTuple{2,Integer}) where {ElType} =
@@ -278,6 +300,7 @@ function preprocess_broadcasted(::Type{T}, bc::Broadcasted) where {T}
 end
 _preprocess_broadcasted(::Type{LowerTriangular}, A) = lowertridata(A)
 _preprocess_broadcasted(::Type{UpperTriangular}, A) = uppertridata(A)
+_preprocess_broadcasted(::Type{UpperHessenberg}, A) = upperhessenbergdata(A)
 
 function copyto!(dest::LowerTriangular, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
@@ -299,6 +322,19 @@ function copyto!(dest::UpperTriangular, bc::Broadcasted{<:StructuredMatrixStyle}
     bc_unwrapped = preprocess_broadcasted(UpperTriangular, bc)
     for j in axs[2]
         for i in 1:j
+            @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
+        end
+    end
+    return dest
+end
+
+function copyto!(dest::UpperHessenberg, bc::Broadcasted{<:StructuredMatrixStyle})
+    isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
+    axs = axes(dest)
+    axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
+    bc_unwrapped = preprocess_broadcasted(UpperHessenberg, bc)
+    for j in axs[2]
+        for i in 1:min(size(dest.data,1), j+1)
             @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
         end
     end
