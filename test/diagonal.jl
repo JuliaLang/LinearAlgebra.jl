@@ -1396,14 +1396,25 @@ end
 end
 
 @testset "kron! for Diagonal" begin
-    a = Diagonal([2,2])
-    b = Diagonal([1,1])
+    a = Diagonal([1,2])
+    b = Diagonal([3,4])
+    # Diagonal out
     c = Diagonal([0,0,0,0])
     kron!(c,b,a)
-    @test c == Diagonal([2,2,2,2])
+    @test c == Diagonal([3, 6, 4, 8])
+    @test c == kron!(fill(0, 4, 4), Matrix(b), Matrix(a)) # against dense kron!
     c=Diagonal(Vector{Float64}(undef, 4))
     kron!(c,a,b)
-    @test c == Diagonal([2,2,2,2])
+    @test c == Diagonal([3.0, 4.0, 6.0, 8.0])
+
+    # AbstractArray out
+    c = fill(0, 4, 4)
+    kron!(c, b, a) 
+    @test c == diagm([3, 6, 4, 8])
+    @test c == kron!(fill(0, 4, 4), Matrix(b), Matrix(a)) # against dense kron!
+    c = Matrix{Float64}(undef, 4, 4)
+    kron!(c, a, b)
+    @test c == diagm([3.0, 4.0, 6.0, 8.0])
 end
 
 @testset "uppertriangular/lowertriangular" begin
