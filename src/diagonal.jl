@@ -806,6 +806,11 @@ end
 
 kron(A::Diagonal, B::Diagonal) = Diagonal(kron(A.diag, B.diag))
 
+function kron!(C::Diagonal, A::Diagonal, B::Diagonal)
+    kron!(C.diag, A.diag, B.diag)
+    return C
+end
+
 function kron(A::Diagonal, B::SymTridiagonal)
     kdv = kron(A.diag, B.dv)
     # We don't need to drop the last element
