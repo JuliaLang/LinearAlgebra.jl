@@ -900,10 +900,11 @@ end
         @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
         @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
         if eltype(C) <: Complex
-            @test mul!(adjoint(copy(C)), A, adjoint(Bm), 4+2im, 3+im) ≈ A * adjoint(Bm) * (4+2im) + adjoint(C) * (3+im)
-            @test mul!(adjoint(copy(C)), adjoint(Bm), A, 4+2im, 3+im) ≈ adjoint(Bm) * A * (4+2im) + adjoint(C) * (3+im)
-            @test mul!(transpose(copy(C)), A, transpose(Bm), 4+2im, 3+im) ≈ A * transpose(Bm) * (4+2im) + transpose(C) * (3+im)
-            @test mul!(transpose(copy(C)), transpose(Bm), A, 4+2im, 3+im) ≈ transpose(Bm) * A * (4+2im) + transpose(C) * (3+im)
+            alpha, beta  = 4+2im, 3+im
+            @test mul!(adjoint(copy(C)), A, adjoint(Bm), alpha, beta) ≈ A * adjoint(Bm) * alpha + adjoint(C) * beta
+            @test mul!(adjoint(copy(C)), adjoint(Bm), A, alpha, beta) ≈ adjoint(Bm) * A * alpha + adjoint(C) * beta
+            @test mul!(transpose(copy(C)), A, transpose(Bm), alpha, beta) ≈ A * transpose(Bm) * alpha + transpose(C) * beta
+            @test mul!(transpose(copy(C)), transpose(Bm), A, alpha, beta) ≈ transpose(Bm) * A * alpha + transpose(C) * beta
         end
     end
     let A = adjoint(Hermitian(rand(S, n,n))), Bv = Vector(rand(T, n)), Bm = Matrix(rand(T, n,n))
@@ -926,10 +927,11 @@ end
         @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
         @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
         if eltype(C) <: Complex
-            @test mul!(adjoint(copy(C)), A, adjoint(Bm), 4+2im, 3+im) ≈ A * adjoint(Bm) * (4+2im) + adjoint(C) * (3+im)
-            @test mul!(adjoint(copy(C)), adjoint(Bm), A, 4+2im, 3+im) ≈ adjoint(Bm) * A * (4+2im) + adjoint(C) * (3+im)
-            @test mul!(transpose(copy(C)), A, transpose(Bm), 4+2im, 3+im) ≈ A * transpose(Bm) * (4+2im) + transpose(C) * (3+im)
-            @test mul!(transpose(copy(C)), transpose(Bm), A, 4+2im, 3+im) ≈ transpose(Bm) * A * (4+2im) + transpose(C) * (3+im)
+            alpha, beta  = 4+2im, 3+im
+            @test mul!(adjoint(copy(C)), A, adjoint(Bm), alpha, beta) ≈ A * adjoint(Bm) * alpha + adjoint(C) * beta
+            @test mul!(adjoint(copy(C)), adjoint(Bm), A, alpha, beta) ≈ adjoint(Bm) * A * alpha + adjoint(C) * beta
+            @test mul!(transpose(copy(C)), A, transpose(Bm), alpha, beta) ≈ A * transpose(Bm) * alpha + transpose(C) * beta
+            @test mul!(transpose(copy(C)), transpose(Bm), A, alpha, beta) ≈ transpose(Bm) * A * alpha + transpose(C) * beta
         end
     end
     let Ahrs = transpose(Hermitian(Symmetric(rand(T, n, n)))),
