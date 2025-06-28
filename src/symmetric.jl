@@ -721,20 +721,24 @@ for f in (:+, :-)
 end
 
 mul(A::HermOrSym, B::HermOrSym) = A * copyto!(similar(parent(B)), B)
-# catch a few potential BLAS-cases
-function mul(A::HermOrSym{<:BlasFloat,<:StridedMatrix}, B::AdjOrTrans{<:BlasFloat,<:StridedMatrix})
-    matmul_size_check(size(A), size(B))
-    T = promote_type(eltype(A), eltype(B))
-    mul!(similar(B, T, (size(A, 1), size(B, 2))),
-            convert(AbstractMatrix{T}, A),
-            copy_oftype(B, T)) # make sure the AdjOrTrans wrapper is resolved
-end
-function mul(A::AdjOrTrans{<:BlasFloat,<:StridedMatrix}, B::HermOrSym{<:BlasFloat,<:StridedMatrix})
-    matmul_size_check(size(A), size(B))
-    T = promote_type(eltype(A), eltype(B))
-    mul!(similar(B, T, (size(A, 1), size(B, 2))),
-            copy_oftype(A, T), # make sure the AdjOrTrans wrapper is resolved
-            convert(AbstractMatrix{T}, B))
+
+# Multiplication of Hermitian and adjoint with an Adjoint destination
+# may conjugate the terms to delegate the multiplication to the parents of the adjoints
+for (AdjTransT, SymHermT) in ((:AdjointAbsMat, :SelfAdjoint), (:(TransposeAbsMat{<:Union{Real,Complex}}), :RealHermSymComplexSym))
+    @eval begin
+        function mul!(C::$AdjTransT, A::$SymHermT, B::$AdjTransT, α::Number, β::Number)
+            _rmul_or_fill!(C, β)
+            isone(α) || rmul!(B, α)
+            mul!(wrapperop(C)(C), wrapperop(B)(B), A)
+            return C
+        end
+        function mul!(C::$AdjTransT, A::$AdjTransT, B::$SymHermT, α::Number, β::Number)
+            _rmul_or_fill!(C, β)
+            isone(α) || rmul!(B, α)
+            mul!(wrapperop(C)(C), B, wrapperop(A)(A))
+            return C
+        end
+    end
 end
 
 function dot(x::AbstractVector, A::RealHermSymComplexHerm, y::AbstractVector)
