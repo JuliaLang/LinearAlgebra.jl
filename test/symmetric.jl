@@ -876,7 +876,7 @@ end
     end
 end
 
-@testset "Multiplications symmetric/hermitian for $T and $S for size $n" for T in
+@testset "Multiplications symmetric/hermitian for T=$T and S=$S for size n=$n" for T in
         (Float16, Float32, Float64, BigFloat, Quaternion{Float64}),
         S in (T <: Quaternion ? (Quaternion{Float64},) : (ComplexF16, ComplexF32, ComplexF64, Quaternion{Float64})),
         n in (2, 3, 4)
@@ -899,6 +899,12 @@ end
         @test mul!(adjoint(copy(C)), adjoint(Bm), A, 2, 3) ≈ adjoint(Bm) * A * 2 + adjoint(C) * 3
         @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
         @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
+        if eltype(C) <: Complex
+            @test mul!(adjoint(copy(C)), A, adjoint(Bm), 4+2im, 3+im) ≈ A * adjoint(Bm) * (4+2im) + adjoint(C) * (3+im)
+            @test mul!(adjoint(copy(C)), adjoint(Bm), A, 4+2im, 3+im) ≈ adjoint(Bm) * A * (4+2im) + adjoint(C) * (3+im)
+            @test mul!(transpose(copy(C)), A, transpose(Bm), 4+2im, 3+im) ≈ A * transpose(Bm) * (4+2im) + transpose(C) * (3+im)
+            @test mul!(transpose(copy(C)), transpose(Bm), A, 4+2im, 3+im) ≈ transpose(Bm) * A * (4+2im) + transpose(C) * (3+im)
+        end
     end
     let A = adjoint(Hermitian(rand(S, n,n))), Bv = Vector(rand(T, n)), Bm = Matrix(rand(T, n,n))
         @test A * Bv ≈ Matrix(A) * Bv
@@ -919,6 +925,12 @@ end
         @test mul!(adjoint(copy(C)), adjoint(Bm), A, 2, 3) ≈ adjoint(Bm) * A * 2 + adjoint(C) * 3
         @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
         @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
+        if eltype(C) <: Complex
+            @test mul!(adjoint(copy(C)), A, adjoint(Bm), 4+2im, 3+im) ≈ A * adjoint(Bm) * (4+2im) + adjoint(C) * (3+im)
+            @test mul!(adjoint(copy(C)), adjoint(Bm), A, 4+2im, 3+im) ≈ adjoint(Bm) * A * (4+2im) + adjoint(C) * (3+im)
+            @test mul!(transpose(copy(C)), A, transpose(Bm), 4+2im, 3+im) ≈ A * transpose(Bm) * (4+2im) + transpose(C) * (3+im)
+            @test mul!(transpose(copy(C)), transpose(Bm), A, 4+2im, 3+im) ≈ transpose(Bm) * A * (4+2im) + transpose(C) * (3+im)
+        end
     end
     let Ahrs = transpose(Hermitian(Symmetric(rand(T, n, n)))),
         Acs = transpose(Symmetric(rand(S, n, n))),

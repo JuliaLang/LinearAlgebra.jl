@@ -732,11 +732,11 @@ for (AdjTransT, SymHermT) in (
 
     @eval begin
         function mul!(C::$AdjTransT, A::$SymHermT, B::$AdjTransT, α::Union{Real,Complex}, β::Union{Real,Complex})
-            mul!(wrapperop(C)(C), wrapperop(B)(B), A, α, β)
+            mul!(wrapperop(C)(C), wrapperop(B)(B), A, wrapperop(C)(α), wrapperop(C)(β))
             return C
         end
         function mul!(C::$AdjTransT, A::$AdjTransT, B::$SymHermT, α::Union{Real,Complex}, β::Union{Real,Complex})
-            mul!(wrapperop(C)(C), B, wrapperop(A)(A), α, β)
+            mul!(wrapperop(C)(C), B, wrapperop(A)(A), wrapperop(C)(α), wrapperop(C)(β))
             return C
         end
     end
