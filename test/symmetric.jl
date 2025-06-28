@@ -888,6 +888,17 @@ end
         @test Bm * A ≈ Bm * Matrix(A)
         @test transpose(Bm) * A ≈ transpose(Bm) * Matrix(A)
         @test adjoint(Bm) * A ≈ adjoint(Bm) * Matrix(A)
+        C = similar(Bm, promote_type(T, S))
+        @test mul!(C, A, Bm) ≈ A * Bm
+        @test mul!(adjoint(C), A, adjoint(Bm)) ≈ A * adjoint(Bm)
+        @test mul!(transpose(C), A, transpose(Bm)) ≈ A * transpose(Bm)
+        rand!(C)
+        @test mul!(copy(C), A, Bm, 2, 3) ≈ A * Bm * 2 + C * 3
+        @test mul!(copy(C), Bm, A, 2, 3) ≈ Bm * A * 2 + C * 3
+        @test mul!(adjoint(copy(C)), A, adjoint(Bm), 2, 3) ≈ A * adjoint(Bm) * 2 + adjoint(C) * 3
+        @test mul!(adjoint(copy(C)), adjoint(Bm), A, 2, 3) ≈ adjoint(Bm) * A * 2 + adjoint(C) * 3
+        @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
+        @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
     end
     let A = adjoint(Hermitian(rand(S, n,n))), Bv = Vector(rand(T, n)), Bm = Matrix(rand(T, n,n))
         @test A * Bv ≈ Matrix(A) * Bv
@@ -897,6 +908,17 @@ end
         @test Bm * A ≈ Bm * Matrix(A)
         @test transpose(Bm) * A ≈ transpose(Bm) * Matrix(A)
         @test adjoint(Bm) * A ≈ adjoint(Bm) * Matrix(A)
+        C = similar(Bm, promote_type(T, S))
+        @test mul!(C, A, Bm) ≈ A * Bm
+        @test mul!(adjoint(C), A, adjoint(Bm)) ≈ A * adjoint(Bm)
+        @test mul!(transpose(C), A, transpose(Bm)) ≈ A * transpose(Bm)
+        rand!(C)
+        @test mul!(copy(C), A, Bm, 2, 3) ≈ A * Bm * 2 + C * 3
+        @test mul!(copy(C), Bm, A, 2, 3) ≈ Bm * A * 2 + C * 3
+        @test mul!(adjoint(copy(C)), A, adjoint(Bm), 2, 3) ≈ A * adjoint(Bm) * 2 + adjoint(C) * 3
+        @test mul!(adjoint(copy(C)), adjoint(Bm), A, 2, 3) ≈ adjoint(Bm) * A * 2 + adjoint(C) * 3
+        @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
+        @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
     end
     let Ahrs = transpose(Hermitian(Symmetric(rand(T, n, n)))),
         Acs = transpose(Symmetric(rand(S, n, n))),

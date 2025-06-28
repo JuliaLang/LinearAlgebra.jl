@@ -225,6 +225,7 @@ const RealHermSymComplexHerm{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, 
 const RealHermSymComplexSym{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, Symmetric{Complex{T},S}}
 const RealHermSymSymTriComplexHerm{T<:Real} = Union{RealHermSymComplexSym{T}, SymTridiagonal{T}}
 const SelfAdjoint = Union{SymTridiagonal{<:Real}, Symmetric{<:Real}, Hermitian}
+const SelfAdjointRealOrComplex = Union{SymTridiagonal{<:Real}, Symmetric{<:Real}, Hermitian{<:Union{Real,Complex}}}
 
 wrappertype(::Union{Symmetric, SymTridiagonal}) = Symmetric
 wrappertype(::Hermitian) = Hermitian
@@ -722,20 +723,20 @@ end
 
 mul(A::HermOrSym, B::HermOrSym) = A * copyto!(similar(parent(B)), B)
 
-# Multiplication of Hermitian and adjoint with an Adjoint destination
+# Multiplication of Hermitian and Adjoint with an Adjoint destination
 # may conjugate the terms to delegate the multiplication to the parents of the adjoints
-for (AdjTransT, SymHermT) in ((:AdjointAbsMat, :SelfAdjoint), (:(TransposeAbsMat{<:Union{Real,Complex}}), :RealHermSymComplexSym))
+# Only defined for commutative numbers
+for (AdjTransT, SymHermT) in (
+        (:(Adjoint{<:Union{Real,Complex}}), :SelfAdjointRealOrComplex),
+        (:(Transpose{<:Union{Real,Complex}}), :RealHermSymComplexSym))
+
     @eval begin
-        function mul!(C::$AdjTransT, A::$SymHermT, B::$AdjTransT, α::Number, β::Number)
-            _rmul_or_fill!(C, β)
-            isone(α) || rmul!(B, α)
-            mul!(wrapperop(C)(C), wrapperop(B)(B), A)
+        function mul!(C::$AdjTransT, A::$SymHermT, B::$AdjTransT, α::Union{Real,Complex}, β::Union{Real,Complex})
+            mul!(wrapperop(C)(C), wrapperop(B)(B), A, α, β)
             return C
         end
-        function mul!(C::$AdjTransT, A::$AdjTransT, B::$SymHermT, α::Number, β::Number)
-            _rmul_or_fill!(C, β)
-            isone(α) || rmul!(B, α)
-            mul!(wrapperop(C)(C), B, wrapperop(A)(A))
+        function mul!(C::$AdjTransT, A::$AdjTransT, B::$SymHermT, α::Union{Real,Complex}, β::Union{Real,Complex})
+            mul!(wrapperop(C)(C), B, wrapperop(A)(A), α, β)
             return C
         end
     end
