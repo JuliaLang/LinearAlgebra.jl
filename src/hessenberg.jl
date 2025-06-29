@@ -59,6 +59,9 @@ size(H::UpperHessenberg) = size(H.data)
 axes(H::UpperHessenberg) = axes(H.data)
 parent(H::UpperHessenberg) = H.data
 
+upperhessenbergdata(H::UpperHessenberg) = H.data
+upperhessenbergdata(A) = A
+
 # similar behaves like UpperTriangular
 similar(H::UpperHessenberg, ::Type{T}) where {T} = UpperHessenberg(similar(H.data, T))
 similar(H::UpperHessenberg, ::Type{T}, dims::Dims{N}) where {T,N} = similar(H.data, T, dims)
