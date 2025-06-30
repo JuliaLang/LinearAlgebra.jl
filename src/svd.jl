@@ -299,7 +299,9 @@ function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(r
     if k == 0
         B[1:n, :] .= 0
     else
-        mul!(view(B, 1:n, :), view(F.Vt, 1:k, :)', view(F.S, 1:k) .\ (view(F.U, :, 1:k)' * _cut_B(B, 1:m)))
+        temp = view(F.U, :, 1:k)' * _cut_B(B, 1:m)
+        ldiv!(Diagonal(view(F.S, 1:k)), temp)
+        mul!(view(B, 1:n, :), view(F.Vt, 1:k, :)', temp)
     end
     return B
 end
