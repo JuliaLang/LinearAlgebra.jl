@@ -312,7 +312,7 @@ function pinv(F::SVD{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T)))
 end
 
 function inv(F::SVD)
-    # TODO: checksquare(F)
+    checksquare(F)
     @inbounds for i in eachindex(F.S)
         iszero(F.S[i]) && throw(SingularException(i))
     end
