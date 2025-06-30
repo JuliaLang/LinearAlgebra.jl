@@ -1415,6 +1415,7 @@ end
     c = Matrix{Float64}(undef, 4, 4)
     kron!(c, a, b)
     @test c == diagm([3.0, 4.0, 6.0, 8.0])
+    @test_throws DimensionMismatch kron!(Diagonal(zeros(5)), Diagonal(zeros(2)), Diagonal(zeros(2)))
 end
 
 @testset "uppertriangular/lowertriangular" begin
