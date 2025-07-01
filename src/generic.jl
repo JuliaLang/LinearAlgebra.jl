@@ -2004,12 +2004,7 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     atol::Real=0,
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
-    Base.promote_shape(size(x), size(y)) # ensure compatible size
-    d = if isempty(x) && isempty(y)
-        norm(zero(eltype(x)) - zero(eltype(y)))
-    else
-        norm_x_minus_y(x, y)
-    end
+    d = norm_x_minus_y(x, y)
     if isfinite(d)
         return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
     else
@@ -2023,7 +2018,12 @@ norm_x_minus_y(x, y) = norm(x - y)
 FastContiguousArrayView{T,N,P<:Array,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
 const ArrayOrFastContiguousArrayView = Union{Array, FastContiguousArrayView}
 function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView)
-    norm(Iterators.map(splat(-), zip(x,y)))
+    Base.promote_shape(size(x), size(y)) # ensure compatible size
+    if isempty(x) && isempty(y)
+        norm(zero(eltype(x)) - zero(eltype(y)))
+    else
+        norm(Iterators.map(splat(-), zip(x,y)))
+    end
 end
 
 """
