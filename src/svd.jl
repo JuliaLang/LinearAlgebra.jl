@@ -92,21 +92,22 @@ default_svd_alg(A) = DivideAndConquer()
 
 
 """
-    svd!(A; full::Bool = false, alg::Algorithm = default_svd_alg(A)) -> SVD
+    svd!(A; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) -> SVD
 
 `svd!` is the same as [`svd`](@ref), but saves space by
 overwriting the input `A`, instead of creating a copy. See documentation of [`svd`](@ref) for details.
 """
-function svd!(A::StridedMatrix{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A)) where {T<:BlasFloat}
+function svd!(A::StridedMatrix{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T<:BlasFloat}
     m, n = size(A)
     if m == 0 || n == 0
         u, s, vt = (Matrix{T}(I, m, full ? m : n), real(zeros(T,0)), Matrix{T}(I, n, n))
     else
         u, s, vt = _svd!(A, full, alg)
     end
-    SVD(u, s, vt)
+    s[_count_svdvals(s, atol, rtol)+1:end] .= 0
+    return SVD(u, s, vt)
 end
-function svd!(A::StridedVector{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A)) where {T<:BlasFloat}
+function svd!(A::StridedVector{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T<:BlasFloat}
     m = length(A)
     normA = norm(A)
     if iszero(normA)
@@ -116,6 +117,7 @@ function svd!(A::StridedVector{T}; full::Bool = false, alg::Algorithm = default_
         return SVD(reshape(A, (m, 1)), [normA], ones(T, 1, 1))
     else
         u, s, vt = _svd!(reshape(A, (m, 1)), full, alg)
+        s[_count_svdvals(s, atol, rtol)+1:end] .= 0
         return SVD(u, s, vt)
     end
 end
@@ -129,10 +131,15 @@ function _svd!(A::StridedMatrix{T}, full::Bool, alg::QRIteration) where {T<:Blas
     u, s, vt = LAPACK.gesvd!(c, c, A)
 end
 
-
+# count positive singular values S ≥ given tolerances, S assumed sorted
+function _count_svdvals(S, atol::Real, rtol::Real)
+    isempty(S) && return 0
+    tol = max(rtol * S[1], atol)
+    return iszero(S[1]) ? 0 : searchsortedlast(S, tol, rev=true)
+end
 
 """
-    svd(A; full::Bool = false, alg::Algorithm = default_svd_alg(A)) -> SVD
+    svd(A; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) -> SVD
 
 Compute the singular value decomposition (SVD) of `A` and return an `SVD` object.
 
@@ -151,10 +158,17 @@ number of singular values.
 
 `alg` specifies which algorithm and LAPACK method to use for SVD:
 - `alg = LinearAlgebra.DivideAndConquer()` (default): Calls `LAPACK.gesdd!`.
-- `alg = LinearAlgebra.QRIteration()`: Calls `LAPACK.gesvd!` (typically slower but more accurate) .
+- `alg = LinearAlgebra.QRIteration()`: Calls `LAPACK.gesvd!` (typically slower but more accurate).
+
+The `atol` and `rtol` parameters specify optional tolerances to truncate the SVD,
+dropping (setting to zero) singular values less than `max(atol, rtol*σ₁)` where
+`σ₁` is the largest singular value of `A`.
 
 !!! compat "Julia 1.3"
     The `alg` keyword argument requires Julia 1.3 or later.
+
+!!! compat "Julia 1.13"
+    The `atol` and `rtol` arguments require Julia 1.13 or later.
 
 # Examples
 ```jldoctest
@@ -176,25 +190,25 @@ julia> Uonly == U
 true
 ```
 """
-function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A)) where {T}
-    svd!(eigencopy_oftype(A, eigtype(T)), full = full, alg = alg)
+function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T}
+    svd!(eigencopy_oftype(A, eigtype(T)); full, alg, atol, rtol)
 end
-function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A)) where {T <: Union{Float16,Complex{Float16}}}
-    A = svd!(eigencopy_oftype(A, eigtype(T)), full = full, alg = alg)
+function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T <: Union{Float16,Complex{Float16}}}
+    A = svd!(eigencopy_oftype(A, eigtype(T)); full, alg, atol, rtol)
     return SVD{T}(A)
 end
-function svd(x::Number; full::Bool = false, alg::Algorithm = default_svd_alg(x))
-    SVD(x == 0 ? fill(one(x), 1, 1) : fill(x/abs(x), 1, 1), [abs(x)], fill(one(x), 1, 1))
+function svd(x::Number; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Real=0, rtol::Real=0)
+    SVD(iszero(x) || abs(x) < atol ? fill(one(x), 1, 1) : fill(x/abs(x), 1, 1), [abs(x)], fill(one(x), 1, 1))
 end
-function svd(x::Integer; full::Bool = false, alg::Algorithm = default_svd_alg(x))
-    svd(float(x), full = full, alg = alg)
+function svd(x::Integer; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Real=0, rtol::Real=0)
+    svd(float(x); full, alg, atol, rtol)
 end
-function svd(A::Adjoint; full::Bool = false, alg::Algorithm = default_svd_alg(A))
-    s = svd(A.parent, full = full, alg = alg)
+function svd(A::Adjoint; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0)
+    s = svd(A.parent; full, alg, atol, rtol)
     return SVD(s.Vt', s.S, s.U')
 end
-function svd(A::Transpose; full::Bool = false, alg::Algorithm = default_svd_alg(A))
-    s = svd(A.parent, full = full, alg = alg)
+function svd(A::Transpose; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0)
+    s = svd(A.parent; full, alg, atol, rtol)
     return SVD(transpose(s.Vt), s.S, transpose(s.U))
 end
 
@@ -248,7 +262,7 @@ svdvals(S::SVD{<:Any,T}) where {T} = (S.S)::Vector{T}
 """
     rank(S::SVD{<:Any, T}; atol::Real=0, rtol::Real=min(n,m)*ϵ) where {T}
 
-Compute the numerical rank of the SVD object `S` by counting how many singular values are greater 
+Compute the numerical rank of the SVD object `S` by counting how many singular values are greater
 than `max(atol, rtol*σ₁)` where `σ₁` is the largest calculated singular value.
 This is equivalent to the default [`rank(::AbstractMatrix)`](@ref) method except that it re-uses an existing SVD factorization.
 `atol` and `rtol` are the absolute and relative tolerances, respectively.
@@ -258,25 +272,51 @@ and `ϵ` is the [`eps`](@ref) of the element type of `S`.
 !!! compat "Julia 1.12"
     The `rank(::SVD)` method requires at least Julia 1.12.
 """
-function rank(S::SVD; atol::Real = 0.0, rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
+function rank(S::SVD; atol::Real=0, rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
     tol = max(atol, rtol*S.S[1])
     count(>(tol), S.S)
 end
 
 ### SVD least squares ###
-function ldiv!(A::SVD{T}, B::AbstractVecOrMat) where T
-    m, n = size(A)
-    k = searchsortedlast(A.S, eps(real(T))*A.S[1], rev=true)
-    mul!(view(B, 1:n, :), view(A.Vt, 1:k, :)', view(A.S, 1:k) .\ (view(A.U, :, 1:k)' * _cut_B(B, 1:m)))
+"""
+    ldiv!(F::SVD, B; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+
+Given the SVD `F` of an ``m \\times n`` matrix, multiply the first ``m`` rows of `B` in-place
+by the Moore-Penrose pseudoinverse, storing the result in the first ``n`` rows of `B`, returning `B`.
+This is equivalent to a least-squares solution (for ``m \\ge n``) or a minimum-norm solution (for ``m \\le n``).
+
+Similar to the [`pinv`](@ref) function, the solution can be regularized by truncating the SVD,
+dropping any singular values less than `max(atol, rtol*σ₁)` where `σ₁` is the largest singular value.
+The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest dimension of `M`, and
+`ϵ` is the [`eps`](@ref) of the element type of `M`.
+
+!!! compat "Julia 1.13"
+    The `atol` and `rtol` arguments require Julia 1.13 or later.
+"""
+function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
+    m, n = size(F)
+    k = _count_svdvals(F.S, atol, rtol)
+    if k == 0
+        B[1:n, :] .= 0
+    else
+        temp = view(F.U, :, 1:k)' * _cut_B(B, 1:m)
+        ldiv!(Diagonal(view(F.S, 1:k)), temp)
+        mul!(view(B, 1:n, :), view(F.Vt, 1:k, :)', temp)
+    end
     return B
 end
 
-function inv(F::SVD{T}) where T
+function pinv(F::SVD{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
+    k = _count_svdvals(F.S, atol, rtol)
+    @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
+end
+
+function inv(F::SVD)
+    # TODO: checksquare(F)
     @inbounds for i in eachindex(F.S)
         iszero(F.S[i]) && throw(SingularException(i))
     end
-    k = searchsortedlast(F.S, eps(real(T))*F.S[1], rev=true)
-    @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
+    pinv(F; rtol=eps(real(eltype(F))))
 end
 
 size(A::SVD, dim::Integer) = dim == 1 ? size(A.U, dim) : size(A.Vt, dim)
