@@ -306,9 +306,9 @@ function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(r
     return B
 end
 
-function pinv(F::SVD{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
+function pinv(F::SVD{T,<:Any,M}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where {T,M}
     k = _count_svdvals(F.S, atol, rtol)
-    @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
+    @views SVD(M(F.Vt[1:k, :]'), inv.(F.S[1:k]), M(F.U[:,1:k]'))
 end
 
 function inv(F::SVD)
@@ -316,7 +316,8 @@ function inv(F::SVD)
     @inbounds for i in eachindex(F.S)
         iszero(F.S[i]) && throw(SingularException(i))
     end
-    pinv(F; rtol=eps(real(eltype(F))))
+    k = _count_svdvals(F.S, 0, eps(real(eltype(F))))
+    return @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
 end
 
 size(A::SVD, dim::Integer) = dim == 1 ? size(A.U, dim) : size(A.Vt, dim)
