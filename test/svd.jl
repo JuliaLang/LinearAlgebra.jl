@@ -247,7 +247,7 @@ end
     @test pinv_3 * b ≈ svd(A, rtol=1e-3) \ b                      rtol=1e-13
     @test pinv_3 * b ≈ pinv(svd(A, rtol=1e-3)) * b                rtol=1e-13
     @test pinv_3 * b ≈ ldiv!(svd(A), copy(b), rtol=1e-3)[1:n]     rtol=1e-13
-    @test pinv(A, atol=100) == pinv(svd(A), atol=100) == pinv(svd(A, atol=100)) == zeros(5,10)
+    @test pinv(A, atol=100) == Matrix(pinv(svd(A), atol=100)) == Matrix(pinv(svd(A, atol=100))) == zeros(5,10)
 end
 
 @testset "Issue 40944. ldiv!(SVD) should update rhs" begin
