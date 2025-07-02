@@ -1756,7 +1756,8 @@ SVD-based algorithm, it is better to employ the SVD directly via `svd(M; rtol, a
 or `ldiv!(svd(M), b; rtol, atol)`.
 
 One can also pass `M = svd(A)` as the argument to `pinv` in order to re-use
-an existing [`SVD`](@ref) factorization.
+an existing [`SVD`](@ref) factorization.  In this case, `pinv` will return
+the SVD of the pseudo-inverse, which can be applied accurately, instead of an explicit matrix.
 
 !!! compat "Julia 1.13"
     Passing an `SVD` object to `pinv` requires Julia 1.13 or later.
