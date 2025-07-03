@@ -239,15 +239,19 @@ end
 @testset "SVD pinv and truncation" begin
     m, n = 10,5
     A = randn(m,n) * [1/(i+j-1) for i = 1:n, j=1:n] # badly conditioned Hilbert matrix
-    @test pinv(A) ≈ Matrix(pinv(svd(A)))                          rtol=1e-13
+    F = svd(A)
+    @test pinv(A) ≈ Matrix(pinv(F))                          rtol=1e-13
     pinv_3 = pinv(A, rtol=1e-3)
-    @test pinv_3 ≈ Matrix(pinv(svd(A), rtol=1e-3))                rtol=1e-13
-    @test pinv_3 ≈ Matrix(pinv(svd(A, rtol=1e-3)))                rtol=1e-13
+    F_3 = svd(A, rtol=1e-3)
+    @test pinv_3 ≈ Matrix(pinv(F, rtol=1e-3))                rtol=1e-13
+    @test pinv_3 ≈ Matrix(pinv(F_3))                         rtol=1e-13
     b = float([1:m;]) # arbitrary rhs
-    @test pinv_3 * b ≈ svd(A, rtol=1e-3) \ b                      rtol=1e-13
-    @test pinv_3 * b ≈ pinv(svd(A, rtol=1e-3)) * b                rtol=1e-13
-    @test pinv_3 * b ≈ ldiv!(svd(A), copy(b), rtol=1e-3)[1:n]     rtol=1e-13
-    @test pinv(A, atol=100) == Matrix(pinv(svd(A), atol=100)) == Matrix(pinv(svd(A, atol=100))) == zeros(5,10)
+    @test pinv_3 * b ≈ F_3 \ b                               rtol=1e-13
+    @test pinv_3 * b ≈ pinv(F_3) * b                         rtol=1e-13
+    @test pinv_3 * b ≈ ldiv!(F, copy(b), rtol=1e-3)[1:n]     rtol=1e-13
+    c = float([1:n;]) # arbitrary rhs
+    @test c' * pinv_3 ≈ c' * pinv(F_3)                       rtol=1e-13
+    @test pinv(A, atol=100) == Matrix(pinv(F, atol=100)) == Matrix(pinv(svd(A, atol=100))) == zeros(5,10)
 end
 
 @testset "Issue 40944. ldiv!(SVD) should update rhs" begin

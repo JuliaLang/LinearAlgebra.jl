@@ -320,6 +320,10 @@ function inv(F::SVD)
     return @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
 end
 
+# multiplying SVD by matrix/vector, mainly useful for pinv(::SVD) output
+(*)(F::SVD, A::AbstractVecOrMat{<:Number}) = F.U * (Diagonal(F.S) * (F.Vt * A))
+(*)(A::AbstractMatrix{<:Number}, F::SVD) = ((A*F.U) * Diagonal(F.S)) * F.Vt
+
 size(A::SVD, dim::Integer) = dim == 1 ? size(A.U, dim) : size(A.Vt, dim)
 size(A::SVD) = (size(A, 1), size(A, 2))
 
