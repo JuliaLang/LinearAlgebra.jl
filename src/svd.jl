@@ -308,7 +308,7 @@ end
 
 function pinv(F::SVD{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
     k = _count_svdvals(F.S, atol, rtol)
-    @views SVD(copy(F.Vt[1:k, :]'), reverse!(inv.(F.S[1:k])), copy(F.U[:,1:k]'))
+    @views SVD(copy(F.Vt[k:-1:1, :]'), inv.(F.S[k:-1:1]), copy(F.U[:,k:-1:1]'))
 end
 
 function inv(F::SVD)
