@@ -308,7 +308,7 @@ end
 
 function pinv(F::SVD{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
     k = _count_svdvals(F.S, atol, rtol)
-    @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
+    @views SVD(copy(F.Vt[k:-1:1, :]'), inv.(F.S[k:-1:1]), copy(F.U[:,k:-1:1]'))
 end
 
 function inv(F::SVD)
@@ -316,8 +316,13 @@ function inv(F::SVD)
     @inbounds for i in eachindex(F.S)
         iszero(F.S[i]) && throw(SingularException(i))
     end
-    pinv(F; rtol=eps(real(eltype(F))))
+    k = _count_svdvals(F.S, 0, eps(real(eltype(F))))
+    return @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
 end
+
+# multiplying SVD by matrix/vector, mainly useful for pinv(::SVD) output
+(*)(F::SVD, A::AbstractVecOrMat{<:Number}) = F.U * (Diagonal(F.S) * (F.Vt * A))
+(*)(A::AbstractMatrix{<:Number}, F::SVD) = ((A*F.U) * Diagonal(F.S)) * F.Vt
 
 size(A::SVD, dim::Integer) = dim == 1 ? size(A.U, dim) : size(A.Vt, dim)
 size(A::SVD) = (size(A, 1), size(A, 2))
