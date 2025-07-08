@@ -16,6 +16,7 @@ struct Quaternion{T<:Real} <: Number
 end
 Quaternion{T}(s::Real) where {T<:Real} = Quaternion{T}(T(s), zero(T), zero(T), zero(T))
 Quaternion(s::Real, v1::Real, v2::Real, v3::Real) = Quaternion(promote(s, v1, v2, v3)...)
+Quaternion{T}(q::Quaternion) where {T<:Real} = Quaternion{T}(T(q.s), T(q.v1), T(q.v2), T(q.v3))
 Base.convert(::Type{Quaternion{T}}, s::Real) where {T <: Real} =
     Quaternion{T}(convert(T, s), zero(T), zero(T), zero(T))
 Base.promote_rule(::Type{Quaternion{T}}, ::Type{S}) where {T <: Real, S <: Real} =
