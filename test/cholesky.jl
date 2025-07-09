@@ -583,6 +583,22 @@ end
         @test C.L == L
         @test C.U == L'
     end
+    let
+        B = [1.0 5.0; 3.0 4.0]
+        CA = Cholesky(LowerTriangular(A))
+        CB = Cholesky(LowerTriangular(B))
+        @test CA == CB
+        @test CA.L == CB.L
+        @test CA.U == CB.U
+    end
+    let
+        C = [1.0 2.0; 5.0 4.0]
+        CA = Cholesky(UpperTriangular(A))
+        CC = Cholesky(UpperTriangular(C))
+        @test CA == CC
+        @test CA.L == CC.L
+        @test CA.U == CC.U
+    end
 end
 
 @testset "adjoint of Cholesky" begin

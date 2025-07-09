@@ -680,10 +680,12 @@ end
 Base.propertynames(F::Cholesky, private::Bool=false) =
     (:U, :L, :UL, (private ? fieldnames(typeof(F)) : ())...)
 
-function Base.:(==)(C1::Cholesky, C2::Cholesky)
+function _equal(C1::Cholesky, C2::Cholesky)
     C1.uplo == C2.uplo || return false
     C1.uplo == 'L' ? (C1.L == C2.L) : (C1.U == C2.U)
 end
+Base.:(==)(C1::Cholesky, C2::Cholesky) = _equal(C1, C2)
+Base.:(==)(C1::T, C2::T) where {T<:Cholesky} = _equal(C1, C2)
 
 function getproperty(C::CholeskyPivoted{T}, d::Symbol) where {T}
     Cfactors = getfield(C, :factors)
