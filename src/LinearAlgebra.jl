@@ -823,7 +823,9 @@ function versioninfo(io::IO=stdout)
     return nothing
 end
 
-function __init__()
+# This OncePerProcess does not yield a useful value, but it causes side-effects (configuring LBT / BLAS)
+# which should only last for the duration of the current process.
+const initialize_lbt = Base.OncePerProcess{Nothing}() do
     try
         verbose = parse(Bool, get(ENV, "LBT_VERBOSE", "false"))
         BLAS.lbt_forward(OpenBLAS_jll.libopenblas_path; clear=true, verbose)
@@ -831,6 +833,7 @@ function __init__()
     catch ex
         Base.showerror_nostdio(ex, "WARNING: Error during initialization of module LinearAlgebra")
     end
+
     # register a hook to disable BLAS threading
     Base.at_disable_library_threading(() -> BLAS.set_num_threads(1))
 
@@ -842,6 +845,15 @@ function __init__()
             BLAS.set_num_threads(max(1, @ccall(jl_effective_threads()::Cint) ÷ 2))
         end
     end
+
+    return nothing
 end
+
+function __init__()
+    initialize_lbt()
+end
+
+# Initialize eagerly, so that LinearAlgebra is available for sysimage builds (incl. `--trim`)
+initialize_lbt()
 
 end # module LinearAlgebra
