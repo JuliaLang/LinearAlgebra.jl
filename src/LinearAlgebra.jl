@@ -841,6 +841,8 @@ function lbt_openblas_onload_callback()
         end
         BLAS.lbt_set_num_threads(nthreads)
     end
+
+    return nothing
 end
 
 function __init__()
@@ -848,5 +850,8 @@ function __init__()
     # clear the datastructures modified by this call and call it again with their own.
     libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, lbt_openblas_onload_callback)
 end
+
+# Register eagerly, so that LinearAlgebra is available for sysimage builds (incl. `--trim`)
+libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, lbt_openblas_onload_callback)
 
 end # module LinearAlgebra
