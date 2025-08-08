@@ -1039,7 +1039,7 @@ function dot(x::AbstractVector, A::Tridiagonal, y::AbstractVector)
     return r
 end
 
-function cholesky(S::SymTridiagonal, ::NoPivot = NoPivot(); check::Bool = true)
+function cholesky(S::Union{SymTridiagonal,Tridiagonal}, ::NoPivot = NoPivot(); check::Bool = true)
     if !ishermitian(S)
         check && checkpositivedefinite(-1)
         return Cholesky(S, 'U', convert(BlasInt, -1))

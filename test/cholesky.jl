@@ -492,9 +492,16 @@ end
 end
 
 @testset "Cholesky for AbstractMatrix" begin
-    S = SymTridiagonal(fill(2.0, 4), ones(3))
-    C = cholesky(S)
-    @test C.L * C.U ≈ S
+    for M in (SymTridiagonal(fill(2.0, 4), ones(3)),
+        Tridiagonal(ones(3), fill(2.0, 4), ones(3)),
+        )
+        C = cholesky(M)
+        @test C.L * C.U ≈ M
+    end
+    # test LowerTriangular version
+    M = Hermitian(Bidiagonal(fill(2.0, 4), ones(3), :L), :L)
+    C = cholesky!(copy(M))
+    @test C.L * C.U ≈ M
 end
 
 @testset "constructor with non-BlasInt arguments" begin

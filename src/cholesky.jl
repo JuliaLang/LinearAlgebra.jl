@@ -220,6 +220,32 @@ function _chol!(A::AbstractMatrix, ::Type{UpperTriangular})
     end
     return UpperTriangular(A), convert(BlasInt, 0)
 end
+function _chol!(A::Bidiagonal, ::Type{UpperTriangular})
+    require_one_based_indexing(A)
+    n = checksquare(A)
+    realdiag = eltype(A) <: Complex
+    dv = A.dv
+    ev = A.ev
+    @inbounds begin
+        for k = 1:n
+            Akk = realdiag ? real(dv[k]) : dv[k]
+            if k > 1
+                Akk -= realdiag ? abs2(ev[k-1]) : ev[k-1]'ev[k-1]
+            end
+            dv[k] = Akk
+            Akk, info = _chol!(Akk, UpperTriangular)
+            if info != 0
+                return UpperTriangular(A), convert(BlasInt, k)
+            end
+            dv[k] = Akk
+            AkkInv = inv(copy(Akk'))
+            if k < n
+                ev[k] = AkkInv*ev[k]
+            end
+        end
+    end
+    return UpperTriangular(A), convert(BlasInt, 0)
+end
 function _chol!(A::AbstractMatrix, ::Type{LowerTriangular})
     require_one_based_indexing(A)
     n = checksquare(A)
@@ -245,6 +271,32 @@ function _chol!(A::AbstractMatrix, ::Type{LowerTriangular})
             end
             @simd for i = k + 1:n
                 A[i,k] *= AkkInv
+            end
+        end
+     end
+    return LowerTriangular(A), convert(BlasInt, 0)
+end
+function _chol!(A::Bidiagonal, ::Type{LowerTriangular})
+    require_one_based_indexing(A)
+    n = checksquare(A)
+    realdiag = eltype(A) <: Complex
+    dv = A.dv
+    ev = A.ev
+    @inbounds begin
+        for k = 1:n
+            Akk = realdiag ? real(dv[k]) : dv[k]
+            if k > 1
+                Akk -= realdiag ? abs2(ev[k-1]) : ev[k-1]*ev[k-1]'
+            end
+            dv[k] = Akk
+            Akk, info = _chol!(Akk, LowerTriangular)
+            if info != 0
+                return LowerTriangular(A), convert(BlasInt, k)
+            end
+            dv[k] = Akk
+            AkkInv = inv(copy(Akk'))
+            if k < n
+                ev[k] *= AkkInv
             end
         end
      end
