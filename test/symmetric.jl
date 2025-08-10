@@ -595,7 +595,7 @@ end
     for t in (Symmetric, Hermitian), uplo in (:U, :L)
         M = t(A, uplo)
         N = Matrix(M)
-        @test dot(x, M, y) ≈ dot(x, N, y)
+        @test dot(x, M, y) ≈ dot(x, M*y) ≈ dot(x, N, y)
     end
 end
 
