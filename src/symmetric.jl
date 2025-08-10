@@ -737,27 +737,28 @@ function mul(A::AdjOrTrans{<:BlasFloat,<:StridedMatrix}, B::HermOrSym{<:BlasFloa
             convert(AbstractMatrix{T}, B))
 end
 
-function dot(x::AbstractVector, A::RealHermSymComplexHerm, y::AbstractVector)
+function dot(x::AbstractVector, A::HermOrSym, y::AbstractVector)
     require_one_based_indexing(x, y)
     n = length(x)
     (n == length(y) == size(A, 1)) || throw(DimensionMismatch())
+    diagop = A isa Symmetric ? identity : real
     data = A.data
     r = dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y)))
     iszero(n) && return r
     if A.uplo == 'U'
         @inbounds for j = 1:length(y)
-            r += dot(x[j], real(data[j,j]), y[j])
+            r += dot(x[j], diagop(data[j,j]), y[j])
             @simd for i = 1:j-1
                 Aij = data[i,j]
-                r += dot(x[i], Aij, y[j]) + dot(x[j], adjoint(Aij), y[i])
+                r += dot(x[i], Aij, y[j]) + dot(x[j], _conjugation(A)(Aij), y[i])
             end
         end
     else # A.uplo == 'L'
         @inbounds for j = 1:length(y)
-            r += dot(x[j], real(data[j,j]), y[j])
+            r += dot(x[j], diagop(data[j,j]), y[j])
             @simd for i = j+1:length(y)
                 Aij = data[i,j]
-                r += dot(x[i], Aij, y[j]) + dot(x[j], adjoint(Aij), y[i])
+                r += dot(x[i], Aij, y[j]) + dot(x[j], _conjugation(A)(Aij), y[i])
             end
         end
     end

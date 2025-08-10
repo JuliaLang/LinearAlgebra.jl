@@ -582,13 +582,21 @@ end
 
 # bug identified in PR #52318: dot products of quaternionic Hermitian matrices,
 # or any number type where conj(a)*conj(b) ≠ conj(a*b):
-@testset "dot Hermitian quaternion #52318" begin
-    A, B = [Quaternion.(randn(3,3), randn(3, 3), randn(3, 3), randn(3,3)) |> t -> t + t' for i in 1:2]
+@testset "dot Hermitian quaternion" begin
+    A, B = [(randn(Quaternion{Float64},4,4)) |> t -> t + t' for i in 1:2]
     @test A == Hermitian(A) && B == Hermitian(B)
     @test dot(A, B) ≈ dot(Hermitian(A), Hermitian(B))
-    A, B = [Quaternion.(randn(3,3), randn(3, 3), randn(3, 3), randn(3,3)) |> t -> t + transpose(t) for i in 1:2]
+    A, B = [(randn(Quaternion{Float64},4,4)) |> t -> t + transpose(t) for i in 1:2]
     @test A == Symmetric(A) && B == Symmetric(B)
     @test dot(A, B) ≈ dot(Symmetric(A), Symmetric(B))
+    A = randn(Quaternion{Float64}, 4, 4)
+    x = randn(Quaternion{Float64}, 4)
+    y = randn(Quaternion{Float64}, 4)
+    for t in (Symmetric, Hermitian), uplo in (:U, :L)
+        M = t(A, uplo)
+        N = Matrix(M)
+        @test dot(x, M, y) ≈ dot(x, N, y)
+    end
 end
 
 # let's make sure the analogous bug will not show up with kronecker products
