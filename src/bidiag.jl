@@ -1472,7 +1472,14 @@ function _chol!(A::Bidiagonal{<:BlasFloat,<:StridedVector}, ::Type{UpperTriangul
     d = real(A.dv)
     e = A.ev
     dv, ev = LAPACK.pttrf!(d, e)
-    map!(sqrt, dv)
+    for k in eachindex(dv)
+        Akk = dv[k]
+        Akk, info = _chol!(Akk, UpperTriangular)
+        if info != 0
+            return UpperTriangular(A), convert(BlasInt, k)
+        end
+        dv[k] = Akk
+    end
     @views ev .*= dv[1:end-1]
     U = Bidiagonal(dv, ev, :U)
     return UpperTriangular(U), convert(BlasInt, 0)
@@ -1507,7 +1514,14 @@ function _chol!(A::Bidiagonal{<:BlasFloat,<:StridedVector}, ::Type{LowerTriangul
     d = real(A.dv)
     e = A.ev
     dv, ev = LAPACK.pttrf!(d, e)
-    map!(sqrt, dv)
+    for k in eachindex(dv)
+        Akk = dv[k]
+        Akk, info = _chol!(Akk, LowerTriangular)
+        if info != 0
+            return LowerTriangular(A), convert(BlasInt, k)
+        end
+        dv[k] = Akk
+    end
     @views ev .*= dv[1:end-1]
     L = Bidiagonal(dv, ev, :L)
     return LowerTriangular(L), convert(BlasInt, 0)
