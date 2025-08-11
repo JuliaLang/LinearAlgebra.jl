@@ -505,6 +505,15 @@ end
         @test C.L * C.U ≈ M
         @test parent(C.U) isa Bidiagonal
     end
+    for T in (identity, big), M in (SymTridiagonal(fill(T(-2.0), 4), ones(3)),
+        Symmetric(SymTridiagonal(fill(T(-2.0), 4), ones(3)), :U),
+        Symmetric(SymTridiagonal(fill(T(-2.0), 4), ones(3)), :L),
+        Tridiagonal(ones(3), fill(T(-2.0), 4), ones(3)),
+        Hermitian(Tridiagonal(ones(3), fill(T(-2.0), 4), ones(3)), :U),
+        Hermitian(Bidiagonal(fill(T(-2.0), 4), ones(3), :U), :U),
+        )
+        @test_throws (T == identity ? LAPACKException : PosDefException) cholesky(M)
+    end
     # test LowerTriangular version
     M = Hermitian(Bidiagonal(fill(2.0, 4), im * ones(3), :L), :L)
     C = cholesky!(copy(M))
