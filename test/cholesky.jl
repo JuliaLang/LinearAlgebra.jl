@@ -493,15 +493,27 @@ end
 
 @testset "Cholesky for AbstractMatrix" begin
     for M in (SymTridiagonal(fill(2.0, 4), ones(3)),
+        Symmetric(SymTridiagonal(fill(2.0, 4), ones(3)), :U),
+        Symmetric(SymTridiagonal(fill(2.0, 4), ones(3)), :L),
         Tridiagonal(ones(3), fill(2.0, 4), ones(3)),
+        Hermitian(Tridiagonal(ones(3), fill(2.0, 4), ones(3)), :U),
+        Hermitian(Bidiagonal(fill(2.0, 4), ones(3), :U), :U),
+        Hermitian(Bidiagonal(fill(2.0, 4), ones(3), :U), :L),
+        Hermitian(Bidiagonal(fill(2.0, 4), ones(3), :L), :L),
         )
         C = cholesky(M)
         @test C.L * C.U ≈ M
+        @test parent(C.U) isa Bidiagonal
     end
     # test LowerTriangular version
     M = Hermitian(Bidiagonal(fill(2.0, 4), im * ones(3), :L), :L)
     C = cholesky!(copy(M))
     @test C.L * C.U ≈ M
+    # non-(RealOrComplex) eltype
+    A = Tridiagonal(randn(Quaternion{Float64}, 4, 4) |> t -> t't)
+    C = cholesky(A)
+    @test C.L * C.U ≈ A
+    @test parent(C.U) isa Bidiagonal
 end
 
 @testset "constructor with non-BlasInt arguments" begin
