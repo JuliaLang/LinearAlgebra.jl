@@ -512,7 +512,9 @@ end
         Hermitian(Tridiagonal(ones(3), fill(T(-2.0), 4), ones(3)), :U),
         Hermitian(Bidiagonal(fill(T(-2.0), 4), ones(3), :U), :U),
         )
-        @test_throws (T == identity ? LAPACKException : PosDefException) cholesky(M)
+        @test_throws PosDefException cholesky(M)
+        C = cholesky(M, check=false)
+        @test C.info > 0
     end
     # test LowerTriangular version
     M = Hermitian(Bidiagonal(fill(2.0, 4), im * ones(3), :L), :L)
@@ -520,6 +522,10 @@ end
     @test C.L * C.U ≈ M
     # non-(RealOrComplex) eltype
     A = Tridiagonal(randn(Quaternion{Float64}, 4, 4) |> t -> t't)
+    C = cholesky(A)
+    @test C.L * C.U ≈ A
+    @test parent(C.U) isa Bidiagonal
+    A = Hermitian(Tridiagonal(randn(Quaternion{Float64}, 4, 4) |> t -> t't), :L)
     C = cholesky(A)
     @test C.L * C.U ≈ A
     @test parent(C.U) isa Bidiagonal

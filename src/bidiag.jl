@@ -1468,89 +1468,32 @@ function inv(B::Bidiagonal{T}) where T
 end
 
 # cholesky-version for (sym)tridiagonal matrices
-function _chol!(A::Bidiagonal{<:BlasFloat,<:StridedVector}, ::Type{UpperTriangular})
-    d = real(A.dv)
-    e = A.ev
-    dv, ev = LAPACK.pttrf!(d, e)
-    for k in eachindex(dv)
-        Akk = dv[k]
-        Akk, info = _chol!(Akk, UpperTriangular)
-        if info != 0
-            return UpperTriangular(A), convert(BlasInt, k)
-        end
-        dv[k] = Akk
-    end
-    @views ev .*= dv[1:end-1]
-    U = Bidiagonal(dv, ev, :U)
-    return UpperTriangular(U), convert(BlasInt, 0)
-end
-function _chol!(A::Bidiagonal, ::Type{UpperTriangular})
-    require_one_based_indexing(A)
-    n = checksquare(A)
-    realdiag = eltype(A) <: Complex
-    dv = A.dv
-    ev = A.ev
-    @inbounds begin
-        for k = 1:n
-            Akk = realdiag ? real(dv[k]) : dv[k]
-            if k > 1
-                Akk -= realdiag ? abs2(ev[k-1]) : ev[k-1]'ev[k-1]
-            end
-            dv[k] = Akk
+for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
+    @eval function _chol!(A::Bidiagonal, ::Type{$T})
+        dv = real(A.dv)
+        ev = A.ev
+        n = length(dv)
+        @inbounds for i in 1:n-1
+            iszero(dv[i]) && throw(ZeroPivotException(i))
+            ev[i] /= dv[i]
+            dv[i+1] -= abs2(ev[i])*dv[i]
+            Akk = dv[i]
             Akk, info = _chol!(Akk, UpperTriangular)
             if info != 0
-                return UpperTriangular(A), convert(BlasInt, k)
+                return $T(A), convert(BlasInt, i)
             end
-            dv[k] = Akk
-            AkkInv = inv(copy(Akk'))
-            if k < n
-                ev[k] = AkkInv*ev[k]
-            end
+            dv[i] = Akk
+            ev[i] *= dv[i]
         end
-    end
-    return UpperTriangular(A), convert(BlasInt, 0)
-end
-function _chol!(A::Bidiagonal{<:BlasFloat,<:StridedVector}, ::Type{LowerTriangular})
-    d = real(A.dv)
-    e = A.ev
-    dv, ev = LAPACK.pttrf!(d, e)
-    for k in eachindex(dv)
-        Akk = dv[k]
-        Akk, info = _chol!(Akk, LowerTriangular)
+        Akk = dv[n]
+        Akk, info = _chol!(Akk, $T)
         if info != 0
-            return LowerTriangular(A), convert(BlasInt, k)
+            return $T(A), convert(BlasInt, n)
         end
-        dv[k] = Akk
+        dv[n] = Akk
+        B = Bidiagonal(dv, ev, $uplo)
+        return $T(B), convert(BlasInt, 0)
     end
-    @views ev .*= dv[1:end-1]
-    L = Bidiagonal(dv, ev, :L)
-    return LowerTriangular(L), convert(BlasInt, 0)
-end
-function _chol!(A::Bidiagonal, ::Type{LowerTriangular})
-    require_one_based_indexing(A)
-    n = checksquare(A)
-    realdiag = eltype(A) <: Complex
-    dv = A.dv
-    ev = A.ev
-    @inbounds begin
-        for k = 1:n
-            Akk = realdiag ? real(dv[k]) : dv[k]
-            if k > 1
-                Akk -= realdiag ? abs2(ev[k-1]) : ev[k-1]*ev[k-1]'
-            end
-            dv[k] = Akk
-            Akk, info = _chol!(Akk, LowerTriangular)
-            if info != 0
-                return LowerTriangular(A), convert(BlasInt, k)
-            end
-            dv[k] = Akk
-            AkkInv = inv(copy(Akk'))
-            if k < n
-                ev[k] *= AkkInv
-            end
-        end
-     end
-    return LowerTriangular(A), convert(BlasInt, 0)
 end
 
 # Eigensystems
