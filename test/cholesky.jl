@@ -504,14 +504,12 @@ end
         C = cholesky(M)
         @test C.L * C.U ≈ M
         @test parent(C.U) isa Bidiagonal
-    end
-    for T in (identity, big), M in (SymTridiagonal(fill(T(-2.0), 4), ones(3)),
-        Symmetric(SymTridiagonal(fill(T(-2.0), 4), ones(3)), :U),
-        Symmetric(SymTridiagonal(fill(T(-2.0), 4), ones(3)), :L),
-        Tridiagonal(ones(3), fill(T(-2.0), 4), ones(3)),
-        Hermitian(Tridiagonal(ones(3), fill(T(-2.0), 4), ones(3)), :U),
-        Hermitian(Bidiagonal(fill(T(-2.0), 4), ones(3), :U), :U),
-        )
+        M[1,1] *= -1
+        @test_throws PosDefException cholesky(M)
+        C = cholesky(M, check=false)
+        @test C.info > 0
+        M[1,1] *= -1
+        M[end,end] *= -1
         @test_throws PosDefException cholesky(M)
         C = cholesky(M, check=false)
         @test C.info > 0
