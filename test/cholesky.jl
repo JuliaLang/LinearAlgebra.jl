@@ -499,7 +499,7 @@ end
         @test C.L * C.U ≈ M
     end
     # test LowerTriangular version
-    M = Hermitian(Bidiagonal(fill(2.0, 4), ones(3), :L), :L)
+    M = Hermitian(Bidiagonal(fill(2.0, 4), im * ones(3), :L), :L)
     C = cholesky!(copy(M))
     @test C.L * C.U ≈ M
 end
