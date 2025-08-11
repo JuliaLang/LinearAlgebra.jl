@@ -1468,6 +1468,15 @@ function inv(B::Bidiagonal{T}) where T
 end
 
 # cholesky-version for (sym)tridiagonal matrices
+function _chol!(A::Bidiagonal{<:BlasFloat,<:StridedVector}, ::Type{UpperTriangular})
+    d = real(A.dv)
+    e = A.ev
+    dv, ev = LAPACK.pttrf!(d, e)
+    map!(sqrt, dv)
+    @views ev .*= dv[1:end-1]
+    U = Bidiagonal(dv, ev, :U)
+    return UpperTriangular(U), convert(BlasInt, 0)
+end
 function _chol!(A::Bidiagonal, ::Type{UpperTriangular})
     require_one_based_indexing(A)
     n = checksquare(A)
@@ -1493,6 +1502,15 @@ function _chol!(A::Bidiagonal, ::Type{UpperTriangular})
         end
     end
     return UpperTriangular(A), convert(BlasInt, 0)
+end
+function _chol!(A::Bidiagonal{<:BlasFloat,<:StridedVector}, ::Type{LowerTriangular})
+    d = real(A.dv)
+    e = A.ev
+    dv, ev = LAPACK.pttrf!(d, e)
+    map!(sqrt, dv)
+    @views ev .*= dv[1:end-1]
+    L = Bidiagonal(dv, ev, :L)
+    return LowerTriangular(L), convert(BlasInt, 0)
 end
 function _chol!(A::Bidiagonal, ::Type{LowerTriangular})
     require_one_based_indexing(A)

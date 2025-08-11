@@ -492,14 +492,14 @@ end
 end
 
 @testset "Cholesky for AbstractMatrix" begin
-    for M in (SymTridiagonal(fill(2.0, 4), ones(3)),
-        Symmetric(SymTridiagonal(fill(2.0, 4), ones(3)), :U),
-        Symmetric(SymTridiagonal(fill(2.0, 4), ones(3)), :L),
-        Tridiagonal(ones(3), fill(2.0, 4), ones(3)),
-        Hermitian(Tridiagonal(ones(3), fill(2.0, 4), ones(3)), :U),
-        Hermitian(Bidiagonal(fill(2.0, 4), ones(3), :U), :U),
-        Hermitian(Bidiagonal(fill(2.0, 4), ones(3), :U), :L),
-        Hermitian(Bidiagonal(fill(2.0, 4), ones(3), :L), :L),
+    for T in (identity, big), M in (SymTridiagonal(fill(T(2.0), 4), ones(3)),
+        Symmetric(SymTridiagonal(fill(T(2.0), 4), ones(3)), :U),
+        Symmetric(SymTridiagonal(fill(T(2.0), 4), ones(3)), :L),
+        Tridiagonal(ones(3), fill(T(2.0), 4), ones(3)),
+        Hermitian(Tridiagonal(ones(3), fill(T(2.0), 4), ones(3)), :U),
+        Hermitian(Bidiagonal(fill(T(2.0), 4), ones(3), :U), :U),
+        Hermitian(Bidiagonal(fill(T(2.0), 4), ones(3), :U), :L),
+        Hermitian(Bidiagonal(fill(T(2.0), 4), ones(3), :L), :L),
         )
         C = cholesky(M)
         @test C.L * C.U ≈ M
