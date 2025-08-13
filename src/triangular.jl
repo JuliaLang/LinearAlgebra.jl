@@ -256,7 +256,7 @@ Base.@constprop :aggressive @propagate_inbounds function getindex(A::Union{Lower
     _shouldforwardindex(A, b) ? A.data[b] : diagzero(A.data, b)
 end
 
-_zero_triangular_half_str(T::Type) = T <: UpperOrLowerTriangular ? "lower" : "upper"
+_zero_triangular_half_str(T::Type) = T <: UpperOrUnitUpperTriangular ? "lower" : "upper"
 
 @noinline function throw_nonzeroerror(T::DataType, @nospecialize(x), i, j)
     Ts = _zero_triangular_half_str(T)
