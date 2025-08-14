@@ -1846,7 +1846,7 @@ julia> det(BigInt[1 0; 2 2]) # exact integer determinant
 function det(A::AbstractMatrix{T}) where {T}
     if istriu(A) || istril(A)
         S = promote_type(T, typeof((one(T)*zero(T) + zero(T))/one(T)))
-        return prod(S, @view A[diagind(A)])
+        return prod(Base.Fix1(convert, S), @view A[diagind(A)])
     end
     return det(lu(A; check = false))
 end
