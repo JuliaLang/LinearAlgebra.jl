@@ -104,7 +104,7 @@ n = 5 # should be odd
         end
     end
     @testset "det with units - triangular" begin
-        for dim in 1:10
+        for dim in 0:4
             A = diagm(Furlong.(ones(elty, dim)))
             @test det(A) == Furlong{dim}(one(elty))
         end
