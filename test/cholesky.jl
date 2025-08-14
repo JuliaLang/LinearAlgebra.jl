@@ -519,11 +519,12 @@ end
     C = cholesky!(copy(M))
     @test C.L * C.U ≈ M
     # non-(RealOrComplex) eltype
-    A = Tridiagonal(randn(Quaternion{Float64}, 4, 4) |> t -> t't)
+    B = Bidiagonal(randn(Quaternion{Float64}, 4), randn(Quaternion{Float64}, 3), :U)
+    A = Tridiagonal(Hermitian(B'B))
     C = cholesky(A)
     @test C.L * C.U ≈ A
     @test parent(C.U) isa Bidiagonal
-    A = Hermitian(Tridiagonal(randn(Quaternion{Float64}, 4, 4) |> t -> t't), :L)
+    A = Hermitian(Tridiagonal(Hermitian(B'B)), :L)
     C = cholesky(A)
     @test C.L * C.U ≈ A
     @test parent(C.U) isa Bidiagonal
