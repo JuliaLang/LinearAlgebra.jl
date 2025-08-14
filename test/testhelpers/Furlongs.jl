@@ -107,6 +107,4 @@ Base.muladd(x::Number, y::Number, z::Furlong) = x*y + z
 Base.muladd(x::Number, y::Furlong, z::Furlong) = x*y + z
 Base.muladd(x::Furlong, y::Number, z::Furlong) = x*y + z
 
-Base.rtoldefault(::Type{T}) where {p,F<:AbstractFloat,T<:Furlong{p,F}} = sqrt(eps(F))
-
 end
