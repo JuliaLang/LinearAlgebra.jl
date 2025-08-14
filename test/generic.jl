@@ -100,7 +100,7 @@ n = 5 # should be odd
     if elty <: Int
         @testset "det no overflow - triangular" begin
             A = diagm([typemax(elty), typemax(elty)])
-            @test det(A) ≈ det(float(A))
+            @test det(A) == det(float(A))
         end
     end
     @testset "det with units - triangular" begin
