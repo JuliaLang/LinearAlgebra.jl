@@ -25,6 +25,9 @@ using .Main.FillArrays
 isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
 using .Main.SizedArrays
 
+isdefined(Main, :Furlongs) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "Furlongs.jl"))
+using .Main.Furlongs
+
 Random.seed!(123)
 
 n = 5 # should be odd
@@ -102,6 +105,18 @@ n = 5 # should be odd
 
     @testset "det with nonstandard Number type" begin
         elty <: Real && @test det(Dual.(triu(A), zero(A))) isa Dual
+    end
+    if elty <: Int
+        @testset "det no overflow - triangular" begin
+            A = diagm([typemax(elty), typemax(elty)])
+            @test det(A) == det(float(A))
+        end
+    end
+    @testset "det with units - triangular" begin
+        for dim in 0:4
+            A = diagm(Furlong.(ones(elty, dim)))
+            @test det(A) == Furlong{dim}(one(elty))
+        end
     end
 end
 
