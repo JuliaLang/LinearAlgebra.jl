@@ -12,6 +12,7 @@ using ..LinearAlgebra: libblastrampoline, BlasFloat, BlasInt, LAPACKException, D
 
 using Base: iszero, require_one_based_indexing
 
+include("liblapack.jl")
 
 # Legacy binding maintained for backwards-compatibility but new packages
 # should not look at this, instead preferring to parse the output
