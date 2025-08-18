@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: 'nightly'
+          version: '1.12'
       - name: Generate docs
         run: |
           julia --color=yes --project=docs -e 'using Pkg; Pkg.instantiate()'
