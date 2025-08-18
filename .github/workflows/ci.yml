@@ -15,10 +15,10 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: julia-actions/setup-julia@v2
         with:
-          version: 'nightly'
+          version: '1.10'
       - name: Generate docs
         run: |
           julia --project --color=yes -e ''
