@@ -256,16 +256,16 @@ Base.@constprop :aggressive @propagate_inbounds function getindex(A::Union{Lower
     _shouldforwardindex(A, b) ? A.data[b] : diagzero(A.data, b)
 end
 
-_zero_triangular_half_str(T::Type) = T <: UpperOrUnitUpperTriangular ? "lower" : "upper"
+_zero_triangular_half_str(@nospecialize(T::Type)) = T <: UpperOrUnitUpperTriangular ? "lower" : "upper"
 
 @noinline function throw_nonzeroerror(T::DataType, @nospecialize(x), i, j)
     Ts = _zero_triangular_half_str(T)
-    Tn = nameof(T)
+    Tn = T.name
     throw(ArgumentError(
         lazy"cannot set index in the $Ts triangular part ($i, $j) of an $Tn matrix to a nonzero value ($x)"))
 end
 @noinline function throw_nononeerror(T::DataType, @nospecialize(x), i, j)
-    Tn = nameof(T)
+    Tn = T.name
     throw(ArgumentError(
         lazy"cannot set index on the diagonal ($i, $j) of an $Tn matrix to a non-unit value ($x)"))
 end
@@ -312,7 +312,7 @@ end
 
 @noinline function throw_setindex_structuralzero_error(T::DataType, @nospecialize(x))
     Ts = _zero_triangular_half_str(T)
-    Tn = nameof(T)
+    Tn = T.name
     throw(ArgumentError(
         lazy"cannot set indices in the $Ts triangular part of an $Tn matrix to a nonzero value ($x)"))
 end
