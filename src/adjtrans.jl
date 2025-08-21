@@ -513,7 +513,6 @@ function _dot_nonrecursive(u, v)
     end
 end
 
-# we use (n A^T) = (A n)^T, which holds if the product of n and the elements of A is commutative
 rmul!(X::Transpose{<:Union{Real,Complex}}, s::Union{Real,Complex}) = (lmul!(s, parent(X)); X)
 rmul!(X::Adjoint, s::Number) = (lmul!(s', parent(X)); X)
 lmul!(s::Union{Real,Complex}, X::Transpose{<:Union{Real,Complex}}) = (rmul!(parent(X), s); X)
