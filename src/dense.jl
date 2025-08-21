@@ -205,6 +205,23 @@ tril(M::Matrix, k::Integer) = tril!(copy(M), k)
     fillband!(A::AbstractMatrix, x, l, u)
 
 Fill the band between diagonals `l` and `u` with the value `x`.
+
+# Examples
+```jldoctest
+julia> A = zeros(4,4)
+4×4 Matrix{Float64}:
+ 0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0
+
+julia> LinearAlgebra.fillband!(A, 2, 0, 1)
+4×4 Matrix{Float64}:
+ 2.0  2.0  0.0  0.0
+ 0.0  2.0  2.0  0.0
+ 0.0  0.0  2.0  2.0
+ 0.0  0.0  0.0  2.0
+```
 """
 function fillband!(A::AbstractMatrix{T}, x, l, u) where T
     require_one_based_indexing(A)
@@ -1731,10 +1748,21 @@ both with the value of `M` and the intended application of the pseudoinverse.
 The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest
 dimension of `M`, and `ϵ` is the [`eps`](@ref) of the element type of `M`.
 
-For inverting dense ill-conditioned matrices in a least-squares sense,
-`rtol = sqrt(eps(real(float(oneunit(eltype(M))))))` is recommended.
+For solving dense, ill-conditioned equations in a least-square sense, it
+is better to *not* explicitly form the pseudoinverse matrix, since this
+can lead to numerical instability at low tolerances.  The default `M \\ b`
+algorithm instead uses pivoted QR factorization ([`qr`](@ref)).  To use an
+SVD-based algorithm, it is better to employ the SVD directly via `svd(M; rtol, atol) \\ b`
+or `ldiv!(svd(M), b; rtol, atol)`.
 
-For more information, see [^issue8859], [^B96], [^S84], [^KY88].
+One can also pass `M = svd(A)` as the argument to `pinv` in order to re-use
+an existing [`SVD`](@ref) factorization.  In this case, `pinv` will return
+the SVD of the pseudo-inverse, which can be applied accurately, instead of an explicit matrix.
+
+!!! compat "Julia 1.13"
+    Passing an `SVD` object to `pinv` requires Julia 1.13 or later.
+
+For more information, see [^pr1387], [^B96], [^S84], [^KY88].
 
 # Examples
 ```jldoctest
@@ -1754,7 +1782,7 @@ julia> M * N
  4.44089e-16   1.0
 ```
 
-[^issue8859]: Issue 8859, "Fix least squares", [https://github.com/JuliaLang/julia/pull/8859](https://github.com/JuliaLang/julia/pull/8859)
+[^pr1387]: PR 1387, "stable pinv least-squares", [LinearAlgebra.jl#1387](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387)
 
 [^B96]: Åke Björck, "Numerical Methods for Least Squares Problems",  SIAM Press, Philadelphia, 1996, "Other Titles in Applied Mathematics", Vol. 51. [doi:10.1137/1.9781611971484](http://epubs.siam.org/doi/book/10.1137/1.9781611971484)
 
@@ -1762,7 +1790,7 @@ julia> M * N
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real = 0.0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
     Tout = typeof(zero(T)/sqrt(oneunit(T) + oneunit(T)))
     if m == 0 || n == 0
@@ -1830,7 +1858,7 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real = 0.0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)

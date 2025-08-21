@@ -1467,6 +1467,35 @@ function inv(B::Bidiagonal{T}) where T
     return B.uplo == 'U' ? UpperTriangular(dest) : LowerTriangular(dest)
 end
 
+# cholesky-version for (sym)tridiagonal matrices
+for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
+    @eval function _chol!(A::Bidiagonal, ::Type{$T})
+        dv = real(A.dv)
+        ev = A.ev
+        n = length(dv)
+        @inbounds for i in 1:n-1
+            iszero(dv[i]) && throw(ZeroPivotException(i))
+            ev[i] /= dv[i]
+            dv[i+1] -= abs2(ev[i])*dv[i]
+            Akk = dv[i]
+            Akk, info = _chol!(Akk, UpperTriangular)
+            if info != 0
+                return $T(A), convert(BlasInt, i)
+            end
+            dv[i] = Akk
+            ev[i] *= dv[i]
+        end
+        Akk = dv[n]
+        Akk, info = _chol!(Akk, $T)
+        if info != 0
+            return $T(A), convert(BlasInt, n)
+        end
+        dv[n] = Akk
+        B = Bidiagonal(dv, ev, $uplo)
+        return $T(B), convert(BlasInt, 0)
+    end
+end
+
 # Eigensystems
 eigvals(M::Bidiagonal) = copy(M.dv)
 function eigvecs(M::Bidiagonal{T}) where T
@@ -1542,4 +1571,31 @@ function Base._sum(A::Bidiagonal, dims::Integer)
         end
     end
     res
+end
+
+function fillband!(B::Bidiagonal, x, l, u)
+    if l > u
+        return B
+    end
+    if ((B.uplo == 'U' && (l < 0 || u > 1)) ||
+            (B.uplo == 'L' && (l < -1 || u > 0))) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    else
+        if B.uplo == 'U'
+            if l <= 1 <= u
+                fill!(B.ev, x)
+            end
+            if l <= 0 <= u
+                fill!(B.dv, x)
+            end
+        else # B.uplo == 'L'
+            if l <= 0 <= u
+                fill!(B.dv, x)
+            end
+            if l <= -1 <= u
+                fill!(B.ev, x)
+            end
+        end
+    end
+    return B
 end

@@ -1039,7 +1039,7 @@ function dot(x::AbstractVector, A::Tridiagonal, y::AbstractVector)
     return r
 end
 
-function cholesky(S::SymTridiagonal, ::NoPivot = NoPivot(); check::Bool = true)
+function cholesky(S::Union{SymTridiagonal,Tridiagonal}, ::NoPivot = NoPivot(); check::Bool = true)
     if !ishermitian(S)
         check && checkpositivedefinite(-1)
         return Cholesky(S, 'U', convert(BlasInt, -1))
@@ -1188,4 +1188,45 @@ function _opnorm1Inf(A::SymTridiagonal, p::Real)
                     zip(view(A.dv, (2:length(A.dv)-1)), view(A.ev, lowerrange), view(A.ev, upperrange))
                 ),
                 normfirst, normend)
+end
+
+function fillband!(T::Tridiagonal, x, l, u)
+    if l > u
+        return T
+    end
+    if (l < -1 || u > 1) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    else
+        if l <= -1 <= u
+            fill!(T.dl, x)
+        end
+        if l <= 0 <= u
+            fill!(T.d, x)
+        end
+        if l <= 1 <= u
+            fill!(T.du, x)
+        end
+    end
+    return T
+end
+
+function fillband!(T::SymTridiagonal, x, l, u)
+    if l > u
+        return T
+    end
+    if (l <= 1 <= u) != (l <= -1 <= u)
+        throw(ArgumentError(lazy"cannot set only one off-diagonal band of a SymTridiagonal"))
+    elseif (l < -1 || u > 1) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    elseif l <= 0 <= u && !issymmetric(x)
+        throw(ArgumentError(lazy"cannot set entries in the diagonal band of a SymTridiagonal to an asymmetric value $x"))
+    else
+        if l <= 0 <= u
+            fill!(T.dv, x)
+        end
+        if l <= 1 <= u
+            fill!(T.ev, x)
+        end
+    end
+    return T
 end

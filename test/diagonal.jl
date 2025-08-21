@@ -1396,14 +1396,26 @@ end
 end
 
 @testset "kron! for Diagonal" begin
-    a = Diagonal([2,2])
-    b = Diagonal([1,1])
-    c = Diagonal([0,0,0,0])
-    kron!(c,b,a)
-    @test c == Diagonal([2,2,2,2])
-    c=Diagonal(Vector{Float64}(undef, 4))
-    kron!(c,a,b)
-    @test c == Diagonal([2,2,2,2])
+    a = Diagonal([1, 2])
+    b = Diagonal([3, 4])
+    # Diagonal out
+    c = Diagonal([0, 0, 0, 0])
+    kron!(c, b, a)
+    @test c == Diagonal([3, 6, 4, 8])
+    @test c == kron!(fill(0, 4, 4), Matrix(b), Matrix(a)) # against dense kron!
+    c = Diagonal(Vector{Float64}(undef, 4))
+    kron!(c, a, b)
+    @test c == Diagonal([3.0, 4.0, 6.0, 8.0])
+
+    # AbstractArray out
+    c = fill(0, 4, 4)
+    kron!(c, b, a) 
+    @test c == diagm([3, 6, 4, 8])
+    @test c == kron!(fill(0, 4, 4), Matrix(b), Matrix(a)) # against dense kron!
+    c = Matrix{Float64}(undef, 4, 4)
+    kron!(c, a, b)
+    @test c == diagm([3.0, 4.0, 6.0, 8.0])
+    @test_throws DimensionMismatch kron!(Diagonal(zeros(5)), Diagonal(zeros(2)), Diagonal(zeros(2)))
 end
 
 @testset "uppertriangular/lowertriangular" begin
@@ -1540,6 +1552,28 @@ end
         @test (@allocated op(D)) == 0
         @test (@allocated op(op(D))) == 0
     end
+end
+
+@testset "fillband!" begin
+    D = Diagonal(zeros(4))
+    LinearAlgebra.fillband!(D, 2, 0, 0)
+    @test all(==(2), diagview(D,0))
+    @test all(==(0), diagview(D,-1))
+    @test_throws ArgumentError LinearAlgebra.fillband!(D, 3, -2, 2)
+
+    LinearAlgebra.fillstored!(D, 1)
+    LinearAlgebra.fillband!(D, 0, -3, 3)
+    @test iszero(D)
+    LinearAlgebra.fillstored!(D, 1)
+    LinearAlgebra.fillband!(D, 0, -10, 10)
+    @test iszero(D)
+
+    LinearAlgebra.fillstored!(D, 1)
+    D2 = copy(D)
+    LinearAlgebra.fillband!(D, 0, -1, -3)
+    @test D == D2
+    LinearAlgebra.fillband!(D, 0, 10, 10)
+    @test D == D2
 end
 
 end # module TestDiagonal

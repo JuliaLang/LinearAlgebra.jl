@@ -224,6 +224,7 @@ const RealHermSymSymTri{T<:Real} = Union{RealHermSym{T}, SymTridiagonal{T}}
 const RealHermSymComplexHerm{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, Hermitian{Complex{T},S}}
 const RealHermSymComplexSym{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, Symmetric{Complex{T},S}}
 const RealHermSymSymTriComplexHerm{T<:Real} = Union{RealHermSymComplexSym{T}, SymTridiagonal{T}}
+const RealSymHermitian{S} = Union{Symmetric{<:Real,S}, Hermitian{<:Any,S}}
 const SelfAdjoint = Union{SymTridiagonal{<:Real}, Symmetric{<:Real}, Hermitian}
 
 wrappertype(::Union{Symmetric, SymTridiagonal}) = Symmetric
@@ -411,6 +412,19 @@ function fillstored!(A::HermOrSym{T}, x) where T
         issymmetric(xT) || throw(ArgumentError("cannot fill Symmetric matrix with an asymmetric value"))
     end
     applytri(A -> fillstored!(A, xT), A)
+    return A
+end
+
+function fillband!(A::HermOrSym, x, l, u)
+    if isa(A, Hermitian)
+        ishermitian(x) || throw(ArgumentError("cannot fill Hermitian matrix with a non-hermitian value"))
+    elseif isa(A, Symmetric)
+        issymmetric(x) || throw(ArgumentError("cannot fill Symmetric matrix with an asymmetric value"))
+    end
+    l == -u || throw(ArgumentError(lazy"lower and upper bands must be equal in magnitude and opposite in sign, got l=$(l), u=$(u)"))
+    lp = A.uplo == 'U' ? 0 : l
+    up = A.uplo == 'U' ? u : 0
+    applytri(A -> fillband!(A, x, lp, up), A)
     return A
 end
 

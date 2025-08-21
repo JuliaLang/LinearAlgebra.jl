@@ -966,4 +966,73 @@ end
     end
 end
 
+@testset "fillband!" begin
+    @testset for TT in (UpperTriangular, UnitUpperTriangular)
+        U = TT(zeros(4,4))
+        @test_throws ArgumentError LinearAlgebra.fillband!(U, 1, -1, 1)
+        if U isa UnitUpperTriangular
+            @test_throws ArgumentError LinearAlgebra.fillband!(U, 2, 0, 1)
+        end
+        # check that the error paths do not mutate the array
+        if U isa UpperTriangular
+            @test iszero(U)
+        end
+
+        LinearAlgebra.fillband!(U, 1, 0, 1)
+        @test all(==(1), diagview(U,0))
+        @test all(==(1), diagview(U,1))
+        @test all(==(0), diagview(U,2))
+
+        LinearAlgebra.fillband!(U, 10, 1, 2)
+        @test all(==(10), diagview(U,1))
+        @test all(==(10), diagview(U,2))
+        @test all(==(1), diagview(U,0))
+        @test all(==(0), diagview(U,3))
+
+        if U isa UpperTriangular
+            LinearAlgebra.fillband!(U, 0, -5, 5)
+            @test iszero(U)
+        end
+
+        U2 = copy(U)
+        LinearAlgebra.fillband!(U, -10, 1, -2)
+        @test U == U2
+        LinearAlgebra.fillband!(U, -10, 10, 10)
+        @test U == U2
+    end
+    @testset for TT in (LowerTriangular, UnitLowerTriangular)
+        L = TT(zeros(4,4))
+        @test_throws ArgumentError LinearAlgebra.fillband!(L, 1, -1, 1)
+        if L isa UnitLowerTriangular
+            @test_throws ArgumentError LinearAlgebra.fillband!(L, 2, -1, 0)
+        end
+        # check that the error paths do not mutate the array
+        if L isa LowerTriangular
+            @test iszero(L)
+        end
+
+        LinearAlgebra.fillband!(L, 1, -1, 0)
+        @test all(==(1), diagview(L,0))
+        @test all(==(1), diagview(L,-1))
+        @test all(==(0), diagview(L,-2))
+
+        LinearAlgebra.fillband!(L, 10, -2, -1)
+        @test all(==(10), diagview(L,-1))
+        @test all(==(10), diagview(L,-2))
+        @test all(==(1), diagview(L,0))
+        @test all(==(0), diagview(L,-3))
+
+        if L isa LowerTriangular
+            LinearAlgebra.fillband!(L, 0, -5, 5)
+            @test iszero(L)
+        end
+
+        L2 = copy(L)
+        LinearAlgebra.fillband!(L, -10, -1, -2)
+        @test L == L2
+        LinearAlgebra.fillband!(L, -10, -10, -10)
+        @test L == L2
+    end
+end
+
 end # module TestTriangular
