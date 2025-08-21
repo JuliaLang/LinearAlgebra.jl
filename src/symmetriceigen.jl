@@ -2,9 +2,9 @@
 
 # preserve HermOrSym wrapper
 # Call `copytrito!` instead of `copy_similar` to only copy the matching triangular half
-eigencopy_oftype(A::Hermitian, S) = Hermitian(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), sym_uplo(A.uplo))
-eigencopy_oftype(A::Symmetric, S) = Symmetric(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), sym_uplo(A.uplo))
-eigencopy_oftype(A::Symmetric{<:Complex}, S) = copyto!(similar(parent(A), S), A)
+eigencopy_oftype(A::Hermitian, ::Type{S}) where S = Hermitian(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), sym_uplo(A.uplo))
+eigencopy_oftype(A::Symmetric, ::Type{S}) where S = Symmetric(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), sym_uplo(A.uplo))
+eigencopy_oftype(A::Symmetric{<:Complex}, ::Type{S}) where S = copyto!(similar(parent(A), S), A)
 
 """
     default_eigen_alg(A)
