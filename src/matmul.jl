@@ -1070,11 +1070,13 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
                 @stable_muladdmul _modify!(MulAddMul(alpha, beta), A[i]*B[1], C, i)
             end
         end
-        for k in @view eachindex(B)[2:end]
-            aoffs = (k-1)*Astride
-            bα = @stable_muladdmul MulAddMul(alpha,false)(B[k])
-            for i in eachindex(C)
-                C[i] += A[aoffs + i] * bα
+        if !iszero(alpha)
+            for k in @view eachindex(B)[2:end]
+                aoffs = (k-1)*Astride
+                b = @stable_muladdmul MulAddMul(alpha,false)(B[k])
+                for i = eachindex(C)
+                    C[i] += A[aoffs + i] * b
+                end
             end
         end
     end

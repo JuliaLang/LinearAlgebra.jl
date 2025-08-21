@@ -6,13 +6,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "OffsetArrays.jl"))
-using .Main.OffsetArrays
-
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
@@ -785,6 +784,40 @@ end
         B = reshape([[1 2; 3 4]*i for i in 1:4], 2, 2)
         @test B'[LinearAlgebra.BandIndex(1,1)] == adjoint(B[2,1])
         @test transpose(B)[LinearAlgebra.BandIndex(1,1)] == transpose(B[2,1])
+    end
+end
+
+@testset "diagview" begin
+    for A in (rand(4, 4), rand(ComplexF64,4,4),
+                fill([1 2; 3 4], 4, 4))
+        for k in -3:3
+            @test diagview(A', k) == diag(A', k)
+            @test diagview(transpose(A), k) == diag(transpose(A), k)
+        end
+        @test IndexStyle(diagview(A')) == IndexLinear()
+    end
+end
+
+@testset "triu!/tril!" begin
+    @testset for sz in ((4,4), (3,4), (4,3))
+        A = rand(sz...)
+        B = similar(A)
+        @testset for f in (adjoint, transpose), k in -3:3
+            @test triu!(f(copy!(B, A)), k) == triu(f(A), k)
+            @test tril!(f(copy!(B, A)), k) == tril!(f(A), k)
+        end
+    end
+end
+
+@testset "fillband!" begin
+    for A in (rand(4, 4), rand(ComplexF64,4,4))
+        B = similar(A)
+        for op in (adjoint, transpose), k in -3:3
+            B .= op(A)
+            LinearAlgebra.fillband!(op(A), 1, k, k)
+            LinearAlgebra.fillband!(B, 1, k, k)
+            @test op(A) == B
+        end
     end
 end
 

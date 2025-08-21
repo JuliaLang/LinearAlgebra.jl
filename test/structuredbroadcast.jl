@@ -6,9 +6,11 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 @testset "broadcast[!] over combinations of scalars, structured matrices, and dense vectors/matrices" begin
     @testset for N in (0,1,2,10) # some edge cases, and a structured case

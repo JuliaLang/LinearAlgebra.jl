@@ -8,16 +8,13 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: errorbounds, transpose!, BandIndex
 using Test: GenericArray
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
-
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "FillArrays.jl"))
-using .Main.FillArrays
-
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 n = 9
 Random.seed!(123)
@@ -245,7 +242,7 @@ end
 end
 
 # dimensional correctness:
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
 
 @testset "AbstractArray constructor should preserve underlying storage type" begin
     # tests corresponding to #34995
@@ -966,6 +963,75 @@ end
         @test 2 * U == 2 * C
         @test U / 2 == C / 2
         @test 2 \ U == 2 \ C
+    end
+end
+
+@testset "fillband!" begin
+    @testset for TT in (UpperTriangular, UnitUpperTriangular)
+        U = TT(zeros(4,4))
+        @test_throws ArgumentError LinearAlgebra.fillband!(U, 1, -1, 1)
+        if U isa UnitUpperTriangular
+            @test_throws ArgumentError LinearAlgebra.fillband!(U, 2, 0, 1)
+        end
+        # check that the error paths do not mutate the array
+        if U isa UpperTriangular
+            @test iszero(U)
+        end
+
+        LinearAlgebra.fillband!(U, 1, 0, 1)
+        @test all(==(1), diagview(U,0))
+        @test all(==(1), diagview(U,1))
+        @test all(==(0), diagview(U,2))
+
+        LinearAlgebra.fillband!(U, 10, 1, 2)
+        @test all(==(10), diagview(U,1))
+        @test all(==(10), diagview(U,2))
+        @test all(==(1), diagview(U,0))
+        @test all(==(0), diagview(U,3))
+
+        if U isa UpperTriangular
+            LinearAlgebra.fillband!(U, 0, -5, 5)
+            @test iszero(U)
+        end
+
+        U2 = copy(U)
+        LinearAlgebra.fillband!(U, -10, 1, -2)
+        @test U == U2
+        LinearAlgebra.fillband!(U, -10, 10, 10)
+        @test U == U2
+    end
+    @testset for TT in (LowerTriangular, UnitLowerTriangular)
+        L = TT(zeros(4,4))
+        @test_throws ArgumentError LinearAlgebra.fillband!(L, 1, -1, 1)
+        if L isa UnitLowerTriangular
+            @test_throws ArgumentError LinearAlgebra.fillband!(L, 2, -1, 0)
+        end
+        # check that the error paths do not mutate the array
+        if L isa LowerTriangular
+            @test iszero(L)
+        end
+
+        LinearAlgebra.fillband!(L, 1, -1, 0)
+        @test all(==(1), diagview(L,0))
+        @test all(==(1), diagview(L,-1))
+        @test all(==(0), diagview(L,-2))
+
+        LinearAlgebra.fillband!(L, 10, -2, -1)
+        @test all(==(10), diagview(L,-1))
+        @test all(==(10), diagview(L,-2))
+        @test all(==(1), diagview(L,0))
+        @test all(==(0), diagview(L,-3))
+
+        if L isa LowerTriangular
+            LinearAlgebra.fillband!(L, 0, -5, 5)
+            @test iszero(L)
+        end
+
+        L2 = copy(L)
+        LinearAlgebra.fillband!(L, -10, -1, -2)
+        @test L == L2
+        LinearAlgebra.fillband!(L, -10, -10, -10)
+        @test L == L2
     end
 end
 

@@ -8,22 +8,16 @@ using Test, LinearAlgebra, Random
 using Test: GenericArray
 using LinearAlgebra: isbanded
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "Quaternions.jl"))
-using .Main.Quaternions
-
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "OffsetArrays.jl"))
-using .Main.OffsetArrays
-
-isdefined(Main, :DualNumbers) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "DualNumbers.jl"))
-using .Main.DualNumbers
-
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "FillArrays.jl"))
-using .Main.FillArrays
-
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.DualNumbers
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.Furlongs
 
 Random.seed!(123)
 
@@ -102,6 +96,18 @@ n = 5 # should be odd
 
     @testset "det with nonstandard Number type" begin
         elty <: Real && @test det(Dual.(triu(A), zero(A))) isa Dual
+    end
+    if elty <: Int
+        @testset "det no overflow - triangular" begin
+            A = diagm([typemax(elty), typemax(elty)])
+            @test det(A) == det(float(A))
+        end
+    end
+    @testset "det with units - triangular" begin
+        for dim in 0:4
+            A = diagm(Furlong.(ones(elty, dim)))
+            @test det(A) == Furlong{dim}(one(elty))
+        end
     end
 end
 

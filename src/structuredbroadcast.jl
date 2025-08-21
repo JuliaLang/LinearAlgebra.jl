@@ -212,7 +212,7 @@ function copyto!(dest::Diagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
-    for i in axs[1]
+    for i in eachindex(dest.diag)
         dest.diag[i] = @inbounds bc[BandIndex(0, i)]
     end
     return dest
@@ -222,15 +222,15 @@ function copyto!(dest::Bidiagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
-    for i in axs[1]
+    for i in eachindex(dest.dv)
         dest.dv[i] = @inbounds bc[BandIndex(0, i)]
     end
     if dest.uplo == 'U'
-        for i = 1:size(dest, 1)-1
+        for i in eachindex(dest.ev)
             dest.ev[i] = @inbounds bc[BandIndex(1, i)]
         end
     else
-        for i = 1:size(dest, 1)-1
+        for i in eachindex(dest.ev)
             dest.ev[i] = @inbounds bc[BandIndex(-1, i)]
         end
     end
@@ -257,13 +257,13 @@ function copyto!(dest::Tridiagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
-    for i in axs[1]
+    for i in eachindex(dest.d)
         dest.d[i] = @inbounds bc[BandIndex(0, i)]
     end
-    for i = 1:size(dest, 1)-1
+    for i in eachindex(dest.du)
         dest.du[i] = @inbounds bc[BandIndex(1, i)]
     end
-    for i = 1:size(dest, 1)-1
+    for i in eachindex(dest.dl)
         dest.dl[i] = @inbounds bc[BandIndex(-1, i)]
     end
     return dest

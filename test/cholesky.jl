@@ -8,10 +8,11 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted,
     PosDefException, RankDeficientException, chkfullrank
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "Quaternions.jl"))
-using .Main.Quaternions
+using Main.LinearAlgebraTestHelpers.Quaternions
 
 function unary_ops_tests(a, ca, tol; n=size(a, 1))
     @test inv(ca)*a ≈ Matrix(I, n, n)
@@ -491,9 +492,42 @@ end
 end
 
 @testset "Cholesky for AbstractMatrix" begin
-    S = SymTridiagonal(fill(2.0, 4), ones(3))
-    C = cholesky(S)
-    @test C.L * C.U ≈ S
+    for T in (identity, big), M in (SymTridiagonal(fill(T(2.0), 4), ones(3)),
+        Symmetric(SymTridiagonal(fill(T(2.0), 4), ones(3)), :U),
+        Symmetric(SymTridiagonal(fill(T(2.0), 4), ones(3)), :L),
+        Tridiagonal(ones(3), fill(T(2.0), 4), ones(3)),
+        Hermitian(Tridiagonal(ones(3), fill(T(2.0), 4), ones(3)), :U),
+        Hermitian(Bidiagonal(fill(T(2.0), 4), ones(3), :U), :U),
+        Hermitian(Bidiagonal(fill(T(2.0), 4), ones(3), :U), :L),
+        Hermitian(Bidiagonal(fill(T(2.0), 4), ones(3), :L), :L),
+        )
+        C = cholesky(M)
+        @test C.L * C.U ≈ M
+        @test parent(C.U) isa Bidiagonal
+        M[1,1] *= -1
+        @test_throws PosDefException cholesky(M)
+        C = cholesky(M, check=false)
+        @test C.info > 0
+        M[1,1] *= -1
+        M[end,end] *= -1
+        @test_throws PosDefException cholesky(M)
+        C = cholesky(M, check=false)
+        @test C.info > 0
+    end
+    # test LowerTriangular version
+    M = Hermitian(Bidiagonal(fill(2.0, 4), im * ones(3), :L), :L)
+    C = cholesky!(copy(M))
+    @test C.L * C.U ≈ M
+    # non-(RealOrComplex) eltype
+    B = Bidiagonal(randn(Quaternion{Float64}, 4), randn(Quaternion{Float64}, 3), :U)
+    A = Tridiagonal(Hermitian(B'B))
+    C = cholesky(A)
+    @test C.L * C.U ≈ A
+    @test parent(C.U) isa Bidiagonal
+    A = Hermitian(Tridiagonal(Hermitian(B'B)), :L)
+    C = cholesky(A)
+    @test C.L * C.U ≈ A
+    @test parent(C.U) isa Bidiagonal
 end
 
 @testset "constructor with non-BlasInt arguments" begin

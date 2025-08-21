@@ -6,25 +6,16 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "Quaternions.jl"))
-using .Main.Quaternions
-
-isdefined(Main, :InfiniteArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "InfiniteArrays.jl"))
-using .Main.InfiniteArrays
-
-isdefined(Main, :FillArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "FillArrays.jl"))
-using .Main.FillArrays
-
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "OffsetArrays.jl"))
-using .Main.OffsetArrays
-
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
-
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.InfiniteArrays
+using Main.LinearAlgebraTestHelpers.FillArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 include("testutils.jl") # test_approx_eq_modphase
 
@@ -1205,6 +1196,63 @@ end
     @test_throws "cannot set off-diagonal entry $((1,3))" S[LinearAlgebra.BandIndex(2,1)] = 1
     @test_throws BoundsError S[LinearAlgebra.BandIndex(size(S,1),1)]
     @test_throws BoundsError S[LinearAlgebra.BandIndex(0,size(S,1)+1)]
+end
+
+@testset "fillband!" begin
+    @testset "Tridiagonal" begin
+        T = Tridiagonal(zeros(3), zeros(4), zeros(3))
+        LinearAlgebra.fillband!(T, 2, 1, 1)
+        @test all(==(2), diagview(T,1))
+        @test all(==(0), diagview(T,0))
+        @test all(==(0), diagview(T,-1))
+        LinearAlgebra.fillband!(T, 3, 0, 0)
+        @test all(==(3), diagview(T,0))
+        @test all(==(2), diagview(T,1))
+        @test all(==(0), diagview(T,-1))
+        LinearAlgebra.fillband!(T, 4, -1, 1)
+        @test all(==(4), diagview(T,-1))
+        @test all(==(4), diagview(T,0))
+        @test all(==(4), diagview(T,1))
+        @test_throws ArgumentError LinearAlgebra.fillband!(T, 3, -2, 2)
+
+        LinearAlgebra.fillstored!(T, 1)
+        LinearAlgebra.fillband!(T, 0, -3, 3)
+        @test iszero(T)
+        LinearAlgebra.fillstored!(T, 1)
+        LinearAlgebra.fillband!(T, 0, -10, 10)
+        @test iszero(T)
+
+        LinearAlgebra.fillstored!(T, 1)
+        T2 = copy(T)
+        LinearAlgebra.fillband!(T, 0, -1, -3)
+        @test T == T2
+        LinearAlgebra.fillband!(T, 0, 10, 10)
+        @test T == T2
+    end
+    @testset "SymTridiagonal" begin
+        S = SymTridiagonal(zeros(4), zeros(3))
+        @test_throws ArgumentError LinearAlgebra.fillband!(S, 2, -1, -1)
+        @test_throws ArgumentError LinearAlgebra.fillband!(S, 2, -2, 2)
+
+        LinearAlgebra.fillband!(S, 1, -1, 1)
+        @test all(==(1), diagview(S,-1))
+        @test all(==(1), diagview(S,0))
+        @test all(==(1), diagview(S,1))
+
+        LinearAlgebra.fillstored!(S, 1)
+        LinearAlgebra.fillband!(S, 0, -3, 3)
+        @test iszero(S)
+        LinearAlgebra.fillstored!(S, 1)
+        LinearAlgebra.fillband!(S, 0, -10, 10)
+        @test iszero(S)
+
+        LinearAlgebra.fillstored!(S, 1)
+        S2 = copy(S)
+        LinearAlgebra.fillband!(S, 0, -1, -3)
+        @test S == S2
+        LinearAlgebra.fillband!(S, 0, 10, 10)
+        @test S == S2
+    end
 end
 
 end # module TestTridiagonal

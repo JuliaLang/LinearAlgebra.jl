@@ -6,11 +6,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
-isdefined(Main, :Quaternions) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "Quaternions.jl"))
-using .Main.Quaternions
-isdefined(Main, :OffsetArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "OffsetArrays.jl"))
-using .Main.OffsetArrays
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.OffsetArrays
 
 Random.seed!(1234543)
 
@@ -587,6 +588,13 @@ end
     J = (5+2im)*I
     @test J/A ≈ J/cA
     @test A\J ≈ cA\J
+end
+
+@testset "block matrix equality" begin
+    A = Diagonal(fill(I(2), 4))
+    @test isone(A)
+    @test A != I
+    @test 0*A != 0*I
 end
 
 end # module TestUniformscaling

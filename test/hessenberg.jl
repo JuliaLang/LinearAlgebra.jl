@@ -6,12 +6,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 
-const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
-isdefined(Main, :SizedArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "SizedArrays.jl"))
-using .Main.SizedArrays
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
-isdefined(Main, :ImmutableArrays) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "ImmutableArrays.jl"))
-using .Main.ImmutableArrays
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
 
 # for tuple tests below
 ≅(x,y) = all(p -> p[1] ≈ p[2], zip(x,y))
@@ -298,6 +298,26 @@ end
     @test_throws DimensionMismatch ones(2, 1)*hessenberg(zeros(0,0)).Q
     @test hessenberg(zeros(0,0)).Q * ones(0, 2) == zeros(0,2)
     @test_throws DimensionMismatch hessenberg(zeros(0,0)).Q * ones(1, 2)
+end
+
+@testset "fillband" begin
+    U = UpperHessenberg(zeros(4,4))
+    @test_throws ArgumentError LinearAlgebra.fillband!(U, 1, -2, 1)
+    @test iszero(U)
+
+    LinearAlgebra.fillband!(U, 10, -1, 2)
+    @test all(==(10), diagview(U,-1))
+    @test all(==(10), diagview(U,2))
+    @test all(==(0), diagview(U,3))
+
+    LinearAlgebra.fillband!(U, 0, -5, 5)
+    @test iszero(U)
+
+    U2 = copy(U)
+    LinearAlgebra.fillband!(U, -10, 1, -2)
+    @test U == U2
+    LinearAlgebra.fillband!(U, -10, 10, 10)
+    @test U == U2
 end
 
 end # module TestHessenberg
