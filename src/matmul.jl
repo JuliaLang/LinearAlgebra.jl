@@ -1067,10 +1067,7 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
             if length(B) == 0
                 C[i] = zero(eltype(C))
             else
-                AiB1 = A[i]*B[1]
-                # the sum is necessary for potential type promotion
-                AiB1C = AiB1 + zero(AiB1)
-                @stable_muladdmul _modify!(MulAddMul(alpha, beta), AiB1C, C, i)
+                C[i] = A[i]*B[1]*alpha + C[i]*beta
             end
         end
         if !iszero(alpha)
