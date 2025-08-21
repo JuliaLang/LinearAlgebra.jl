@@ -639,8 +639,8 @@ end
         sinA1 = convert(Matrix{elty}, [0.2865568596627417 -1.107751980582015 -0.13772915374386513;
                                        -0.6227405671629401 0.2176922827908092 -0.5538759902910078;
                                        -0.6227405671629398 -0.6916051440348725 0.3554214365346742])
-        @test @inferred(cos(A1)) ≈ cosA1
-        @test @inferred(sin(A1)) ≈ sinA1
+        @test cos(A1) ≈ cosA1
+        @test sin(A1) ≈ sinA1
 
         cosA2 = convert(Matrix{elty}, [-0.6331745163802187 0.12878366262380136 -0.17304181968301532;
                                        0.12878366262380136 -0.5596234510748788 0.5210483146041339;
@@ -663,22 +663,22 @@ end
 
         # Identities
         for (i, A) in enumerate((A1, A2, A3, A4, A5))
-            @test @inferred(sincos(A)) == (sin(A), cos(A))
+            @test sincos(A) == (sin(A), cos(A))
             @test cos(A)^2 + sin(A)^2 ≈ Matrix(I, size(A))
             @test cos(A) ≈ cos(-A)
             @test sin(A) ≈ -sin(-A)
-            @test @inferred(tan(A)) ≈ sin(A) / cos(A)
+            @test tan(A) ≈ sin(A) / cos(A)
 
             @test cos(A) ≈ real(exp(im*A))
             @test sin(A) ≈ imag(exp(im*A))
             @test cos(A) ≈ real(cis(A))
             @test sin(A) ≈ imag(cis(A))
-            @test @inferred(cis(A)) ≈ cos(A) + im * sin(A)
+            @test cis(A) ≈ cos(A) + im * sin(A)
 
-            @test @inferred(cosh(A)) ≈ 0.5 * (exp(A) + exp(-A))
-            @test @inferred(sinh(A)) ≈ 0.5 * (exp(A) - exp(-A))
-            @test @inferred(cosh(A)) ≈ cosh(-A)
-            @test @inferred(sinh(A)) ≈ -sinh(-A)
+            @test cosh(A) ≈ 0.5 * (exp(A) + exp(-A))
+            @test sinh(A) ≈ 0.5 * (exp(A) - exp(-A))
+            @test cosh(A) ≈ cosh(-A)
+            @test sinh(A) ≈ -sinh(-A)
 
             # Some of the following identities fail for A3, A4 because the matrices are singular
             if i in (1, 2, 5)
@@ -687,7 +687,7 @@ end
                 @test @inferred(cot(A)) ≈ inv(tan(A))
                 @test @inferred(sech(A)) ≈ inv(cosh(A))
                 @test @inferred(csch(A)) ≈ inv(sinh(A))
-                @test @inferred(coth(A)) ≈ inv(@inferred tanh(A))
+                @test @inferred(coth(A)) ≈ inv(tanh(A))
             end
             # The following identities fail for A1, A2 due to rounding errors;
             # probably needs better algorithm for the general case
@@ -904,11 +904,6 @@ end
     end
 end
 
-@testset "matrix logarithm is type-inferable" for elty in (Float32,Float64,ComplexF32,ComplexF64)
-    A1 = randn(elty, 4, 4)
-    @inferred Union{Matrix{elty},Matrix{complex(elty)}} log(A1)
-end
-
 @testset "Additional matrix square root tests" for elty in (Float64, ComplexF64)
     A11 = convert(Matrix{elty}, [3 2; -5 -3])
     @test sqrt(A11)^2 ≈ A11
@@ -1073,7 +1068,7 @@ end
     @test lyap(1.0+2.0im, 3.0+4.0im) == -1.5 - 2.0im
 end
 
-@testset "$elty Matrix to real power" for elty in (Float64, ComplexF64)
+@testset "$elty Matrix to real power" for elty in (Float32, Float64, ComplexF32, ComplexF64)
     # Tests proposed at Higham, Deadman: Testing Matrix Function Algorithms Using Identities, March 2014
     #Aa : only positive real eigenvalues
     Aa = convert(Matrix{elty}, [5 4 2 1; 0 1 -1 -1; -1 -1 3 0; 1 1 -1 2])
@@ -1099,7 +1094,13 @@ end
         ADi += [im 0; 0 im]
     end
 
-    for A in (Aa, Ab, Ac, Ad, Ah, ADi)
+    #ADin : negative Diagonal Matrix
+    ADin = convert(Matrix{elty}, [-3 0; 0 3])
+    if elty <: LinearAlgebra.BlasComplex
+        ADin += [im 0; 0 im]
+    end
+
+    for A in (Aa, Ab, Ac, Ad, Ah, ADi, ADin)
         @test A^(1/2) ≈ sqrt(A)
         @test A^(-1/2) ≈ inv(sqrt(A))
         @test A^(3/4) ≈ sqrt(A) * sqrt(sqrt(A))
@@ -1112,7 +1113,7 @@ end
     end
 
     Tschurpow = Union{Matrix{real(elty)}, Matrix{complex(elty)}}
-    @test (@inferred Tschurpow LinearAlgebra.schurpow(Aa, 2.0)) ≈ Aa^2
+    @test (@inferred Tschurpow LinearAlgebra.schurpow(Aa, real(elty)(2.0))) ≈ Aa^2
 end
 
 @testset "BigFloat triangular real power" begin

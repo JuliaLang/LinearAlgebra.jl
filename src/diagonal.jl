@@ -806,6 +806,11 @@ end
 
 kron(A::Diagonal, B::Diagonal) = Diagonal(kron(A.diag, B.diag))
 
+function kron!(C::Diagonal, A::Diagonal, B::Diagonal)
+    kron!(C.diag, A.diag, B.diag)
+    return C
+end
+
 function kron(A::Diagonal, B::SymTridiagonal)
     kdv = kron(A.diag, B.dv)
     # We don't need to drop the last element
@@ -1216,3 +1221,18 @@ end
 
 uppertriangular(D::Diagonal) = D
 lowertriangular(D::Diagonal) = D
+
+throw_fillband_error(l, u, x) = throw(ArgumentError(lazy"cannot set bands $l:$u to a nonzero value ($x)"))
+
+function fillband!(D::Diagonal, x, l, u)
+    if l > u
+        return D
+    end
+    if (l < 0 || u > 0) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    end
+    if l <= 0 <= u
+        fill!(D.diag, x)
+    end
+    return D
+end

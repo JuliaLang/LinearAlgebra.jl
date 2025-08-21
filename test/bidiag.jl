@@ -1246,4 +1246,56 @@ end
     end
 end
 
+@testset "fillband!" begin
+    @testset "uplo = :U" begin
+        B = Bidiagonal(zeros(4), zeros(3), :U)
+        LinearAlgebra.fillband!(B, 2, 1, 1)
+        @test all(==(2), diagview(B,1))
+        LinearAlgebra.fillband!(B, 3, 0, 0)
+        @test all(==(3), diagview(B,0))
+        @test all(==(2), diagview(B,1))
+        LinearAlgebra.fillband!(B, 4, 0, 1)
+        @test all(==(4), diagview(B,0))
+        @test all(==(4), diagview(B,1))
+        @test_throws ArgumentError LinearAlgebra.fillband!(B, 3, -1, 0)
+
+        LinearAlgebra.fillstored!(B, 1)
+        LinearAlgebra.fillband!(B, 0, -3, 3)
+        @test iszero(B)
+        LinearAlgebra.fillband!(B, 0, -10, 10)
+        @test iszero(B)
+        LinearAlgebra.fillstored!(B, 1)
+        B2 = copy(B)
+        LinearAlgebra.fillband!(B, 0, -1, -3)
+        @test B == B2
+        LinearAlgebra.fillband!(B, 0, 10, 10)
+        @test B == B2
+    end
+
+    @testset "uplo = :L" begin
+        B = Bidiagonal(zeros(4), zeros(3), :L)
+        LinearAlgebra.fillband!(B, 2, -1, -1)
+        @test all(==(2), diagview(B,-1))
+        LinearAlgebra.fillband!(B, 3, 0, 0)
+        @test all(==(3), diagview(B,0))
+        @test all(==(2), diagview(B,-1))
+        LinearAlgebra.fillband!(B, 4, -1, 0)
+        @test all(==(4), diagview(B,0))
+        @test all(==(4), diagview(B,-1))
+        @test_throws ArgumentError LinearAlgebra.fillband!(B, 3, 0, 1)
+
+        LinearAlgebra.fillstored!(B, 1)
+        LinearAlgebra.fillband!(B, 0, -3, 3)
+        @test iszero(B)
+        LinearAlgebra.fillband!(B, 0, -10, 10)
+        @test iszero(B)
+        LinearAlgebra.fillstored!(B, 1)
+        B2 = copy(B)
+        LinearAlgebra.fillband!(B, 0, -1, -3)
+        @test B == B2
+        LinearAlgebra.fillband!(B, 0, 10, 10)
+        @test B == B2
+    end
+end
+
 end # module TestBidiagonal

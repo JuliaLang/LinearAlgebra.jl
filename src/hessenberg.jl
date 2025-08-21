@@ -124,6 +124,17 @@ lmul!(x::Number, H::UpperHessenberg) = (lmul!(x, H.data); H)
 
 fillstored!(H::UpperHessenberg, x) = (fillband!(H.data, x, -1, size(H,2)-1); H)
 
+function fillband!(H::UpperHessenberg, x, l, u)
+    if l > u
+        return H
+    end
+    if l < -1 && !iszero(x)
+        throw_fillband_error(l, u, x)
+    end
+    fillband!(H.data, x, l, u)
+    return H
+end
+
 +(A::UpperHessenberg, B::UpperHessenberg) = UpperHessenberg(A.data+B.data)
 -(A::UpperHessenberg, B::UpperHessenberg) = UpperHessenberg(A.data-B.data)
 

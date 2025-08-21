@@ -876,21 +876,67 @@ end
     end
 end
 
-@testset "Multiplications symmetric/hermitian for $T and $S" for T in
-        (Float16, Float32, Float64, BigFloat), S in (ComplexF16, ComplexF32, ComplexF64)
-    let A = transpose(Symmetric(rand(S, 3, 3))), Bv = Vector(rand(T, 3)), Bm = Matrix(rand(T, 3,3))
+@testset "Multiplications symmetric/hermitian for T=$T and S=$S for size n=$n" for T in
+        (Float16, Float32, Float64, BigFloat, Quaternion{Float64}),
+        S in (T <: Quaternion ? (Quaternion{Float64},) : (ComplexF16, ComplexF32, ComplexF64, Quaternion{Float64})),
+        n in (2, 3, 4)
+    let A = transpose(Symmetric(rand(S, n, n))), Bv = Vector(rand(T, n)), Bm = Matrix(rand(T, n,n))
         @test A * Bv ≈ Matrix(A) * Bv
         @test A * Bm ≈ Matrix(A) * Bm
+        @test A * transpose(Bm) ≈ Matrix(A) * transpose(Bm)
+        @test A * adjoint(Bm) ≈ Matrix(A) * adjoint(Bm)
         @test Bm * A ≈ Bm * Matrix(A)
+        @test transpose(Bm) * A ≈ transpose(Bm) * Matrix(A)
+        @test adjoint(Bm) * A ≈ adjoint(Bm) * Matrix(A)
+        C = similar(Bm, promote_type(T, S))
+        @test mul!(C, A, Bm) ≈ A * Bm
+        @test mul!(adjoint(C), A, adjoint(Bm)) ≈ A * adjoint(Bm)
+        @test mul!(transpose(C), A, transpose(Bm)) ≈ A * transpose(Bm)
+        rand!(C)
+        @test mul!(copy(C), A, Bm, 2, 3) ≈ A * Bm * 2 + C * 3
+        @test mul!(copy(C), Bm, A, 2, 3) ≈ Bm * A * 2 + C * 3
+        @test mul!(adjoint(copy(C)), A, adjoint(Bm), 2, 3) ≈ A * adjoint(Bm) * 2 + adjoint(C) * 3
+        @test mul!(adjoint(copy(C)), adjoint(Bm), A, 2, 3) ≈ adjoint(Bm) * A * 2 + adjoint(C) * 3
+        @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
+        @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
+        if eltype(C) <: Complex
+            alpha, beta  = 4+2im, 3+im
+            @test mul!(adjoint(copy(C)), A, adjoint(Bm), alpha, beta) ≈ A * adjoint(Bm) * alpha + adjoint(C) * beta
+            @test mul!(adjoint(copy(C)), adjoint(Bm), A, alpha, beta) ≈ adjoint(Bm) * A * alpha + adjoint(C) * beta
+            @test mul!(transpose(copy(C)), A, transpose(Bm), alpha, beta) ≈ A * transpose(Bm) * alpha + transpose(C) * beta
+            @test mul!(transpose(copy(C)), transpose(Bm), A, alpha, beta) ≈ transpose(Bm) * A * alpha + transpose(C) * beta
+        end
     end
-    let A = adjoint(Hermitian(rand(S, 3,3))), Bv = Vector(rand(T, 3)), Bm = Matrix(rand(T, 3,3))
+    let A = adjoint(Hermitian(rand(S, n,n))), Bv = Vector(rand(T, n)), Bm = Matrix(rand(T, n,n))
         @test A * Bv ≈ Matrix(A) * Bv
         @test A * Bm ≈ Matrix(A) * Bm
+        @test A * transpose(Bm) ≈ Matrix(A) * transpose(Bm)
+        @test A * adjoint(Bm) ≈ Matrix(A) * adjoint(Bm)
         @test Bm * A ≈ Bm * Matrix(A)
+        @test transpose(Bm) * A ≈ transpose(Bm) * Matrix(A)
+        @test adjoint(Bm) * A ≈ adjoint(Bm) * Matrix(A)
+        C = similar(Bm, promote_type(T, S))
+        @test mul!(C, A, Bm) ≈ A * Bm
+        @test mul!(adjoint(C), A, adjoint(Bm)) ≈ A * adjoint(Bm)
+        @test mul!(transpose(C), A, transpose(Bm)) ≈ A * transpose(Bm)
+        rand!(C)
+        @test mul!(copy(C), A, Bm, 2, 3) ≈ A * Bm * 2 + C * 3
+        @test mul!(copy(C), Bm, A, 2, 3) ≈ Bm * A * 2 + C * 3
+        @test mul!(adjoint(copy(C)), A, adjoint(Bm), 2, 3) ≈ A * adjoint(Bm) * 2 + adjoint(C) * 3
+        @test mul!(adjoint(copy(C)), adjoint(Bm), A, 2, 3) ≈ adjoint(Bm) * A * 2 + adjoint(C) * 3
+        @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
+        @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
+        if eltype(C) <: Complex
+            alpha, beta  = 4+2im, 3+im
+            @test mul!(adjoint(copy(C)), A, adjoint(Bm), alpha, beta) ≈ A * adjoint(Bm) * alpha + adjoint(C) * beta
+            @test mul!(adjoint(copy(C)), adjoint(Bm), A, alpha, beta) ≈ adjoint(Bm) * A * alpha + adjoint(C) * beta
+            @test mul!(transpose(copy(C)), A, transpose(Bm), alpha, beta) ≈ A * transpose(Bm) * alpha + transpose(C) * beta
+            @test mul!(transpose(copy(C)), transpose(Bm), A, alpha, beta) ≈ transpose(Bm) * A * alpha + transpose(C) * beta
+        end
     end
-    let Ahrs = transpose(Hermitian(Symmetric(rand(T, 3, 3)))),
-        Acs = transpose(Symmetric(rand(S, 3, 3))),
-        Ahcs = transpose(Hermitian(Symmetric(rand(S, 3, 3))))
+    let Ahrs = transpose(Hermitian(Symmetric(rand(T, n, n)))),
+        Acs = transpose(Symmetric(rand(S, n, n))),
+        Ahcs = transpose(Hermitian(Symmetric(rand(S, n, n))))
 
         @test Ahrs * Ahrs ≈ Ahrs * Matrix(Ahrs)
         @test Ahrs * Acs ≈ Ahrs * Matrix(Acs)
@@ -899,9 +945,9 @@ end
         @test Ahrs * Ahcs ≈ Matrix(Ahrs) * Ahcs
         @test Ahcs * Ahrs ≈ Ahcs * Matrix(Ahrs)
     end
-    let Ahrs = adjoint(Hermitian(Symmetric(rand(T, 3, 3)))),
-        Acs = adjoint(Symmetric(rand(S, 3, 3))),
-        Ahcs = adjoint(Hermitian(Symmetric(rand(S, 3, 3))))
+    let Ahrs = adjoint(Hermitian(Symmetric(rand(T, n, n)))),
+        Acs = adjoint(Symmetric(rand(S, n, n))),
+        Ahcs = adjoint(Hermitian(Symmetric(rand(S, n, n))))
 
         @test Ahrs * Ahrs ≈ Ahrs * Matrix(Ahrs)
         @test Ahcs * Ahcs ≈ Matrix(Ahcs) * Matrix(Ahcs)
@@ -1196,14 +1242,85 @@ end
     end
 end
 
-@testset "asin/acos/acosh for matrix outside the real domain" begin
+@testset "asin/acos/acosh/tanh for matrix outside the real domain" begin
     M = [0 2;2 0] #eigenvalues are ±2
     for T ∈ (Float32, Float64, ComplexF32, ComplexF64)
         M2 = Hermitian(T.(M))
         @test sin(asin(M2)) ≈ M2
         @test cos(acos(M2)) ≈ M2
         @test cosh(acosh(M2)) ≈ M2
+        @test tanh(atanh(M2)) ≈ M2
     end
+end
+
+@testset "type inference of matrix functions" begin
+    for T ∈ (Float32, Float64, ComplexF32, ComplexF64)
+        a = randn(T, 2, 2)
+        syma = Symmetric(a)
+        symtria = SymTridiagonal(syma)
+        herma = Hermitian(a)
+        #nasty functions
+        for f in (x->x^real(T)(0.3), sqrt, log, asin, acos, acosh, atanh)
+            if T <: Real
+                @test @inferred(Matrix{Complex{T}}, f(a)) isa Matrix
+                @test @inferred(Symmetric{Complex{T}}, f(syma)) isa Symmetric
+                @test @inferred(Symmetric{Complex{T}}, f(symtria)) isa Symmetric
+                @test @inferred(Symmetric{Complex{T}}, f(herma)) isa Union{Symmetric{Complex{T}}, Hermitian{T}}
+            else
+                @test @inferred(f(a)) isa Matrix{T}
+                @test @inferred(Matrix{T}, f(herma)) isa Union{Matrix{T}, Hermitian{T}}
+            end
+        end
+        #nice functions
+        for f in (x->x^2, exp, cos, sin, tan, cosh, sinh, tanh, atan, asinh, cbrt)
+            if T <: Real
+                @test @inferred(f(a)) isa Matrix{T}
+                @test @inferred(f(syma)) isa Symmetric{T}
+                @test @inferred(f(symtria)) isa Symmetric{T}
+                @test @inferred(f(herma)) isa Hermitian{T}
+            else
+                f != cbrt && @test @inferred(f(a)) isa Matrix{T}
+                @test @inferred(f(herma)) isa Hermitian{T}
+            end
+        end
+        #special case cis
+        if T <: Real
+            @test @inferred(cis(a)) isa Matrix{Complex{T}}
+            @test @inferred(cis(syma)) isa Symmetric{Complex{T}}
+            @test @inferred(cis(symtria)) isa Symmetric{Complex{T}}
+            @test @inferred(cis(herma)) isa Symmetric{Complex{T}}
+        else
+            @test @inferred(cis(a)) isa Matrix{T}
+            @test @inferred(cis(herma)) isa Matrix{T}
+        end
+        #special case sincos
+        if T <: Real
+            @test @inferred(sincos(syma)) isa Tuple{Symmetric{T}, Symmetric{T}}
+            @test @inferred(sincos(symtria)) isa Tuple{Symmetric{T}, Symmetric{T}}
+        end
+        @test @inferred(sincos(a)) isa Tuple{Matrix{T}, Matrix{T}}
+        @test @inferred(sincos(herma)) isa Tuple{Hermitian{T}, Hermitian{T}}
+    end
+end
+
+@testset "fillband!" begin
+    A = zeros(4,4)
+    @testset for T in (Symmetric, Hermitian), uplo in (:U, :L)
+        A .= 0
+        S = T(A, uplo)
+        LinearAlgebra.fillband!(S, 2, -2, 2)
+        @test all(all(==(2), diagview(S, k)) for k in -2:2)
+        @test iszero(diagview(S, -3))
+        @test iszero(diagview(S, 3))
+        LinearAlgebra.fillband!(S, 4, -1, 1)
+        @test all(all(==(4), diagview(S, k)) for k in -1:1)
+        @test all(==(2), diagview(S, -2))
+        @test all(==(2), diagview(S, 2))
+    end
+    msg = "cannot fill Hermitian matrix with a non-hermitian value"
+    @test_throws msg LinearAlgebra.fillband!(Hermitian(A), 2im, -3, 3)
+    msg = "lower and upper bands must be equal in magnitude and opposite in sign, got l=0, u=1"
+    @test_throws msg LinearAlgebra.fillband!(Symmetric(A), 2, 0, 1)
 end
 
 end # module TestSymmetric
