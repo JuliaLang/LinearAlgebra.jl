@@ -700,6 +700,9 @@ issymmetric(S::Tridiagonal) = all(issymmetric, S.d) && all(Iterators.map((x, y) 
 
 \(A::Adjoint{<:Any,<:Tridiagonal}, B::Adjoint{<:Any,<:AbstractVecOrMat}) = copy(A) \ B
 
+diag(M::Tridiagonal, ::Val{0}) = M.d
+diag(M::Tridiagonal, ::Val{1}) = M.du
+diag(M::Tridiagonal, ::Val{-1}) = M.dl
 function diag(M::Tridiagonal, n::Integer=0)
     # every branch call similar(..., ::Int) to make sure the
     # same vector type is returned independent of n
