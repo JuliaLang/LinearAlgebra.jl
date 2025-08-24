@@ -111,7 +111,7 @@ function (::Type{SymTri})(A::AbstractMatrix) where {SymTri <: SymTridiagonal}
     checksquare(A)
     du = diag(A, 1)
     d  = diag(A)
-    if !(_issymmetric(A) || _checksymmetric(d, du, diag(A, -1)))
+    if !(_issymmetric(A) || _checksymmetric(d, du, diag(A, Val(-1))))
         throw(ArgumentError("matrix is not symmetric; cannot convert to SymTridiagonal"))
     end
     return SymTri(d, du)
