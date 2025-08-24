@@ -317,7 +317,7 @@ band instead of making a copy if `k` lies within the bandwidth of the matrix.
 !!! note
     The type of the result may vary depending on the values of `k`.
 """
-diag(A::AbstractMatrix, ::Val{N}) where {N} = diag(A, N)
+diag(A::AbstractMatrix, ::Val{k}) where {k} = diag(A, k)
 
 """
     diagview(M, k::Integer=0)
