@@ -12,6 +12,7 @@ using ..LinearAlgebra: libblastrampoline, BlasFloat, BlasInt, LAPACKException, D
 
 using Base: iszero, require_one_based_indexing
 
+include("liblapack.jl")
 
 # Legacy binding maintained for backwards-compatibility but new packages
 # should not look at this, instead preferring to parse the output
@@ -132,18 +133,16 @@ function version()
     major = Ref{BlasInt}(0)
     minor = Ref{BlasInt}(0)
     patch = Ref{BlasInt}(0)
-    ccall((@blasfunc(ilaver_), libblastrampoline), Cvoid,
-          (Ptr{BlasInt}, Ptr{BlasInt}, Ptr{BlasInt}),
-          major, minor, patch)
+    ilaver(major, minor, patch)
     return VersionNumber(major[], minor[], patch[])
 end
 
 # (GB) general banded matrices, LU decomposition and solver
 for (gbtrf, gbtrs, elty) in
-    ((:dgbtrf_,:dgbtrs_,:Float64),
-     (:sgbtrf_,:sgbtrs_,:Float32),
-     (:zgbtrf_,:zgbtrs_,:ComplexF64),
-     (:cgbtrf_,:cgbtrs_,:ComplexF32))
+    ((:dgbtrf,:dgbtrs,:Float64),
+     (:sgbtrf,:sgbtrs,:Float32),
+     (:zgbtrf,:zgbtrs,:ComplexF64),
+     (:cgbtrf,:cgbtrs,:ComplexF32))
     @eval begin
         # SUBROUTINE DGBTRF( M, N, KL, KU, AB, LDAB, IPIV, INFO )
         # *     .. Scalar Arguments ..
@@ -158,10 +157,7 @@ for (gbtrf, gbtrs, elty) in
             mnmn = min(m, n)
             ipiv = similar(AB, BlasInt, mnmn)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gbtrf), libblastrampoline), Cvoid,
-                  (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt}),
-                  m, n, kl, ku, AB, max(1,stride(AB,2)), ipiv, info)
+            $gbtrf(m, n, kl, ku, AB, max(1,stride(AB,2)), ipiv, info)
             chklapackerror(info[])
             AB, ipiv
         end
@@ -184,12 +180,8 @@ for (gbtrf, gbtrs, elty) in
             if m != n || m != size(B,1)
                 throw(DimensionMismatch(lazy"matrix AB has dimensions $(size(AB)), but right hand side matrix B has dimensions $(size(B))"))
             end
-            ccall((@blasfunc($gbtrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ref{BlasInt}, Clong),
-                  trans, n, kl, ku, size(B,2), AB, max(1,stride(AB,2)), ipiv,
-                  B, max(1,stride(B,2)), info, 1)
+            $gbtrs(trans, n, kl, ku, size(B,2), AB, max(1,stride(AB,2)), ipiv,
+                   B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -219,10 +211,10 @@ gbtrs!(trans::AbstractChar, kl::Integer, ku::Integer, m::Integer, AB::AbstractMa
 
 ## (GE) general matrices: balancing and back-transforming
 for (gebal, gebak, elty, relty) in
-    ((:dgebal_, :dgebak_, :Float64, :Float64),
-     (:sgebal_, :sgebak_, :Float32, :Float32),
-     (:zgebal_, :zgebak_, :ComplexF64, :Float64),
-     (:cgebal_, :cgebak_, :ComplexF32, :Float32))
+    ((:dgebal, :dgebak, :Float64, :Float64),
+     (:sgebal, :sgebak, :Float32, :Float32),
+     (:zgebal, :zgebak, :ComplexF64, :Float64),
+     (:cgebal, :cgebak, :ComplexF32, :Float32))
     @eval begin
         #     SUBROUTINE DGEBAL( JOB, N, A, LDA, ILO, IHI, SCALE, INFO )
         #*     .. Scalar Arguments ..
@@ -240,10 +232,7 @@ for (gebal, gebak, elty, relty) in
             ilo = Ref{BlasInt}()
             scale = similar(A, $relty, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gebal), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$relty}, Ref{BlasInt}, Clong),
-                  job, n, A, max(1,stride(A,2)), ilo, ihi, scale, info, 1)
+            $gebal(job, n, A, max(1,stride(A,2)), ilo, ihi, scale, info)
             chklapackerror(info[])
             ilo[], ihi[], scale
         end
@@ -264,12 +253,7 @@ for (gebal, gebak, elty, relty) in
             chkfinite(V) # balancing routines don't support NaNs and Infs
             n = checksquare(V)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gebak), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                   Ptr{$relty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                   Clong, Clong),
-                  job, side, size(V,1), ilo, ihi, scale, n, V, max(1,stride(V,2)), info,
-                  1, 1)
+            $gebak(job, side, size(V,1), ilo, ihi, scale, n, V, max(1,stride(V,2)), info)
             chklapackerror(info[])
             V
         end
@@ -306,10 +290,10 @@ gebak!(job::AbstractChar, side::AbstractChar, ilo::BlasInt, ihi::BlasInt, scale:
 # updated in place.  The condensed mutating functions, usually a
 # function of A only, are defined after this block.
 for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty) in
-    ((:dgebrd_,:dgelqf_,:dgeqlf_,:dgeqrf_,:dgeqp3_,:dgeqrt_,:dgeqrt3_,:dgerqf_,:dgetrf_,:Float64,:Float64),
-     (:sgebrd_,:sgelqf_,:sgeqlf_,:sgeqrf_,:sgeqp3_,:sgeqrt_,:sgeqrt3_,:sgerqf_,:sgetrf_,:Float32,:Float32),
-     (:zgebrd_,:zgelqf_,:zgeqlf_,:zgeqrf_,:zgeqp3_,:zgeqrt_,:zgeqrt3_,:zgerqf_,:zgetrf_,:ComplexF64,:Float64),
-     (:cgebrd_,:cgelqf_,:cgeqlf_,:cgeqrf_,:cgeqp3_,:cgeqrt_,:cgeqrt3_,:cgerqf_,:cgetrf_,:ComplexF32,:Float32))
+    ((:dgebrd,:dgelqf,:dgeqlf,:dgeqrf,:dgeqp3,:dgeqrt,:dgeqrt3,:dgerqf,:dgetrf,:Float64,:Float64),
+     (:sgebrd,:sgelqf,:sgeqlf,:sgeqrf,:sgeqp3,:sgeqrt,:sgeqrt3,:sgerqf,:sgetrf,:Float32,:Float32),
+     (:zgebrd,:zgelqf,:zgeqlf,:zgeqrf,:zgeqp3,:zgeqrt,:zgeqrt3,:zgerqf,:zgetrf,:ComplexF64,:Float64),
+     (:cgebrd,:cgelqf,:cgeqlf,:cgeqrf,:cgeqp3,:cgeqrt,:cgeqrt3,:cgerqf,:cgetrf,:ComplexF32,:Float32))
     @eval begin
         # SUBROUTINE DGEBRD( M, N, A, LDA, D, E, TAUQ, TAUP, WORK, LWORK,
         #                    INFO )
@@ -331,13 +315,9 @@ for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gebrd), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$relty}, Ptr{$relty}, Ptr{$elty}, Ptr{$elty},
-                     Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                     m, n, A, max(1,stride(A,2)),
-                     d, e, tauq, taup,
-                     work, lwork, info)
+                $gebrd(m, n, A, max(1,stride(A,2)),
+                       d, e, tauq, taup,
+                       work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -365,10 +345,7 @@ for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty
             work  = Vector{$elty}(undef, 1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gelqf), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                      m, n, A, lda, tau, work, lwork, info)
+                $gelqf(m, n, A, lda, tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -396,10 +373,7 @@ for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty
             work  = Vector{$elty}(undef, 1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($geqlf), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                      m, n, A, lda, tau, work, lwork, info)
+                $geqlf(m, n, A, lda, tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -438,21 +412,9 @@ for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
                 if cmplx
-                    ccall((@blasfunc($geqp3), libblastrampoline), Cvoid,
-                          (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{$relty}, Ptr{BlasInt}),
-                          m, n, A, lda,
-                          jpvt, tau, work, lwork,
-                          rwork, info)
+                    $geqp3(m, n, A, lda, jpvt, tau, work, lwork, rwork, info)
                 else
-                    ccall((@blasfunc($geqp3), libblastrampoline), Cvoid,
-                          (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{BlasInt}),
-                          m, n, A, lda,
-                          jpvt, tau, work,
-                          lwork, info)
+                    $geqp3(m, n, A, lda, jpvt, tau, work, lwork, info)
                 end
                 chklapackerror(info[])
                 if i == 1
@@ -476,13 +438,7 @@ for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty
             work = Vector{$elty}(undef, nb*n)
             if minmn > 0
                 info = Ref{BlasInt}()
-                ccall((@blasfunc($geqrt), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ptr{BlasInt}),
-                     m, n, nb, A,
-                     lda, T, max(1,stride(T,2)), work,
-                     info)
+                $geqrt(m, n, nb, A, lda, T, max(1,stride(T,2)), work, info)
                 chklapackerror(info[])
             end
             A, T
@@ -502,11 +458,7 @@ for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty
             end
             if n > 0    # this implies `m > 0` because of `m >= n`
                 info = Ref{BlasInt}()
-                ccall((@blasfunc($geqrt3), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                     m, n, A, max(1, stride(A, 2)),
-                     T, max(1,stride(T,2)), info)
+                $geqrt3(m, n, A, max(1, stride(A, 2)), T, max(1,stride(T,2)), info)
                 chklapackerror(info[])
             end
             A, T
@@ -529,10 +481,7 @@ for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2                # first call returns lwork as work[1]
-                ccall((@blasfunc($geqrf), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                      m, n, A, max(1,stride(A,2)), tau, work, lwork, info)
+                $geqrf(m, n, A, max(1,stride(A,2)), tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = max(BlasInt(1),BlasInt(real(work[1])))
@@ -558,10 +507,7 @@ for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty
             work  = Vector{$elty}(undef, 1)
             info  = Ref{BlasInt}()
             for i = 1:2                # first call returns lwork as work[1]
-                ccall((@blasfunc($gerqf), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                      m, n, A, max(1,stride(A,2)), tau, work, lwork, info)
+                $gerqf(m, n, A, max(1,stride(A,2)), tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = max(BlasInt(m), BlasInt(real(work[1])))
@@ -584,10 +530,7 @@ for (gebrd, gelqf, geqlf, geqrf, geqp3, geqrt, geqrt3, gerqf, getrf, elty, relty
             m, n = size(A)
             lda  = max(1,stride(A, 2))
             info = Ref{BlasInt}()
-            ccall((@blasfunc($getrf), libblastrampoline), Cvoid,
-                  (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                   Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt}),
-                  m, n, A, lda, ipiv, info)
+            $getrf(m, n, A, lda, ipiv, info)
             chkargsok(info[])
             A, ipiv, info[] #Error code is stored in LU factorization type
         end
@@ -788,10 +731,10 @@ getrf!(A::AbstractMatrix{T}; check::Bool=true) where {T <: BlasFloat} = ((m,n) =
 
 ## Tools to compute and apply elementary reflectors
 for (larfg, elty) in
-    ((:dlarfg_, Float64),
-     (:slarfg_, Float32),
-     (:zlarfg_, ComplexF64),
-     (:clarfg_, ComplexF32))
+    ((:dlarfg, Float64),
+     (:slarfg, Float32),
+     (:zlarfg, ComplexF64),
+     (:clarfg, ComplexF32))
     @eval begin
         #        .. Scalar Arguments ..
         #        INTEGER            incx, n
@@ -805,9 +748,7 @@ for (larfg, elty) in
             α    = Ref{$elty}(x[1])
             incx = BlasInt(1)
             τ    = Ref{$elty}(0)
-            ccall((@blasfunc($larfg), libblastrampoline), Cvoid,
-                (Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ref{$elty}),
-                N, α, pointer(x, 2), incx, τ)
+            GC.@preserve x $larfg(N, α, pointer(x, 2), incx, τ)
             @inbounds x[1] = one($elty)
             return τ[]
         end
@@ -815,10 +756,10 @@ for (larfg, elty) in
 end
 
 for (larf, elty) in
-    ((:dlarf_, Float64),
-     (:slarf_, Float32),
-     (:zlarf_, ComplexF64),
-     (:clarf_, ComplexF32))
+    ((:dlarf, Float64),
+     (:slarf, Float32),
+     (:zlarf, ComplexF64),
+     (:clarf, ComplexF32))
     @eval begin
         #        .. Scalar Arguments ..
         #        CHARACTER          side
@@ -835,11 +776,7 @@ for (larf, elty) in
             ldc = max(1, stride(C, 2))
             l = side == 'L' ? n : m
             incv  = BlasInt(1)
-            ccall((@blasfunc($larf), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Clong),
-                side, m, n, v, incv,
-                τ, C, ldc, work, 1)
+            $larf(side, m, n, v, incv, τ, C, ldc, work)
             return C
         end
 
@@ -856,10 +793,10 @@ end
 
 ## Complete orthogonaliztion tools
 for (tzrzf, ormrz, elty) in
-    ((:dtzrzf_,:dormrz_,:Float64),
-     (:stzrzf_,:sormrz_,:Float32),
-     (:ztzrzf_,:zunmrz_,:ComplexF64),
-     (:ctzrzf_,:cunmrz_,:ComplexF32))
+    ((:dtzrzf,:dormrz,:Float64),
+     (:stzrzf,:sormrz,:Float32),
+     (:ztzrzf,:zunmrz,:ComplexF64),
+     (:ctzrzf,:cunmrz,:ComplexF32))
     @eval begin
          #       SUBROUTINE ZTZRZF( M, N, A, LDA, TAU, WORK, LWORK, INFO )
          #
@@ -881,11 +818,7 @@ for (tzrzf, ormrz, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($tzrzf), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                    m, n, A, lda,
-                    tau, work, lwork, info)
+                $tzrzf(m, n, A, lda, tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -919,15 +852,8 @@ for (tzrzf, ormrz, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ormrz), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                     Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                    side, trans, m, n,
-                    k, l, A, lda,
-                    tau, C, ldc, work,
-                    lwork, info, 1, 1)
+                $ormrz(side, trans, m, n, k, l, A, lda,
+                       tau, C, ldc, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -962,10 +888,10 @@ tzrzf!(A::AbstractMatrix)
 
 ## (GE) general matrices, solvers with factorization, solver and inverse
 for (gels, gesv, getrs, getri, elty) in
-    ((:dgels_,:dgesv_,:dgetrs_,:dgetri_,:Float64),
-     (:sgels_,:sgesv_,:sgetrs_,:sgetri_,:Float32),
-     (:zgels_,:zgesv_,:zgetrs_,:zgetri_,:ComplexF64),
-     (:cgels_,:cgesv_,:cgetrs_,:cgetri_,:ComplexF32))
+    ((:dgels,:dgesv,:dgetrs,:dgetri,:Float64),
+     (:sgels,:sgesv,:sgetrs,:sgetri,:Float32),
+     (:zgels,:zgesv,:zgetrs,:zgetri,:ComplexF64),
+     (:cgels,:cgesv,:cgetrs,:cgetri,:ComplexF32))
     @eval begin
         #      SUBROUTINE DGELS( TRANS, M, N, NRHS, A, LDA, B, LDB, WORK, LWORK,INFO)
         # *     .. Scalar Arguments ..
@@ -984,12 +910,8 @@ for (gels, gesv, getrs, getri, elty) in
             work  = Vector{$elty}(undef, 1)
             lwork = BlasInt(-1)
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gels), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      (btrn ? 'T' : 'N'), m, n, size(B,2), A, max(1,stride(A,2)),
-                      B, max(1,stride(B,2)), work, lwork, info, 1)
+                $gels(btrn ? 'T' : 'N', m, n, size(B,2), A, max(1,stride(A,2)),
+                      B, max(1,stride(B,2)), work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -1025,10 +947,7 @@ for (gels, gesv, getrs, getri, elty) in
             end
             ipiv = similar(A, BlasInt, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gesv), libblastrampoline), Cvoid,
-                  (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                  n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info)
+            $gesv(n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B, A, ipiv
         end
@@ -1053,10 +972,7 @@ for (gels, gesv, getrs, getri, elty) in
             end
             nrhs = size(B, 2)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($getrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  trans, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info, 1)
+            $getrs(trans, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -1079,10 +995,7 @@ for (gels, gesv, getrs, getri, elty) in
             work  = Vector{$elty}(undef, 1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($getri), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                      n, A, lda, ipiv, work, lwork, info)
+                $getri(n, A, lda, ipiv, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -1138,8 +1051,8 @@ its inverse.
 getri!(A::AbstractMatrix, ipiv::AbstractVector{BlasInt})
 
 for (gesvx, elty) in
-    ((:dgesvx_,:Float64),
-     (:sgesvx_,:Float32))
+    ((:dgesvx,:Float64),
+     (:sgesvx,:Float32))
     @eval begin
         #     SUBROUTINE DGESVX( FACT, TRANS, N, NRHS, A, LDA, AF, LDAF, IPIV,
         #                        EQUED, R, C, B, LDB, X, LDX, RCOND, FERR, BERR,
@@ -1176,14 +1089,8 @@ for (gesvx, elty) in
             iwork = Vector{BlasInt}(undef, n)
             info  = Ref{BlasInt}()
             X = similar(A, $elty, n, nrhs)
-            ccall((@blasfunc($gesvx), libblastrampoline), Cvoid,
-              (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-               Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-               Ref{UInt8}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-               Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty},
-               Ptr{$elty}, Ptr{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong),
-              fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
-              ldb, X, n, rcond, ferr, berr, work, iwork, info, 1, 1, 1)
+            $gesvx(fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
+                   ldb, X, n, rcond, ferr, berr, work, iwork, info)
             chklapackerror(info[])
             if info[] == n + 1
                 @warn "Matrix is singular to working precision"
@@ -1210,8 +1117,8 @@ for (gesvx, elty) in
     end
 end
 for (gesvx, elty, relty) in
-    ((:zgesvx_,:ComplexF64,:Float64),
-     (:cgesvx_,:ComplexF32 ,:Float32))
+    ((:zgesvx,:ComplexF64,:Float64),
+     (:cgesvx,:ComplexF32,:Float32))
     @eval begin
         #     SUBROUTINE ZGESVX( FACT, TRANS, N, NRHS, A, LDA, AF, LDAF, IPIV,
         #                        EQUED, R, C, B, LDB, X, LDX, RCOND, FERR, BERR,
@@ -1248,14 +1155,8 @@ for (gesvx, elty, relty) in
             rwork = Vector{$relty}(undef, 2n)
             info  = Ref{BlasInt}()
             X = similar(A, $elty, n, nrhs)
-            ccall((@blasfunc($gesvx), libblastrampoline), Cvoid,
-              (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-               Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-               Ref{UInt8}, Ptr{$relty}, Ptr{$relty}, Ptr{$elty}, Ref{BlasInt},
-               Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ptr{$relty}, Ptr{$relty},
-               Ptr{$elty}, Ptr{$relty}, Ref{BlasInt}, Clong, Clong, Clong),
-              fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
-              ldb, X, n, rcond, ferr, berr, work, rwork, info, 1, 1, 1)
+            $gesvx(fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
+                   ldb, X, n, rcond, ferr, berr, work, rwork, info)
             chklapackerror(info[])
             if info[] == n + 1
                 @warn "Matrix is singular to working precision"
@@ -1318,8 +1219,8 @@ The no-equilibration, no-transpose simplification of `gesvx!`.
 gesvx!(A::AbstractMatrix, B::AbstractVecOrMat)
 
 for (gelsd, gelsy, elty) in
-    ((:dgelsd_,:dgelsy_,:Float64),
-     (:sgelsd_,:sgelsy_,:Float32))
+    ((:dgelsd,:dgelsy,:Float64),
+     (:sgelsd,:sgelsy,:Float32))
     @eval begin
         # SUBROUTINE DGELSD( M, N, NRHS, A, LDA, B, LDB, S, RCOND, RANK,
         #      $                   WORK, LWORK, IWORK, INFO )
@@ -1345,15 +1246,10 @@ for (gelsd, gelsy, elty) in
             lwork = BlasInt(-1)
             iwork = Vector{BlasInt}(undef, 1)
             for i = 1:2  # first call returns lwork as work[1] and iwork length as iwork[1]
-                ccall((@blasfunc($gelsd), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{$elty}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{BlasInt}, Ptr{BlasInt}),
-                      m, n, size(B,2),
-                      A, max(1,stride(A,2)), newB, max(1,stride(B,2),n),
-                      s, $elty(rcond), rnk, work,
-                      lwork, iwork, info)
+                $gelsd(m, n, size(B,2),
+                       A, max(1,stride(A,2)), newB, max(1,stride(B,2),n),
+                       s, $elty(rcond), rnk, work,
+                       lwork, iwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -1391,15 +1287,10 @@ for (gelsd, gelsy, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gelsy), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                     Ref{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{BlasInt}),
-                    m, n, nrhs, A,
-                    lda, newB, ldb, jpvt,
-                    $elty(rcond), rnk, work, lwork,
-                    info)
+                $gelsy(m, n, nrhs, A,
+                       lda, newB, ldb, jpvt,
+                       $elty(rcond), rnk, work, lwork,
+                       info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -1412,8 +1303,8 @@ for (gelsd, gelsy, elty) in
 end
 
 for (gelsd, gelsy, elty, relty) in
-    ((:zgelsd_,:zgelsy_,:ComplexF64,:Float64),
-     (:cgelsd_,:cgelsy_,:ComplexF32,:Float32))
+    ((:zgelsd,:zgelsy,:ComplexF64,:Float64),
+     (:cgelsd,:cgelsy,:ComplexF32,:Float32))
     @eval begin
         # SUBROUTINE ZGELSD( M, N, NRHS, A, LDA, B, LDB, S, RCOND, RANK,
         #      $                   WORK, LWORK, RWORK, IWORK, INFO )
@@ -1441,15 +1332,10 @@ for (gelsd, gelsy, elty, relty) in
             rwork = Vector{$relty}(undef, 1)
             iwork = Vector{BlasInt}(undef, 1)
             for i = 1:2  # first call returns lwork as work[1], rwork length as rwork[1] and iwork length as iwork[1]
-                ccall((@blasfunc($gelsd), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$relty},
-                       Ref{$relty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$relty}, Ref{BlasInt}, Ref{BlasInt}),
-                      m, n, size(B,2), A,
-                      max(1,stride(A,2)), newB, max(1,stride(B,2),n), s,
-                      $relty(rcond), rnk, work, lwork,
-                      rwork, iwork, info)
+                $gelsd(m, n, size(B,2), A,
+                       max(1,stride(A,2)), newB, max(1,stride(B,2),n), s,
+                       $relty(rcond), rnk, work, lwork,
+                       rwork, iwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -1489,15 +1375,10 @@ for (gelsd, gelsy, elty, relty) in
             rwork = Vector{$relty}(undef, 2n)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gelsy), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                     Ref{$relty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$relty}, Ptr{BlasInt}),
-                    m, n, nrhs, A,
-                    lda, newB, ldb, jpvt,
-                    $relty(rcond), rnk, work, lwork,
-                    rwork, info)
+                $gelsy(m, n, nrhs, A,
+                       lda, newB, ldb, jpvt,
+                       $relty(rcond), rnk, work, lwork,
+                       rwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -1531,10 +1412,10 @@ of `A` in `rnk`.
 """
 gelsy!(A::AbstractMatrix, B::AbstractVecOrMat, rcond::Real)
 
-for (gglse, elty) in ((:dgglse_, :Float64),
-                      (:sgglse_, :Float32),
-                      (:zgglse_, :ComplexF64),
-                      (:cgglse_, :ComplexF32))
+for (gglse, elty) in ((:dgglse, :Float64),
+                      (:sgglse, :Float32),
+                      (:zgglse, :ComplexF64),
+                      (:cgglse, :ComplexF32))
     @eval begin
         # SUBROUTINE DGGLSE( M, N, P, A, LDA, B, LDB, C, D, X, WORK, LWORK,
         #      $                   INFO )
@@ -1564,13 +1445,8 @@ for (gglse, elty) in ((:dgglse_, :Float64),
             work  = Vector{$elty}(undef, 1)
             lwork = BlasInt(-1)
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gglse), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                       Ptr{$elty}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{BlasInt}),
-                      m, n, p, A, max(1,stride(A,2)), B, max(1,stride(B,2)), c, d, X,
-                      work, lwork, info)
+                $gglse(m, n, p, A, max(1,stride(A,2)), B, max(1,stride(B,2)), c, d, X,
+                       work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -1593,10 +1469,10 @@ gglse!(A::AbstractMatrix, c::AbstractVector, B::AbstractMatrix, d::AbstractVecto
 
 # (GE) general matrices eigenvalue-eigenvector and singular value decompositions
 for (geev, gesvd, gesdd, ggsvd, elty, relty) in
-    ((:dgeev_,:dgesvd_,:dgesdd_,:dggsvd_,:Float64,:Float64),
-     (:sgeev_,:sgesvd_,:sgesdd_,:sggsvd_,:Float32,:Float32),
-     (:zgeev_,:zgesvd_,:zgesdd_,:zggsvd_,:ComplexF64,:Float64),
-     (:cgeev_,:cgesvd_,:cgesdd_,:cggsvd_,:ComplexF32,:Float32))
+    ((:dgeev,:dgesvd,:dgesdd,:dggsvd,:Float64,:Float64),
+     (:sgeev,:sgesvd,:sgesdd,:sggsvd,:Float32,:Float32),
+     (:zgeev,:zgesvd,:zgesdd,:zggsvd,:ComplexF64,:Float64),
+     (:cgeev,:cgesvd,:cgesdd,:cggsvd,:ComplexF32,:Float32))
     @eval begin
         #      SUBROUTINE DGEEV( JOBVL, JOBVR, N, A, LDA, WR, WI, VL, LDVL, VR,
         #      $                  LDVR, WORK, LWORK, INFO )
@@ -1630,21 +1506,11 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
                 if cmplx
-                    ccall((@blasfunc($geev), libblastrampoline), Cvoid,
-                          (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                           Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{$relty}, Ref{BlasInt}, Clong, Clong),
-                          jobvl, jobvr, n, A, max(1,stride(A,2)), W, VL, n, VR, n,
-                          work, lwork, rwork, info, 1, 1)
+                    $geev(jobvl, jobvr, n, A, max(1,stride(A,2)), W, VL, n, VR, n,
+                          work, lwork, rwork, info)
                 else
-                    ccall((@blasfunc($geev), libblastrampoline), Cvoid,
-                          (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                           Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty},
-                           Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                           Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                          jobvl, jobvr, n, A, max(1,stride(A,2)), WR, WI, VL, n,
-                          VR, n, work, lwork, info, 1, 1)
+                    $geev(jobvl, jobvr, n, A, max(1,stride(A,2)), WR, WI, VL, n,
+                          VR, n, work, lwork, info)
                 end
                 chklapackerror(info[])
                 if i == 1
@@ -1695,21 +1561,11 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             info   = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
                 if cmplx
-                    ccall((@blasfunc($gesdd), libblastrampoline), Cvoid,
-                          (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                           Ref{BlasInt}, Ptr{$relty}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{$relty}, Ptr{BlasInt}, Ref{BlasInt}, Clong),
-                          job, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
-                          work, lwork, rwork, iwork, info, 1)
+                    $gesdd(job, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
+                           work, lwork, rwork, iwork, info)
                 else
-                    ccall((@blasfunc($gesdd), libblastrampoline), Cvoid,
-                          (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                           Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                           Ptr{BlasInt}, Ref{BlasInt}, Clong),
-                          job, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
-                          work, lwork, iwork, info, 1)
+                    $gesdd(job, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
+                           work, lwork, iwork, info)
                 end
                 chklapackerror(info[])
                 if i == 1
@@ -1767,21 +1623,11 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             info   = Ref{BlasInt}()
             for i in 1:2  # first call returns lwork as work[1]
                 if cmplx
-                    ccall((@blasfunc($gesvd), libblastrampoline), Cvoid,
-                          (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                           Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ptr{$elty},
-                           Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                           Ref{BlasInt}, Ptr{$relty}, Ref{BlasInt}, Clong, Clong),
-                          jobu, jobvt, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
-                          work, lwork, rwork, info, 1, 1)
+                    $gesvd(jobu, jobvt, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
+                           work, lwork, rwork, info)
                 else
-                    ccall((@blasfunc($gesvd), libblastrampoline), Cvoid,
-                          (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                           Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
-                           Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                           Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                          jobu, jobvt, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
-                          work, lwork, info, 1, 1)
+                    $gesvd(jobu, jobvt, m, n, A, max(1,stride(A,2)), S, U, max(1,stride(U,2)), VT, max(1,stride(VT,2)),
+                           work, lwork, info)
                 end
                 chklapackerror(info[])
                 if i == 1
@@ -1850,37 +1696,13 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             iwork = Vector{BlasInt}(undef, n)
             info = Ref{BlasInt}()
             if cmplx
-                ccall((@blasfunc($ggsvd), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                    Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$relty}, Ptr{$relty}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ptr{$relty}, Ptr{BlasInt}, Ptr{BlasInt},
-                    Clong, Clong, Clong),
-                    jobu, jobv, jobq, m,
-                    n, p, k, l,
-                    A, lda, B, ldb,
-                    alpha, beta, U, ldu,
-                    V, ldv, Q, ldq,
-                    work, rwork, iwork, info,
-                    1, 1, 1)
+                $ggsvd(jobu, jobv, jobq, m, n, p, k, l,
+                       A, lda, B, ldb, alpha, beta, U, ldu,
+                       V, ldv, Q, ldq, work, rwork, iwork, info)
             else
-                ccall((@blasfunc($ggsvd), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                    Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$relty}, Ptr{$relty}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-                    Clong, Clong, Clong),
-                    jobu, jobv, jobq, m,
-                    n, p, k, l,
-                    A, lda, B, ldb,
-                    alpha, beta, U, ldu,
-                    V, ldv, Q, ldq,
-                    work, iwork, info,
-                    1, 1, 1)
+                $ggsvd(jobu, jobv, jobq, m, n, p, k, l,
+                       A, lda, B, ldb, alpha, beta, U, ldu,
+                       V, ldv, Q, ldq, work, iwork, info)
             end
             chklapackerror(info[])
             if m - k[1] - l[1] >= 0
@@ -1946,8 +1768,8 @@ versions prior to 3.6.0.
 ggsvd!(jobu::AbstractChar, jobv::AbstractChar, jobq::AbstractChar, A::AbstractMatrix, B::AbstractMatrix)
 
 
-for (f, elty) in ((:dggsvd3_, :Float64),
-                  (:sggsvd3_, :Float32))
+for (ggsvd3, elty) in ((:dggsvd3, :Float64),
+                       (:sggsvd3, :Float32))
     @eval begin
         function ggsvd3!(jobu::AbstractChar, jobv::AbstractChar, jobq::AbstractChar, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             require_one_based_indexing(A, B)
@@ -1977,21 +1799,9 @@ for (f, elty) in ((:dggsvd3_, :Float64),
             iwork = Vector{BlasInt}(undef, n)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($f), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                    Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt},
-                    Clong, Clong, Clong),
-                    jobu, jobv, jobq, m,
-                    n, p, k, l,
-                    A, lda, B, ldb,
-                    alpha, beta, U, ldu,
-                    V, ldv, Q, ldq,
-                    work, lwork, iwork, info,
-                    1, 1, 1)
+                $ggsvd3(jobu, jobv, jobq, m, n, p, k, l,
+                        A, lda, B, ldb, alpha, beta, U, ldu,
+                        V, ldv, Q, ldq, work, lwork, iwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -2008,8 +1818,8 @@ for (f, elty) in ((:dggsvd3_, :Float64),
     end
 end
 
-for (f, elty, relty) in ((:zggsvd3_, :ComplexF64, :Float64),
-                         (:cggsvd3_, :ComplexF32, :Float32))
+for (ggsvd3, elty, relty) in ((:zggsvd3, :ComplexF64, :Float64),
+                              (:cggsvd3, :ComplexF32, :Float32))
     @eval begin
         function ggsvd3!(jobu::AbstractChar, jobv::AbstractChar, jobq::AbstractChar, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
             require_one_based_indexing(A, B)
@@ -2040,21 +1850,10 @@ for (f, elty, relty) in ((:zggsvd3_, :ComplexF64, :Float64),
             iwork = Vector{BlasInt}(undef, n)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($f), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                    Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$relty}, Ptr{$relty}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ptr{BlasInt},
-                    Ref{BlasInt}, Clong, Clong, Clong),
-                    jobu, jobv, jobq, m,
-                    n, p, k, l,
-                    A, lda, B, ldb,
-                    alpha, beta, U, ldu,
-                    V, ldv, Q, ldq,
-                    work, lwork, rwork, iwork,
-                    info, 1, 1, 1)
+                $ggsvd3(jobu, jobv, jobq, m, n, p, k, l,
+                        A, lda, B, ldb, alpha, beta, U, ldu,
+                        V, ldv, Q, ldq, work, lwork, rwork, iwork,
+                        info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -2085,8 +1884,8 @@ ggsvd3!
 
 ## Expert driver and generalized eigenvalue problem
 for (geevx, ggev, ggev3, elty) in
-    ((:dgeevx_,:dggev_,:dggev3_,:Float64),
-     (:sgeevx_,:sggev_,:sggev3_,:Float32))
+    ((:dgeevx,:dggev,:dggev3,:Float64),
+     (:sgeevx,:sggev,:sggev3,:Float32))
     @eval begin
         #     SUBROUTINE DGEEVX( BALANC, JOBVL, JOBVR, SENSE, N, A, LDA, WR, WI,
         #                          VL, LDVL, VR, LDVR, ILO, IHI, SCALE, ABNRM,
@@ -2151,21 +1950,12 @@ for (geevx, ggev, ggev3, elty) in
             iwork = Vector{BlasInt}(undef, iworksize)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($geevx), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
-                       Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                       Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
-                       Ptr{$elty}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt},
-                       Clong, Clong, Clong, Clong),
-                       balanc, jobvl, jobvr, sense,
+                $geevx(balanc, jobvl, jobvr, sense,
                        n, A, lda, wr,
                        wi, VL, max(1,ldvl), VR,
                        max(1,ldvr), ilo, ihi, scale,
                        abnrm, rconde, rcondv, work,
-                       lwork, iwork, info,
-                       1, 1, 1, 1)
+                       lwork, iwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -2219,17 +2009,11 @@ for (geevx, ggev, ggev3, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ggev), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ptr{$elty}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ref{BlasInt}, Clong, Clong),
-                    jobvl, jobvr, n, A,
-                    lda, B, ldb, alphar,
-                    alphai, beta, vl, ldvl,
-                    vr, ldvr, work, lwork,
-                    info, 1, 1)
+                $ggev(jobvl, jobvr, n, A,
+                      lda, B, ldb, alphar,
+                      alphai, beta, vl, ldvl,
+                      vr, ldvr, work, lwork,
+                      info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -2283,17 +2067,10 @@ for (geevx, ggev, ggev3, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ggev3), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ptr{$elty}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ref{BlasInt}, Clong, Clong),
-                    jobvl, jobvr, n, A,
-                    lda, B, ldb, alphar,
-                    alphai, beta, vl, ldvl,
-                    vr, ldvr, work, lwork,
-                    info, 1, 1)
+                $ggev3(jobvl, jobvr, n, A,
+                       lda, B, ldb, alphar,
+                       alphai, beta, vl, ldvl,
+                       vr, ldvr, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -2306,23 +2083,9 @@ for (geevx, ggev, ggev3, elty) in
 end
 
 for (geevx, ggev, ggev3, elty, relty) in
-    ((:zgeevx_,:zggev_,:zggev3_,:ComplexF64,:Float64),
-     (:cgeevx_,:cggev_,:cggev3_,:ComplexF32,:Float32))
+    ((:zgeevx,:zggev,:zggev3,:ComplexF64,:Float64),
+     (:cgeevx,:cggev,:cggev3,:ComplexF32,:Float32))
     @eval begin
-        #     SUBROUTINE ZGEEVX( BALANC, JOBVL, JOBVR, SENSE, N, A, LDA, W, VL,
-        #                          LDVL, VR, LDVR, ILO, IHI, SCALE, ABNRM, RCONDE,
-        #                          RCONDV, WORK, LWORK, RWORK, INFO )
-        #
-        #       .. Scalar Arguments ..
-        #       CHARACTER          BALANC, JOBVL, JOBVR, SENSE
-        #       INTEGER            IHI, ILO, INFO, LDA, LDVL, LDVR, LWORK, N
-        #       DOUBLE PRECISION   ABNRM
-        #       ..
-        #       .. Array Arguments ..
-        #       DOUBLE PRECISION   RCONDE( * ), RCONDV( * ), RWORK( * ),
-        #      $                   SCALE( * )
-        #       COMPLEX*16         A( LDA, * ), VL( LDVL, * ), VR( LDVR, * ),
-        #      $                   W( * ), WORK( * )
         function geevx!(balanc::AbstractChar, jobvl::AbstractChar, jobvr::AbstractChar, sense::AbstractChar, A::AbstractMatrix{$elty})
             require_one_based_indexing(A)
             if balanc ∉ ('N', 'P', 'S', 'B')
@@ -2367,19 +2130,12 @@ for (geevx, ggev, ggev3, elty, relty) in
             rwork = Vector{$relty}(undef, 2n)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($geevx), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
-                       Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$relty}, Ptr{$relty},
-                       Ptr{$relty}, Ptr{$relty}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$relty}, Ref{BlasInt}, Clong, Clong, Clong, Clong),
-                       balanc, jobvl, jobvr, sense,
+                $geevx(balanc, jobvl, jobvr, sense,
                        n, A, lda, w,
                        VL, max(1,ldvl), VR, max(1,ldvr),
                        ilo, ihi, scale, abnrm,
                        rconde, rcondv, work, lwork,
-                       rwork, info, 1, 1, 1, 1)
+                       rwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -2434,17 +2190,11 @@ for (geevx, ggev, ggev3, elty, relty) in
             rwork = Vector{$relty}(undef, 8n)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ggev), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$relty},
-                     Ref{BlasInt}, Clong, Clong),
-                    jobvl, jobvr, n, A,
-                    lda, B, ldb, alpha,
-                    beta, vl, ldvl, vr,
-                    ldvr, work, lwork, rwork,
-                    info, 1, 1)
+                $ggev(jobvl, jobvr, n, A,
+                      lda, B, ldb, alpha,
+                      beta, vl, ldvl, vr,
+                      ldvr, work, lwork, rwork,
+                      info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -2499,17 +2249,11 @@ for (geevx, ggev, ggev3, elty, relty) in
             rwork = Vector{$relty}(undef, 8n)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ggev3), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$relty},
-                     Ref{BlasInt}, Clong, Clong),
-                    jobvl, jobvr, n, A,
-                    lda, B, ldb, alpha,
-                    beta, vl, ldvl, vr,
-                    ldvr, work, lwork, rwork,
-                    info, 1, 1)
+                $ggev3(jobvl, jobvr, n, A,
+                       lda, B, ldb, alpha,
+                       beta, vl, ldvl, vr,
+                       ldvr, work, lwork, rwork,
+                       info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -2563,8 +2307,8 @@ ggev3!(jobvl::AbstractChar, jobvr::AbstractChar, A::AbstractMatrix, B::AbstractM
 
 # One step incremental condition estimation of max/min singular values
 for (laic1, elty) in
-    ((:dlaic1_,:Float64),
-     (:slaic1_,:Float32))
+    ((:dlaic1,:Float64),
+     (:slaic1,:Float32))
     @eval begin
         #  SUBROUTINE DLAIC1( JOB, J, X, SEST, W, GAMMA, SESTPR, S, C )
         #
@@ -2585,20 +2329,14 @@ for (laic1, elty) in
             sestpr = Ref{$elty}()
             s = Ref{$elty}()
             c = Ref{$elty}()
-            ccall((@blasfunc($laic1), libblastrampoline), Cvoid,
-                (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{$elty},
-                 Ptr{$elty}, Ref{$elty}, Ref{$elty}, Ref{$elty},
-                 Ref{$elty}),
-                job, j, x, sest,
-                w, gamma, sestpr, s,
-                c)
+            $laic1(job, j, x, sest, w, gamma, sestpr, s, c)
             sestpr[], s[], c[]
         end
     end
 end
 for (laic1, elty, relty) in
-    ((:zlaic1_,:ComplexF64,:Float64),
-     (:claic1_,:ComplexF32,:Float32))
+    ((:zlaic1,:ComplexF64,:Float64),
+     (:claic1,:ComplexF32,:Float32))
     @eval begin
        #  SUBROUTINE ZLAIC1( JOB, J, X, SEST, W, GAMMA, SESTPR, S, C )
        #
@@ -2620,13 +2358,7 @@ for (laic1, elty, relty) in
             sestpr = Ref{$relty}()
             s = Ref{$elty}()
             c = Ref{$elty}()
-            ccall((@blasfunc($laic1), libblastrampoline), Cvoid,
-                (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{$relty},
-                 Ptr{$elty}, Ref{$elty}, Ref{$relty}, Ref{$elty},
-                 Ref{$elty}),
-                job, j, x, sest,
-                w, gamma, sestpr, s,
-                c)
+            $laic1(job, j, x, sest, w, gamma, sestpr, s, c)
             sestpr[], s[], c[]
         end
     end
@@ -2634,10 +2366,10 @@ end
 
 # (GT) General tridiagonal, decomposition, solver and direct solver
 for (gtsv, gttrf, gttrs, elty) in
-    ((:dgtsv_,:dgttrf_,:dgttrs_,:Float64),
-     (:sgtsv_,:sgttrf_,:sgttrs_,:Float32),
-     (:zgtsv_,:zgttrf_,:zgttrs_,:ComplexF64),
-     (:cgtsv_,:cgttrf_,:cgttrs_,:ComplexF32))
+    ((:dgtsv,:dgttrf,:dgttrs,:Float64),
+     (:sgtsv,:sgttrf,:sgttrs,:Float32),
+     (:zgtsv,:zgttrf,:zgttrs,:ComplexF64),
+     (:cgtsv,:cgttrf,:cgttrs,:ComplexF32))
     @eval begin
         #       SUBROUTINE DGTSV( N, NRHS, DL, D, DU, B, LDB, INFO )
         #       .. Scalar Arguments ..
@@ -2662,10 +2394,7 @@ for (gtsv, gttrf, gttrs, elty) in
                 return B # Early exit if possible
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gtsv), libblastrampoline), Cvoid,
-                  (Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty},
-                   Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                  n, size(B,2), dl, d, du, B, max(1,stride(B,2)), info)
+            $gtsv(n, size(B,2), dl, d, du, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -2689,10 +2418,7 @@ for (gtsv, gttrf, gttrs, elty) in
             du2  = similar(d, $elty, n-2)
             ipiv = similar(d, BlasInt, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gttrf), libblastrampoline), Cvoid,
-                  (Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty},
-                   Ptr{BlasInt}, Ref{BlasInt}),
-                  n, dl, d, du, du2, ipiv, info)
+            $gttrf(n, dl, d, du, du2, ipiv, info)
             chklapackerror(info[])
             dl, d, du, du2, ipiv
         end
@@ -2721,11 +2447,7 @@ for (gtsv, gttrf, gttrs, elty) in
                 throw(DimensionMismatch(lazy"B has leading dimension $(size(B,1)), but should have $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gttrs), libblastrampoline), Cvoid,
-                   (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                    Ptr{$elty}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty},
-                    Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                   trans, n, size(B,2), dl, d, du, du2, ipiv, B, max(1,stride(B,2)), info, 1)
+            $gttrs(trans, n, size(B,2), dl, d, du, du2, ipiv, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
          end
@@ -2766,10 +2488,10 @@ gttrs!(trans::AbstractChar, dl::AbstractVector, d::AbstractVector, du::AbstractV
 
 ## (OR) orthogonal (or UN, unitary) matrices, extractors and multiplication
 for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
-    ((:dorglq_,:dorgqr_,:dorgql_,:dorgrq_,:dormlq_,:dormqr_,:dormql_,:dormrq_,:dgemqrt_,:Float64),
-     (:sorglq_,:sorgqr_,:sorgql_,:sorgrq_,:sormlq_,:sormqr_,:sormql_,:sormrq_,:sgemqrt_,:Float32),
-     (:zunglq_,:zungqr_,:zungql_,:zungrq_,:zunmlq_,:zunmqr_,:zunmql_,:zunmrq_,:zgemqrt_,:ComplexF64),
-     (:cunglq_,:cungqr_,:cungql_,:cungrq_,:cunmlq_,:cunmqr_,:cunmql_,:cunmrq_,:cgemqrt_,:ComplexF32))
+    ((:dorglq,:dorgqr,:dorgql,:dorgrq,:dormlq,:dormqr,:dormql,:dormrq,:dgemqrt,:Float64),
+     (:sorglq,:sorgqr,:sorgql,:sorgrq,:sormlq,:sormqr,:sormql,:sormrq,:sgemqrt,:Float32),
+     (:zunglq,:zungqr,:zungql,:zungrq,:zunmlq,:zunmqr,:zunmql,:zunmrq,:zgemqrt,:ComplexF64),
+     (:cunglq,:cungqr,:cungql,:cungrq,:cunmlq,:cunmqr,:cunmql,:cunmrq,:cgemqrt,:ComplexF32))
     @eval begin
         # SUBROUTINE DORGLQ( M, N, K, A, LDA, TAU, WORK, LWORK, INFO )
         # *     .. Scalar Arguments ..
@@ -2788,10 +2510,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($orglq), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                      m, n, k, A, max(1,stride(A,2)), tau, work, lwork, info)
+                $orglq(m, n, k, A, max(1,stride(A,2)), tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -2822,12 +2541,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($orgqr), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                      m, n, k, A,
-                      max(1,stride(A,2)), tau, work, lwork,
-                      info)
+                $orgqr(m, n, k, A, max(1,stride(A,2)), tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -2858,12 +2572,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($orgql), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                      m, n, k, A,
-                      max(1,stride(A,2)), tau, work, lwork,
-                      info)
+                $orgql(m, n, k, A, max(1,stride(A,2)), tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -2896,12 +2605,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($orgrq), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                      m, n, k, A,
-                      max(1,stride(A,2)), tau, work, lwork,
-                      info)
+                $orgrq(m, n, k, A, max(1,stride(A,2)), tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -2943,12 +2647,8 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ormlq), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                      side, trans, m, n, k, A, max(1,stride(A,2)), tau,
-                      C, max(1,stride(C,2)), work, lwork, info, 1, 1)
+                $ormlq(side, trans, m, n, k, A, max(1,stride(A,2)), tau,
+                       C, max(1,stride(C,2)), work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -2990,15 +2690,10 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ormqr), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                       Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ref{BlasInt}, Clong, Clong),
-                      side, trans, m, n,
-                      k, A, max(1,stride(A,2)), tau,
-                      C, max(1, stride(C,2)), work, lwork,
-                      info, 1, 1)
+                $ormqr(side, trans, m, n,
+                       k, A, max(1,stride(A,2)), tau,
+                       C, max(1, stride(C,2)), work, lwork,
+                       info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -3040,15 +2735,10 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ormql), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                       Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ref{BlasInt}, Clong, Clong),
-                      side, trans, m, n,
-                      k, A, max(1,stride(A,2)), tau,
-                      C, max(1, stride(C,2)), work, lwork,
-                      info, 1, 1)
+                $ormql(side, trans, m, n,
+                       k, A, max(1,stride(A,2)), tau,
+                       C, max(1, stride(C,2)), work, lwork,
+                       info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -3090,12 +2780,8 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ormrq), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                      side, trans, m, n, k, A, max(1,stride(A,2)), tau,
-                      C, max(1,stride(C,2)), work, lwork, info, 1, 1)
+                $ormrq(side, trans, m, n, k, A, max(1,stride(A,2)), tau,
+                       C, max(1,stride(C,2)), work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -3146,15 +2832,10 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             ldc = stride(C, 2)
             work = Vector{$elty}(undef, wss)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gemqrt), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                 Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Clong, Clong),
-                side, trans, m, n,
-                k, nb, V, ldv,
-                T, max(1,stride(T,2)), C, max(1,ldc),
-                work, info, 1, 1)
+            $gemqrt(side, trans, m, n,
+                    k, nb, V, ldv,
+                    T, max(1,stride(T,2)), C, max(1,ldc),
+                    work, info)
             chklapackerror(info[])
             return C
         end
@@ -3245,10 +2926,10 @@ gemqrt!(side::AbstractChar, trans::AbstractChar, V::AbstractMatrix, T::AbstractM
 
 # (PO) positive-definite symmetric matrices,
 for (posv, potrf, potri, potrs, pstrf, elty, rtyp) in
-    ((:dposv_,:dpotrf_,:dpotri_,:dpotrs_,:dpstrf_,:Float64,:Float64),
-     (:sposv_,:spotrf_,:spotri_,:spotrs_,:spstrf_,:Float32,:Float32),
-     (:zposv_,:zpotrf_,:zpotri_,:zpotrs_,:zpstrf_,:ComplexF64,:Float64),
-     (:cposv_,:cpotrf_,:cpotri_,:cpotrs_,:cpstrf_,:ComplexF32,:Float32))
+    ((:dposv,:dpotrf,:dpotri,:dpotrs,:dpstrf,:Float64,:Float64),
+     (:sposv,:spotrf,:spotri,:spotrs,:spstrf,:Float32,:Float32),
+     (:zposv,:zpotrf,:zpotri,:zpotrs,:zpstrf,:ComplexF64,:Float64),
+     (:cposv,:cpotrf,:cpotri,:cpotrs,:cpstrf,:ComplexF32,:Float32))
     @eval begin
         #     SUBROUTINE DPOSV( UPLO, N, NRHS, A, LDA, B, LDB, INFO )
         #*     .. Scalar Arguments ..
@@ -3265,10 +2946,7 @@ for (posv, potrf, potri, potrs, pstrf, elty, rtyp) in
                 throw(DimensionMismatch(lazy"first dimension of B, $(size(B,1)), and size of A, ($n,$n), must match!"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($posv), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, n, size(B,2), A, max(1,stride(A,2)), B, max(1,stride(B,2)), info, 1)
+            $posv(uplo, n, size(B,2), A, max(1,stride(A,2)), B, max(1,stride(B,2)), info)
             chkargsok(info[])
             chkposdef(info[])
             A, B
@@ -3290,9 +2968,7 @@ for (posv, potrf, potri, potrs, pstrf, elty, rtyp) in
                 return A, 0
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($potrf), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, size(A,1), A, lda, info, 1)
+            $potrf(uplo, size(A,1), A, lda, info)
             chkargsok(info[])
             #info[] > 0 means the leading minor of order info[] is not positive definite
             #ordinarily, throw Exception here, but return error code here
@@ -3311,9 +2987,7 @@ for (posv, potrf, potri, potrs, pstrf, elty, rtyp) in
             chkstride1(A)
             chkuplo(uplo)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($potri), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, size(A,1), A, max(1,stride(A,2)), info, 1)
+            $potri(uplo, size(A,1), A, max(1,stride(A,2)), info)
             chkargsok(info[])
             chknonsingular(info[])
             A
@@ -3340,11 +3014,7 @@ for (posv, potrf, potri, potrs, pstrf, elty, rtyp) in
             end
             ldb = max(1,stride(B,2))
             info = Ref{BlasInt}()
-            ccall((@blasfunc($potrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                    Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                   uplo, n, nrhs, A,
-                   lda, B, ldb, info, 1)
+            $potrs(uplo, n, nrhs, A, lda, B, ldb, info)
             chklapackerror(info[])
             return B
         end
@@ -3366,10 +3036,7 @@ for (posv, potrf, potri, potrs, pstrf, elty, rtyp) in
             rank = Vector{BlasInt}(undef, 1)
             work = Vector{$rtyp}(undef, 2n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($pstrf), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                   Ptr{BlasInt}, Ref{$rtyp}, Ptr{$rtyp}, Ref{BlasInt}, Clong),
-                  uplo, n, A, max(1,stride(A,2)), piv, rank, tol, work, info, 1)
+            $pstrf(uplo, n, A, max(1,stride(A,2)), piv, rank, tol, work, info)
             chkargsok(info[])
             A, piv, rank[1], info[] #Stored in CholeskyPivoted
         end
@@ -3434,10 +3101,10 @@ pstrf!(uplo::AbstractChar, A::AbstractMatrix, tol::Real)
 # (PT) positive-definite, symmetric, tri-diagonal matrices
 # Direct solvers for general tridiagonal and symmetric positive-definite tridiagonal
 for (ptsv, pttrf, elty, relty) in
-    ((:dptsv_,:dpttrf_,:Float64,:Float64),
-     (:sptsv_,:spttrf_,:Float32,:Float32),
-     (:zptsv_,:zpttrf_,:ComplexF64,:Float64),
-     (:cptsv_,:cpttrf_,:ComplexF32,:Float32))
+    ((:dptsv,:dpttrf,:Float64,:Float64),
+     (:sptsv,:spttrf,:Float32,:Float32),
+     (:zptsv,:zpttrf,:ComplexF64,:Float64),
+     (:cptsv,:cpttrf,:ComplexF32,:Float32))
     @eval begin
         #       SUBROUTINE DPTSV( N, NRHS, D, E, B, LDB, INFO )
         #       .. Scalar Arguments ..
@@ -3455,10 +3122,7 @@ for (ptsv, pttrf, elty, relty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)) but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($ptsv), libblastrampoline), Cvoid,
-                  (Ref{BlasInt}, Ref{BlasInt}, Ptr{$relty}, Ptr{$elty},
-                   Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                  n, size(B,2), D, E, B, max(1,stride(B,2)), info)
+            $ptsv(n, size(B,2), D, E, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -3476,9 +3140,7 @@ for (ptsv, pttrf, elty, relty) in
                 throw(DimensionMismatch(lazy"E has length $(length(E)), but needs $(n - 1)"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($pttrf), libblastrampoline), Cvoid,
-                  (Ref{BlasInt}, Ptr{$relty}, Ptr{$elty}, Ptr{BlasInt}),
-                  n, D, E, info)
+            $pttrf(n, D, E, info)
             chklapackerror(info[])
             D, E
         end
@@ -3504,8 +3166,8 @@ and returned.
 pttrf!(D::AbstractVector, E::AbstractVector)
 
 for (pttrs, elty, relty) in
-    ((:dpttrs_,:Float64,:Float64),
-     (:spttrs_,:Float32,:Float32))
+    ((:dpttrs,:Float64,:Float64),
+     (:spttrs,:Float32,:Float32))
     @eval begin
         #       SUBROUTINE DPTTRS( N, NRHS, D, E, B, LDB, INFO )
         #       .. Scalar Arguments ..
@@ -3523,10 +3185,7 @@ for (pttrs, elty, relty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)) but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($pttrs), libblastrampoline), Cvoid,
-                  (Ref{BlasInt}, Ref{BlasInt}, Ptr{$relty}, Ptr{$elty},
-                   Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}),
-                  n, size(B,2), D, E, B, max(1,stride(B,2)), info)
+            $pttrs(n, size(B,2), D, E, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -3534,8 +3193,8 @@ for (pttrs, elty, relty) in
 end
 
 for (pttrs, elty, relty) in
-    ((:zpttrs_,:ComplexF64,:Float64),
-     (:cpttrs_,:ComplexF32,:Float32))
+    ((:zpttrs,:ComplexF64,:Float64),
+     (:cpttrs,:ComplexF32,:Float32))
     @eval begin
         #       SUBROUTINE ZPTTRS( UPLO, N, NRHS, D, E, B, LDB, INFO )
         # *     .. Scalar Arguments ..
@@ -3557,10 +3216,7 @@ for (pttrs, elty, relty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)) but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($pttrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$relty}, Ptr{$elty},
-                   Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, n, size(B,2), D, E, B, max(1,stride(B,2)), info, 1)
+            $pttrs(uplo, n, size(B,2), D, E, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -3578,10 +3234,10 @@ pttrs!(D::AbstractVector, E::AbstractVector, B::AbstractVecOrMat)
 
 ## (TR) triangular matrices: solver and inverse
 for (trtri, trtrs, elty) in
-    ((:dtrtri_,:dtrtrs_,:Float64),
-     (:strtri_,:strtrs_,:Float32),
-     (:ztrtri_,:ztrtrs_,:ComplexF64),
-     (:ctrtri_,:ctrtrs_,:ComplexF32))
+    ((:dtrtri,:dtrtrs,:Float64),
+     (:strtri,:strtrs,:Float32),
+     (:ztrtri,:ztrtrs,:ComplexF64),
+     (:ctrtri,:ctrtrs,:ComplexF32))
     @eval begin
         #     SUBROUTINE DTRTRI( UPLO, DIAG, N, A, LDA, INFO )
         #*     .. Scalar Arguments ..
@@ -3597,10 +3253,7 @@ for (trtri, trtrs, elty) in
             chkdiag(diag)
             lda = max(1,stride(A, 2))
             info = Ref{BlasInt}()
-            ccall((@blasfunc($trtri), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ref{BlasInt}, Clong, Clong),
-                  uplo, diag, n, A, lda, info, 1, 1)
+            $trtri(uplo, diag, n, A, lda, info)
             chklapackerror(info[])
             A
         end
@@ -3623,13 +3276,8 @@ for (trtri, trtrs, elty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)) but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($trtrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                   Clong, Clong, Clong),
-                  uplo, trans, diag, n, size(B,2), A, max(1,stride(A,2)),
-                  B, max(1,stride(B,2)), info,
-                  1, 1, 1)
+            $trtrs(uplo, trans, diag, n, size(B,2), A, max(1,stride(A,2)),
+                   B, max(1,stride(B,2)), info)
             chklapackerror(info[], trtrs!)
             B
         end
@@ -3660,8 +3308,8 @@ trtrs!(uplo::AbstractChar, trans::AbstractChar, diag::AbstractChar, A::AbstractM
 
 #Eigenvector computation and condition number estimation
 for (trcon, trevc, trrfs, elty) in
-    ((:dtrcon_,:dtrevc_,:dtrrfs_,:Float64),
-     (:strcon_,:strevc_,:strrfs_,:Float32))
+    ((:dtrcon,:dtrevc,:dtrrfs,:Float64),
+     (:strcon,:strevc,:strrfs,:Float32))
     @eval begin
         # SUBROUTINE DTRCON( NORM, UPLO, DIAG, N, A, LDA, RCOND, WORK,
         #                  IWORK, INFO )
@@ -3683,13 +3331,7 @@ for (trcon, trevc, trrfs, elty) in
             work  = Vector{$elty}(undef, 3n)
             iwork = Vector{BlasInt}(undef, n)
             info  = Ref{BlasInt}()
-            ccall((@blasfunc($trcon), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-                   Clong, Clong, Clong),
-                  norm, uplo, diag, n,
-                  A, max(1,stride(A,2)), rcond, work, iwork, info,
-                  1, 1, 1)
+            $trcon(norm, uplo, diag, n, A, max(1,stride(A,2)), rcond, work, iwork, info)
             chklapackerror(info[])
             rcond[]
         end
@@ -3725,15 +3367,8 @@ for (trcon, trevc, trrfs, elty) in
             work = Vector{$elty}(undef, 3n)
             info = Ref{BlasInt}()
 
-            ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Clong, Clong),
-                side, howmny, select, n,
-                T, ldt, VL, ldvl,
-                VR, ldvr, mm, m,
-                work, info, 1, 1)
+            $trevc(side, howmny, select, n, T, ldt, VL, ldvl,
+                   VR, ldvr, mm, m, work, info)
             chklapackerror(info[])
 
             VLn = size(VL, 1)
@@ -3784,13 +3419,8 @@ for (trcon, trevc, trrfs, elty) in
             work = Vector{$elty}(undef, 3n)
             iwork = Vector{BlasInt}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($trrfs), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ptr{$elty}, Ptr{$elty}, Ptr{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong),
-                uplo, trans, diag, n,
-                nrhs, A, max(1,stride(A,2)), B, max(1,stride(B,2)), X, max(1,stride(X,2)),
-                Ferr, Berr, work, iwork, info, 1, 1, 1)
+            $trrfs(uplo, trans, diag, n, nrhs, A, max(1,stride(A,2)), B, max(1,stride(B,2)), X,
+                   max(1,stride(X,2)), Ferr, Berr, work, iwork, info)
             chklapackerror(info[])
             Ferr, Berr
         end
@@ -3798,8 +3428,8 @@ for (trcon, trevc, trrfs, elty) in
 end
 
 for (trcon, trevc, trrfs, elty, relty) in
-    ((:ztrcon_,:ztrevc_,:ztrrfs_,:ComplexF64,:Float64),
-     (:ctrcon_,:ctrevc_,:ctrrfs_,:ComplexF32, :Float32))
+    ((:ztrcon,:ztrevc,:ztrrfs,:ComplexF64,:Float64),
+     (:ctrcon,:ctrevc,:ctrrfs,:ComplexF32,:Float32))
     @eval begin
         # SUBROUTINE ZTRCON( NORM, UPLO, DIAG, N, A, LDA, RCOND, WORK,
         #                   RWORK, INFO )
@@ -3821,13 +3451,8 @@ for (trcon, trevc, trrfs, elty, relty) in
             work  = Vector{$elty}(undef, 2n)
             rwork = Vector{$relty}(undef, n)
             info  = Ref{BlasInt}()
-            ccall((@blasfunc($trcon), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Ref{$relty}, Ptr{$elty}, Ptr{$relty}, Ptr{BlasInt},
-                   Clong, Clong, Clong),
-                  norm, uplo, diag, n,
-                  A, max(1,stride(A,2)), rcond, work, rwork, info,
-                  1, 1, 1)
+            $trcon(norm, uplo, diag, n,
+                  A, max(1,stride(A,2)), rcond, work, rwork, info)
             chklapackerror(info[])
             rcond[]
         end
@@ -3864,15 +3489,8 @@ for (trcon, trevc, trrfs, elty, relty) in
             work = Vector{$elty}(undef, 2n)
             rwork = Vector{$relty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                 Ptr{$elty}, Ptr{$relty}, Ref{BlasInt}, Clong, Clong),
-                side, howmny, select, n,
-                T, ldt, VL, ldvl,
-                VR, ldvr, mm, m,
-                work, rwork, info, 1, 1)
+            $trevc(side, howmny, select, n, T, ldt, VL, ldvl,
+                   VR, ldvr, mm, m, work, rwork, info)
             chklapackerror(info[])
 
             VLn = size(VL, 1)
@@ -3923,13 +3541,9 @@ for (trcon, trevc, trrfs, elty, relty) in
             work  = Vector{$elty}(undef, 2n)
             rwork = Vector{$relty}(undef, n)
             info  = Ref{BlasInt}()
-            ccall((@blasfunc($trrfs), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$relty}, Ptr{$relty}, Ptr{$elty}, Ptr{$relty}, Ref{BlasInt}, Clong, Clong, Clong),
-                uplo, trans, diag, n,
-                nrhs, A, max(1,stride(A,2)), B, max(1,stride(B,2)), X, max(1,stride(X,2)),
-                Ferr, Berr, work, rwork, info, 1, 1, 1)
+            $trrfs(uplo, trans, diag, n,
+                   nrhs, A, max(1,stride(A,2)), B, max(1,stride(B,2)), X, max(1,stride(X,2)),
+                   Ferr, Berr, work, rwork, info)
             chklapackerror(info[])
             Ferr, Berr
         end
@@ -3978,8 +3592,8 @@ trrfs!(uplo::AbstractChar, trans::AbstractChar, diag::AbstractChar, A::AbstractM
 
 ## (ST) Symmetric tridiagonal - eigendecomposition
 for (stev, stebz, stegr, stein, elty) in
-    ((:dstev_,:dstebz_,:dstegr_,:dstein_,:Float64),
-     (:sstev_,:sstebz_,:sstegr_,:sstein_,:Float32)
+    ((:dstev,:dstebz,:dstegr,:dstein,:Float64),
+     (:sstev,:sstebz,:sstegr,:sstein,:Float32)
 #     , (:zstev_,:ComplexF64)  Need to rewrite for ZHEEV, rwork, etc.
 #     , (:cstev_,:ComplexF32)
      )
@@ -3995,10 +3609,7 @@ for (stev, stebz, stegr, stein, elty) in
             Zmat = similar(dv, $elty, (n, job != 'N' ? n : 0))
             work = Vector{$elty}(undef, max(1, 2n-2))
             info = Ref{BlasInt}()
-            ccall((@blasfunc($stev), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty},
-                   Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                  job, n, dv, ev, Zmat, n, work, info, 1)
+            $stev(job, n, dv, ev, Zmat, n, work, info)
             chklapackerror(info[])
             dv, Zmat
         end
@@ -4025,17 +3636,9 @@ for (stev, stebz, stegr, stein, elty) in
             work = Vector{$elty}(undef, 4*n)
             iwork = Vector{BlasInt}(undef, 3*n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($stebz), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{$elty},
-                Ref{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ref{$elty},
-                Ptr{$elty}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-                Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
-                Ptr{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                range, order, n, vl,
-                vu, il, iu, abstol,
-                dv, ev, m, nsplit,
-                w, iblock, isplit, work,
-                iwork, info, 1, 1)
+            $stebz(range, order, n, vl, vu, il, iu, abstol,
+                   dv, ev, m, nsplit, w, iblock, isplit, work,
+                   iwork, info)
             chklapackerror(info[])
             resize!(w, m[]), resize!(iblock, m[]), resize!(isplit, nsplit[1])
         end
@@ -4069,19 +3672,9 @@ for (stev, stebz, stegr, stein, elty) in
             liwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1] and liwork as iwork[1]
-                ccall((@blasfunc($stegr), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                    Ptr{$elty}, Ref{$elty}, Ref{$elty}, Ref{BlasInt},
-                    Ref{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{$elty},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
-                    Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                    Clong, Clong),
-                    jobz, range, n, dv,
-                    eev, vl, vu, il,
-                    iu, abstol, m, w,
-                    Z, ldz, isuppz, work,
-                    lwork, iwork, liwork, info,
-                    1, 1)
+                $stegr(jobz, range, n, dv, eev, vl, vu, il,
+                       iu, abstol, m, w, Z, ldz, isuppz, work,
+                       lwork, iwork, liwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -4134,12 +3727,7 @@ for (stev, stebz, stegr, stein, elty) in
             iwork = Vector{BlasInt}(undef, n)
             ifail = Vector{BlasInt}(undef, m)
             info  = Ref{BlasInt}()
-            ccall((@blasfunc($stein), libblastrampoline), Cvoid,
-                (Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
-                Ref{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-                Ptr{BlasInt}),
-                n, dv, ev, m, w, iblock, isplit, z, ldz, work, iwork, ifail, info)
+            $stein(n, dv, ev, m, w, iblock, isplit, z, ldz, work, iwork, ifail, info)
             chklapackerror(info[])
             if any(ifail .!= 0)
                 # TODO: better error message / type
@@ -4206,8 +3794,8 @@ stein!(dv::AbstractVector, ev_in::AbstractVector, w_in::AbstractVector, iblock_i
 ## (SY) symmetric real matrices - Bunch-Kaufman decomposition,
 ## solvers (direct and factored) and inverse.
 for (syconv, sysv, sytrf, sytri, sytrs, elty) in
-    ((:dsyconv_,:dsysv_,:dsytrf_,:dsytri_,:dsytrs_,:Float64),
-     (:ssyconv_,:ssysv_,:ssytrf_,:ssytri_,:ssytrs_,:Float32))
+    ((:dsyconv,:dsysv,:dsytrf,:dsytri,:dsytrs,:Float64),
+     (:ssyconv,:ssysv,:ssytrf,:ssytri,:ssytrs,:Float32))
     @eval begin
         #       SUBROUTINE DSYCONV( UPLO, WAY, N, A, LDA, IPIV, WORK, INFO )
         # *     .. Scalar Arguments ..
@@ -4223,10 +3811,7 @@ for (syconv, sysv, sytrf, sytri, sytrs, elty) in
             chkuplo(uplo)
             work = Vector{$elty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($syconv), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong, Clong),
-                  uplo, 'C', n, A, max(1,stride(A,2)), ipiv, work, info, 1, 1)
+            $syconv(uplo, 'C', n, A, max(1,stride(A,2)), ipiv, work, info)
             chklapackerror(info[])
             A, work
         end
@@ -4252,11 +3837,8 @@ for (syconv, sysv, sytrf, sytri, sytrs, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($sysv), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
-                      work, lwork, info,  1)
+                $sysv(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
+                      work, lwork, info)
                 chkargsok(info[])
                 chknonsingular(info[])
                 if i == 1
@@ -4286,10 +3868,7 @@ for (syconv, sysv, sytrf, sytri, sytrs, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($sytrf), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, A, stride(A,2), ipiv, work, lwork, info, 1)
+                $sytrf(uplo, n, A, stride(A,2), ipiv, work, lwork, info)
                 chkargsok(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -4350,10 +3929,7 @@ for (syconv, sysv, sytrf, sytri, sytrs, elty) in
             chkuplo(uplo)
             work = Vector{$elty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($sytri), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                  uplo, n, A, max(1,stride(A,2)), ipiv, work, info, 1)
+            $sytri(uplo, n, A, max(1,stride(A,2)), ipiv, work, info)
             chkargsok(info[])
             chknonsingular(info[])
             A
@@ -4377,10 +3953,7 @@ for (syconv, sysv, sytrf, sytri, sytrs, elty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)), but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($sytrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info, 1)
+            $sytrs(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -4389,8 +3962,8 @@ end
 
 # Rook-pivoting variants of symmetric-matrix algorithms
 for (sysv, sytrf, sytri, sytrs, syconvf, elty) in
-    ((:dsysv_rook_,:dsytrf_rook_,:dsytri_rook_,:dsytrs_rook_,:dsyconvf_rook_,:Float64),
-     (:ssysv_rook_,:ssytrf_rook_,:ssytri_rook_,:ssytrs_rook_,:ssyconvf_rook_,:Float32))
+    ((:dsysv_rook,:dsytrf_rook,:dsytri_rook,:dsytrs_rook,:dsyconvf_rook,:Float64),
+     (:ssysv_rook,:ssytrf_rook,:ssytri_rook,:ssytrs_rook,:ssyconvf_rook,:Float32))
     @eval begin
         #       SUBROUTINE DSYSV_ROOK(UPLO, N, NRHS, A, LDA, IPIV, B, LDB, WORK,
         #                             LWORK, INFO )
@@ -4413,11 +3986,8 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($sysv), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
-                      work, lwork, info, 1)
+                $sysv(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
+                      work, lwork, info)
                 chkargsok(info[])
                 chknonsingular(info[])
                 if i == 1
@@ -4448,10 +4018,7 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($sytrf), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, A, stride(A,2), ipiv, work, lwork, info, 1)
+                $sytrf(uplo, n, A, stride(A,2), ipiv, work, lwork, info)
                 chkargsok(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -4475,10 +4042,7 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty) in
             chkuplo(uplo)
             work = Vector{$elty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($sytri), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                  uplo, n, A, max(1,stride(A,2)), ipiv, work, info, 1)
+            $sytri(uplo, n, A, max(1,stride(A,2)), ipiv, work, info)
             chkargsok(info[])
             chknonsingular(info[])
             A
@@ -4502,10 +4066,7 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)), but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($sytrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info, 1)
+            $sytrs(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -4541,15 +4102,7 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty) in
 
             # allocate
             info = Ref{BlasInt}()
-
-            ccall((@blasfunc($syconvf), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-                 Clong, Clong),
-                uplo, way, n, A,
-                lda, e, ipiv, info,
-                1, 1)
-
+            $syconvf(uplo, way, n, A, lda, e, ipiv, info)
             chklapackerror(info[])
             return A, e
         end
@@ -4559,8 +4112,8 @@ end
 ## (SY) hermitian matrices - eigendecomposition, Bunch-Kaufman decomposition,
 ## solvers (direct and factored) and inverse.
 for (syconv, hesv, hetrf, hetri, hetrs, elty, relty) in
-    ((:zsyconv_,:zhesv_,:zhetrf_,:zhetri_,:zhetrs_,:ComplexF64, :Float64),
-     (:csyconv_,:chesv_,:chetrf_,:chetri_,:chetrs_,:ComplexF32, :Float32))
+    ((:zsyconv,:zhesv,:zhetrf,:zhetri,:zhetrs,:ComplexF64, :Float64),
+     (:csyconv,:chesv,:chetrf,:chetri,:chetrs,:ComplexF32, :Float32))
     @eval begin
        #   SUBROUTINE ZSYCONV( UPLO, WAY, N, A, LDA, IPIV, WORK, INFO )
        #
@@ -4578,10 +4131,7 @@ for (syconv, hesv, hetrf, hetri, hetrs, elty, relty) in
             chkuplo(uplo)
             work = Vector{$elty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($syconv), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong, Clong),
-                  uplo, 'C', n, A, max(1,stride(A,2)), ipiv, work, info, 1, 1)
+            $syconv(uplo, 'C', n, A, max(1,stride(A,2)), ipiv, work, info)
             chklapackerror(info[])
             A, work
         end
@@ -4607,11 +4157,8 @@ for (syconv, hesv, hetrf, hetri, hetrs, elty, relty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($hesv), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
-                      work, lwork, info, 1)
+                $hesv(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
+                      work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -4638,10 +4185,7 @@ for (syconv, hesv, hetrf, hetri, hetrs, elty, relty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i in 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($hetrf), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, A, max(1,stride(A,2)), ipiv, work, lwork, info, 1)
+                $hetrf(uplo, n, A, max(1,stride(A,2)), ipiv, work, lwork, info)
                 chkargsok(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -4704,10 +4248,7 @@ for (syconv, hesv, hetrf, hetri, hetrs, elty, relty) in
             chkuplo(uplo)
             work = Vector{$elty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($hetri), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                  uplo, n, A, max(1,stride(A,2)), ipiv, work, info, 1)
+            $hetri(uplo, n, A, max(1,stride(A,2)), ipiv, work, info)
             chklapackerror(info[])
             A
         end
@@ -4730,10 +4271,7 @@ for (syconv, hesv, hetrf, hetri, hetrs, elty, relty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)), but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($hetrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info, 1)
+            $hetrs(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -4741,8 +4279,8 @@ for (syconv, hesv, hetrf, hetri, hetrs, elty, relty) in
 end
 
 for (hesv, hetrf, hetri, hetrs, elty, relty) in
-    ((:zhesv_rook_,:zhetrf_rook_,:zhetri_rook_,:zhetrs_rook_,:ComplexF64, :Float64),
-     (:chesv_rook_,:chetrf_rook_,:chetri_rook_,:chetrs_rook_,:ComplexF32, :Float32))
+    ((:zhesv_rook,:zhetrf_rook,:zhetri_rook,:zhetrs_rook,:ComplexF64,:Float64),
+     (:chesv_rook,:chetrf_rook,:chetri_rook,:chetrs_rook,:ComplexF32,:Float32))
     @eval begin
         #       SUBROUTINE ZHESV_ROOK( UPLO, N, NRHS, A, LDA, IPIV, B, LDB, WORK,
         # *     .. Scalar Arguments ..
@@ -4765,11 +4303,8 @@ for (hesv, hetrf, hetri, hetrs, elty, relty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($hesv), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
-                      work, lwork, info, 1)
+                $hesv(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
+                      work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -4797,10 +4332,7 @@ for (hesv, hetrf, hetri, hetrs, elty, relty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i in 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($hetrf), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, A, max(1,stride(A,2)), ipiv, work, lwork, info, 1)
+                $hetrf(uplo, n, A, max(1,stride(A,2)), ipiv, work, lwork, info)
                 chkargsok(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -4825,10 +4357,7 @@ for (hesv, hetrf, hetri, hetrs, elty, relty) in
             chkuplo(uplo)
             work = Vector{$elty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($hetri), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                  uplo, n, A, max(1,stride(A,2)), ipiv, work, info, 1)
+            $hetri(uplo, n, A, max(1,stride(A,2)), ipiv, work, info)
             chklapackerror(info[])
             A
         end
@@ -4851,10 +4380,7 @@ for (hesv, hetrf, hetri, hetrs, elty, relty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)), but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($hetrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info, 1)
+            $hetrs(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -4862,8 +4388,8 @@ for (hesv, hetrf, hetri, hetrs, elty, relty) in
 end
 
 for (sysv, sytrf, sytri, sytrs, elty, relty) in
-    ((:zsysv_,:zsytrf_,:zsytri_,:zsytrs_,:ComplexF64, :Float64),
-     (:csysv_,:csytrf_,:csytri_,:csytrs_,:ComplexF32, :Float32))
+    ((:zsysv,:zsytrf,:zsytri,:zsytrs,:ComplexF64, :Float64),
+     (:csysv,:csytrf,:csytri,:csytrs,:ComplexF32, :Float32))
     @eval begin
         #       SUBROUTINE ZSYSV( UPLO, N, NRHS, A, LDA, IPIV, B, LDB, WORK,
         #      $                  LWORK, INFO )
@@ -4887,11 +4413,8 @@ for (sysv, sytrf, sytri, sytrs, elty, relty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($sysv), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
-                      work, lwork, info, 1)
+                $sysv(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
+                      work, lwork, info)
                 chkargsok(info[])
                 chknonsingular(info[])
                 if i == 1
@@ -4922,10 +4445,7 @@ for (sysv, sytrf, sytri, sytrs, elty, relty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($sytrf), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, A, max(1,stride(A,2)), ipiv, work, lwork, info, 1)
+                $sytrf(uplo, n, A, max(1,stride(A,2)), ipiv, work, lwork, info)
                 chkargsok(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -4987,10 +4507,7 @@ for (sysv, sytrf, sytri, sytrs, elty, relty) in
             chkuplo(uplo)
             work = Vector{$elty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($sytri), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                  uplo, n, A, max(1,stride(A,2)), ipiv, work, info, 1)
+            $sytri(uplo, n, A, max(1,stride(A,2)), ipiv, work, info)
             chklapackerror(info[])
             A
         end
@@ -5013,10 +4530,7 @@ for (sysv, sytrf, sytri, sytrs, elty, relty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)), but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($sytrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info,  1)
+            $sytrs(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -5024,8 +4538,8 @@ for (sysv, sytrf, sytri, sytrs, elty, relty) in
 end
 
 for (sysv, sytrf, sytri, sytrs, syconvf, elty, relty) in
-    ((:zsysv_rook_,:zsytrf_rook_,:zsytri_rook_,:zsytrs_rook_,:zsyconvf_rook_,:ComplexF64, :Float64),
-     (:csysv_rook_,:csytrf_rook_,:csytri_rook_,:csytrs_rook_,:csyconvf_rook_,:ComplexF32, :Float32))
+    ((:zsysv_rook,:zsytrf_rook,:zsytri_rook,:zsytrs_rook,:zsyconvf_rook,:ComplexF64, :Float64),
+     (:csysv_rook,:csytrf_rook,:csytri_rook,:csytrs_rook,:csyconvf_rook,:ComplexF32, :Float32))
     @eval begin
         #       SUBROUTINE ZSYSV_ROOK(UPLO, N, NRHS, A, LDA, IPIV, B, LDB, WORK,
         #      $                      LWORK, INFO )
@@ -5049,11 +4563,8 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty, relty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($sysv), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
-                      work, lwork, info, 1)
+                $sysv(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)),
+                      work, lwork, info)
                 chkargsok(info[])
                 chknonsingular(info[])
                 if i == 1
@@ -5085,10 +4596,7 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty, relty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($sytrf), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                      uplo, n, A, max(1,stride(A,2)), ipiv, work, lwork, info, 1)
+                $sytrf(uplo, n, A, max(1,stride(A,2)), ipiv, work, lwork, info)
                 chkargsok(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -5113,10 +4621,7 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty, relty) in
             chkuplo(uplo)
             work = Vector{$elty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($sytri), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                  uplo, n, A, max(1,stride(A,2)), ipiv, work, info, 1)
+            $sytri(uplo, n, A, max(1,stride(A,2)), ipiv, work, info)
             chklapackerror(info[])
             A
         end
@@ -5139,10 +4644,7 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty, relty) in
                 throw(DimensionMismatch(lazy"B has first dimension $(size(B,1)), but needs $n"))
             end
             info = Ref{BlasInt}()
-            ccall((@blasfunc($sytrs), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ptr{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                  uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info, 1)
+            $sytrs(uplo, n, size(B,2), A, max(1,stride(A,2)), ipiv, B, max(1,stride(B,2)), info)
             chklapackerror(info[])
             B
         end
@@ -5180,15 +4682,7 @@ for (sysv, sytrf, sytri, sytrs, syconvf, elty, relty) in
 
             # allocate
             info = Ref{BlasInt}()
-
-            ccall((@blasfunc($syconvf), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-                 Clong, Clong),
-                uplo, way, n, A,
-                max(1, lda), e, ipiv, info,
-                1, 1)
-
+            $syconvf(uplo, way, n, A, max(1, lda), e, ipiv, info)
             chklapackerror(info[])
             return A, e
         end
@@ -5333,8 +4827,8 @@ end
 
 # Symmetric (real) eigensolvers
 for (syev, syevr, syevd, sygvd, elty) in
-    ((:dsyev_,:dsyevr_,:dsyevd_,:dsygvd_,:Float64),
-     (:ssyev_,:ssyevr_,:ssyevd_,:ssygvd_,:Float32))
+    ((:dsyev,:dsyevr,:dsyevd,:dsygvd,:Float64),
+     (:ssyev,:ssyevr,:ssyevd,:ssygvd,:Float32))
     @eval begin
         #       SUBROUTINE DSYEV( JOBZ, UPLO, N, A, LDA, W, WORK, LWORK, INFO )
         # *     .. Scalar Arguments ..
@@ -5353,10 +4847,7 @@ for (syev, syevr, syevd, sygvd, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($syev), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                      Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                      jobz, uplo, n, A, max(1,stride(A,2)), W, work, lwork, info, 1, 1)
+                $syev(jobz, uplo, n, A, max(1,stride(A,2)), W, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -5407,19 +4898,9 @@ for (syev, syevr, syevd, sygvd, elty) in
             liwork = BlasInt(-1)
             info   = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1] and liwork as iwork[1]
-                ccall((@blasfunc($syevr), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                        Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ref{$elty},
-                        Ref{BlasInt}, Ref{BlasInt}, Ref{$elty}, Ptr{BlasInt},
-                        Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt},
-                        Ref{BlasInt}, Clong, Clong, Clong),
-                    jobz, range, uplo, n,
-                    A, max(1,lda), vl, vu,
-                    il, iu, abstol, m,
-                    W, Z, max(1,ldz), isuppz,
-                    work, lwork, iwork, liwork,
-                    info, 1, 1, 1)
+                $syevr(jobz, range, uplo, n, A, max(1,lda), vl, vu,
+                       il, iu, abstol, m, W, Z, max(1,ldz), isuppz,
+                       work, lwork, iwork, liwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -5458,13 +4939,8 @@ for (syev, syevr, syevd, sygvd, elty) in
             liwork = BlasInt(-1)
             info   = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1] and liwork as iwork[1]
-                ccall((@blasfunc($syevd), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                        Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt},
-                        Ref{BlasInt}, Clong, Clong),
-                    jobz, uplo, n, A, max(1,lda),
-                    W, work, lwork, iwork, liwork,
-                    info, 1, 1)
+                $syevd(jobz, uplo, n, A, max(1,lda),
+                       W, work, lwork, iwork, liwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -5505,15 +4981,8 @@ for (syev, syevr, syevd, sygvd, elty) in
             liwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1] and liwork as iwork[1]
-                ccall((@blasfunc($sygvd), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                     Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                     Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                    itype, jobz, uplo, n,
-                    A, lda, B, ldb,
-                    w, work, lwork, iwork,
-                    liwork, info, 1, 1)
+                $sygvd(itype, jobz, uplo, n, A, lda, B, ldb,
+                       w, work, lwork, iwork, liwork, info)
                 chkargsok(info[])
                 if i == 1
                     lwork = BlasInt(work[1])
@@ -5529,8 +4998,8 @@ for (syev, syevr, syevd, sygvd, elty) in
 end
 # Hermitian eigensolvers
 for (syev, syevr, syevd, sygvd, elty, relty) in
-    ((:zheev_,:zheevr_,:zheevd_,:zhegvd_,:ComplexF64,:Float64),
-     (:cheev_,:cheevr_,:cheevd_,:chegvd_,:ComplexF32,:Float32))
+    ((:zheev,:zheevr,:zheevd,:zhegvd,:ComplexF64,:Float64),
+     (:cheev,:cheevr,:cheevd,:chegvd,:ComplexF32,:Float32))
     @eval begin
         # SUBROUTINE ZHEEV( JOBZ, UPLO, N, A, LDA, W, WORK, LWORK, RWORK, INFO )
         # *     .. Scalar Arguments ..
@@ -5552,12 +5021,7 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
             rwork = Vector{$relty}(undef, max(1, 3n-2))
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($syev), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                      Ptr{$relty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ptr{BlasInt},
-                      Clong, Clong),
-                      jobz, uplo, n, A, stride(A,2), W, work, lwork, rwork, info,
-                      1, 1)
+                $syev(jobz, uplo, n, A, stride(A,2), W, work, lwork, rwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -5613,21 +5077,10 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
             liwork = BlasInt(-1)
             info   = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1], lrwork as rwork[1] and liwork as iwork[1]
-                ccall((@blasfunc($syevr), libblastrampoline), Cvoid,
-                      (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ref{$elty},
-                       Ref{BlasInt}, Ref{BlasInt}, Ref{$elty}, Ptr{BlasInt},
-                       Ptr{$relty}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ref{BlasInt},
-                       Ptr{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                       Clong, Clong, Clong),
-                      jobz, range, uplo, n,
-                      A, lda, vl, vu,
-                      il, iu, abstol, m,
-                      W, Z, ldz, isuppz,
-                      work, lwork, rwork, lrwork,
-                      iwork, liwork, info,
-                      1, 1, 1)
+                $syevr(jobz, range, uplo, n, A, lda, vl, vu,
+                       il, iu, abstol, m, W, Z, ldz, isuppz,
+                       work, lwork, rwork, lrwork,
+                       iwork, liwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -5671,13 +5124,9 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
             liwork = BlasInt(-1)
             info   = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1], lrwork as rwork[1] and liwork as iwork[1]
-                ccall((@blasfunc($syevd), liblapack), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$relty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ref{BlasInt},
-                    Ptr{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                    jobz, uplo, n, A, stride(A,2),
+                $syevd(jobz, uplo, n, A, stride(A,2),
                     W, work, lwork, rwork, lrwork,
-                    iwork, liwork, info, 1, 1)
+                    iwork, liwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -5723,17 +5172,9 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
             lrwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1], lrwork as rwork[1] and liwork as iwork[1]
-                ccall((@blasfunc($sygvd), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                     Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$relty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$relty},
-                     Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                     Clong, Clong),
-                    itype, jobz, uplo, n,
-                    A, lda, B, ldb,
-                    w, work, lwork, rwork,
-                    lrwork, iwork, liwork, info,
-                    1, 1)
+                $sygvd(itype, jobz, uplo, n, A, lda, B, ldb,
+                       w, work, lwork, rwork, lrwork, iwork,
+                       liwork, info)
                 chkargsok(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -5800,10 +5241,10 @@ sygvd!(itype::Integer, jobz::AbstractChar, uplo::AbstractChar, A::AbstractMatrix
 
 ## (BD) Bidiagonal matrices - singular value decomposition
 for (bdsqr, relty, elty) in
-    ((:dbdsqr_,:Float64,:Float64),
-     (:sbdsqr_,:Float32,:Float32),
-     (:zbdsqr_,:Float64,:ComplexF64),
-     (:cbdsqr_,:Float32,:ComplexF32))
+    ((:dbdsqr,:Float64,:Float64),
+     (:sbdsqr,:Float32,:Float32),
+     (:zbdsqr,:Float64,:ComplexF64),
+     (:cbdsqr,:Float32,:ComplexF32))
     @eval begin
         function bdsqr!(uplo::AbstractChar, d::AbstractVector{$relty}, e_::AbstractVector{$relty},
                         Vt::AbstractMatrix{$elty}, U::AbstractMatrix{$elty}, C::AbstractMatrix{$elty})
@@ -5833,15 +5274,8 @@ for (bdsqr, relty, elty) in
             # Allocate
             work = Vector{$relty}(undef, 4n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($bdsqr), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                 Ref{BlasInt}, Ptr{$relty}, Ptr{$relty}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$relty}, Ref{BlasInt}, Clong),
-                uplo, n, ncvt, nru,
-                ncc, d, e_, Vt,
-                ldvt, U, ldu, C,
-                ldc, work, info, 1)
+            $bdsqr(uplo, n, ncvt, nru, ncc, d, e_, Vt,
+                   ldvt, U, ldu, C, ldc, work, info)
             chklapackerror(info[])
             d, Vt, U, C #singular values in descending order, P**T * VT, U * Q, Q**T * C
         end
@@ -5862,8 +5296,8 @@ bdsqr!(uplo::AbstractChar, d::AbstractVector, e_::AbstractVector, Vt::AbstractMa
 
 #Defined only for real types
 for (bdsdc, elty) in
-    ((:dbdsdc_,:Float64),
-     (:sbdsdc_,:Float32))
+    ((:dbdsdc,:Float64),
+     (:sbdsdc,:Float32))
     @eval begin
         #*  DBDSDC computes the singular value decomposition (SVD) of a real
         #*  N-by-N (upper or lower) bidiagonal matrix B:  B = U * S * VT,
@@ -5904,15 +5338,9 @@ for (bdsdc, elty) in
             work  = Vector{$elty}(undef, lwork)
             iwork = Vector{BlasInt}(undef, 8n)
             info  = Ref{BlasInt}()
-            ccall((@blasfunc($bdsdc), libblastrampoline), Cvoid,
-               (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
-                Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                Ptr{$elty}, Ptr{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
-                Clong, Clong),
-                uplo, compq, n, d, e_,
-                u, ldu, vt, ldvt,
-                q, iq, work, iwork, info,
-                1, 1)
+            $bdsdc(uplo, compq, n, d, e_,
+                   u, ldu, vt, ldvt,
+                   q, iq, work, iwork, info)
             chklapackerror(info[])
             d, e_, u, vt, q, iq
         end
@@ -5935,8 +5363,8 @@ vectors in `iq`.
 bdsdc!(uplo::AbstractChar, compq::AbstractChar, d::AbstractVector, e_::AbstractVector)
 
 for (gecon, elty) in
-    ((:dgecon_,:Float64),
-     (:sgecon_,:Float32))
+    ((:dgecon,:Float64),
+     (:sgecon,:Float32))
     @eval begin
         #  SUBROUTINE DGECON( NORM, N, A, LDA, ANORM, RCOND, WORK, IWORK,
         #      $                   INFO )
@@ -5958,12 +5386,7 @@ for (gecon, elty) in
             work = Vector{$elty}(undef, 4n)
             iwork = Vector{BlasInt}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gecon), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ref{$elty}, Ref{$elty}, Ptr{$elty}, Ptr{BlasInt},
-                   Ref{BlasInt}, Clong),
-                  normtype, n, A, lda, anorm, rcond, work, iwork,
-                  info, 1)
+            $gecon(normtype, n, A, lda, anorm, rcond, work, iwork, info)
             chklapackerror(info[])
             rcond[]
         end
@@ -5971,8 +5394,8 @@ for (gecon, elty) in
 end
 
 for (gecon, elty, relty) in
-    ((:zgecon_,:ComplexF64,:Float64),
-     (:cgecon_,:ComplexF32,:Float32))
+    ((:zgecon,:ComplexF64,:Float64),
+     (:cgecon,:ComplexF32,:Float32))
     @eval begin
         #       SUBROUTINE ZGECON( NORM, N, A, LDA, ANORM, RCOND, WORK, RWORK,
         #      $                   INFO )
@@ -5994,12 +5417,7 @@ for (gecon, elty, relty) in
             work = Vector{$elty}(undef, 2n)
             rwork = Vector{$relty}(undef, 2n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($gecon), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ref{$relty}, Ref{$relty}, Ptr{$elty}, Ptr{$relty},
-                   Ref{BlasInt}, Clong),
-                  normtype, n, A, lda, anorm, rcond, work, rwork,
-                  info, 1)
+            $gecon(normtype, n, A, lda, anorm, rcond, work, rwork, info)
             chklapackerror(info[])
             rcond[]
         end
@@ -6017,10 +5435,10 @@ result of `getrf!` and `anorm` is the norm of `A` in the relevant norm.
 gecon!(normtype::AbstractChar, A::AbstractMatrix, anorm)
 
 for (gehrd, elty) in
-    ((:dgehrd_,:Float64),
-     (:sgehrd_,:Float32),
-     (:zgehrd_,:ComplexF64),
-     (:cgehrd_,:ComplexF32))
+    ((:dgehrd,:Float64),
+     (:sgehrd,:Float32),
+     (:zgehrd,:ComplexF64),
+     (:cgehrd,:ComplexF32))
     @eval begin
 
         #                 .. Scalar Arguments ..
@@ -6038,13 +5456,8 @@ for (gehrd, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gehrd), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{BlasInt}),
-                    n, ilo, ihi, A,
-                    max(1, stride(A, 2)), tau, work, lwork,
-                    info)
+                $gehrd(n, ilo, ihi, A, max(1, stride(A, 2)), tau,
+                    work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6068,10 +5481,10 @@ the factorization.
 gehrd!(ilo::Integer, ihi::Integer, A::AbstractMatrix)
 
 for (orghr, elty) in
-    ((:dorghr_,:Float64),
-     (:sorghr_,:Float32),
-     (:zunghr_,:ComplexF64),
-     (:cunghr_,:ComplexF32))
+    ((:dorghr,:Float64),
+     (:sorghr,:Float32),
+     (:zunghr,:ComplexF64),
+     (:cunghr,:ComplexF32))
     @eval begin
         # *     .. Scalar Arguments ..
         #       INTEGER            IHI, ILO, INFO, LDA, LWORK, N
@@ -6089,13 +5502,8 @@ for (orghr, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($orghr), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{BlasInt}),
-                    n, ilo, ihi, A,
-                    max(1, stride(A, 2)), tau, work, lwork,
-                    info)
+                $orghr(n, ilo, ihi, A, max(1, stride(A, 2)), tau,
+                       work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6116,10 +5524,10 @@ Explicitly finds `Q`, the orthogonal/unitary matrix from `gehrd!`. `ilo`,
 orghr!(ilo::Integer, ihi::Integer, A::AbstractMatrix, tau::AbstractVector)
 
 for (ormhr, elty) in
-    ((:dormhr_,:Float64),
-     (:sormhr_,:Float32),
-     (:zunmhr_,:ComplexF64),
-     (:cunmhr_,:ComplexF32))
+    ((:dormhr,:Float64),
+     (:sormhr,:Float32),
+     (:zunmhr,:ComplexF64),
+     (:cunmhr,:ComplexF32))
     @eval begin
         # .. Scalar Arguments ..
         # CHARACTER          side, trans
@@ -6149,15 +5557,10 @@ for (ormhr, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ormhr), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                     Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
-                    side, trans, mC, nC,
-                    ilo, ihi, A, max(1, stride(A, 2)),
-                    tau, C, max(1, stride(C, 2)), work,
-                    lwork, info, 1, 1)
+                $ormhr(side, trans, mC, nC,
+                       ilo, ihi, A, max(1, stride(A, 2)),
+                       tau, C, max(1, stride(C, 2)), work,
+                       lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6170,8 +5573,8 @@ for (ormhr, elty) in
 end
 
 for (hseqr, elty) in
-    ((:zhseqr_,:ComplexF64),
-     (:chseqr_,:ComplexF32))
+    ((:zhseqr,:ComplexF64),
+     (:chseqr,:ComplexF32))
     @eval begin
         # *     .. Scalar Arguments ..
         #       CHARACTER          JOB, COMPZ
@@ -6194,14 +5597,9 @@ for (hseqr, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($hseqr), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                    Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{BlasInt}),
-                    job, compz, n, ilo, ihi,
-                    H, ldh, w, Z, ldz, work,
-                    lwork, info)
+                $hseqr(job, compz, n, ilo, ihi,
+                       H, ldh, w, Z, ldz, work,
+                       lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6214,8 +5612,8 @@ for (hseqr, elty) in
 end
 
 for (hseqr, elty) in
-    ((:dhseqr_,:Float64),
-     (:shseqr_,:Float32))
+    ((:dhseqr,:Float64),
+     (:shseqr,:Float32))
     @eval begin
         # *     .. Scalar Arguments ..
         #       CHARACTER          JOB, COMPZ
@@ -6239,14 +5637,9 @@ for (hseqr, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($hseqr), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                    Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{BlasInt}),
-                    job, compz, n, ilo, ihi,
-                    H, ldh, wr, wi, Z, ldz, work,
-                    lwork, info)
+                $hseqr(job, compz, n, ilo, ihi,
+                       H, ldh, wr, wi, Z, ldz, work,
+                       lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6272,10 +5665,10 @@ the factorization.
 hseqr!(job::AbstractChar, compz::AbstractChar, ilo::Integer, ihi::Integer, H::AbstractMatrix, Z::AbstractMatrix)
 
 for (hetrd, elty) in
-    ((:dsytrd_,Float64),
-     (:ssytrd_,Float32),
-     (:zhetrd_,ComplexF64),
-     (:chetrd_,ComplexF32))
+    ((:dsytrd,Float64),
+     (:ssytrd,Float32),
+     (:zhetrd,ComplexF64),
+     (:chetrd,ComplexF32))
     relty = real(elty)
     @eval begin
 
@@ -6297,11 +5690,7 @@ for (hetrd, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($hetrd), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$relty}, Ptr{$relty},
-                    Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong),
-                    uplo, n, A, max(1, stride(A, 2)), d, e, tau, work, lwork, info, 1)
+                $hetrd(uplo, n, A, max(1, stride(A, 2)), d, e, tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6324,10 +5713,10 @@ diagonal and `e` contains the upper/lower diagonal.
 hetrd!(uplo::AbstractChar, A::AbstractMatrix)
 
 for (orgtr, elty) in
-    ((:dorgtr_,:Float64),
-     (:sorgtr_,:Float32),
-     (:zungtr_,:ComplexF64),
-     (:cungtr_,:ComplexF32))
+    ((:dorgtr,:Float64),
+     (:sorgtr,:Float32),
+     (:zungtr,:ComplexF64),
+     (:cungtr,:ComplexF32))
     @eval begin
         # *     .. Scalar Arguments ..
         #       CHARACTER          UPLO
@@ -6347,13 +5736,8 @@ for (orgtr, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($orgtr), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ref{BlasInt},
-                     Ref{BlasInt}, Clong),
-                    uplo, n, A,
-                    max(1, stride(A, 2)), tau, work, lwork,
-                    info, 1)
+                $orgtr(uplo, n, A, max(1, stride(A, 2)),
+                       tau, work, lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6374,10 +5758,10 @@ Explicitly finds `Q`, the orthogonal/unitary matrix from `hetrd!`. `uplo`,
 orgtr!(uplo::AbstractChar, A::AbstractMatrix, tau::AbstractVector)
 
 for (ormtr, elty) in
-    ((:dormtr_,:Float64),
-     (:sormtr_,:Float32),
-     (:zunmtr_,:ComplexF64),
-     (:cunmtr_,:ComplexF32))
+    ((:dormtr,:Float64),
+     (:sormtr,:Float32),
+     (:zunmtr,:ComplexF64),
+     (:cunmtr,:ComplexF32))
     @eval begin
         # .. Scalar Arguments ..
         # CHARACTER          side, trans, uplo
@@ -6407,15 +5791,10 @@ for (ormtr, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($ormtr), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                     Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong),
-                    side, uplo, trans, mC, nC,
-                    A, max(1, stride(A, 2)),
-                    tau, C, max(1, stride(C, 2)), work,
-                    lwork, info, 1, 1, 1)
+                $ormtr(side, uplo, trans, mC, nC,
+                       A, max(1, stride(A, 2)),
+                       tau, C, max(1, stride(C, 2)), work,
+                       lwork, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6428,8 +5807,8 @@ for (ormtr, elty) in
 end
 
 for (gees, gges, gges3, elty) in
-    ((:dgees_,:dgges_,:dgges3_,:Float64),
-     (:sgees_,:sgges_,:sgges3_,:Float32))
+    ((:dgees,:dgges,:dgges3,:Float64),
+     (:sgees,:sgges,:sgges3,:Float32))
     @eval begin
         #     .. Scalar Arguments ..
         #     CHARACTER          JOBVS, SORT
@@ -6453,15 +5832,10 @@ for (gees, gges, gges3, elty) in
             lwork = BlasInt(-1)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gees), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid}, Ref{BlasInt},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{$elty},
-                        Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                        Ref{BlasInt}, Ptr{Cvoid}, Ref{BlasInt}, Clong, Clong),
-                    jobvs, 'N', C_NULL, n,
-                        A, max(1, stride(A, 2)), sdim, wr,
-                        wi, vs, ldvs, work,
-                        lwork, C_NULL, info, 1, 1)
+                $gees(jobvs, 'N', C_NULL, n,
+                      A, max(1, stride(A, 2)), sdim, wr,
+                      wi, vs, ldvs, work,
+                      lwork, C_NULL, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6501,19 +5875,11 @@ for (gees, gges, gges3, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gges), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid},
-                        Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                        Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
-                        Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                        Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{Cvoid},
-                        Ref{BlasInt}, Clong, Clong, Clong),
-                    jobvsl, jobvsr, 'N', C_NULL,
-                    n, A, max(1,stride(A, 2)), B,
-                    max(1,stride(B, 2)), sdim, alphar, alphai,
-                    beta, vsl, ldvsl, vsr,
-                    ldvsr, work, lwork, C_NULL,
-                    info, 1, 1, 1)
+                $gges(jobvsl, jobvsr, 'N', C_NULL,
+                      n, A, max(1,stride(A, 2)), B,
+                      max(1,stride(B, 2)), sdim, alphar, alphai,
+                      beta, vsl, ldvsl, vsr,
+                      ldvsr, work, lwork, C_NULL, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6553,19 +5919,11 @@ for (gees, gges, gges3, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gges3), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid},
-                        Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                        Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
-                        Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                        Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{Cvoid},
-                        Ref{BlasInt}, Clong, Clong, Clong),
-                    jobvsl, jobvsr, 'N', C_NULL,
-                    n, A, max(1,stride(A, 2)), B,
-                    max(1,stride(B, 2)), sdim, alphar, alphai,
-                    beta, vsl, ldvsl, vsr,
-                    ldvsr, work, lwork, C_NULL,
-                    info, 1, 1, 1)
+                $gges3(jobvsl, jobvsr, 'N', C_NULL,
+                       n, A, max(1,stride(A, 2)), B,
+                       max(1,stride(B, 2)), sdim, alphar, alphai,
+                       beta, vsl, ldvsl, vsr,
+                       ldvsr, work, lwork, C_NULL, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6578,8 +5936,8 @@ for (gees, gges, gges3, elty) in
 end
 
 for (gees, gges, gges3, elty, relty) in
-    ((:zgees_,:zgges_,:zgges3_,:ComplexF64,:Float64),
-     (:cgees_,:cgges_,:cgges3_,:ComplexF32,:Float32))
+    ((:zgees,:zgges,:zgges3,:ComplexF64,:Float64),
+     (:cgees,:cgges,:cgges3,:ComplexF32,:Float32))
     @eval begin
         # *     .. Scalar Arguments ..
         #       CHARACTER          JOBVS, SORT
@@ -6604,15 +5962,10 @@ for (gees, gges, gges3, elty, relty) in
             rwork = Vector{$relty}(undef, n)
             info  = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gees), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid}, Ref{BlasInt},
-                        Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                        Ptr{$relty}, Ptr{Cvoid}, Ref{BlasInt}, Clong, Clong),
-                    jobvs, sort, C_NULL, n,
-                        A, max(1, stride(A, 2)), sdim, w,
-                        vs, ldvs, work, lwork,
-                        rwork, C_NULL, info, 1, 1)
+                $gees(jobvs, sort, C_NULL, n,
+                      A, max(1, stride(A, 2)), sdim, w,
+                      vs, ldvs, work, lwork,
+                      rwork, C_NULL, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6653,19 +6006,11 @@ for (gees, gges, gges3, elty, relty) in
             rwork = Vector{$relty}(undef, 8n)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gges), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid},
-                        Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                        Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ptr{Cvoid},
-                        Ref{BlasInt}, Clong, Clong, Clong),
-                    jobvsl, jobvsr, 'N', C_NULL,
+                $gges(jobvsl, jobvsr, 'N', C_NULL,
                     n, A, max(1, stride(A, 2)), B,
                     max(1, stride(B, 2)), sdim, alpha, beta,
                     vsl, ldvsl, vsr, ldvsr,
-                    work, lwork, rwork, C_NULL,
-                    info, 1, 1, 1)
+                    work, lwork, rwork, C_NULL, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6706,19 +6051,11 @@ for (gees, gges, gges3, elty, relty) in
             rwork = Vector{$relty}(undef, 8n)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gges3), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ptr{Cvoid},
-                        Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                        Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ptr{Cvoid},
-                        Ref{BlasInt}, Clong, Clong, Clong),
-                    jobvsl, jobvsr, 'N', C_NULL,
-                    n, A, max(1, stride(A, 2)), B,
-                    max(1, stride(B, 2)), sdim, alpha, beta,
-                    vsl, ldvsl, vsr, ldvsr,
-                    work, lwork, rwork, C_NULL,
-                    info, 1, 1, 1)
+                $gges3(jobvsl, jobvsr, 'N', C_NULL,
+                       n, A, max(1, stride(A, 2)), B,
+                       max(1, stride(B, 2)), sdim, alpha, beta,
+                       vsl, ldvsl, vsr, ldvsr,
+                       work, lwork, rwork, C_NULL, info)
                 chklapackerror(info[])
                 if i == 1
                     lwork = BlasInt(real(work[1]))
@@ -6767,8 +6104,8 @@ vectors are returned in `vsl` and the right Schur vectors are returned in `vsr`.
 gges3!(jobvsl::AbstractChar, jobvsr::AbstractChar, A::AbstractMatrix, B::AbstractMatrix)
 
 for (trexc, trsen, tgsen, elty) in
-    ((:dtrexc_, :dtrsen_, :dtgsen_, :Float64),
-     (:strexc_, :strsen_, :stgsen_, :Float32))
+    ((:dtrexc, :dtrsen, :dtgsen, :Float64),
+     (:strexc, :strsen, :stgsen, :Float32))
     @eval begin
         # *     .. Scalar Arguments ..
         #       CHARACTER          COMPQ
@@ -6785,15 +6122,8 @@ for (trexc, trsen, tgsen, elty) in
             ldq = max(1, stride(Q, 2))
             work = Vector{$elty}(undef, n)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($trexc), libblastrampoline), Cvoid,
-                  (Ref{UInt8},  Ref{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ref{BlasInt}, Ref{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Clong),
-                  compq, n,
-                  T, ldt, Q, ldq,
-                  ifst, ilst,
-                  work, info, 1)
+            $trexc(compq, n, T, ldt, Q, ldq,
+                   ifst, ilst, work, info)
             chklapackerror(info[])
             T, Q
         end
@@ -6830,17 +6160,9 @@ for (trexc, trsen, tgsen, elty) in
             s = Ref{$elty}(zero($elty))
             sep = Ref{$elty}(zero($elty))
             for i = 1:2  # first call returns lwork as work[1] and liwork as iwork[1]
-                ccall((@blasfunc($trsen), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ref{$elty},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt},
-                    Ref{BlasInt}, Clong, Clong),
-                    job, compq, select, n,
-                    T, ldt, Q, ldq,
-                    wr, wi, m, s, sep,
-                    work, lwork, iwork, liwork,
-                    info, 1, 1)
+                $trsen(job, compq, select, n, T, ldt, Q, ldq,
+                       wr, wi, m, s, sep, work, lwork, iwork,
+                       liwork, info)
                 chklapackerror(info[])
                 if i == 1 # only estimated optimal lwork, liwork
                     lwork  = BlasInt(real(work[1]))
@@ -6896,21 +6218,11 @@ for (trexc, trsen, tgsen, elty) in
             info = Ref{BlasInt}()
             select = convert(Array{BlasInt}, select)
             for i = 1:2  # first call returns lwork as work[1] and liwork as iwork[1]
-                ccall((@blasfunc($tgsen), libblastrampoline), Cvoid,
-                       (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                        Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                        Ref{BlasInt}, Ptr{$elty}, Ptr{$elty}, Ptr{$elty},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                        Ref{BlasInt}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt},
-                        Ptr{BlasInt}),
-                    0, 1, 1, select,
-                    n, S, lds, T,
-                    ldt, alphar, alphai, beta,
-                    Q, ldq, Z, ldz,
-                    m, C_NULL, C_NULL, C_NULL,
-                    work, lwork, iwork, liwork,
-                    info)
+                $tgsen(0, 1, 1, select, n, S, lds, T,
+                       ldt, alphar, alphai, beta,
+                       Q, ldq, Z, ldz,
+                       m, C_NULL, C_NULL, C_NULL,
+                       work, lwork, iwork, liwork, info)
                 chklapackerror(info[])
                 if i == 1 # only estimated optimal lwork, liwork
                     lwork  = BlasInt(real(work[1]))
@@ -6925,8 +6237,8 @@ for (trexc, trsen, tgsen, elty) in
 end
 
 for (trexc, trsen, tgsen, elty, relty) in
-    ((:ztrexc_, :ztrsen_, :ztgsen_, :ComplexF64, :Float64),
-     (:ctrexc_, :ctrsen_, :ctgsen_, :ComplexF32, :Float32))
+    ((:ztrexc, :ztrsen, :ztgsen, :ComplexF64, :Float64),
+     (:ctrexc, :ctrsen, :ctgsen, :ComplexF32, :Float32))
     @eval begin
         #      .. Scalar Arguments ..
         #      CHARACTER          COMPQ
@@ -6942,15 +6254,8 @@ for (trexc, trsen, tgsen, elty, relty) in
             ldt = max(1, stride(T, 2))
             ldq = max(1, stride(Q, 2))
             info = Ref{BlasInt}()
-            ccall((@blasfunc($trexc), libblastrampoline), Cvoid,
-                  (Ref{UInt8},  Ref{BlasInt},
-                   Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Ref{BlasInt}, Ref{BlasInt},
-                   Ref{BlasInt}, Clong),
-                  compq, n,
-                  T, ldt, Q, ldq,
-                  ifst, ilst,
-                  info,  1)
+            $trexc(compq, n, T, ldt, Q, ldq,
+                   ifst, ilst, info)
             chklapackerror(info[])
             T, Q
         end
@@ -6983,17 +6288,10 @@ for (trexc, trsen, tgsen, elty, relty) in
             s = Ref{$relty}(zero($relty))
             sep = Ref{$relty}(zero($relty))
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($trsen), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Ptr{$elty}, Ref{BlasInt}, Ref{$relty}, Ref{$relty},
-                    Ptr{$elty}, Ref{BlasInt},
-                    Ref{BlasInt}, Clong, Clong),
-                    job, compq, select, n,
-                    T, ldt, Q, ldq,
-                    w, m, s, sep,
-                    work, lwork,
-                    info, 1, 1)
+                $trsen(job, compq, select, n,
+                       T, ldt, Q, ldq,
+                       w, m, s, sep,
+                       work, lwork, info)
                 chklapackerror(info[])
                 if i == 1 # only estimated optimal lwork, liwork
                     lwork  = BlasInt(real(work[1]))
@@ -7046,21 +6344,12 @@ for (trexc, trsen, tgsen, elty, relty) in
             info = Ref{BlasInt}()
             select = convert(Array{BlasInt}, select)
             for i = 1:2  # first call returns lwork as work[1] and liwork as iwork[1]
-                ccall((@blasfunc($tgsen), libblastrampoline), Cvoid,
-                       (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                        Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                        Ref{BlasInt}, Ptr{$elty}, Ptr{$elty},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                        Ref{BlasInt}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid},
-                        Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt},
-                        Ptr{BlasInt}),
-                    0, 1, 1, select,
-                    n, S, lds, T,
-                    ldt, alpha, beta,
-                    Q, ldq, Z, ldz,
-                    m, C_NULL, C_NULL, C_NULL,
-                    work, lwork, iwork, liwork,
-                    info)
+                $tgsen(0, 1, 1, select,
+                       n, S, lds, T,
+                       ldt, alpha, beta,
+                       Q, ldq, Z, ldz,
+                       m, C_NULL, C_NULL, C_NULL,
+                       work, lwork, iwork, liwork, info)
                 chklapackerror(info[])
                 if i == 1 # only estimated optimal lwork, liwork
                     lwork  = BlasInt(real(work[1]))
@@ -7113,10 +6402,10 @@ the eigenvalues in each cluster.
 """
 tgsen!(select::AbstractVector{BlasInt}, S::AbstractMatrix, T::AbstractMatrix, Q::AbstractMatrix, Z::AbstractMatrix)
 
-for (fn, elty, relty) in ((:dtrsyl_, :Float64, :Float64),
-                   (:strsyl_, :Float32, :Float32),
-                   (:ztrsyl_, :ComplexF64, :Float64),
-                   (:ctrsyl_, :ComplexF32, :Float32))
+for (trsyl, elty, relty) in ((:dtrsyl, :Float64, :Float64),
+                             (:strsyl, :Float32, :Float32),
+                             (:ztrsyl, :ComplexF64, :Float64),
+                             (:ctrsyl, :ComplexF32, :Float32))
     @eval begin
         function trsyl!(transa::AbstractChar, transb::AbstractChar, A::AbstractMatrix{$elty},
                         B::AbstractMatrix{$elty}, C::AbstractMatrix{$elty}, isgn::Int=1)
@@ -7134,13 +6423,9 @@ for (fn, elty, relty) in ((:dtrsyl_, :Float64, :Float64),
             ldc = max(1, stride(C, 2))
             scale = Ref{$relty}()
             info  = Ref{BlasInt}()
-            ccall((@blasfunc($fn), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$relty}, Ref{BlasInt}, Clong, Clong),
-                transa, transb, isgn, m, n,
-                A, lda, B, ldb, C, ldc,
-                scale, info, 1, 1)
+            $trsyl(transa, transb, isgn, m, n,
+                   A, lda, B, ldb, C, ldc,
+                   scale, info)
             chklapackerror(info[])
             C, scale[]
         end
@@ -7161,10 +6446,10 @@ Returns `X` (overwriting `C`) and `scale`.
 """
 trsyl!(transa::AbstractChar, transb::AbstractChar, A::AbstractMatrix, B::AbstractMatrix, C::AbstractMatrix, isgn::Int=1)
 
-for (fn, elty) in ((:dlacpy_, :Float64),
-                   (:slacpy_, :Float32),
-                   (:zlacpy_, :ComplexF64),
-                   (:clacpy_, :ComplexF32))
+for (lacpy, elty) in ((:dlacpy, :Float64),
+                      (:slacpy, :Float32),
+                      (:zlacpy, :ComplexF64),
+                      (:clacpy, :ComplexF32))
     @eval begin
         # SUBROUTINE DLACPY( UPLO, M, N, A, LDA, B, LDB )
         #     .. Scalar Arguments ..
@@ -7188,10 +6473,7 @@ for (fn, elty) in ((:dlacpy_, :Float64),
             end
             lda = max(1, stride(A, 2))
             ldb = max(1, stride(B, 2))
-            ccall((@blasfunc($fn), libblastrampoline), Cvoid,
-                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                  Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                  uplo, m, n, A, lda, B, ldb, 1)
+            $lacpy(uplo, m, n, A, lda, B, ldb)
             B
         end
     end
