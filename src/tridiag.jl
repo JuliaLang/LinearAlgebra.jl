@@ -195,9 +195,9 @@ _diagiter(M::SymTridiagonal) = (symmetric(x, :U) for x in M.dv)
 _eviter_transposed(M::SymTridiagonal{<:Number}) = _evview(M)
 _eviter_transposed(M::SymTridiagonal) = (transpose(x) for x in _evview(M))
 
-diag(M::SymTridiagonal{<:Number}, ::Val{0})= M.dv
-diag(M::SymTridiagonal{<:Number}, ::Val{1})= _evview(M)
-diag(M::SymTridiagonal{<:Number}, ::Val{-1})= _evview(M)
+diag(M::SymTridiagonal{<:Number}, ::Val{0}) = M.dv
+diag(M::SymTridiagonal{<:Number}, ::Val{1}) = _evview(M)
+diag(M::SymTridiagonal{<:Number}, ::Val{-1}) = _evview(M)
 function diag(M::SymTridiagonal, n::Integer=0)
     # every branch call similar(..., ::Int) to make sure the
     # same vector type is returned independent of n
