@@ -6211,6 +6211,8 @@ for (trexc, trsen, tgsen, elty) in
             alphai = similar(T, $elty, n)
             alphar = similar(T, $elty, n)
             beta = similar(T, $elty, n)
+            pl = Ref{$elty}()
+            pr = Ref{$elty}()
             lwork = BlasInt(-1)
             work = Vector{$elty}(undef, 1)
             liwork = BlasInt(-1)
@@ -6221,7 +6223,7 @@ for (trexc, trsen, tgsen, elty) in
                 $tgsen(0, 1, 1, select, n, S, lds, T,
                        ldt, alphar, alphai, beta,
                        Q, ldq, Z, ldz,
-                       m, C_NULL, C_NULL, C_NULL,
+                       m, pl, pr, C_NULL,
                        work, lwork, iwork, liwork, info)
                 chklapackerror(info[])
                 if i == 1 # only estimated optimal lwork, liwork
@@ -6337,6 +6339,8 @@ for (trexc, trsen, tgsen, elty, relty) in
             m = sum(select)
             alpha = similar(T, $elty, n)
             beta = similar(T, $elty, n)
+            pl = Ref{$relty}()
+            pr = Ref{$relty}()
             lwork = BlasInt(-1)
             work = Vector{$elty}(undef, 1)
             liwork = BlasInt(-1)
@@ -6348,7 +6352,7 @@ for (trexc, trsen, tgsen, elty, relty) in
                        n, S, lds, T,
                        ldt, alpha, beta,
                        Q, ldq, Z, ldz,
-                       m, C_NULL, C_NULL, C_NULL,
+                       m, pl, pr, C_NULL,
                        work, lwork, iwork, liwork, info)
                 chklapackerror(info[])
                 if i == 1 # only estimated optimal lwork, liwork
