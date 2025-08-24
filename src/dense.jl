@@ -311,9 +311,11 @@ diag(A::AbstractMatrix, k::Integer=0) = A[diagind(A, k, IndexStyle(A))]
     diag(M, ::Val{k}) where {k}
 
 Return the `k`th diagonal of a matrix as a vector.
-For structured matrices such as `Diagonal`, this may return the underlying
+For banded matrix types such as `Diagonal`, this may return the underlying
 band instead of making a copy if `k` lies within the bandwidth of the matrix.
-This means that the type of the result may vary depending on the values of `k`.
+
+!!! note
+    The type of the result may vary depending on the values of `k`.
 """
 diag(A::AbstractMatrix, ::Val{N}) where {N} = diag(A, N)
 
