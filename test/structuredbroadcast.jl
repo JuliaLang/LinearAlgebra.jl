@@ -410,4 +410,10 @@ end
     @test UH2 isa UpperHessenberg
 end
 
+@testset "forwarding for Diganoal" begin
+    D = Diagonal(1:4)
+    D2 = D .* 2
+    @test D2 isa Diagonal{Int, <:AbstractRange{Int}}
+end
+
 end
