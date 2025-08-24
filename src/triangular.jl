@@ -549,7 +549,11 @@ adjoint!(A::UpperTriangular) = LowerTriangular(copytri!(A.data, 'U' , true, true
 adjoint!(A::UnitUpperTriangular) = UnitLowerTriangular(copytri!(A.data, 'U' , true, false))
 
 diag(A::UpperOrLowerTriangular) = diag(A.data)
+diag(A::UpperOrLowerTriangular, ::Val{0}) = diag(A.data, Val(0))
+diag(A::UpperOrUnitUpperTriangular, ::Val{1}) = diag(A.data, Val(1))
+diag(A::LowerOrUnitLowerTriangular, ::Val{-1}) = diag(A.data, Val(-1))
 diag(A::Union{UnitLowerTriangular, UnitUpperTriangular}) = fill(oneunit(eltype(A)), size(A,1))
+diag(A::Union{UnitLowerTriangular, UnitUpperTriangular}, ::Val{0}) = diag(A)
 
 # Unary operations
 -(A::LowerTriangular) = LowerTriangular(-A.data)
