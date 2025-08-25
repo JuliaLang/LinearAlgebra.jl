@@ -1,8 +1,181 @@
-# --- Wrappers not generated because the Fortran routines are in F90 ---
-# sgedmd, sgedmdq, slartg, slassq
-# dgedmd, dgedmdq, dlartg, dlassq
-# cgedmd, cgedmdq, clartg, classq
-# zgedmd, zgedmdq, zlartg, zlassq
+function sgedmd(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+                k, reig, imeig, z, ldz, res, b, ldb, v, ldv, work, lwork, iwork, liwork, info)
+    ccall((@blasfunc(sgedmd_), libblastrampoline), Cvoid,
+          (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
+           Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt},
+           Ptr{Float32}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float32}, Ref{BlasInt}, Ptr{Float32},
+           Ptr{Float32}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ptr{Float32}, Ref{BlasInt},
+           Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt},
+           Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
+          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+          k, reig, imeig, z, ldz, res, b, ldb, v, ldv, work, lwork, iwork, liwork, info,
+          1, 1, 1, 1, 1, 1, 1)
+end
+
+function dgedmd(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+                k, reig, imeig, z, ldz, res, b, ldb, v, ldv, work, lwork, iwork, liwork, info)
+    ccall((@blasfunc(dgedmd_), libblastrampoline), Cvoid,
+          (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
+           Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
+           Ptr{Float64}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float64}, Ref{BlasInt}, Ptr{Float64},
+           Ptr{Float64}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ptr{Float64}, Ref{BlasInt},
+           Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt},
+           Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
+          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+          k, reig, imeig, z, ldz, res, b, ldb, v, ldv, work, lwork, iwork, liwork, info,
+          1, 1, 1, 1, 1, 1, 1)
+end
+
+function cgedmd(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+                k, eig, z, ldz, res, b, ldb, v, ldv, work, lwork, rwork, iwork, liwork, info)
+    ccall((@blasfunc(cgedmd_), libblastrampoline), Cvoid,
+          (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
+           Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
+           Ptr{ComplexF32}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float32}, Ref{BlasInt}, Ptr{ComplexF32},
+           Ptr{ComplexF32}, Ref{BlasInt}, Ptr{Float32}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32},
+           Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{Float32}, Ptr{BlasInt}, Ref{BlasInt},
+           Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
+          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+          k, eig, z, ldz, res, b, ldb, v, ldv, work, lwork, rwork, iwork, liwork, info,
+          1, 1, 1, 1, 1, 1, 1)
+end
+
+function zgedmd(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+                k, eig, z, ldz, res, b, ldb, v, ldv, work, lwork, rwork, iwork, liwork, info)
+    ccall((@blasfunc(zgedmd_), libblastrampoline), Cvoid,
+          (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
+           Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
+           Ptr{ComplexF64}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float64}, Ref{BlasInt}, Ptr{ComplexF64},
+           Ptr{ComplexF64}, Ref{BlasInt}, Ptr{Float64}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64},
+           Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{Float64}, Ptr{BlasInt}, Ref{BlasInt},
+           Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
+          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+          k, eig, z, ldz, res, b, ldb, v, ldv, work, lwork, rwork, iwork, liwork, info,
+          1, 1, 1, 1, 1, 1, 1)
+end
+
+function sgedmdq(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+                 k, reig, imeig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, iwork, liwork, info)
+    ccall((@blasfunc(sgedmdq_), libblastrampoline), Cvoid,
+          (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
+           Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt},
+           Ptr{Float32}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float32}, Ref{BlasInt}, Ptr{Float32},
+           Ptr{Float32}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ptr{Float32}, Ref{BlasInt},
+           Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt},
+           Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{BlasInt},  Ref{BlasInt},
+           Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
+          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+          k, reig, imeig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, iwork, liwork, info,
+          1, 1, 1, 1, 1, 1, 1)
+end
+
+function dgedmdq(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+                 k, reig, imeig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, iwork, liwork, info)
+    ccall((@blasfunc(dgedmdq_), libblastrampoline), Cvoid,
+          (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
+           Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
+           Ptr{Float64}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float64}, Ref{BlasInt}, Ptr{Float64},
+           Ptr{Float64}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ptr{Float64}, Ref{BlasInt},
+           Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
+           Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{BlasInt},  Ref{BlasInt},
+           Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
+          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+          k, reig, imeig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, iwork, liwork, info,
+          1, 1, 1, 1, 1, 1, 1)
+end
+
+function cgedmdq(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol, k, eig,
+                 z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info)
+    ccall((@blasfunc(cgedmdq_), libblastrampoline), Cvoid,
+          (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
+           Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
+           Ptr{ComplexF32}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float32}, Ref{BlasInt}, Ptr{ComplexF32},
+           Ptr{ComplexF32}, Ref{BlasInt}, Ptr{Float32}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32},
+           Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32},
+           Ref{BlasInt}, Ptr{Float32}, Ptr{BlasInt},  Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong,
+           Clong, Clong, Clong, Clong),
+          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol, k, eig,
+          z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info,
+          1, 1, 1, 1, 1, 1, 1)
+end
+
+function zgedmdq(jobs::Ref{UInt8}, jobz::Ref{UInt8}, jobr::Ref{UInt8}, jobq::Ref{UInt8},
+                 jobt::Ref{UInt8}, jobf::Ref{UInt8}, whtsvd::Ref{UInt8},
+                 m::Ref{BlasInt}, n::Ref{BlasInt},
+                 f::StridedMatrix{ComplexF64}, ldf::Ref{BlasInt},
+                 x::StridedMatrix{ComplexF64}, ldx::Ref{BlasInt},
+                 y::StridedMatrix{ComplexF64}, ldy::Ref{BlasInt},
+                 nrnk::Ref{BlasInt}, tol::Ref{Float64}, k::Ref{BlasInt},
+                 eig::StridedVector{ComplexF64},
+                 z::StridedMatrix{ComplexF64}, ldz::Ref{BlasInt},
+                 res::StridedVector{Float64},
+                 b::StridedMatrix{ComplexF64}, ldb::Ref{BlasInt},
+                 v::StridedMatrix{ComplexF64}, ldv::Ref{BlasInt},
+                 s::StridedMatrix{ComplexF64}, lds::Ref{BlasInt},
+                 work::StridedVector{ComplexF64}, lwork::Ref{BlasInt},
+                 rwork::StridedVector{Float64},
+                 iwork::StridedVector{BlasInt}, liwork::Ref{BlasInt},
+                 info::Ref{BlasInt})
+    ccall((@blasfunc(zgedmdq_), libblastrampoline), Cvoid,
+          (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
+           Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
+           Ptr{ComplexF64}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float64}, Ref{BlasInt}, Ptr{ComplexF64},
+           Ptr{ComplexF64}, Ref{BlasInt}, Ptr{Float64}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64},
+           Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64},
+           Ref{BlasInt}, Ptr{Float64}, Ptr{BlasInt},  Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong,
+           Clong, Clong, Clong, Clong),
+          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+          k, eig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info,
+          1, 1, 1, 1, 1, 1, 1)
+end
+
+function slartg(f, g, cs, sn, r)
+    ccall((@blasfunc(slartg_), libblastrampoline), Cvoid,
+          (Ref{Float32}, Ref{Float32}, Ref{Float32}, Ref{Float32}, Ref{Float32}),
+          f, g, cs, sn, r)
+end
+
+function dlartg(f, g, cs, sn, r)
+    ccall((@blasfunc(dlartg_), libblastrampoline), Cvoid,
+          (Ref{Float64}, Ref{Float64}, Ref{Float64}, Ref{Float64}, Ref{Float64}),
+          f, g, cs, sn, r)
+end
+
+function clartg(f, g, cs, sn, r)
+    ccall((@blasfunc(clartg_), libblastrampoline), Cvoid,
+          (Ref{ComplexF32}, Ref{ComplexF32}, Ref{Float32}, Ref{ComplexF32}, Ref{ComplexF32}),
+          f, g, cs, sn, r)
+end
+
+function zlartg(f, g, cs, sn, r)
+    ccall((@blasfunc(zlartg_), libblastrampoline), Cvoid,
+          (Ref{ComplexF64}, Ref{ComplexF64}, Ref{Float64}, Ref{ComplexF64}, Ref{ComplexF64}),
+          f, g, cs, sn, r)
+end
+
+function slassq(n, x, incx, scale, sumsq)
+    ccall((@blasfunc(slassq_), libblastrampoline), Cvoid,
+          (Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ref{Float32}, Ref{Float32}),
+          n, x, incx, scale, sumsq)
+end
+
+function dlassq(n, x, incx, scale, sumsq)
+    ccall((@blasfunc(dlassq_), libblastrampoline), Cvoid,
+          (Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ref{Float64}, Ref{Float64}),
+          n, x, incx, scale, sumsq)
+end
+
+function classq(n, x, incx, scale, sumsq)
+    ccall((@blasfunc(classq_), libblastrampoline), Cvoid,
+          (Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ref{Float32}, Ref{Float32}),
+          n, x, incx, scale, sumsq)
+end
+
+function zlassq(n, x, incx, scale, sumsq)
+    ccall((@blasfunc(zlassq_), libblastrampoline), Cvoid,
+          (Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ref{Float64}, Ref{Float64}),
+          n, x, incx, scale, sumsq)
+end
 
 function ilaver(major, minor, patch)
     return ccall((@blasfunc(ilaver_), libblastrampoline), Cvoid,
@@ -249,7 +422,7 @@ end
 function cgejsv(joba, jobu, jobv, jobr, jobt, jobp, m, n, a, lda, sva, u, ldu, v, ldv,
                 cwork, lwork, rwork, lrwork, iwork, info)
     return ccall((@blasfunc(cgejsv_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8},
+                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
                   Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{Float32},
                   Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32},
                   Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt}, Clong, Clong,
@@ -536,7 +709,7 @@ end
 function cgesvj(joba, jobu, jobv, m, n, a, lda, sva, mv, v, ldv, cwork, lwork, rwork,
                 lrwork, info)
     return ccall((@blasfunc(cgesvj_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32},
+                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32},
                   Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
                   Ptr{ComplexF32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ref{BlasInt}, Clong,
                   Clong, Clong), joba, jobu, jobv, m, n, a, lda, sva, mv, v, ldv, cwork,
@@ -788,7 +961,7 @@ end
 function cgsvj0(jobv, m, n, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep, work,
                 lwork, info)
     return ccall((@blasfunc(cgsvj0_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
                   Ptr{ComplexF32}, Ptr{Float32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
                   Ref{Float32}, Ref{Float32}, Ref{Float32}, Ref{BlasInt}, Ptr{ComplexF32},
                   Ref{BlasInt}, Ref{BlasInt}, Clong), jobv, m, n, a, lda, d, sva, mv, v, ldv, eps,
@@ -798,7 +971,7 @@ end
 function cgsvj1(jobv, m, n, n1, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep, work,
                 lwork, info)
     return ccall((@blasfunc(cgsvj1_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
                   Ptr{ComplexF32}, Ptr{Float32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
                   Ref{Float32}, Ref{Float32}, Ref{Float32}, Ref{BlasInt}, Ptr{ComplexF32},
                   Ref{BlasInt}, Ref{BlasInt}, Clong), jobv, m, n, n1, a, lda, d, sva, mv, v, ldv,
@@ -1692,7 +1865,7 @@ end
 
 function cla_herpvgrw(uplo, n, info, a, lda, af, ldaf, ipiv, work)
     return ccall((@blasfunc(cla_herpvgrw_), libblastrampoline), Float32,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
                   Ptr{ComplexF32}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{Float32}, Clong), uplo, n,
                  info, a, lda, af, ldaf, ipiv, work, 1)
 end
@@ -1736,7 +1909,7 @@ end
 
 function cla_porpvgrw(uplo, ncols, a, lda, af, ldaf, work)
     return ccall((@blasfunc(cla_porpvgrw_), libblastrampoline), Float32,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32},
+                 (Ref{UInt8}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32},
                   Ref{BlasInt}, Ptr{Float32}, Clong), uplo, ncols, a, lda, af, ldaf, work, 1)
 end
 
@@ -1781,7 +1954,7 @@ end
 
 function cla_syrpvgrw(uplo, n, info, a, lda, af, ldaf, ipiv, work)
     return ccall((@blasfunc(cla_syrpvgrw_), libblastrampoline), Float32,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
                   Ptr{ComplexF32}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{Float32}, Clong), uplo, n,
                  info, a, lda, af, ldaf, ipiv, work, 1)
 end
@@ -4258,7 +4431,7 @@ end
 function dgejsv(joba, jobu, jobv, jobr, jobt, jobp, m, n, a, lda, sva, u, ldu, v, ldv, work,
                 lwork, iwork, info)
     return ccall((@blasfunc(dgejsv_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8},
+                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
                   Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ptr{Float64},
                   Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{BlasInt},
                   Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong), joba, jobu, jobv,
@@ -4532,7 +4705,7 @@ end
 
 function dgesvj(joba, jobu, jobv, m, n, a, lda, sva, mv, v, ldv, work, lwork, info)
     return ccall((@blasfunc(dgesvj_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64},
+                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64},
                   Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64},
                   Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong), joba, jobu, jobv, m, n, a,
                  lda, sva, mv, v, ldv, work, lwork, info, 1, 1, 1)
@@ -4775,7 +4948,7 @@ end
 function dgsvj0(jobv, m, n, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep, work,
                 lwork, info)
     return ccall((@blasfunc(dgsvj0_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64},
                   Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ref{Float64},
                   Ref{Float64}, Ref{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ref{BlasInt},
                   Clong), jobv, m, n, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep,
@@ -4785,7 +4958,7 @@ end
 function dgsvj1(jobv, m, n, n1, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep, work,
                 lwork, info)
     return ccall((@blasfunc(dgsvj1_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
                   Ptr{Float64}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
                   Ref{Float64}, Ref{Float64}, Ref{Float64}, Ref{BlasInt}, Ptr{Float64},
                   Ref{BlasInt}, Ref{BlasInt}, Clong), jobv, m, n, n1, a, lda, d, sva, mv, v, ldv,
@@ -4981,7 +5154,7 @@ end
 
 function dla_porpvgrw(uplo, ncols, a, lda, af, ldaf, work)
     return ccall((@blasfunc(dla_porpvgrw_), libblastrampoline), Float64,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
                   Ptr{Float64}, Clong), uplo, ncols, a, lda, af, ldaf, work, 1)
 end
 
@@ -5016,7 +5189,7 @@ end
 
 function dla_syrpvgrw(uplo, n, info, a, lda, af, ldaf, ipiv, work)
     return ccall((@blasfunc(dla_syrpvgrw_), libblastrampoline), Float64,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64},
                   Ref{BlasInt}, Ptr{BlasInt}, Ptr{Float64}, Clong), uplo, n, info, a, lda, af,
                  ldaf, ipiv, work, 1)
 end
@@ -8262,7 +8435,7 @@ end
 function sgejsv(joba, jobu, jobv, jobr, jobt, jobp, m, n, a, lda, sva, u, ldu, v, ldv, work,
                 lwork, iwork, info)
     return ccall((@blasfunc(sgejsv_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8},
+                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
                   Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ptr{Float32},
                   Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{BlasInt},
                   Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong), joba, jobu, jobv,
@@ -8536,7 +8709,7 @@ end
 
 function sgesvj(joba, jobu, jobv, m, n, a, lda, sva, mv, v, ldv, work, lwork, info)
     return ccall((@blasfunc(sgesvj_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32},
+                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32},
                   Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32},
                   Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong), joba, jobu, jobv, m, n, a,
                  lda, sva, mv, v, ldv, work, lwork, info, 1, 1, 1)
@@ -8779,7 +8952,7 @@ end
 function sgsvj0(jobv, m, n, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep, work,
                 lwork, info)
     return ccall((@blasfunc(sgsvj0_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32},
                   Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ref{Float32},
                   Ref{Float32}, Ref{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ref{BlasInt},
                   Clong), jobv, m, n, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep,
@@ -8789,7 +8962,7 @@ end
 function sgsvj1(jobv, m, n, n1, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep, work,
                 lwork, info)
     return ccall((@blasfunc(sgsvj1_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt},
                   Ptr{Float32}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt},
                   Ref{Float32}, Ref{Float32}, Ref{Float32}, Ref{BlasInt}, Ptr{Float32},
                   Ref{BlasInt}, Ref{BlasInt}, Clong), jobv, m, n, n1, a, lda, d, sva, mv, v, ldv,
@@ -8985,7 +9158,7 @@ end
 
 function sla_porpvgrw(uplo, ncols, a, lda, af, ldaf, work)
     return ccall((@blasfunc(sla_porpvgrw_), libblastrampoline), Float32,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt},
                   Ptr{Float32}, Clong), uplo, ncols, a, lda, af, ldaf, work, 1)
 end
 
@@ -9020,7 +9193,7 @@ end
 
 function sla_syrpvgrw(uplo, n, info, a, lda, af, ldaf, ipiv, work)
     return ccall((@blasfunc(sla_syrpvgrw_), libblastrampoline), Float32,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32},
                   Ref{BlasInt}, Ptr{BlasInt}, Ptr{Float32}, Clong), uplo, n, info, a, lda, af,
                  ldaf, ipiv, work, 1)
 end
@@ -12163,7 +12336,7 @@ end
 function zgejsv(joba, jobu, jobv, jobr, jobt, jobp, m, n, a, lda, sva, u, ldu, v, ldv,
                 cwork, lwork, rwork, lrwork, iwork, info)
     return ccall((@blasfunc(zgejsv_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8},
+                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
                   Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{Float64},
                   Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64},
                   Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{BlasInt}, Ref{BlasInt}, Clong, Clong,
@@ -12450,7 +12623,7 @@ end
 function zgesvj(joba, jobu, jobv, m, n, a, lda, sva, mv, v, ldv, cwork, lwork, rwork,
                 lrwork, info)
     return ccall((@blasfunc(zgesvj_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ptr{UInt8}, Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64},
+                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64},
                   Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
                   Ptr{ComplexF64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ref{BlasInt}, Clong,
                   Clong, Clong), joba, jobu, jobv, m, n, a, lda, sva, mv, v, ldv, cwork,
@@ -12702,7 +12875,7 @@ end
 function zgsvj0(jobv, m, n, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep, work,
                 lwork, info)
     return ccall((@blasfunc(zgsvj0_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
                   Ptr{ComplexF64}, Ptr{Float64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
                   Ref{Float64}, Ref{Float64}, Ref{Float64}, Ref{BlasInt}, Ptr{ComplexF64},
                   Ref{BlasInt}, Ref{BlasInt}, Clong), jobv, m, n, a, lda, d, sva, mv, v, ldv, eps,
@@ -12712,7 +12885,7 @@ end
 function zgsvj1(jobv, m, n, n1, a, lda, d, sva, mv, v, ldv, eps, sfmin, tol, nsweep, work,
                 lwork, info)
     return ccall((@blasfunc(zgsvj1_), libblastrampoline), Cvoid,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
                   Ptr{ComplexF64}, Ptr{Float64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
                   Ref{Float64}, Ref{Float64}, Ref{Float64}, Ref{BlasInt}, Ptr{ComplexF64},
                   Ref{BlasInt}, Ref{BlasInt}, Clong), jobv, m, n, n1, a, lda, d, sva, mv, v, ldv,
@@ -13606,7 +13779,7 @@ end
 
 function zla_herpvgrw(uplo, n, info, a, lda, af, ldaf, ipiv, work)
     return ccall((@blasfunc(zla_herpvgrw_), libblastrampoline), Float64,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
                   Ptr{ComplexF64}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{Float64}, Clong), uplo, n,
                  info, a, lda, af, ldaf, ipiv, work, 1)
 end
@@ -13650,7 +13823,7 @@ end
 
 function zla_porpvgrw(uplo, ncols, a, lda, af, ldaf, work)
     return ccall((@blasfunc(zla_porpvgrw_), libblastrampoline), Float64,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64},
+                 (Ref{UInt8}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64},
                   Ref{BlasInt}, Ptr{Float64}, Clong), uplo, ncols, a, lda, af, ldaf, work, 1)
 end
 
@@ -13695,7 +13868,7 @@ end
 
 function zla_syrpvgrw(uplo, n, info, a, lda, af, ldaf, ipiv, work)
     return ccall((@blasfunc(zla_syrpvgrw_), libblastrampoline), Float64,
-                 (Ptr{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
+                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
                   Ptr{ComplexF64}, Ref{BlasInt}, Ptr{BlasInt}, Ptr{Float64}, Clong), uplo, n,
                  info, a, lda, af, ldaf, ipiv, work, 1)
 end
