@@ -799,6 +799,25 @@ end
     end
 end
 
+@testset "diag with a Val index" begin
+    @testset "$(typeof(A))" for A in Any[rand(4, 4), rand(ComplexF64,4,4), fill([1 2; 3 4], 4, 4),
+            Diagonal(1:4), Bidiagonal(1:4, 1:3, :U),
+            Tridiagonal(1:3, 1:4, 1:3), SymTridiagonal(1:4, 1:3)]
+        @testset for (wrap_fn, wrap_T) in ((transpose,Transpose), (adjoint,Adjoint))
+            At = wrap_fn(A)
+            @test diag(At, 1) == diag(At, Val(1))
+            @test diag(At, 0) == diag(At, Val(0))
+            @test diag(At, -1) == diag(At, Val(-1))
+            if !(At isa wrap_T)
+                AT = wrap_T(A)
+                @test diag(At, Val(1)) == diag(AT, Val(1))
+                @test diag(At, Val(0)) == diag(AT, Val(0))
+                @test diag(At, Val(-1)) == diag(AT, Val(-1))
+            end
+        end
+    end
+end
+
 @testset "triu!/tril!" begin
     @testset for sz in ((4,4), (3,4), (4,3))
         A = rand(sz...)
