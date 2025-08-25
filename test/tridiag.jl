@@ -1067,27 +1067,17 @@ end
 end
 
 @testset "opnorms" begin
-    T = Tridiagonal([1,2,3], [1,-2,3,-4], [1,2,3])
-
-    @test opnorm(T, 1) == opnorm(Matrix(T), 1)
-    @test_skip opnorm(T, 2) ≈ opnorm(Matrix(T), 2) # currently missing
-    @test opnorm(T, Inf) == opnorm(Matrix(T), Inf)
-
-    S = SymTridiagonal([1,-2,3,-4], [1,2,3])
-
-    @test opnorm(S, 1) == opnorm(Matrix(S), 1)
-    @test_skip opnorm(S, 2) ≈ opnorm(Matrix(S), 2) # currently missing
-    @test opnorm(S, Inf) == opnorm(Matrix(S), Inf)
-
-    T = Tridiagonal(Int[], [-5], Int[])
-    @test opnorm(T, 1) == opnorm(Matrix(T), 1)
-    @test_skip opnorm(T, 2) ≈ opnorm(Matrix(T), 2) # currently missing
-    @test opnorm(T, Inf) == opnorm(Matrix(T), Inf)
-
-    S = SymTridiagonal(T)
-    @test opnorm(S, 1) == opnorm(Matrix(S), 1)
-    @test_skip opnorm(S, 2) ≈ opnorm(Matrix(S), 2) # currently missing
-    @test opnorm(S, Inf) == opnorm(Matrix(S), Inf)
+    for T in (Tridiagonal([1,2,3], [1,-2,3,-4], [1,2,3]),
+                SymTridiagonal([1,-2,3,-4], [1,2,3]),
+                Tridiagonal(Int[], [-5], Int[]),
+                SymTridiagonal([-5], Int[]),
+                Tridiagonal([1], [1,-2], [3]),
+                SymTridiagonal([1,-2], [3])
+             )
+        @test opnorm(T, 1) == opnorm(Matrix(T), 1)
+        @test_skip opnorm(T, 2) ≈ opnorm(Matrix(T), 2) # currently missing
+        @test opnorm(T, Inf) == opnorm(Matrix(T), Inf)
+    end
 end
 
 @testset "block-bidiagonal matrix indexing" begin
