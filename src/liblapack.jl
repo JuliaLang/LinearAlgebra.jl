@@ -62,8 +62,8 @@ function sgedmdq(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ld
            Ptr{Float32}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float32}, Ref{BlasInt}, Ptr{Float32},
            Ptr{Float32}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ptr{Float32}, Ref{BlasInt},
            Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt},
-           Ptr{Float32}, Ref{BlasInt}, Ptr{Float32}, Ref{BlasInt}, Ptr{BlasInt},  Ref{BlasInt},
-           Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
+           Ptr{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong,
+           Clong),
           jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
           k, reig, imeig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, iwork, liwork, info,
           1, 1, 1, 1, 1, 1, 1)
@@ -77,56 +77,37 @@ function dgedmdq(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ld
            Ptr{Float64}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float64}, Ref{BlasInt}, Ptr{Float64},
            Ptr{Float64}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ptr{Float64}, Ref{BlasInt},
            Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
-           Ptr{Float64}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt}, Ptr{BlasInt},  Ref{BlasInt},
-           Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
+           Ptr{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong,
+           Clong),
           jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
           k, reig, imeig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, iwork, liwork, info,
           1, 1, 1, 1, 1, 1, 1)
 end
 
-function cgedmdq(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol, k, eig,
-                 z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info)
+function cgedmdq(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+                 k, eig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info)
     ccall((@blasfunc(cgedmdq_), libblastrampoline), Cvoid,
           (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
            Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt},
            Ptr{ComplexF32}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float32}, Ref{BlasInt}, Ptr{ComplexF32},
            Ptr{ComplexF32}, Ref{BlasInt}, Ptr{Float32}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32},
-           Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32},
-           Ref{BlasInt}, Ptr{Float32}, Ptr{BlasInt},  Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong,
-           Clong, Clong, Clong, Clong),
+           Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{ComplexF32}, Ref{BlasInt}, Ptr{Float32},
+           Ptr{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
           jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol, k, eig,
-          z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info,
-          1, 1, 1, 1, 1, 1, 1)
+          z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info, 1, 1, 1, 1, 1, 1, 1)
 end
 
-function zgedmdq(jobs::Ref{UInt8}, jobz::Ref{UInt8}, jobr::Ref{UInt8}, jobq::Ref{UInt8},
-                 jobt::Ref{UInt8}, jobf::Ref{UInt8}, whtsvd::Ref{UInt8},
-                 m::Ref{BlasInt}, n::Ref{BlasInt},
-                 f::StridedMatrix{ComplexF64}, ldf::Ref{BlasInt},
-                 x::StridedMatrix{ComplexF64}, ldx::Ref{BlasInt},
-                 y::StridedMatrix{ComplexF64}, ldy::Ref{BlasInt},
-                 nrnk::Ref{BlasInt}, tol::Ref{Float64}, k::Ref{BlasInt},
-                 eig::StridedVector{ComplexF64},
-                 z::StridedMatrix{ComplexF64}, ldz::Ref{BlasInt},
-                 res::StridedVector{Float64},
-                 b::StridedMatrix{ComplexF64}, ldb::Ref{BlasInt},
-                 v::StridedMatrix{ComplexF64}, ldv::Ref{BlasInt},
-                 s::StridedMatrix{ComplexF64}, lds::Ref{BlasInt},
-                 work::StridedVector{ComplexF64}, lwork::Ref{BlasInt},
-                 rwork::StridedVector{Float64},
-                 iwork::StridedVector{BlasInt}, liwork::Ref{BlasInt},
-                 info::Ref{BlasInt})
+function zgedmdq(jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
+                 k, eig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info)
     ccall((@blasfunc(zgedmdq_), libblastrampoline), Cvoid,
           (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
            Ref{BlasInt}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt},
            Ptr{ComplexF64}, Ref{BlasInt}, Ref{BlasInt}, Ref{Float64}, Ref{BlasInt}, Ptr{ComplexF64},
            Ptr{ComplexF64}, Ref{BlasInt}, Ptr{Float64}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64},
-           Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64},
-           Ref{BlasInt}, Ptr{Float64}, Ptr{BlasInt},  Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong,
-           Clong, Clong, Clong, Clong),
-          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol,
-          k, eig, z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info,
-          1, 1, 1, 1, 1, 1, 1)
+           Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{ComplexF64}, Ref{BlasInt}, Ptr{Float64},
+           Ptr{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong, Clong, Clong, Clong, Clong),
+          jobs, jobz, jobr, jobq, jobt, jobf, whtsvd, m, n, f, ldf, x, ldx, y, ldy, nrnk, tol, k, eig,
+          z, ldz, res, b, ldb, v, ldv, s, lds, work, lwork, rwork, iwork, liwork, info, 1, 1, 1, 1, 1, 1, 1)
 end
 
 function slartg(f, g, cs, sn, r)
