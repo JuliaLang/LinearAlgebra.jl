@@ -618,6 +618,18 @@ end
     end
 end
 
+@testset "3-arg dot with Symmetric/Hermitian matrix of matrices" begin
+    for m in (Symmetric([randn(ComplexF64, 2, 2) for i in 1:2, j in 1:2]),
+                Symmetric([randn(ComplexF64, 2, 2) for i in 1:2, j in 1:2], :L),
+                Hermitian([randn(ComplexF64, 2, 2) for i in 1:2, j in 1:2]),
+                Hermitian([randn(ComplexF64, 2, 2) for i in 1:2, j in 1:2], :L)
+            )
+        x = [randn(ComplexF64, 2) for i in 1:2]
+        y = [randn(ComplexF64, 2) for i in 1:2]
+        @test dot(x, m, y) ≈ dot(x, m*y) ≈ dot(x, Matrix(m), y)
+    end
+end
+
 #Issue #7647: test xsyevr, xheevr, xstevr drivers.
 @testset "Eigenvalues in interval for $(typeof(Mi7647))" for Mi7647 in
         (Symmetric(diagm(0 => 1.0:3.0)),
