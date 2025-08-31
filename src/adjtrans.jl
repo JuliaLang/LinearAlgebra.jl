@@ -513,6 +513,11 @@ function _dot_nonrecursive(u, v)
     end
 end
 
+rmul!(X::Transpose{<:Union{Real,Complex}}, s::Union{Real,Complex}) = (lmul!(s, parent(X)); X)
+rmul!(X::Adjoint, s::Number) = (lmul!(s', parent(X)); X)
+lmul!(s::Union{Real,Complex}, X::Transpose{<:Union{Real,Complex}}) = (rmul!(parent(X), s); X)
+lmul!(s::Number, X::Adjoint) = (rmul!(parent(X), s'); X)
+
 # Adjoint/Transpose-vector * vector
 *(u::AdjointAbsVec{<:Number}, v::AbstractVector{<:Number}) = dot(u.parent, v)
 *(u::TransposeAbsVec{T}, v::AbstractVector{T}) where {T<:Real} = dot(u.parent, v)
@@ -579,5 +584,10 @@ tril!(A::AdjOrTransAbsMat, k::Integer = 0) = wrapperop(A)(triu!(parent(A), -k))
 
 function fillstored!(A::AdjOrTransAbsMat, v)
     fillstored!(parent(A), wrapperop(A)(v))
+    return A
+end
+
+function fillband!(A::AdjOrTrans, v, k1, k2)
+    fillband!(parent(A), wrapperop(A)(v), -k2, -k1)
     return A
 end

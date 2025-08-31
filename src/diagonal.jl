@@ -612,10 +612,10 @@ function _rdiv!(B::AbstractVecOrMat, A::AbstractVecOrMat, D::Diagonal)
     if (k = length(dd)) != n
         throw(DimensionMismatch(lazy"left hand side has $n columns but D is $k by $k"))
     end
-    @inbounds for j in 1:n
+    @inbounds for j in axes(A,2)
         ddj = dd[j]
         iszero(ddj) && throw(SingularException(j))
-        for i in 1:m
+        for i in axes(A,1)
             B[i, j] = A[i, j] / ddj
         end
     end
@@ -640,7 +640,17 @@ function ldiv!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
     (m, n) == (m′, n′) || throw(DimensionMismatch(lazy"expect output to be $m by $n, but got $m′ by $n′"))
     j = findfirst(iszero, D.diag)
     isnothing(j) || throw(SingularException(j))
-    @inbounds for j = 1:n, i = 1:m
+    _ldiv_Diagonal_loop!(B, D, A)
+    B
+end
+function _ldiv_Diagonal_loop!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
+    dd = D.diag
+    @. B = dd \ A
+    B
+end
+function _ldiv_Diagonal_loop!(B::StridedVecOrMat, D::Diagonal, A::StridedVecOrMat)
+    dd = D.diag
+    @inbounds for j in axes(A,2), i in axes(A,1)
         B[i, j] = dd[i] \ A[i, j]
     end
     B
@@ -805,6 +815,11 @@ end
 end
 
 kron(A::Diagonal, B::Diagonal) = Diagonal(kron(A.diag, B.diag))
+
+function kron!(C::Diagonal, A::Diagonal, B::Diagonal)
+    kron!(C.diag, A.diag, B.diag)
+    return C
+end
 
 function kron(A::Diagonal, B::SymTridiagonal)
     kdv = kron(A.diag, B.dv)
@@ -1216,3 +1231,18 @@ end
 
 uppertriangular(D::Diagonal) = D
 lowertriangular(D::Diagonal) = D
+
+throw_fillband_error(l, u, x) = throw(ArgumentError(lazy"cannot set bands $l:$u to a nonzero value ($x)"))
+
+function fillband!(D::Diagonal, x, l, u)
+    if l > u
+        return D
+    end
+    if (l < 0 || u > 0) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    end
+    if l <= 0 <= u
+        fill!(D.diag, x)
+    end
+    return D
+end

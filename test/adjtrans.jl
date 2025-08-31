@@ -12,6 +12,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
@@ -817,6 +818,45 @@ end
         @test LinearAlgebra.fillstored!(op(A), 2im) == op(fill(f(2im), size(A)))
         @test LinearAlgebra.fillstored!(op(U), 1) == op(triu(fill(1, size(U))))
         @test LinearAlgebra.fillstored!(op(U), 2im) == op(triu(fill(f(2im), size(U))))
+    end
+end
+        
+@testset "lmul!/rmul! by numbers" begin
+    @testset "$(eltype(A))" for A in (rand(4, 4), rand(ComplexF64,4,4),
+                fill([1 2; 3 4], 4, 4),
+                fill(Quaternion(1,2,3,4), 4, 4))
+        B = copy(A)
+        @testset for op in (transpose, adjoint)
+            A .= B
+            @test lmul!(2, op(A)) == 2 * op(B)
+            A .= B
+            @test rmul!(op(A), 2) == op(B) * 2
+            if eltype(A) <: Complex
+                A .= B
+                @test lmul!(-2im, op(A)) == -2im * op(B)
+                A .= B
+                @test rmul!(op(A), -2im) == op(B) * -2im
+            end
+            if eltype(A) <: Quaternion
+                A .= B
+                q = Quaternion(0,1,4,7)
+                @test lmul!(q, op(A)) == q * op(B)
+                A .= B
+                @test rmul!(op(A), q) == op(B) * q
+            end
+        end
+    end
+end
+
+@testset "fillband!" begin
+    for A in (rand(4, 4), rand(ComplexF64,4,4))
+        B = similar(A)
+        for op in (adjoint, transpose), k in -3:3
+            B .= op(A)
+            LinearAlgebra.fillband!(op(A), 1, k, k)
+            LinearAlgebra.fillband!(B, 1, k, k)
+            @test op(A) == B
+        end
     end
 end
 

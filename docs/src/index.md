@@ -745,7 +745,7 @@ LinearAlgebra.BLAS.trsv
 
 ```@docs
 LinearAlgebra.BLAS.ger!
-# xGERU
+LinearAlgebra.BLAS.geru!
 # xGERC
 LinearAlgebra.BLAS.her!
 # xHPR

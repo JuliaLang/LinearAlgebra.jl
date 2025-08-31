@@ -224,10 +224,14 @@ const RealHermSymSymTri{T<:Real} = Union{RealHermSym{T}, SymTridiagonal{T}}
 const RealHermSymComplexHerm{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, Hermitian{Complex{T},S}}
 const RealHermSymComplexSym{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, Symmetric{Complex{T},S}}
 const RealHermSymSymTriComplexHerm{T<:Real} = Union{RealHermSymComplexSym{T}, SymTridiagonal{T}}
+const RealSymHermitian{S} = Union{Symmetric{<:Real,S}, Hermitian{<:Any,S}}
 const SelfAdjoint = Union{SymTridiagonal{<:Real}, Symmetric{<:Real}, Hermitian}
 
 wrappertype(::Union{Symmetric, SymTridiagonal}) = Symmetric
 wrappertype(::Hermitian) = Hermitian
+
+hswrapperop(::Symmetric) = symmetric
+hswrapperop(::Hermitian) = hermitian
 
 nonhermitianwrappertype(::SymSymTri{<:Real}) = Symmetric
 nonhermitianwrappertype(::Hermitian{<:Real}) = Symmetric
@@ -411,6 +415,19 @@ function fillstored!(A::HermOrSym{T}, x) where T
         issymmetric(xT) || throw(ArgumentError("cannot fill Symmetric matrix with an asymmetric value"))
     end
     applytri(A -> fillstored!(A, xT), A)
+    return A
+end
+
+function fillband!(A::HermOrSym, x, l, u)
+    if isa(A, Hermitian)
+        ishermitian(x) || throw(ArgumentError("cannot fill Hermitian matrix with a non-hermitian value"))
+    elseif isa(A, Symmetric)
+        issymmetric(x) || throw(ArgumentError("cannot fill Symmetric matrix with an asymmetric value"))
+    end
+    l == -u || throw(ArgumentError(lazy"lower and upper bands must be equal in magnitude and opposite in sign, got l=$(l), u=$(u)"))
+    lp = A.uplo == 'U' ? 0 : l
+    up = A.uplo == 'U' ? u : 0
+    applytri(A -> fillband!(A, x, lp, up), A)
     return A
 end
 
@@ -724,27 +741,28 @@ function mul(A::AdjOrTrans{<:BlasFloat,<:StridedMatrix}, B::HermOrSym{<:BlasFloa
             convert(AbstractMatrix{T}, B))
 end
 
-function dot(x::AbstractVector, A::RealHermSymComplexHerm, y::AbstractVector)
+function dot(x::AbstractVector, A::HermOrSym, y::AbstractVector)
     require_one_based_indexing(x, y)
     n = length(x)
     (n == length(y) == size(A, 1)) || throw(DimensionMismatch())
     data = A.data
-    r = dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y)))
+    s = dot(first(x), first(A), first(y))
+    r = zero(s+s)
     iszero(n) && return r
     if A.uplo == 'U'
         @inbounds for j = 1:length(y)
-            r += dot(x[j], real(data[j,j]), y[j])
+            r += dot(x[j], hswrapperop(A)(data[j,j], :U), y[j])
             @simd for i = 1:j-1
                 Aij = data[i,j]
-                r += dot(x[i], Aij, y[j]) + dot(x[j], adjoint(Aij), y[i])
+                r += dot(x[i], Aij, y[j]) + dot(x[j], _conjugation(A)(Aij), y[i])
             end
         end
     else # A.uplo == 'L'
         @inbounds for j = 1:length(y)
-            r += dot(x[j], real(data[j,j]), y[j])
+            r += dot(x[j], hswrapperop(A)(data[j,j], :L), y[j])
             @simd for i = j+1:length(y)
                 Aij = data[i,j]
-                r += dot(x[i], Aij, y[j]) + dot(x[j], adjoint(Aij), y[i])
+                r += dot(x[i], Aij, y[j]) + dot(x[j], _conjugation(A)(Aij), y[i])
             end
         end
     end

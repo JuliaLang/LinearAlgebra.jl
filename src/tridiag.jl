@@ -1039,7 +1039,7 @@ function dot(x::AbstractVector, A::Tridiagonal, y::AbstractVector)
     return r
 end
 
-function cholesky(S::SymTridiagonal, ::NoPivot = NoPivot(); check::Bool = true)
+function cholesky(S::Union{SymTridiagonal,Tridiagonal}, ::NoPivot = NoPivot(); check::Bool = true)
     if !ishermitian(S)
         check && checkpositivedefinite(-1)
         return Cholesky(S, 'U', convert(BlasInt, -1))
@@ -1166,7 +1166,7 @@ function _opnorm1Inf(A::Tridiagonal, p)
     case = p == Inf
     lowerrange, upperrange = case ? (1:length(A.dl)-1, 2:length(A.dl)) : (2:length(A.dl), 1:length(A.dl)-1)
     normfirst, normend = case ? (norm(first(A.d))+norm(first(A.du)), norm(last(A.dl))+norm(last(A.d))) : (norm(first(A.d))+norm(first(A.dl)), norm(last(A.du))+norm(last(A.d)))
-
+    size(A, 1) == 2 && return max(normfirst, normend)
     return max(
                 mapreduce(t -> sum(norm, t),
                     max,
@@ -1181,11 +1181,52 @@ function _opnorm1Inf(A::SymTridiagonal, p::Real)
     size(A, 1) == 1 && return norm(first(A.dv))
     lowerrange, upperrange = 1:length(A.ev)-1, 2:length(A.ev)
     normfirst, normend = norm(first(A.dv))+norm(first(A.ev)), norm(last(A.ev))+norm(last(A.dv))
-
+    size(A, 1) == 2 && return max(normfirst, normend)
     return max(
                 mapreduce(t -> sum(norm, t),
                     max,
                     zip(view(A.dv, (2:length(A.dv)-1)), view(A.ev, lowerrange), view(A.ev, upperrange))
                 ),
                 normfirst, normend)
+end
+
+function fillband!(T::Tridiagonal, x, l, u)
+    if l > u
+        return T
+    end
+    if (l < -1 || u > 1) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    else
+        if l <= -1 <= u
+            fill!(T.dl, x)
+        end
+        if l <= 0 <= u
+            fill!(T.d, x)
+        end
+        if l <= 1 <= u
+            fill!(T.du, x)
+        end
+    end
+    return T
+end
+
+function fillband!(T::SymTridiagonal, x, l, u)
+    if l > u
+        return T
+    end
+    if (l <= 1 <= u) != (l <= -1 <= u)
+        throw(ArgumentError(lazy"cannot set only one off-diagonal band of a SymTridiagonal"))
+    elseif (l < -1 || u > 1) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    elseif l <= 0 <= u && !issymmetric(x)
+        throw(ArgumentError(lazy"cannot set entries in the diagonal band of a SymTridiagonal to an asymmetric value $x"))
+    else
+        if l <= 0 <= u
+            fill!(T.dv, x)
+        end
+        if l <= 1 <= u
+            fill!(T.ev, x)
+        end
+    end
+    return T
 end

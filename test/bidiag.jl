@@ -1144,29 +1144,17 @@ end
 end
 
 @testset "opnorms" begin
-    B = Bidiagonal([1,-2,3,-4], [1,2,3], 'U')
-
-    @test opnorm(B, 1) == opnorm(Matrix(B), 1)
-    @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
-    @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
-
-    B = Bidiagonal([1,-2,3,-4], [1,2,3], 'L')
-
-    @test opnorm(B, 1) == opnorm(Matrix(B), 1)
-    @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
-    @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
-
-    B = Bidiagonal([2], Int[], 'L')
-
-    @test opnorm(B, 1) == opnorm(Matrix(B), 1)
-    @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
-    @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
-
-    B = Bidiagonal([2], Int[], 'U')
-
-    @test opnorm(B, 1) == opnorm(Matrix(B), 1)
-    @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
-    @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
+    for B in (Bidiagonal([1,-2,3,-4], [1,2,3], 'U'),
+                Bidiagonal([1,-2,3,-4], [1,2,3], 'L'),
+                Bidiagonal([2], Int[], 'L'),
+                Bidiagonal([2], Int[], 'U'),
+                Bidiagonal([1,-2], [-4], 'U'),
+                Bidiagonal([1,-2], [-4], 'L')
+            )
+        @test opnorm(B, 1) == opnorm(Matrix(B), 1)
+        @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
+        @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
+    end
 end
 
 @testset "convert to Bidiagonal" begin
@@ -1243,6 +1231,58 @@ end
         @test B[1,2] == m
         @test (@allocated op(B)) == 0
         @test (@allocated op(op(B))) == 0
+    end
+end
+
+@testset "fillband!" begin
+    @testset "uplo = :U" begin
+        B = Bidiagonal(zeros(4), zeros(3), :U)
+        LinearAlgebra.fillband!(B, 2, 1, 1)
+        @test all(==(2), diagview(B,1))
+        LinearAlgebra.fillband!(B, 3, 0, 0)
+        @test all(==(3), diagview(B,0))
+        @test all(==(2), diagview(B,1))
+        LinearAlgebra.fillband!(B, 4, 0, 1)
+        @test all(==(4), diagview(B,0))
+        @test all(==(4), diagview(B,1))
+        @test_throws ArgumentError LinearAlgebra.fillband!(B, 3, -1, 0)
+
+        LinearAlgebra.fillstored!(B, 1)
+        LinearAlgebra.fillband!(B, 0, -3, 3)
+        @test iszero(B)
+        LinearAlgebra.fillband!(B, 0, -10, 10)
+        @test iszero(B)
+        LinearAlgebra.fillstored!(B, 1)
+        B2 = copy(B)
+        LinearAlgebra.fillband!(B, 0, -1, -3)
+        @test B == B2
+        LinearAlgebra.fillband!(B, 0, 10, 10)
+        @test B == B2
+    end
+
+    @testset "uplo = :L" begin
+        B = Bidiagonal(zeros(4), zeros(3), :L)
+        LinearAlgebra.fillband!(B, 2, -1, -1)
+        @test all(==(2), diagview(B,-1))
+        LinearAlgebra.fillband!(B, 3, 0, 0)
+        @test all(==(3), diagview(B,0))
+        @test all(==(2), diagview(B,-1))
+        LinearAlgebra.fillband!(B, 4, -1, 0)
+        @test all(==(4), diagview(B,0))
+        @test all(==(4), diagview(B,-1))
+        @test_throws ArgumentError LinearAlgebra.fillband!(B, 3, 0, 1)
+
+        LinearAlgebra.fillstored!(B, 1)
+        LinearAlgebra.fillband!(B, 0, -3, 3)
+        @test iszero(B)
+        LinearAlgebra.fillband!(B, 0, -10, 10)
+        @test iszero(B)
+        LinearAlgebra.fillstored!(B, 1)
+        B2 = copy(B)
+        LinearAlgebra.fillband!(B, 0, -1, -3)
+        @test B == B2
+        LinearAlgebra.fillband!(B, 0, 10, 10)
+        @test B == B2
     end
 end
 

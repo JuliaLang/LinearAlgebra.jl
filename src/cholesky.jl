@@ -413,7 +413,7 @@ end
 # cholesky!. Destructive methods for computing Cholesky factorization of real symmetric
 # or Hermitian matrix
 ## No pivoting (default)
-function cholesky!(A::SelfAdjoint, ::NoPivot = NoPivot(); check::Bool = true)
+function cholesky!(A::RealSymHermitian, ::NoPivot = NoPivot(); check::Bool = true)
     C, info = _chol!(A.data, A.uplo == 'U' ? UpperTriangular : LowerTriangular)
     check && checkpositivedefinite(info)
     return Cholesky(C.data, A.uplo, info)
@@ -455,7 +455,7 @@ end
 
 ## With pivoting
 ### Non BLAS/LAPACK element types (generic).
-function cholesky!(A::SelfAdjoint, ::RowMaximum; tol = 0.0, check::Bool = true)
+function cholesky!(A::RealSymHermitian, ::RowMaximum; tol = 0.0, check::Bool = true)
     AA, piv, rank, info = _cholpivoted!(A.data, A.uplo == 'U' ? UpperTriangular : LowerTriangular, tol, check)
     C = CholeskyPivoted(AA, A.uplo, piv, rank, tol, info)
     check && chkfullrank(C)

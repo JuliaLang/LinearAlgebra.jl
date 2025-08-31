@@ -1067,27 +1067,17 @@ end
 end
 
 @testset "opnorms" begin
-    T = Tridiagonal([1,2,3], [1,-2,3,-4], [1,2,3])
-
-    @test opnorm(T, 1) == opnorm(Matrix(T), 1)
-    @test_skip opnorm(T, 2) ≈ opnorm(Matrix(T), 2) # currently missing
-    @test opnorm(T, Inf) == opnorm(Matrix(T), Inf)
-
-    S = SymTridiagonal([1,-2,3,-4], [1,2,3])
-
-    @test opnorm(S, 1) == opnorm(Matrix(S), 1)
-    @test_skip opnorm(S, 2) ≈ opnorm(Matrix(S), 2) # currently missing
-    @test opnorm(S, Inf) == opnorm(Matrix(S), Inf)
-
-    T = Tridiagonal(Int[], [-5], Int[])
-    @test opnorm(T, 1) == opnorm(Matrix(T), 1)
-    @test_skip opnorm(T, 2) ≈ opnorm(Matrix(T), 2) # currently missing
-    @test opnorm(T, Inf) == opnorm(Matrix(T), Inf)
-
-    S = SymTridiagonal(T)
-    @test opnorm(S, 1) == opnorm(Matrix(S), 1)
-    @test_skip opnorm(S, 2) ≈ opnorm(Matrix(S), 2) # currently missing
-    @test opnorm(S, Inf) == opnorm(Matrix(S), Inf)
+    for T in (Tridiagonal([1,2,3], [1,-2,3,-4], [1,2,3]),
+                SymTridiagonal([1,-2,3,-4], [1,2,3]),
+                Tridiagonal(Int[], [-5], Int[]),
+                SymTridiagonal([-5], Int[]),
+                Tridiagonal([1], [1,-2], [3]),
+                SymTridiagonal([1,-2], [3])
+             )
+        @test opnorm(T, 1) == opnorm(Matrix(T), 1)
+        @test_skip opnorm(T, 2) ≈ opnorm(Matrix(T), 2) # currently missing
+        @test opnorm(T, Inf) == opnorm(Matrix(T), Inf)
+    end
 end
 
 @testset "block-bidiagonal matrix indexing" begin
@@ -1196,6 +1186,63 @@ end
     @test_throws "cannot set off-diagonal entry $((1,3))" S[LinearAlgebra.BandIndex(2,1)] = 1
     @test_throws BoundsError S[LinearAlgebra.BandIndex(size(S,1),1)]
     @test_throws BoundsError S[LinearAlgebra.BandIndex(0,size(S,1)+1)]
+end
+
+@testset "fillband!" begin
+    @testset "Tridiagonal" begin
+        T = Tridiagonal(zeros(3), zeros(4), zeros(3))
+        LinearAlgebra.fillband!(T, 2, 1, 1)
+        @test all(==(2), diagview(T,1))
+        @test all(==(0), diagview(T,0))
+        @test all(==(0), diagview(T,-1))
+        LinearAlgebra.fillband!(T, 3, 0, 0)
+        @test all(==(3), diagview(T,0))
+        @test all(==(2), diagview(T,1))
+        @test all(==(0), diagview(T,-1))
+        LinearAlgebra.fillband!(T, 4, -1, 1)
+        @test all(==(4), diagview(T,-1))
+        @test all(==(4), diagview(T,0))
+        @test all(==(4), diagview(T,1))
+        @test_throws ArgumentError LinearAlgebra.fillband!(T, 3, -2, 2)
+
+        LinearAlgebra.fillstored!(T, 1)
+        LinearAlgebra.fillband!(T, 0, -3, 3)
+        @test iszero(T)
+        LinearAlgebra.fillstored!(T, 1)
+        LinearAlgebra.fillband!(T, 0, -10, 10)
+        @test iszero(T)
+
+        LinearAlgebra.fillstored!(T, 1)
+        T2 = copy(T)
+        LinearAlgebra.fillband!(T, 0, -1, -3)
+        @test T == T2
+        LinearAlgebra.fillband!(T, 0, 10, 10)
+        @test T == T2
+    end
+    @testset "SymTridiagonal" begin
+        S = SymTridiagonal(zeros(4), zeros(3))
+        @test_throws ArgumentError LinearAlgebra.fillband!(S, 2, -1, -1)
+        @test_throws ArgumentError LinearAlgebra.fillband!(S, 2, -2, 2)
+
+        LinearAlgebra.fillband!(S, 1, -1, 1)
+        @test all(==(1), diagview(S,-1))
+        @test all(==(1), diagview(S,0))
+        @test all(==(1), diagview(S,1))
+
+        LinearAlgebra.fillstored!(S, 1)
+        LinearAlgebra.fillband!(S, 0, -3, 3)
+        @test iszero(S)
+        LinearAlgebra.fillstored!(S, 1)
+        LinearAlgebra.fillband!(S, 0, -10, 10)
+        @test iszero(S)
+
+        LinearAlgebra.fillstored!(S, 1)
+        S2 = copy(S)
+        LinearAlgebra.fillband!(S, 0, -1, -3)
+        @test S == S2
+        LinearAlgebra.fillband!(S, 0, 10, 10)
+        @test S == S2
+    end
 end
 
 end # module TestTridiagonal
