@@ -242,7 +242,7 @@ _preprocess_broadcasted(::Type, x) = x
 
 _preprocess_broadcasted(::Type{Diagonal}, d::Diagonal) = d.diag
 # fallback for types that might opt into Diagonal-like structured broadcasting, e.g. wrappers
-_preprocess_broadcasted(::Type{Diagonal}, d::AbstractMatrix) = diag(d)
+_preprocess_broadcasted(::Type{Diagonal}, d::AbstractMatrix) = diagview(d)
 
 function copy(bc::Broadcasted{StructuredMatrixStyle{Diagonal}})
     if isstructurepreserving(bc) || fzeropreserving(bc)
