@@ -48,8 +48,6 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{UnitUpperTriangular}, ::Structu
 
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}, ::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular}}) =
     StructuredMatrixStyle{Matrix}()
-Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular}}, ::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}) =
-    StructuredMatrixStyle{Matrix}()
 
 # Make sure that `StructuredMatrixStyle{Matrix}` doesn't ever end up falling
 # through and give back `DefaultArrayStyle{2}`
