@@ -435,6 +435,8 @@ function diag(M::Bidiagonal, n::Integer=0)
     return v
 end
 
+isstoredband(A::Bidiagonal, k::Integer) = k == 0 || k == _offdiagind(A.uplo)
+
 function +(A::Bidiagonal, B::Bidiagonal)
     if A.uplo == B.uplo || length(A.dv) == 0
         Bidiagonal(A.dv+B.dv, A.ev+B.ev, A.uplo)

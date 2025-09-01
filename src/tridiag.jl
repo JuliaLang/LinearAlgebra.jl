@@ -1230,3 +1230,5 @@ function fillband!(T::SymTridiagonal, x, l, u)
     end
     return T
 end
+
+isstoredband(::Union{SymTridiagonal, Tridiagonal}, k::Integer) = -1 <= k <= 1

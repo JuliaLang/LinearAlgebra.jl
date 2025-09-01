@@ -320,4 +320,31 @@ end
     @test U == U2
 end
 
+@testset "isstoredband" begin
+    U = UpperHessenberg(Diagonal(1:4))
+    @test LinearAlgebra.isstoredband(U, 0)
+    @test !LinearAlgebra.isstoredband(U, 1)
+    @test !LinearAlgebra.isstoredband(U, -1)
+
+    U = UpperHessenberg(Bidiagonal(1:4, 1:3, :U))
+    @test LinearAlgebra.isstoredband(U, 0)
+    @test LinearAlgebra.isstoredband(U, 1)
+    @test !LinearAlgebra.isstoredband(U, 2)
+    @test !LinearAlgebra.isstoredband(U, -1)
+
+    U = UpperHessenberg(Bidiagonal(1:4, 1:3, :L))
+    @test LinearAlgebra.isstoredband(U, 0)
+    @test LinearAlgebra.isstoredband(U, -1)
+    @test !LinearAlgebra.isstoredband(U, 1)
+    @test !LinearAlgebra.isstoredband(U, 2)
+
+    for Tri in (Tridiagonal(1:3, 1:4, 1:3), SymTridiagonal(1:4, 1:3))
+        U = UpperHessenberg(Tri)
+        @test LinearAlgebra.isstoredband(U, 0)
+        @test LinearAlgebra.isstoredband(U, 1)
+        @test LinearAlgebra.isstoredband(U, -1)
+        @test !LinearAlgebra.isstoredband(U, 2)
+    end
+end
+
 end # module TestHessenberg

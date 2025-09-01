@@ -940,6 +940,9 @@ function diag(D::Diagonal, k::Integer=0)
     end
     return v
 end
+
+isstoredband(::Diagonal, k::Integer) = k == 0
+
 tr(D::Diagonal) = sum(tr, D.diag)
 det(D::Diagonal) = prod(det, D.diag)
 function logdet(D::Diagonal{<:Complex}) # make sure branch cut is correct
