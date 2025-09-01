@@ -1110,4 +1110,13 @@ end
     end
 end
 
+@testset "diag with a Val index" begin
+    U = UpperTriangular(Tridiagonal(2:4, 1:4, 1:3))
+    @test diag(U, Val(0)) === 1:4
+    @test diag(U, Val(1)) === 1:3
+    L = LowerTriangular(Tridiagonal(2:4, 1:4, 1:3))
+    @test diag(L, Val(0)) === 1:4
+    @test diag(L, Val(-1)) === 2:4
+end
+
 end # module TestTriangular

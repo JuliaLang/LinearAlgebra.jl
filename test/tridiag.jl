@@ -1255,4 +1255,15 @@ end
     end
 end
 
+@testset "diag with a Val index" begin
+    T = Tridiagonal(2:4, 1:4, 1:3)
+    @test diag(T, Val(0)) === 1:4
+    @test diag(T, Val(1)) === 1:3
+    @test diag(T, Val(-1)) === 2:4
+    ST = SymTridiagonal(1:4, 1:3)
+    @test diag(ST, Val(0)) === 1:4
+    @test diag(ST, Val(1)) === 1:3
+    @test diag(ST, Val(-1)) === 1:3
+end
+
 end # module TestTridiagonal
