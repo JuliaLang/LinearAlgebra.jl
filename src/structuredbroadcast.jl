@@ -131,7 +131,7 @@ For instance, it is used to determine whether the output of
 `[(1,) (0,); (0,) (2,)]`. For this, we need to determine whether `(0,)` is
 considered to be zero. `iszero((0,))` falls back to `(0,) == zero((0,))` which
 fails as `zero(::Tuple{Int})` is not defined. However,
-`iszerodefined(::Tuple{Int})` is `false` hence we falls back to the comparison
+`iszerodefined(::Tuple{Int})` is `false` hence we fall back to the comparison
 `(0,) == 0` which returns `false` and decides that the correct output is
 `[(1,) (0,); (0,) (2,)]`.
 """
