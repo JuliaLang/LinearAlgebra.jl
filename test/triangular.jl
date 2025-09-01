@@ -1114,9 +1114,20 @@ end
     U = UpperTriangular(Tridiagonal(2:4, 1:4, 1:3))
     @test diag(U, Val(0)) === 1:4
     @test diag(U, Val(1)) === 1:3
+    @test diag(U, Val(-1)) == diag(U, -1) == zeros(3)
     L = LowerTriangular(Tridiagonal(2:4, 1:4, 1:3))
     @test diag(L, Val(0)) === 1:4
     @test diag(L, Val(-1)) === 2:4
+    @test diag(L, Val(1)) == diag(L, 1) == zeros(3)
+
+    U = UnitUpperTriangular(Tridiagonal(2:4, 1:4, 1:3))
+    @test diag(U, Val(1)) === 1:3
+    @test diag(U, Val(0)) == diag(U, 0) == diag(U) == ones(4)
+    @test diag(U, Val(-1)) == diag(U, -1) == zeros(3)
+    L = UnitLowerTriangular(Tridiagonal(2:4, 1:4, 1:3))
+    @test diag(L, Val(-1)) === 2:4
+    @test diag(L, Val(0)) == diag(L, 0) == diag(L) == ones(4)
+    @test diag(L, Val(1)) == diag(L, 1) == zeros(3)
 end
 
 end # module TestTriangular
