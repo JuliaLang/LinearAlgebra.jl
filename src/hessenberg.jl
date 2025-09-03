@@ -670,3 +670,6 @@ function logdet(F::Hessenberg)
     d,s = logabsdet(F)
     return d + log(s)
 end
+
+diag(A::UpperHessenberg) = diag(A.data)
+diag(A::UpperHessenberg, ::Val{k}) where {k} = k >= -1 ? diag(A.data, Val(k)) : diag(A, k)

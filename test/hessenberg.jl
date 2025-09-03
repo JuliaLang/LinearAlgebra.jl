@@ -320,4 +320,14 @@ end
     @test U == U2
 end
 
+@testset "diag with a Val index" begin
+    H = UpperHessenberg(Tridiagonal(1:3, 1:4, 1:3))
+    @test diag(H, Val(0)) === 1:4
+    @test diag(H, Val(1)) === 1:3
+    @test diag(H, Val(-1)) === 1:3
+    @test diag(H, Val(0)) == diag(H) == diag(H, 0)
+    @test diag(H, Val(2)) == diag(H, 2)
+    @test diag(H, Val(-2)) == diag(H, -2)
+end
+
 end # module TestHessenberg

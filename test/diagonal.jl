@@ -1576,4 +1576,9 @@ end
     @test D == D2
 end
 
+@testset "diag with a Val index" begin
+    D = Diagonal(1:4)
+    @test diag(D, Val(0)) === 1:4
+end
+
 end # module TestDiagonal
