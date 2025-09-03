@@ -238,6 +238,11 @@ Base.isassigned(A::UpperOrLowerTriangular, i::Int, j::Int) =
 Base.isstored(A::UpperOrLowerTriangular, i::Int, j::Int) =
     _shouldforwardindex(A, i, j) ? Base.isstored(A.data, i, j) : false
 
+isstoredband(U::UpperTriangular, k::Integer) = k >= 0 && isstoredband(parent(U), k)
+isstoredband(L::LowerTriangular, k::Integer) = k <= 0 && isstoredband(parent(L), k)
+isstoredband(U::UnitUpperTriangular, k::Integer) = k > 0 && isstoredband(parent(U), k)
+isstoredband(L::UnitLowerTriangular, k::Integer) = k < 0 && isstoredband(parent(L), k)
+
 @propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Int, j::Int) where {T}
     if _shouldforwardindex(A, i, j)
         A.data[i,j]
