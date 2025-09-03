@@ -2004,13 +2004,25 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     atol::Real=0,
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
-    d = norm(x - y)
+    d = norm_x_minus_y(x, y)
     if isfinite(d)
         return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
     else
         # Fall back to a component-wise approximate comparison
         # (mapreduce instead of all for greater generality [#44893])
         return mapreduce((a, b) -> isapprox(a, b; rtol=rtol, atol=atol, nans=nans), &, x, y)
+    end
+end
+
+norm_x_minus_y(x, y) = norm(x - y)
+FastContiguousArrayView{T,N,P<:Array,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
+const ArrayOrFastContiguousArrayView = Union{Array, FastContiguousArrayView}
+function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView)
+    Base.promote_shape(size(x), size(y)) # ensure compatible size
+    if isempty(x) && isempty(y)
+        norm(zero(eltype(x)) - zero(eltype(y)))
+    else
+        norm(Iterators.map(splat(-), zip(x,y)))
     end
 end
 
