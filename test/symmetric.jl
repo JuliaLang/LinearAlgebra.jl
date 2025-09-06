@@ -1343,4 +1343,26 @@ end
     @test_throws msg LinearAlgebra.fillband!(Symmetric(A), 2, 0, 1)
 end
 
+@testset "issymmetrictype/ishermitiantype" begin
+    fsym(x) = Val(LinearAlgebra.issymmetrictype(typeof(x)))
+    @test @inferred(fsym(Symmetric(ones(2,2)))) == Val(true)
+    @test @inferred(fsym(Symmetric(ones(ComplexF64,2,2)))) == Val(true)
+    @test @inferred(fsym(Hermitian(ones(2,2)))) == Val(true)
+    @test @inferred(fsym(Hermitian(ones(ComplexF64,2,2)))) == Val(false)
+    @test @inferred(fsym(1)) == Val(true)
+    @test @inferred(fsym(1.0)) == Val(false)
+    @test @inferred(fsym(complex(1))) == Val(true)
+    @test @inferred(fsym(complex(1.0))) == Val(false)
+
+    fherm(x) = Val(LinearAlgebra.ishermitiantype(typeof(x)))
+    @test @inferred(fherm(Symmetric(ones(2,2)))) == Val(true)
+    @test @inferred(fherm(Symmetric(ones(ComplexF64,2,2)))) == Val(false)
+    @test @inferred(fherm(Hermitian(ones(2,2)))) == Val(true)
+    @test @inferred(fherm(Hermitian(ones(ComplexF64,2,2)))) == Val(true)
+    @test @inferred(fherm(1)) == Val(true)
+    @test @inferred(fherm(1.0)) == Val(false)
+    @test @inferred(fherm(complex(1))) == Val(false)
+    @test @inferred(fherm(complex(1.0))) == Val(false)
+end
+
 end # module TestSymmetric

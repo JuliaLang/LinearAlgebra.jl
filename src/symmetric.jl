@@ -461,9 +461,34 @@ issymmetric(A::Hermitian{<:Real}) = true
 issymmetric(A::Hermitian{<:Complex}) = isreal(A)
 issymmetric(A::Symmetric) = true
 
-# check if the symmetry is known from the type
-_issymmetric(::Union{SymSymTri, Hermitian{<:Real}}) = true
-_issymmetric(::Any) = false
+"""
+    issymmetrictype(T::Type)
+
+Return whether every instance `x` of the type `T` satisfies `issymmetric(x) == tue`,
+that is, the fact that the instance is symmetric is known from its type.
+
+!!! note
+    An instance `x::T` may still be symmetric when `issymmetrictype(T)` return `false`.
+"""
+issymmetrictype(::Type) = false
+issymmetrictype(::Type{<:Union{Symmetric,Hermitian{<:Real}}}) = true
+issymmetrictype(::Type{<:Real}) = true
+issymmetrictype(::Type{<:AbstractFloat}) = false
+issymmetrictype(::Type{Complex{T}}) where {T} = issymmetrictype(T)
+
+"""
+    ishermitiantype(T::Type)
+
+Return whether every instance `x` of the type `T` satisfies `ishermitian(x) == tue`,
+that is, the fact that the instance is hermitian is known from its type.
+
+!!! note
+    An instance `x::T` may still be hermitian when `ishermitiantype(T)` return `false`.
+"""
+ishermitiantype(::Type) = false
+ishermitiantype(::Type{<:Union{Symmetric{<:Real},Hermitian}}) = true
+ishermitiantype(::Type{<:Real}) = true
+ishermitiantype(::Type{<:AbstractFloat}) = false
 
 adjoint(A::Hermitian) = A
 transpose(A::Symmetric) = A
