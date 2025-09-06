@@ -943,4 +943,12 @@ end
     @test B == A2
 end
 
+@testset "issymmetric/ishermitian for Numbers" begin
+    fsym(x) = Val(issymmetric(x))
+    @test @inferred(fsym(2)) isa Val{true}
+    @test @inferred(fsym(2im)) isa Val{true}
+    fherm(x) = Val(ishermitian(x))
+    @test @inferred(fherm(2)) isa Val{true}
+end
+
 end # module TestGeneric
