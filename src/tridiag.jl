@@ -118,7 +118,7 @@ function (::Type{SymTri})(A::AbstractMatrix) where {SymTri <: SymTridiagonal}
 end
 
 _checksymmetric(d, du, dl) = all(((x, y),) -> x == transpose(y), zip(du, dl)) && all(issymmetric, d)
-_checksymmetric(A::AbstractMatrix) = _issymmetric(A) || _checksymmetric(diagview(A), diagview(A, 1), diagview(A, -1))
+_checksymmetric(A::AbstractMatrix) = issymmetrictype(typeof(A)) || _checksymmetric(diagview(A), diagview(A, 1), diagview(A, -1))
 
 SymTridiagonal{T,V}(S::SymTridiagonal{T,V}) where {T,V<:AbstractVector{T}} = S
 SymTridiagonal{T,V}(S::SymTridiagonal) where {T,V<:AbstractVector{T}} =
