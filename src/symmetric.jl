@@ -468,7 +468,7 @@ Return whether every instance `x` of the type `T` satisfies `issymmetric(x) == t
 that is, the fact that the instance is symmetric is known from its type.
 
 !!! note
-    An instance `x::T` may still be symmetric when `issymmetrictype(T)` return `false`.
+    An instance `x::T` may still be symmetric when `issymmetrictype(T)` returns `false`.
 """
 issymmetrictype(::Type) = false
 issymmetrictype(::Type{<:Union{Symmetric,Hermitian{<:Real}}}) = true
@@ -483,7 +483,7 @@ Return whether every instance `x` of the type `T` satisfies `ishermitian(x) == t
 that is, the fact that the instance is hermitian is known from its type.
 
 !!! note
-    An instance `x::T` may still be hermitian when `ishermitiantype(T)` return `false`.
+    An instance `x::T` may still be hermitian when `ishermitiantype(T)` returns `false`.
 """
 ishermitiantype(::Type) = false
 ishermitiantype(::Type{<:Union{Symmetric{<:Real},Hermitian}}) = true
