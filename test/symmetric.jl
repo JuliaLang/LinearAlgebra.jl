@@ -874,6 +874,21 @@ end
     @test det(Hermitian(A))::Float64 == det(A) == 0.0
 end
 
+@testset "issue #1437: inverse of Symmetric|Hermitian{<:Any,<:Diagonal} returns of Symmetric|Hermitian{<:Any,<:Diagonal}" begin
+    Dreal    = Diagonal(randn(3))
+    Dcomplex = Diagonal(randn(ComplexF64, 3))
+    # without wrapper
+    invDreal = inv(Dreal)
+    invDcomplex = inv(real(Dcomplex)) # because Hermitian implies a real diagonal
+    # with wrapper
+    SDreal = Symmetric(Dreal)
+    HDcomplex = Hermitian(Dcomplex)
+    @test inv(SDreal)::Symmetric{Float64,typeof(Dreal)} ≈ invDreal
+    @test inv(HDcomplex)::Hermitian{Float64,typeof(Dreal)} ≈ invDcomplex
+    Dcomplex[2,2] = 0
+    @test_throws SingularException inv(HDcomplex)
+end
+
 @testset "symmetric()/hermitian() for Numbers" begin
     @test LinearAlgebra.symmetric(1) == LinearAlgebra.symmetric(1, :U) == 1
     @test LinearAlgebra.symmetric_type(Int) == Int

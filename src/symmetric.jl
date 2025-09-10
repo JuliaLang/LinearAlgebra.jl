@@ -987,6 +987,7 @@ See also [`hermitianpart!`](@ref) for the corresponding in-place operation.
     This function requires Julia 1.10 or later.
 """
 hermitianpart(A::AbstractMatrix, uplo::Symbol=:U) = Hermitian(_hermitianpart(A), uplo)
+hermitianpart(a::Number) = real(a)
 
 """
     hermitianpart!(A::AbstractMatrix, uplo::Symbol=:U) -> Hermitian
