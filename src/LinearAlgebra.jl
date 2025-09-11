@@ -363,6 +363,11 @@ function char_uplo(uplo::Symbol)
     end
 end
 
+"""
+    sym_uplo(uplo::Char)
+
+Return the `Symbol` corresponding to the `uplo` `Char` by checking for validity.
+"""
 function sym_uplo(uplo::Char)
     if uplo == 'U'
         return :U
@@ -370,6 +375,19 @@ function sym_uplo(uplo::Char)
         return :L
     else
         throw_uplo()
+    end
+end
+"""
+    sym_uplo_unsafe(uplo::Char)
+
+Return the `Symbol` corresponding to the `uplo` `Char` without checking for validity.
+See also `sym_uplo`, which checks for validity.
+"""
+function sym_uplo_unsafe(uplo::Char)
+    if uplo == 'U'
+        return :U
+    else
+        return :L
     end
 end
 
