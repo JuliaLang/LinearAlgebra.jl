@@ -237,6 +237,34 @@ nonhermitianwrappertype(::SymSymTri{<:Real}) = Symmetric
 nonhermitianwrappertype(::Hermitian{<:Real}) = Symmetric
 nonhermitianwrappertype(::Hermitian) = identity
 
+"""
+    LinearAlgebra.uplo(S::Union{Symmetric, Hermitian})::Symbol
+
+Return a `Symbol` corresponding to the stored triangular half in the matrix `S`,
+that is, the elements are common between `S` and `parent(S)` for that triangular half.
+The possible values that may be returned are `:U` and `:L`.
+
+# Example
+```jldoctest
+julia> S = Symmetric([1 2; 3 4], :U)
+2×2 Symmetric{Int64, Matrix{Int64}}:
+ 1  2
+ 2  4
+
+julia> LinearAlgebra.uplo(S)
+:U
+
+julia> H = Hermitian([1 2; 3 4], :L)
+2×2 Hermitian{Int64, Matrix{Int64}}:
+ 1  3
+ 3  4
+
+julia> LinearAlgebra.uplo(H)
+:L
+```
+"""
+uplo(S::HermOrSym) = sym_uplo(S.uplo)
+
 size(A::HermOrSym) = size(A.data)
 axes(A::HermOrSym) = axes(A.data)
 @inline function Base.isassigned(A::HermOrSym, i::Int, j::Int)
