@@ -118,7 +118,7 @@ Bidiagonal{T}(A::Bidiagonal) where {T} = Bidiagonal{T}(A.dv, A.ev, A.uplo)
 """
     LinearAlgebra.uplo(S::Bidiagonal)::Symbol
 
-Return a `Symbol` corresponding to whether the upper or lower off-diagonal band is stored.
+Return a `Symbol` corresponding to whether the upper (`:U`) or lower (`:L`) off-diagonal band is stored.
 """
 uplo(::Bidiagonal) = sym_uplo(B.uplo)
 
