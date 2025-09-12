@@ -242,6 +242,7 @@ nonhermitianwrappertype(::Hermitian) = identity
 
 Return a `Symbol` corresponding to the stored triangular half in the matrix `S`,
 that is, the elements are common between `S` and `parent(S)` for that triangular half.
+The possible values that may be returned are `:U` and `:L`.
 
 # Example
 ```jldoctest
