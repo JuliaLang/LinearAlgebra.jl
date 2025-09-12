@@ -120,7 +120,7 @@ Bidiagonal{T}(A::Bidiagonal) where {T} = Bidiagonal{T}(A.dv, A.ev, A.uplo)
 
 Return a `Symbol` corresponding to whether the upper (`:U`) or lower (`:L`) off-diagonal band is stored.
 """
-uplo(::Bidiagonal) = sym_uplo(B.uplo)
+uplo(B::Bidiagonal) = sym_uplo(B.uplo)
 
 _offdiagind(uplo) = uplo == 'U' ? 1 : -1
 
