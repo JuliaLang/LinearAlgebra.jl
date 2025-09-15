@@ -1343,4 +1343,10 @@ end
     @test_throws msg LinearAlgebra.fillband!(Symmetric(A), 2, 0, 1)
 end
 
+@testset "sym_uplo" begin
+    @test LinearAlgebra.sym_uplo('U') == :U
+    @test LinearAlgebra.sym_uplo('L') == :L
+    @test_throws ArgumentError LinearAlgebra.sym_uplo('N')
+end
+
 end # module TestSymmetric
