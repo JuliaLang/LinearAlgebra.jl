@@ -369,6 +369,8 @@ end
 Return the `Symbol` corresponding the `uplo` by checking for validity.
 """
 function sym_uplo(uplo::Char)
+    # This method is called by other packages, and isn't used within LinearAlgebra
+    # It's retained here for backward compatibility.
     if uplo == 'U'
         return :U
     elseif uplo == 'L'
