@@ -383,13 +383,7 @@ end
 Return the `Symbol` corresponding to `uplo` without checking for validity.
 See also `sym_uplo`, which checks for validity.
 """
-function sym_uplo_unsafe(uplo::Char)
-    if uplo == 'U'
-        return :U
-    else
-        return :L
-    end
-end
+sym_uplo_unsafe(uplo::Char) = uplo == 'U' ? (:U) : (:L)
 
 @noinline throw_uplo() = throw(ArgumentError("uplo argument must be either :U (upper) or :L (lower)"))
 
