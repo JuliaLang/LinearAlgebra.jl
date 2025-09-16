@@ -1037,10 +1037,12 @@ end
     end
     @testset "hermitianpart for numbers" begin
     @test hermitianpart(3 + 4im) == 3
-    @test hermitianpart(5) == 5
+    @test hermitianpart(5) == 5.0
+    @test typeof(hermitianpart(5)) == Float64
     @test hermitianpart(2.5) == 2.5
     @test hermitianpart(-1 + 0im) == -1
-    @test typeof(hermitianpart(3 + 4im)) == Int
+    @test typeof(hermitianpart(3 + 4im)) == 3.0
+    @test typeof(hermitianpart(3 + 4im)) == Float64
     @test typeof(hermitianpart(2.5 + 3im)) == Float64
 end
 end

@@ -1003,7 +1003,7 @@ end
 
 """
     hermitianpart(A::AbstractMatrix, uplo::Symbol=:U) -> Hermitian
-    hermitianpart(x::Number) -> Real
+    hermitianpart(x::Number) -> Number
 
 Return the Hermitian part of the square matrix `A`, defined as `(A + A') / 2`, as a
 [`Hermitian`](@ref) matrix. For real matrices `A`, this is also known as the symmetric part
@@ -1011,13 +1011,18 @@ of `A`; it is also sometimes called the "operator real part". The optional argum
 [`Hermitian`](@ref) view. For real matrices, the latter is equivalent to a
 [`Symmetric`](@ref) view.
 
+For scalar inputs `x`, the function returns the real part of `x`. Standard integer scalars
+are promoted to `Float64` to align with the behavior of 1×1 Hermitian matrices, while other numeric types
+(`Float32`, `BigInt`, `Rational`, `BigFloat`) are preserved.
+
 See also [`hermitianpart!`](@ref) for the corresponding in-place operation.
 
 !!! compat "Julia 1.10"
     This function requires Julia 1.10 or later.
 """
+
 hermitianpart(A::AbstractMatrix, uplo::Symbol=:U) = Hermitian(_hermitianpart(A), uplo)
-hermitianpart(x::Number) = real(x)
+hermitianpart(x::Number) = float(real(x))
 
 """
     hermitianpart!(A::AbstractMatrix, uplo::Symbol=:U) -> Hermitian
