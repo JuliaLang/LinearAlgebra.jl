@@ -131,7 +131,7 @@ end
 
 bkcopy_oftype(A, S) = eigencopy_oftype(A, S)
 function bkcopy_oftype(A::Symmetric{<:Complex}, S)
-    Symmetric(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), sym_uplo_unsafe(A.uplo))
+    Symmetric(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), _sym_uplo(A.uplo))
 end
 
 """
