@@ -7,7 +7,7 @@ This is my fork of LinearAlgebra.jl for contributing to Julia as part of my GSoC
 
 **My contributions:**
 - [PR #1445](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1445) - Add hermitianpart method for Number types
-- Active in issues: [Inserisci numeri issue quando ne commenti alcuni]
+- Active in issues: Coming
 
 **Original repository:** [JuliaLang/LinearAlgebra.jl](https://github.com/JuliaLang/LinearAlgebra.jl)
 
