@@ -910,12 +910,12 @@ function _bidimul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
     @inbounds begin
         # first row of C
         for j in 1:min(2, n)
-            C[1,j] += _add(A[1,j]*B[j,j])
+            C[1,j] += _add(A[1,j]*Bd[j])
         end
         # second row of C
         if n > 1
             for j in 1:min(3, n)
-                C[2,j] += _add(A[2,j]*B[j,j])
+                C[2,j] += _add(A[2,j]*Bd[j])
             end
         end
         for j in 3:n-2
@@ -926,13 +926,13 @@ function _bidimul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
         if n > 3
             # row before last of C
             for j in n-2:n
-                C[n-1,j] += _add(A[n-1,j]*B[j,j])
+                C[n-1,j] += _add(A[n-1,j]*Bd[j])
             end
         end
         # last row of C
         if n > 2
             for j in n-1:n
-                C[n,j] += _add(A[n,j]*B[j,j])
+                C[n,j] += _add(A[n,j]*Bd[j])
             end
         end
     end # inbounds
