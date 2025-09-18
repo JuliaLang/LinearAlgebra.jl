@@ -28,7 +28,7 @@ To compute the symmetric part of a real matrix, or more generally the Hermitian 
 a real or complex matrix `A`, use [`hermitianpart`](@ref).
 
 The `uplo` symbol corresponding to the triangular half of `A` that is shared by the symmetric view may be
-fetched by using the function [`uplo`](@ref). The underlying matrix `A` may be fetched from the symmetric
+fetched by using the function [`LinearAlgebra.uplo`](@ref). The underlying matrix `A` may be fetched from the symmetric
 view by using `parent`.
 
 # Examples
@@ -117,7 +117,7 @@ triangle of the matrix `A`.
 To compute the Hermitian part of `A`, use [`hermitianpart`](@ref).
 
 The `uplo` symbol corresponding to the triangular half of `A` that is shared by the hermitian view may be
-fetched by using the function [`uplo`](@ref). The underlying matrix `A` may be fetched from the hermitian
+fetched by using the function [`LinearAlgebra.uplo`](@ref). The underlying matrix `A` may be fetched from the hermitian
 view by using `parent`.
 
 # Examples
