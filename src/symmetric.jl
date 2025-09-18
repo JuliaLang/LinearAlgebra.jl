@@ -27,6 +27,10 @@ if any specialized algorithms.)
 To compute the symmetric part of a real matrix, or more generally the Hermitian part `(A + A') / 2` of
 a real or complex matrix `A`, use [`hermitianpart`](@ref).
 
+The `uplo` symbol corresponding to the triangular half of `A` that is shared by the symmetric view may be
+fetched by using the function [`uplo`](@ref). The underlying matrix `A` may be fetched from the symmetric
+view by using `parent`.
+
 # Examples
 ```jldoctest
 julia> A = [1 2 3; 4 5 6; 7 8 9]
@@ -111,6 +115,10 @@ Construct a `Hermitian` view of the upper (if `uplo = :U`) or lower (if `uplo = 
 triangle of the matrix `A`.
 
 To compute the Hermitian part of `A`, use [`hermitianpart`](@ref).
+
+The `uplo` symbol corresponding to the triangular half of `A` that is shared by the hermitian view may be
+fetched by using the function [`uplo`](@ref). The underlying matrix `A` may be fetched from the hermitian
+view by using `parent`.
 
 # Examples
 ```jldoctest
