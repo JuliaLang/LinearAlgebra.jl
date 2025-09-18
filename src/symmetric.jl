@@ -240,7 +240,7 @@ nonhermitianwrappertype(::Hermitian) = identity
 """
     LinearAlgebra.uplo(S::Union{Symmetric, Hermitian})::Symbol
 
-Return a `Symbol` corresponding to the stored triangular half in the matrix `S`,
+Return a `Symbol` corresponding to the stored triangular half (`:U` or `:L`) in the matrix `S`,
 that is, the elements are common between `S` and `parent(S)` for that triangular half.
 The possible values that may be returned are `:U` and `:L`.
 
