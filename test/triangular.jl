@@ -1110,4 +1110,47 @@ end
     end
 end
 
+@testset "isstoredband" begin
+    U = UpperTriangular(Diagonal(1:4))
+    @test LinearAlgebra.isstoredband(U, 0)
+    @test !LinearAlgebra.isstoredband(U, 1)
+    @test !LinearAlgebra.isstoredband(U, -1)
+    L = LowerTriangular(Diagonal(1:4))
+    @test LinearAlgebra.isstoredband(L, 0)
+    @test !LinearAlgebra.isstoredband(L, 1)
+    @test !LinearAlgebra.isstoredband(L, -1)
+    for T in (UnitUpperTriangular, UnitLowerTriangular)
+        U = T(Diagonal(1:4))
+        @test !LinearAlgebra.isstoredband(U, 0)
+        @test !LinearAlgebra.isstoredband(U, 1)
+        @test !LinearAlgebra.isstoredband(U, -1)
+    end
+
+    U = UpperTriangular(Bidiagonal(1:4, 1:3, :U))
+    @test LinearAlgebra.isstoredband(U, 0)
+    @test LinearAlgebra.isstoredband(U, 1)
+    @test !LinearAlgebra.isstoredband(U, 2)
+    @test !LinearAlgebra.isstoredband(U, -1)
+
+    U = UpperTriangular(Bidiagonal(1:4, 1:3, :L))
+    @test LinearAlgebra.isstoredband(U, 0)
+    @test !LinearAlgebra.isstoredband(U, 1)
+    @test !LinearAlgebra.isstoredband(U, 2)
+    @test !LinearAlgebra.isstoredband(U, -1)
+
+    for Tri in (Tridiagonal(1:3, 1:4, 1:3), SymTridiagonal(1:4, 1:3))
+        U = UpperTriangular(Tri)
+        @test LinearAlgebra.isstoredband(U, 0)
+        @test LinearAlgebra.isstoredband(U, 1)
+        @test !LinearAlgebra.isstoredband(U, 2)
+        @test !LinearAlgebra.isstoredband(U, -1)
+
+        L = LowerTriangular(Tri)
+        @test LinearAlgebra.isstoredband(L, 0)
+        @test LinearAlgebra.isstoredband(L, -1)
+        @test !LinearAlgebra.isstoredband(L, -2)
+        @test !LinearAlgebra.isstoredband(L, 1)
+    end
+end
+
 end # module TestTriangular
