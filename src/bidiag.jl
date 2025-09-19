@@ -418,6 +418,9 @@ function triu!(M::Bidiagonal{T}, k::Integer=0) where T
     return M
 end
 
+diag(M::Bidiagonal, ::Val{0}) = M.dv
+diag(M::Bidiagonal, ::Val{1}) = M.uplo == 'U' ? M.ev : zero(M.ev)
+diag(M::Bidiagonal, ::Val{-1}) = M.uplo == 'L' ? M.ev : zero(M.ev)
 function diag(M::Bidiagonal, n::Integer=0)
     # every branch call similar(..., ::Int) to make sure the
     # same vector type is returned independent of n
