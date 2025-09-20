@@ -1350,7 +1350,7 @@ function issymmetric(A::AbstractMatrix)
     return true
 end
 
-issymmetric(x::Number) = !isnan(x)
+issymmetric(x::Number) = true
 
 """
     ishermitian(A) -> Bool
@@ -1389,7 +1389,7 @@ function ishermitian(A::AbstractMatrix)
     return true
 end
 
-ishermitian(x::Number) = issymmetric(x) && isreal(x)
+ishermitian(x::Number) = isreal(x)
 
 # helper function equivalent to `iszero(v)`, but potentially without the fast exit feature
 # of `all` if this improves performance
