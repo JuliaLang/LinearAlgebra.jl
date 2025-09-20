@@ -410,4 +410,19 @@ end
     @test UH2 isa UpperHessenberg
 end
 
+@testset "forwarding broadcast to the diag for a Diagonal" begin
+    D = Diagonal(1:4)
+    D2 = D .* 2
+    @test D2 isa Diagonal{Int, <:AbstractRange{Int}}
+
+    # test for wrappers that opt into Diagonal-like broadcasting
+    U = UpperTriangular(D)
+    bc = Broadcast.broadcasted(+, D, U)
+    bcD = Broadcast.broadcasted(+, D, D)
+    S = typeof(Broadcast.BroadcastStyle(typeof(bcD)))
+    bc2 = convert(Broadcast.Broadcasted{S}, bc)
+    @test copy(bc2) == copy(bc) == copy(bcD)
+    @test copy(bc2) isa Diagonal
+end
+
 end

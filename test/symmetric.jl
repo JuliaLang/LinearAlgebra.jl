@@ -1349,4 +1349,11 @@ end
     @test_throws ArgumentError LinearAlgebra.sym_uplo('N')
 end
 
+@testset "uplo" begin
+    S = Symmetric([1 2; 3 4], :U)
+    @test LinearAlgebra.uplo(S) == :U
+    H = Hermitian([1 2; 3 4], :L)
+    @test LinearAlgebra.uplo(H) == :L
+end
+
 end # module TestSymmetric

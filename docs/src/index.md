@@ -604,6 +604,7 @@ LinearAlgebra.hermitianpart
 LinearAlgebra.hermitianpart!
 LinearAlgebra.copy_adjoint!
 LinearAlgebra.copy_transpose!
+LinearAlgebra.uplo
 ```
 
 ## Low-level matrix operations

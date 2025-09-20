@@ -27,6 +27,10 @@ if any specialized algorithms.)
 To compute the symmetric part of a real matrix, or more generally the Hermitian part `(A + A') / 2` of
 a real or complex matrix `A`, use [`hermitianpart`](@ref).
 
+The `uplo` symbol corresponding to the triangular half of `A` that is shared by the symmetric view may be
+fetched by using the function [`LinearAlgebra.uplo`](@ref). The underlying matrix `A` may be fetched from the symmetric
+view by using `parent`.
+
 # Examples
 ```jldoctest
 julia> A = [1 2 3; 4 5 6; 7 8 9]
@@ -111,6 +115,10 @@ Construct a `Hermitian` view of the upper (if `uplo = :U`) or lower (if `uplo = 
 triangle of the matrix `A`.
 
 To compute the Hermitian part of `A`, use [`hermitianpart`](@ref).
+
+The `uplo` symbol corresponding to the triangular half of `A` that is shared by the hermitian view may be
+fetched by using the function [`LinearAlgebra.uplo`](@ref). The underlying matrix `A` may be fetched from the hermitian
+view by using `parent`.
 
 # Examples
 ```jldoctest
@@ -237,6 +245,33 @@ nonhermitianwrappertype(::SymSymTri{<:Real}) = Symmetric
 nonhermitianwrappertype(::Hermitian{<:Real}) = Symmetric
 nonhermitianwrappertype(::Hermitian) = identity
 
+"""
+    LinearAlgebra.uplo(S::Union{Symmetric, Hermitian})::Symbol
+
+Return a `Symbol` corresponding to the stored triangular half (`:U` or `:L`) in the matrix `S`,
+that is, the elements are common between `S` and `parent(S)` for that triangular half.
+
+# Example
+```jldoctest
+julia> S = Symmetric([1 2; 3 4], :U)
+2×2 Symmetric{Int64, Matrix{Int64}}:
+ 1  2
+ 2  4
+
+julia> LinearAlgebra.uplo(S)
+:U
+
+julia> H = Hermitian([1 2; 3 4], :L)
+2×2 Hermitian{Int64, Matrix{Int64}}:
+ 1  3
+ 3  4
+
+julia> LinearAlgebra.uplo(H)
+:L
+```
+"""
+uplo(S::HermOrSym) = sym_uplo(S.uplo)
+
 size(A::HermOrSym) = size(A.data)
 axes(A::HermOrSym) = axes(A.data)
 @inline function Base.isassigned(A::HermOrSym, i::Int, j::Int)
@@ -330,14 +365,8 @@ isdiag(A::HermOrSym) = applytri(isdiag, A)
 
 # For A<:Union{Symmetric,Hermitian}, similar(A[, neweltype]) should yield a matrix with the same
 # symmetry type, uplo flag, and underlying storage type as A. The following methods cover these cases.
-similar(A::Symmetric, ::Type{T}) where {T} = Symmetric(similar(parent(A), T), ifelse(A.uplo == 'U', :U, :L))
-# If the Hermitian constructor's check ascertaining that the wrapped matrix's
-# diagonal is strictly real is removed, the following method can be simplified.
-function similar(A::Hermitian, ::Type{T}) where T
-    B = similar(parent(A), T)
-    for i in 1:size(B, 1) B[i, i] = 0 end
-    return Hermitian(B, ifelse(A.uplo == 'U', :U, :L))
-end
+similar(A::Symmetric, ::Type{T}) where {T} = Symmetric(similar(parent(A), T), sym_uplo(A.uplo))
+similar(A::Hermitian, ::Type{T}) where {T} = Hermitian(similar(parent(A), T), sym_uplo(A.uplo))
 # On the other hand, similar(A, [neweltype,] shape...) should yield a matrix of the underlying
 # storage type of A (not wrapped in a symmetry type). The following method covers these cases.
 similar(A::Union{Symmetric,Hermitian}, ::Type{T}, dims::Dims{N}) where {T,N} = similar(parent(A), T, dims)
