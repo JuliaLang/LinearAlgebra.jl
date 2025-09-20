@@ -359,7 +359,7 @@ function applytri(f, A::HermOrSym, B::HermOrSym)
 end
 _parent_tri(U::UpperOrLowerTriangular) = parent(U)
 _parent_tri(U) = U
-parentof_applytri(f, args...) = _parent_tri(applytri(f, args...))
+parentof_applytri(f, args...) = applytri(_parent_tri∘f, args...)
 
 isdiag(A::HermOrSym) = applytri(isdiag, A)
 
