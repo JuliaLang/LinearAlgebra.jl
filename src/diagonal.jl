@@ -1254,7 +1254,7 @@ function generic_normMinusInf(D::Diagonal)
 end
 generic_normInf(D::Diagonal) = norm(D.diag, Inf)
 generic_norm1(D::Diagonal) = norm(D.diag, 1)
-generic_norm2(D::Diagonal) = norm(D.diag, 2)
+generic_norm2(D::Diagonal) = norm(D.diag)
 function generic_normp(D::Diagonal, p)
     v = norm(D.diag, p)
     if size(D,1) > 1 && p < 0
