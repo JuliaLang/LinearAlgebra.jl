@@ -597,18 +597,14 @@ end
 # Compute L_p norm ‖x‖ₚ = sum(abs(x).^p)^(1/p)
 # (Not technically a "norm" for p < 1.)
 function generic_normp(x, p)
+    (v, s) = iterate(x)::Tuple
     if p > 1 || p < -1 # might need to rescale to avoid overflow
         maxabs = p > 1 ? normInf(x) : normMinusInf(x)
         (ismissing(maxabs) || iszero(maxabs) || isinf(maxabs)) && return maxabs
-        return _generic_normp(x, p, maxabs)
+        T = typeof(maxabs)
     else
-        return _generic_normp(x, p)
+        T = typeof(float(norm(v)))
     end
-end
-
-function _generic_normp(x, p, maxabs::TM = nothing) where {TM}
-    (v, s) = iterate(x)::Tuple
-    T = isnothing(maxabs) ? typeof(float(norm(v))) : TM
     spp::promote_type(Float64, T) = p
     if -1 <= p <= 1 || (isfinite(length(x)*maxabs^spp) && !iszero(maxabs^spp)) # scaling not necessary
         sum::promote_type(Float64, T) = norm(v)^spp
