@@ -132,13 +132,13 @@ function mul(B::Bidiagonal, H::UpperHessenberg)
 end
 
 function /(H::UpperHessenberg, B::Bidiagonal)
-    T = typeof(oneunit(eltype(H))/oneunit(eltype(B)))
+    T = typeof(oneunit(eltype(H))/zero(eltype(B)))
     A = _rdiv!(similar(H, T, size(H)), H, B)
     return B.uplo == 'U' ? UpperHessenberg(A) : A
 end
 
 function \(B::Bidiagonal, H::UpperHessenberg)
-    T = typeof(oneunit(eltype(B))\oneunit(eltype(H)))
+    T = typeof(zero(eltype(B))\oneunit(eltype(H)))
     A = ldiv!(similar(H, T, size(H)), B, H)
     return B.uplo == 'U' ? UpperHessenberg(A) : A
 end
