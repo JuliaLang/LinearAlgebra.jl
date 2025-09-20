@@ -575,8 +575,11 @@ norm_sqr(x::Union{T,Complex{T},Rational{T}}) where {T<:Integer} = abs2(float(x))
 function generic_norm2(x)
     maxabs = normInf(x)
     (ismissing(maxabs) || iszero(maxabs) || isinf(maxabs)) && return maxabs
+    return _generic_norm2(x, maxabs)
+end
+
+function _generic_norm2(x, maxabs::T) where {T}
     (v, s) = iterate(x)::Tuple
-    T = typeof(maxabs)
     if isfinite(length(x)*maxabs*maxabs) && !iszero(maxabs*maxabs) # Scaling not necessary
         sum::promote_type(Float64, T) = norm_sqr(v)
         for v in Iterators.rest(x, s)
@@ -601,10 +604,15 @@ function generic_normp(x, p)
     if p > 1 || p < -1 # might need to rescale to avoid overflow
         maxabs = p > 1 ? normInf(x) : normMinusInf(x)
         (ismissing(maxabs) || iszero(maxabs) || isinf(maxabs)) && return maxabs
-        T = typeof(maxabs)
+        return _generic_normp(x, p, maxabs)
     else
-        T = typeof(float(norm(v)))
+        # in this case, only the type of the last argument is used
+        # there is no scaling involved
+        return _generic_normp(x, p, float(norm(v)))
     end
+end
+
+function _generic_normp(x, p, maxabs::T) where {T}
     spp::promote_type(Float64, T) = p
     if -1 <= p <= 1 || (isfinite(length(x)*maxabs^spp) && !iszero(maxabs^spp)) # scaling not necessary
         sum::promote_type(Float64, T) = norm(v)^spp

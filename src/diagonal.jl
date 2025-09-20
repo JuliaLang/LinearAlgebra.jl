@@ -1246,3 +1246,14 @@ function fillband!(D::Diagonal, x, l, u)
     end
     return D
 end
+
+# norm
+function generic_normMinusInf(D::Diagonal)
+    norm_diag = generic_normMinusInf(D.diag)
+    min(norm_diag, zero(norm_diag))
+end
+generic_normInf(D::Diagonal) = generic_normInf(D.diag)
+generic_norm1(D::Diagonal) = generic_norm1(D.diag)
+_generic_norm2(D::Diagonal, maxabs) = _generic_norm2(D.diag, maxabs)
+_generic_normp(D::Diagonal, p, maxabs) = _generic_normp(D.diag, p, maxabs)
+norm_x_minus_y(D1::Diagonal, D2::Diagonal) = norm_x_minus_y(D1.diag, D2.diag)
