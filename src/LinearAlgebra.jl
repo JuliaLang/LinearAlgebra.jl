@@ -587,6 +587,8 @@ include("schur.jl")
 include("structuredbroadcast.jl")
 include("deprecated.jl")
 
+include("evalpoly.jl")
+
 const ⋅ = dot
 const × = cross
 export ⋅, ×
