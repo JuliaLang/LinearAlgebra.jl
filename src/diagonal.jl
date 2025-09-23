@@ -1114,7 +1114,7 @@ end
 # norm
 function generic_normMinusInf(D::Diagonal)
     norm_diag = norm(D.diag, -Inf)
-    min(norm_diag, zero(norm_diag))
+    return size(D,1) > 1 ? min(norm_diag, zero(norm_diag)) : norm_diag
 end
 generic_normInf(D::Diagonal) = norm(D.diag, Inf)
 generic_norm1(D::Diagonal) = norm(D.diag, 1)
