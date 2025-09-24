@@ -579,20 +579,14 @@ function generic_norm2(x)
     T = typeof(maxabs)
     if isfinite(length(x)*maxabs*maxabs) && !iszero(maxabs*maxabs) # Scaling not necessary
         sum::promote_type(Float64, T) = norm_sqr(v)
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             sum += norm_sqr(v)
         end
         ismissing(sum) && return missing
         return convert(T, sqrt(sum))
     else
         sum = abs2(norm(v)/maxabs)
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             sum += (norm(v)/maxabs)^2
         end
         ismissing(sum) && return missing
@@ -614,10 +608,7 @@ function generic_normp(x, p)
     spp::promote_type(Float64, T) = p
     if -1 <= p <= 1 || (isfinite(length(x)*maxabs^spp) && !iszero(maxabs^spp)) # scaling not necessary
         sum::promote_type(Float64, T) = norm(v)^spp
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             ismissing(v) && return missing
             sum += norm(v)^spp
         end
@@ -625,10 +616,7 @@ function generic_normp(x, p)
     else # rescaling
         sum = (norm(v)/maxabs)^spp
         ismissing(sum) && return missing
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             ismissing(v) && return missing
             sum += (norm(v)/maxabs)^spp
         end
