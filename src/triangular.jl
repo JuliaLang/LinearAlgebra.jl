@@ -530,6 +530,11 @@ function tril!(A::UnitLowerTriangular, k::Integer=0)
     return tril!(LowerTriangular(A.data), k)
 end
 
+tril_maybe_inplace(A, k::Integer=0) = tril(A, k)
+triu_maybe_inplace(A, k::Integer=0) = triu(A, k)
+tril_maybe_inplace(A::StridedMatrix, k::Integer=0) = tril!(A, k)
+triu_maybe_inplace(A::StridedMatrix, k::Integer=0) = triu!(A, k)
+
 adjoint(A::LowerTriangular) = UpperTriangular(adjoint(A.data))
 adjoint(A::UpperTriangular) = LowerTriangular(adjoint(A.data))
 adjoint(A::UnitLowerTriangular) = UnitUpperTriangular(adjoint(A.data))
