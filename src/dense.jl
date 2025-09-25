@@ -237,6 +237,18 @@ end
 
 fillstored!(A::AbstractMatrix, v) = fill!(A, v)
 
+"""
+    isstoredband(A::AbstractMatrix, k::Integer)
+
+Return whether the `k`-th band of `A` is stored as a vector, as opposed to
+being generated during indexing.
+For example, only the principal diagonal would be stored for a `Diagonal`.
+
+!!! note
+    This is a conservative check that may have false negatives but should not have false positives.
+"""
+isstoredband(A::AbstractMatrix, k::Integer) = false
+
 diagind(m::Integer, n::Integer, k::Integer=0) = diagind(IndexLinear(), m, n, k)
 diagind(::IndexLinear, m::Integer, n::Integer, k::Integer=0) =
     k <= 0 ? range(1-k, step=m+1, length=min(m+k, n)) : range(k*m+1, step=m+1, length=min(m, n-k))
