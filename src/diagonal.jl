@@ -1111,6 +1111,23 @@ end
 /(u::AdjointAbsVec, D::Diagonal) = (D' \ u')'
 /(u::TransposeAbsVec, D::Diagonal) = transpose(transpose(D) \ transpose(u))
 
+# norm
+function generic_normMinusInf(D::Diagonal)
+    norm_diag = norm(D.diag, -Inf)
+    return size(D,1) > 1 ? min(norm_diag, zero(norm_diag)) : norm_diag
+end
+generic_normInf(D::Diagonal) = norm(D.diag, Inf)
+generic_norm1(D::Diagonal) = norm(D.diag, 1)
+generic_norm2(D::Diagonal) = norm(D.diag)
+function generic_normp(D::Diagonal, p)
+    v = norm(D.diag, p)
+    if size(D,1) > 1 && p < 0
+        v = norm(zero(v), p)
+    end
+    return v
+end
+norm_x_minus_y(D1::Diagonal, D2::Diagonal) = norm_x_minus_y(D1.diag, D2.diag)
+
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnorm12Inf(A::Diagonal, p) = maximum(opnorm(x, p) for x in A.diag)
