@@ -181,7 +181,8 @@ public AbstractTriangular,
         zeroslike,
         matprod_dest,
         fillstored!,
-        fillband!
+        fillband!,
+        uplo
 
 const BlasFloat = Union{Float64,Float32,ComplexF64,ComplexF32}
 const BlasReal = Union{Float64,Float32}
@@ -363,7 +364,14 @@ function char_uplo(uplo::Symbol)
     end
 end
 
+"""
+    sym_uplo(uplo::Char)
+
+Return the `Symbol` corresponding the `uplo` by checking for validity.
+"""
 function sym_uplo(uplo::Char)
+    # This method is called by other packages, and isn't used within LinearAlgebra
+    # It's retained here for backward compatibility.
     if uplo == 'U'
         return :U
     elseif uplo == 'L'
@@ -372,6 +380,13 @@ function sym_uplo(uplo::Char)
         throw_uplo()
     end
 end
+"""
+    _sym_uplo(uplo::Char)
+
+Return the `Symbol` corresponding to `uplo` without checking for validity.
+See also `sym_uplo`, which checks for validity.
+"""
+_sym_uplo(uplo::Char) = uplo == 'U' ? (:U) : (:L)
 
 @noinline throw_uplo() = throw(ArgumentError("uplo argument must be either :U (upper) or :L (lower)"))
 

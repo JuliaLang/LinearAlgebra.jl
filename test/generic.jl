@@ -755,12 +755,16 @@ end
 end
 
 @testset "generalized dot #32739" begin
-    for elty in (Int, Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
+    for elty in (Bool, Int, Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
         n = 10
         if elty <: Int
             A = rand(-n:n, n, n)
             x = rand(-n:n, n)
             y = rand(-n:n, n)
+        elseif elty <: Bool
+            A = rand(elty, n, n)
+            x = rand(elty, n)
+            y = rand(elty, n)
         elseif elty <: Real
             A = convert(Matrix{elty}, randn(n,n))
             x = rand(elty, n)
@@ -770,7 +774,7 @@ end
             x = rand(elty, n)
             y = rand(elty, n)
         end
-        @test dot(x, A, y) ≈ dot(A'x, y) ≈ *(x', A, y) ≈ (x'A)*y
+        @test (@inferred dot(x, A, y)) ≈ dot(A'x, y) ≈ *(x', A, y) ≈ (x'A)*y
         @test dot(x, A', y) ≈ dot(A*x, y) ≈ *(x', A', y) ≈ (x'A')*y
         elty <: Real && @test dot(x, transpose(A), y) ≈ dot(x, transpose(A)*y) ≈ *(x', transpose(A), y) ≈ (x'*transpose(A))*y
         B = reshape([A], 1, 1)
