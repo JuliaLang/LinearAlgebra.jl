@@ -263,7 +263,7 @@ end
     a = randn(5,5)
     A = a'a
     for ul in (:U, :L)
-        B = bunchkaufman(A, ul)
+        B = bunchkaufman(Symmetric(A, ul))
         @test A ≈ Array(B) ≈ Matrix(B) ≈ AbstractArray(B) ≈ AbstractMatrix(B)
     end
 end
