@@ -276,8 +276,8 @@ eigvecs(A::Union{Number, AbstractMatrix}; kws...) =
 eigvecs(F::Union{Eigen, GeneralizedEigen}) = F.vectors
 
 eigvals(F::Union{Eigen, GeneralizedEigen}) = F.values
-eigmin(F::Union{Eigen, GeneralizedEigen}) = minimum(F.values)
-eigmax(F::Union{Eigen, GeneralizedEigen}) = maximum(F.values)
+eigmin(F::Union{Eigen, GeneralizedEigen}) = minimum(eigvals(F))
+eigmax(F::Union{Eigen, GeneralizedEigen}) = maximum(eigvals(F))
 
 """
     eigvals!(A; permute::Bool=true, scale::Bool=true, sortby) -> values

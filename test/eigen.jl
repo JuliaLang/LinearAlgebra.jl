@@ -45,9 +45,9 @@ aimg  = randn(n,n)/2
             @test isposdef(a) == isposdef(f)
             @test eigvals(f) === f.values
 
-            if all(isreal, f.values)
-                @test eigmin(f) == minimum(f.values)
-                @test eigmax(f) == maximum(f.values)
+            if all(isreal, eigvals(f))
+                @test eigmin(f) == minimum(eigvals(f))
+                @test eigmax(f) == maximum(eigvals(f))
             else
                 @test_throws MethodError eigmin(f)
                 @test_throws MethodError eigmax(f)
@@ -91,9 +91,9 @@ aimg  = randn(n,n)/2
             @test eigvecs(asym_sg, ASG2) == f.vectors
             @test eigvals(f) === f.values
 
-            if all(isreal, f.values)
-                @test eigmin(f) == minimum(f.values)
-                @test eigmax(f) == maximum(f.values)
+            if all(isreal, eigvals(f))
+                @test eigmin(f) == minimum(eigvals(f))
+                @test eigmax(f) == maximum(eigvals(f))
             else
                 @test_throws MethodError eigmin(f)
                 @test_throws MethodError eigmax(f)
