@@ -219,7 +219,7 @@ Factorization{T}(B::BunchKaufman) where {T} = BunchKaufman{T}(B)
 
 AbstractMatrix(B::BunchKaufman) = B.uplo == 'U' ? B.P'B.U*B.D*B.U'B.P : B.P'B.L*B.D*B.L'B.P
 AbstractArray(B::BunchKaufman) = AbstractMatrix(B)
-Matrix(B::BunchKaufman) = Array(AbstractArray(B))
+Matrix(B::BunchKaufman) = convert(Array, AbstractArray(B))
 Array(B::BunchKaufman) = Matrix(B)
 
 
