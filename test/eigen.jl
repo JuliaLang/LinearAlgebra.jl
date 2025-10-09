@@ -44,6 +44,15 @@ aimg  = randn(n,n)/2
             @test inv(a) ≈ inv(f)
             @test isposdef(a) == isposdef(f)
             @test eigvals(f) === f.values
+
+            if all(isreal, eigvals(f))
+                @test eigmin(f) == minimum(eigvals(f))
+                @test eigmax(f) == maximum(eigvals(f))
+            else
+                @test_throws MethodError eigmin(f)
+                @test_throws MethodError eigmax(f)
+            end
+
             @test eigvecs(f) === f.vectors
             @test Array(f) ≈ a
 
@@ -81,6 +90,15 @@ aimg  = randn(n,n)/2
             @test prod(f.values) ≈ prod(eigvals(asym_sg/(ASG2))) atol=200ε
             @test eigvecs(asym_sg, ASG2) == f.vectors
             @test eigvals(f) === f.values
+
+            if all(isreal, eigvals(f))
+                @test eigmin(f) == minimum(eigvals(f))
+                @test eigmax(f) == maximum(eigvals(f))
+            else
+                @test_throws MethodError eigmin(f)
+                @test_throws MethodError eigmax(f)
+            end
+
             @test eigvecs(f) === f.vectors
             @test_throws FieldError f.Z
 
