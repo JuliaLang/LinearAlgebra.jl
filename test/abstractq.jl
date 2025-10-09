@@ -68,6 +68,7 @@ n = 5
         end
         @test convert(Matrix, Q) ≈ Matrix(Q) ≈ Q[:,:] ≈ copyto!(zeros(T, size(Q)), Q) ≈ Q.Q*I
         @test convert(Matrix, Q') ≈ Matrix(Q') ≈ (Q')[:,:] ≈ copyto!(zeros(T, size(Q)), Q') ≈ Q.Q'*I
+        @test AbstractMatrix(Q) ≈ AbstractArray(Q) ≈ AbstractMatrix{T}(Q) ≈ AbstractArray{T}(Q)
         @test Q[1,:] == Q.Q[1,:] == view(Q, 1, :)
         @test Q[:,1] == Q.Q[:,1] == view(Q, :, 1)
         @test Q[1,1] == Q.Q[1,1]
