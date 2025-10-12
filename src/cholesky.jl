@@ -646,7 +646,7 @@ Factorization{T}(C::CholeskyPivoted) where {T} = CholeskyPivoted{T}(C)
 
 AbstractMatrix(C::Cholesky) = C.uplo == 'U' ? C.U'C.U : C.L*C.L'
 AbstractArray(C::Cholesky) = AbstractMatrix(C)
-Matrix(C::Cholesky) = Array(AbstractArray(C))
+Matrix(C::Cholesky) = convert(Array, AbstractArray(C))
 Array(C::Cholesky) = Matrix(C)
 
 function AbstractMatrix(F::CholeskyPivoted)
@@ -655,7 +655,7 @@ function AbstractMatrix(F::CholeskyPivoted)
     U'U
 end
 AbstractArray(F::CholeskyPivoted) = AbstractMatrix(F)
-Matrix(F::CholeskyPivoted) = Array(AbstractArray(F))
+Matrix(F::CholeskyPivoted) = convert(Array, AbstractArray(F))
 Array(F::CholeskyPivoted) = Matrix(F)
 
 copy(C::Cholesky) = Cholesky(copy(C.factors), C.uplo, C.info)
