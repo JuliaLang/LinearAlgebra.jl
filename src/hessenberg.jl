@@ -670,3 +670,5 @@ function logdet(F::Hessenberg)
     d,s = logabsdet(F)
     return d + log(s)
 end
+
+isstoredband(U::UpperHessenberg, k::Integer) = k >= -1 && isstoredband(parent(U), k)
