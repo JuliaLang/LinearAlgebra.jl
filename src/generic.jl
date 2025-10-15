@@ -1224,6 +1224,7 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
+    T = promote_op(\, eltype(A), eltype(B))
     if m == n
         if istril(A)
             if istriu(A)
@@ -1235,9 +1236,9 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(A) \ B
+        return _lu(_lucopy(A, T)) \ B
     end
-    return qr(A, ColumnNorm()) \ B
+    return _qr(copy_similar(A, _qreltype(T)), ColumnNorm()) \ B
 end
 
 (\)(a::AbstractVector, b::AbstractArray) = pinv(a) * b
