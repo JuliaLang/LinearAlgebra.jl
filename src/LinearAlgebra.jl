@@ -346,13 +346,7 @@ function checksquare(A)
     return sizeA[1]
 end
 
-function checksquare(A...)
-    sizes = Vector{Int}(undef, length(A))
-    for i in eachindex(A)
-        sizes[i] = checksquare(A[i])
-    end
-    return sizes
-end
+checksquare(A...) = [checksquare(a) for a in A]
 
 function char_uplo(uplo::Symbol)
     if uplo === :U
