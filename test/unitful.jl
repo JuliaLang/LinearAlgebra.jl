@@ -86,7 +86,7 @@ end
         @test U isa AbstractMatrix{<:Union{Real,Complex}}
         @test V isa AbstractMatrix{<:Union{Real,Complex}}
         @test s isa AbstractVector{<:Furlong{1}}
-        E = eigen(Du)
+        E = eigen(Du; sortby=nothing)
         vals, vecs = E
         @test Matrix(E) == Du
         @test vals isa AbstractVector{<:Furlong{1}}
