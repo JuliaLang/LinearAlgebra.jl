@@ -1430,4 +1430,15 @@ end
     @test log(D) ≈ log(UpperTriangular(D))
 end
 
+@testset "issue 1362" begin
+    A = zeros(2,2)
+    B = zeros(2,3)
+    C = zeros(2,2,1)
+    @test LinearAlgebra.checksquare(A) == 2
+    @test LinearAlgebra.checksquare(A,A) == [2, 2]
+    @test_throws DimensionMismatch LinearAlgebra.checksquare(B)
+    @test_throws DimensionMismatch LinearAlgebra.checksquare(C)
+    @test_throws DimensionMismatch LinearAlgebra.checksquare(A,B)
+end
+
 end # module TestDense
