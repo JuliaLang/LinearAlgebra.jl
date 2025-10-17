@@ -1288,4 +1288,13 @@ end
     end
 end
 
+@testset "diag with a Val index" begin
+    B = Bidiagonal(1:4, 1:3, :U)
+    @test diag(B, Val(0)) === 1:4
+    @test diag(B, Val(1)) === 1:3
+    B = Bidiagonal(1:4, 1:3, :L)
+    @test diag(B, Val(0)) === 1:4
+    @test diag(B, Val(-1)) === 1:3
+end
+
 end # module TestBidiagonal
