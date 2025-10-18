@@ -970,6 +970,10 @@ function inv(D::Diagonal{T}) where T
     Diagonal(Di)
 end
 
+# Ensure doubly wrapped matrices use efficient diagonal methods and return a Symmetric/Hermitian type
+inv(A::Symmetric{<:Number,<:Diagonal}) = Symmetric(inv(A.data), sym_uplo(A.uplo))
+inv(A::Hermitian{<:Number,<:Diagonal}) = Hermitian(inv(real(A.data)), sym_uplo(A.uplo))
+
 function pinv(D::Diagonal{T}) where T
     Di = similar(D.diag, typeof(inv(oneunit(T))))
     for i = 1:length(D.diag)
