@@ -1576,4 +1576,17 @@ end
     @test D == D2
 end
 
+@testset "norm" begin
+    D = Diagonal(float.(1:3))
+    A = Array(D)
+    @testset for p in -2:2
+        p == 0 && continue
+        @test norm(D, p) ≈ sum(abs.(D).^p)^(1/p)
+        @test norm(D, p) ≈ norm(A, p)
+    end
+    @test norm(D, Inf) ≈ norm(A, Inf)
+    @test norm(D, -Inf) ≈ norm(A, -Inf)
+    @test norm(D, 0) ≈ norm(A, 0)
+end
+
 end # module TestDiagonal
