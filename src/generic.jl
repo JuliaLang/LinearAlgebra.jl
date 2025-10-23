@@ -1169,18 +1169,17 @@ end
 inv(A::Adjoint) = adjoint(inv(parent(A)))
 inv(A::Transpose) = transpose(inv(parent(A)))
 
-pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T<:Real} = _vectorpinv(transpose, v, tol)
-pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T<:Complex} = _vectorpinv(adjoint, v, tol)
-pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T} = _vectorpinv(adjoint, v, tol)
-function _vectorpinv(dualfn::Tf, v::AbstractVector{Tv}, tol) where {Tv,Tf}
-    res = dualfn(similar(v, typeof(zero(Tv) / (abs2(one(Tv)) + abs2(one(Tv))))))
+_pinvadjoint(v::AbstractVector{T}) where {T<:Real} = transpose(v)
+_pinvadjoint(v::AbstractVector) = adjoint(v)
+function pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T}
+    res = _pinvadjoint(similar(v, typeof(zero(T) / (abs2(one(T)) + abs2(one(T))))))
     den = sum(abs2, v)
     # as tol is the threshold relative to the maximum singular value, for a vector with
     # single singular value σ=√den, σ ≦ tol*σ is equivalent to den=0 ∨ tol≥1
     if iszero(den) || tol >= one(tol)
         fill!(res, zero(eltype(res)))
     else
-        res .= dualfn(v) ./ den
+        res .= _pinvadjoint(v) ./ den
     end
     return res
 end
@@ -1224,6 +1223,7 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
+    T = promote_op(\, eltype(A), eltype(B))
     if m == n
         if istril(A)
             if istriu(A)
@@ -1235,12 +1235,16 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(A) \ B
+        return lu(convert(AbstractArray{T}, A)) \ B
     end
-    return qr(A, ColumnNorm()) \ B
+    return qr(convert(AbstractArray{T}, A), ColumnNorm()) \ B
 end
 
-(\)(a::AbstractVector, b::AbstractArray) = pinv(a) * b
+function (\)(a::AbstractVector, b::AbstractArray)
+    den = sum(abs2, a)
+    goodden = den == 0 ? one(den) : den
+    return _pinvadjoint(a) * b / goodden
+end
 """
     A / B
 
@@ -1271,7 +1275,11 @@ function (/)(A::AbstractVecOrMat, B::AbstractVecOrMat)
 end
 # \(A::StridedMatrix,x::Number) = inv(A)*x Should be added at some point when the old elementwise version has been deprecated long enough
 # /(x::Number,A::StridedMatrix) = x*inv(A)
-/(x::Number, v::AbstractVector) = x*pinv(v)
+function (/)(x::Number, v::AbstractVector)
+    den = sum(abs2, v)
+    goodden = den == 0 ? one(den) : den
+    return (x / goodden) * _pinvadjoint(v)
+end
 
 cond(x::Number) = iszero(x) ? Inf : 1.0
 cond(x::Number, p) = cond(x)

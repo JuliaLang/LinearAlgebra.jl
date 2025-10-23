@@ -954,4 +954,25 @@ end
     @test Int[] ≈ Int[]
 end
 
+@testset "issue 930" begin
+    A = rand(Int, 2, 2)
+    B = rand(Int, 2, 3)
+    C = rand(Int, 2)
+    for T ∈ (Float32, BigFloat)
+        v = randn(T, 2)
+        x = @inferred C \ v
+        @test eltype(x) <: T
+        x = @inferred zero(C) \ v
+        @test eltype(x) <: T
+        x = @inferred T(1) / C
+        @test eltype(x) <: T
+        x = @inferred T(1) / zero(C)
+        @test eltype(x) <: T
+        for M ∈ (A, B)
+            x = @inferred M \ v
+            @test eltype(x) <: T
+        end
+    end
+end
+
 end # module TestGeneric
