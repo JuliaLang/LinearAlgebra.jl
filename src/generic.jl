@@ -1189,8 +1189,6 @@ end
 # would turn into inv(A)^1 = copy(inv(A)), which makes an extra copy.
 @inline Base.literal_pow(::typeof(^), A::AbstractMatrix, ::Val{-1}) = inv(A)
 
-_maybecopy(A::AbstractArray{T}, ::Type{T}) where {T} = A
-_maybecopy(A, ::Type{T}) where {T} = copy_oftype(A, T)
 """
     \\(A, B)
 
@@ -1237,9 +1235,9 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(_maybecopy(A, T)) \ B
+        return lu(convert(AbstractArray{T}, A)) \ B
     end
-    return qr(_maybecopy(A, T), ColumnNorm()) \ B
+    return qr(convert(AbstractArray{T}, A), ColumnNorm()) \ B
 end
 
 function (\)(a::AbstractVector, b::AbstractArray)
