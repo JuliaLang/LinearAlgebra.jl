@@ -550,6 +550,12 @@ adjoint!(A::UnitUpperTriangular) = UnitLowerTriangular(copytri!(A.data, 'U' , tr
 
 diag(A::UpperOrLowerTriangular) = diag(A.data)
 diag(A::Union{UnitLowerTriangular, UnitUpperTriangular}) = fill(oneunit(eltype(A)), size(A,1))
+diag(A::UpperTriangular, ::Val{k}) where {k} = k >= 0 ?  diag(A.data, Val(k)) : diag(A, k)
+diag(A::LowerTriangular, ::Val{k}) where {k} = k <= 0 ? diag(A.data, Val(k)) : diag(A, k)
+diag(A::UnitUpperTriangular, ::Val{0}) = diag(A)
+diag(A::UnitLowerTriangular, ::Val{0}) = diag(A)
+diag(A::UnitUpperTriangular, ::Val{k}) where {k} = k > 0 ? diag(A.data, Val(k)) : diag(A, k)
+diag(A::UnitLowerTriangular, ::Val{k}) where {k} = k < 0 ? diag(A.data, Val(k)) : diag(A, k)
 
 # Unary operations
 -(A::LowerTriangular) = LowerTriangular(-A.data)
@@ -2994,8 +3000,8 @@ logdet(A::UnitUpperTriangular{T}) where {T} = zero(T)
 logdet(A::UnitLowerTriangular{T}) where {T} = zero(T)
 logabsdet(A::UnitUpperTriangular{T}) where {T} = zero(T), one(T)
 logabsdet(A::UnitLowerTriangular{T}) where {T} = zero(T), one(T)
-det(A::UpperTriangular) = prod(diag(A.data))
-det(A::LowerTriangular) = prod(diag(A.data))
+det(A::UpperTriangular) = prod(diag(A.data, Val(0)))
+det(A::LowerTriangular) = prod(diag(A.data, Val(0)))
 function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     sgn = one(T)
     abs_det = zero(real(T))
