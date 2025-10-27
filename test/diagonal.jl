@@ -1577,16 +1577,22 @@ end
 end
 
 @testset "norm" begin
-    D = Diagonal(float.(1:3))
-    A = Array(D)
-    @testset for p in -2:2
-        p == 0 && continue
-        @test norm(D, p) ≈ sum(abs.(D).^p)^(1/p)
-        @test norm(D, p) ≈ norm(A, p)
+    # test x ≈ y but also ensure that the types are identical
+    function test_isapprox_and_type(x::T, y::T) where {T}
+        @test x ≈ y
     end
-    @test norm(D, Inf) ≈ norm(A, Inf)
-    @test norm(D, -Inf) ≈ norm(A, -Inf)
-    @test norm(D, 0) ≈ norm(A, 0)
+    @testset "size(D,1) = $(size(D,1))" for D in ( Diagonal(1:3), Diagonal(1:1), Diagonal(1:0) )
+        A = Array(D)
+        @testset for p in -2:2
+            p == 0 && continue
+            s = sum(float.(abs.(D)).^p)^(1/p)
+            test_isapprox_and_type(norm(D, p), isempty(D) ? zero(s) : s)
+            test_isapprox_and_type(norm(D, p), norm(A, p))
+        end
+        test_isapprox_and_type(norm(D, Inf), norm(A, Inf))
+        test_isapprox_and_type(norm(D, -Inf), norm(A, -Inf))
+        test_isapprox_and_type(norm(D, 0), norm(A, 0))
+    end
 end
 
 end # module TestDiagonal
