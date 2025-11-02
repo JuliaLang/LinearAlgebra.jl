@@ -1020,7 +1020,6 @@ See also [`hermitianpart!`](@ref) for the corresponding in-place operation.
 !!! compat "Julia 1.10"
     This function requires Julia 1.10 or later.
 """
-
 hermitianpart(A::AbstractMatrix, uplo::Symbol=:U) = Hermitian(_hermitianpart(A), uplo)
 hermitianpart(x::Number) = float(real(x))
 
