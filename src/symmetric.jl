@@ -1011,10 +1011,6 @@ of `A`; it is also sometimes called the "operator real part". The optional argum
 [`Hermitian`](@ref) view. For real matrices, the latter is equivalent to a
 [`Symmetric`](@ref) view.
 
-For scalar inputs `x`, the function returns the real part of `x`. Standard integer scalars
-are promoted to `Float64` to align with the behavior of 1×1 Hermitian matrices, while other numeric types
-(`Float32`, `BigInt`, `Rational`, `BigFloat`) are preserved.
-
 See also [`hermitianpart!`](@ref) for the corresponding in-place operation.
 
 !!! compat "Julia 1.10"

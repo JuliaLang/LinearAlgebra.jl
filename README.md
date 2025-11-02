@@ -1,28 +1,3 @@
-# LinearAlgebra
-
----
-## 🚀 About this fork
-
-This is my fork of LinearAlgebra.jl for contributing to Julia as part of my GSoC 2026 preparation.
-
-**My contributions:**
-- [PR #1445](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1445) - Add hermitianpart method for Number types
-- Active in issues: Coming
-
-**Original repository:** [JuliaLang/LinearAlgebra.jl](https://github.com/JuliaLang/LinearAlgebra.jl)
-
----
-
-# LinearAlgebra
-
-This package is part of the Julia standard library (stdlib).
-
-LinearAlgebra.jl provides functionality for performing linear algebra operations in Julia.
-
-This package is part of the Julia standard library (stdlib).
-
-`LinearAlgebra.jl` provides functionality for performing linear algebra operations in Julia.
-
 | **Build Status**                    | **Coverage**                    |
 |:-------------------------------:|:-------------------------------:|
 [![Build status](https://badge.buildkite.com/4032f509b3a7354c8ce7b34b98c7496d66adc4504b0101cbcf.svg?branch=master)](https://buildkite.com/julialang/linearalgebra-dot-jl) | [![][codecov-img]][codecov-url] |
