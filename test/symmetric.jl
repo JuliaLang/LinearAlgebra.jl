@@ -1040,7 +1040,6 @@ end
     @test hermitianpart(5) == 5.0
     @test hermitianpart(2.5) == 2.5
     @test hermitianpart(-1 + 0im) == -1
-    @test typeof(hermitianpart(3 + 4im)) == 3.0
 end
 end
 
