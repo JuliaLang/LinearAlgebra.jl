@@ -1035,6 +1035,12 @@ end
         @test Aherm isa Hermitian
         @test Aherm.uplo == LinearAlgebra.char_uplo(uplo)
     end
+    @testset "hermitianpart for numbers" begin
+        @test hermitianpart(3 + 4im) == 3
+        @test hermitianpart(5) == 5.0
+        @test hermitianpart(2.5 + 4.3im) == 2.5
+        @test hermitianpart(-1 + 0im) == -1
+    end
 end
 
 @testset "Structured display" begin
