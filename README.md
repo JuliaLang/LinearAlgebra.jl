@@ -1,3 +1,9 @@
+# LinearAlgebra
+
+This package is part of the Julia standard library (stdlib).
+
+`LinearAlgebra.jl` provides functionality for performing linear algebra operations in Julia.
+
 | **Build Status**                    | **Coverage**                    |
 |:-------------------------------:|:-------------------------------:|
 [![Build status](https://badge.buildkite.com/4032f509b3a7354c8ce7b34b98c7496d66adc4504b0101cbcf.svg?branch=master)](https://buildkite.com/julialang/linearalgebra-dot-jl) | [![][codecov-img]][codecov-url] |
