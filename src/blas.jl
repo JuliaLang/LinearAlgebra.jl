@@ -86,6 +86,17 @@ export
 
 using ..LinearAlgebra: libblastrampoline, BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, chkstride1
 
+if USE_BLAS64
+    macro blasfunc(x)
+        return Expr(:quote, Symbol(x, "64_"))
+    end
+else
+    macro blasfunc(x)
+        return Expr(:quote, x)
+    end
+end
+
+include("libblas.jl")
 include("lbt.jl")
 
 # Legacy bindings that some packages (such as NNlib.jl) use.
@@ -106,16 +117,6 @@ Return an object representing the current `libblastrampoline` configuration.
     `get_config()` requires at least Julia 1.7.
 """
 get_config() = lbt_get_config()
-
-if USE_BLAS64
-    macro blasfunc(x)
-        return Expr(:quote, Symbol(x, "64_"))
-    end
-else
-    macro blasfunc(x)
-        return Expr(:quote, x)
-    end
-end
 
 _tryparse_env_int(key) = tryparse(Int, get(ENV, key, ""))
 
@@ -207,16 +208,14 @@ Copy `n` elements of array `X` with stride `incx` to array `Y` with stride `incy
 """
 function blascopy! end
 
-for (fname, elty) in ((:dcopy_,:Float64),
-                      (:scopy_,:Float32),
-                      (:zcopy_,:ComplexF64),
-                      (:ccopy_,:ComplexF32))
+for (fname, elty) in ((:dcopy,:Float64),
+                      (:scopy,:Float32),
+                      (:zcopy,:ComplexF64),
+                      (:ccopy,:ComplexF32))
     @eval begin
         # SUBROUTINE DCOPY(N,DX,INCX,DY,INCY)
         function blascopy!(n::Integer, DX::Union{Ptr{$elty},AbstractArray{$elty}}, incx::Integer, DY::Union{Ptr{$elty},AbstractArray{$elty}}, incy::Integer)
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}),
-                 n, DX, incx, DY, incy)
+            $fname(n, DX, incx, DY, incy)
             DY
         end
     end
@@ -236,18 +235,16 @@ first `n` elements of array `Y` with stride `incy`. Returns `X` and `Y`.
 """
 function rot! end
 
-for (fname, elty, cty, sty, lib) in ((:drot_, :Float64, :Float64, :Float64, libblastrampoline),
-                                     (:srot_, :Float32, :Float32, :Float32, libblastrampoline),
-                                     (:zdrot_, :ComplexF64, :Float64, :Float64, libblastrampoline),
-                                     (:csrot_, :ComplexF32, :Float32, :Float32, libblastrampoline),
-                                     (:zrot_, :ComplexF64, :Float64, :ComplexF64, libblastrampoline),
-                                     (:crot_, :ComplexF32, :Float32, :ComplexF32, libblastrampoline))
+for (fname, elty, cty, sty) in ((:drot, :Float64, :Float64, :Float64),
+                                (:srot, :Float32, :Float32, :Float32),
+                                (:zdrot, :ComplexF64, :Float64, :Float64),
+                                (:csrot, :ComplexF32, :Float32, :Float32),
+                                (:zrot, :ComplexF64, :Float64, :ComplexF64),
+                                (:crot, :ComplexF32, :Float32, :ComplexF32))
     @eval begin
         # SUBROUTINE DROT(N,DX,INCX,DY,INCY,C,S)
         function rot!(n::Integer, DX::Union{Ptr{$elty},AbstractArray{$elty}}, incx::Integer, DY::Union{Ptr{$elty},AbstractArray{$elty}}, incy::Integer, C::$cty, S::$sty)
-            ccall((@blasfunc($fname), $lib), Cvoid,
-                (Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{$cty}, Ref{$sty}),
-                 n, DX, incx, DY, incy, C, S)
+            $fname(n, DX, incx, DY, incy, C, S)
             DX, DY
         end
     end
@@ -275,16 +272,14 @@ If `n` and `incx` are not provided, `length(X)` and `stride(X,1)` are used.
 """
 function scal end
 
-for (fname, elty) in ((:dscal_,:Float64),
-                      (:sscal_,:Float32),
-                      (:zscal_,:ComplexF64),
-                      (:cscal_,:ComplexF32))
+for (fname, elty) in ((:dscal,:Float64),
+                      (:sscal,:Float32),
+                      (:zscal,:ComplexF64),
+                      (:cscal,:ComplexF32))
     @eval begin
         # SUBROUTINE DSCAL(N,DA,DX,INCX)
         function scal!(n::Integer, DA::$elty, DX::Union{Ptr{$elty},AbstractArray{$elty}}, incx::Integer)
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                  (Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt}),
-                  n, DA, DX, incx)
+            $fname(n, DA, DX, incx)
             DX
         end
 
@@ -396,14 +391,17 @@ for (fname, elty) in ((:cblas_zdotu_sub,:ComplexF64),
     end
 end
 
-for (elty, f) in ((Float32, :dot), (Float64, :dot),
-                  (ComplexF32, :dotc), (ComplexF64, :dotc),
-                  (ComplexF32, :dotu), (ComplexF64, :dotu))
+for (elty, fname) in ((Float32, :dot),
+                      (Float64, :dot),
+                      (ComplexF32, :dotc),
+                      (ComplexF64, :dotc),
+                      (ComplexF32, :dotu),
+                      (ComplexF64, :dotu))
     @eval begin
-        function $f(x::AbstractArray{$elty}, y::AbstractArray{$elty})
+        function $fname(x::AbstractArray{$elty}, y::AbstractArray{$elty})
             n, m = length(x), length(y)
             n == m || throw(DimensionMismatch(lazy"dot product arguments have lengths $n and $m"))
-            GC.@preserve x y $f(n, vec_pointer_stride(x)..., vec_pointer_stride(y)...)
+            GC.@preserve x y $fname(n, vec_pointer_stride(x)..., vec_pointer_stride(y)...)
         end
     end
 end
@@ -426,16 +424,14 @@ julia> BLAS.nrm2(1, fill(1.0, 8), 2)
 """
 function nrm2 end
 
-for (fname, elty, ret_type) in ((:dnrm2_,:Float64,:Float64),
-                                (:snrm2_,:Float32,:Float32),
-                                (:dznrm2_,:ComplexF64,:Float64),
-                                (:scnrm2_,:ComplexF32,:Float32))
+for (fname, elty, ret_type) in ((:dnrm2,:Float64,:Float64),
+                                (:snrm2,:Float32,:Float32),
+                                (:dznrm2,:ComplexF64,:Float64),
+                                (:scnrm2,:ComplexF32,:Float32))
     @eval begin
         # SUBROUTINE DNRM2(N,X,INCX)
         function nrm2(n::Integer, X::Union{Ptr{$elty},AbstractArray{$elty}}, incx::Integer)
-            ccall((@blasfunc($fname), libblastrampoline), $ret_type,
-                (Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}),
-                 n, X, incx)
+            $fname(n, X, incx)
         end
     end
 end
@@ -467,16 +463,14 @@ julia> BLAS.asum(2, fill(1.0im, 10), 5)
 """
 function asum end
 
-for (fname, elty, ret_type) in ((:dasum_,:Float64,:Float64),
-                                (:sasum_,:Float32,:Float32),
-                                (:dzasum_,:ComplexF64,:Float64),
-                                (:scasum_,:ComplexF32,:Float32))
+for (fname, elty, ret_type) in ((:dasum,:Float64,:Float64),
+                                (:sasum,:Float32,:Float32),
+                                (:dzasum,:ComplexF64,:Float64),
+                                (:scasum,:ComplexF32,:Float32))
     @eval begin
         # SUBROUTINE ASUM(N, X, INCX)
         function asum(n::Integer, X::Union{Ptr{$elty},AbstractArray{$elty}}, incx::Integer)
-            ccall((@blasfunc($fname), libblastrampoline), $ret_type,
-                (Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}),
-                 n, X, incx)
+            $fname(n, X, incx)
         end
     end
 end
@@ -505,10 +499,10 @@ julia> BLAS.axpy!(2, x, y)
 """
 function axpy! end
 
-for (fname, elty) in ((:daxpy_,:Float64),
-                      (:saxpy_,:Float32),
-                      (:zaxpy_,:ComplexF64),
-                      (:caxpy_,:ComplexF32))
+for (fname, elty) in ((:daxpy,:Float64),
+                      (:saxpy,:Float32),
+                      (:zaxpy,:ComplexF64),
+                      (:caxpy,:ComplexF32))
     @eval begin
                 # SUBROUTINE DAXPY(N,DA,DX,INCX,DY,INCY)
                 # DY <- DA*DX + DY
@@ -518,9 +512,7 @@ for (fname, elty) in ((:daxpy_,:Float64),
                 #*     .. Array Arguments ..
                 #      DOUBLE PRECISION DX(*),DY(*)
         function axpy!(n::Integer, alpha::($elty), dx::Union{Ptr{$elty}, AbstractArray{$elty}}, incx::Integer, dy::Union{Ptr{$elty}, AbstractArray{$elty}}, incy::Integer)
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}),
-                 n, alpha, dx, incx, dy, incy)
+            $fname(n, alpha, dx, incx, dy, incy)
             dy
         end
     end
@@ -577,8 +569,10 @@ julia> BLAS.axpby!(2., x, 3., y)
 """
 function axpby! end
 
-for (fname, elty) in ((:daxpby_,:Float64), (:saxpby_,:Float32),
-                      (:zaxpby_,:ComplexF64), (:caxpby_,:ComplexF32))
+for (fname, elty) in ((:daxpby,:Float64),
+                      (:saxpby,:Float32),
+                      (:zaxpby,:ComplexF64),
+                      (:caxpby,:ComplexF32))
     @eval begin
         # SUBROUTINE DAXPBY(N,DA,DX,INCX,DB,DY,INCY)
         # DY <- DA*DX + DB*DY
@@ -590,9 +584,7 @@ for (fname, elty) in ((:daxpby_,:Float64), (:saxpby_,:Float32),
         function axpby!(n::Integer, alpha::($elty), dx::Union{Ptr{$elty},
                         AbstractArray{$elty}}, incx::Integer, beta::($elty),
                         dy::Union{Ptr{$elty}, AbstractArray{$elty}}, incy::Integer)
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid, (Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt}),
-                n, alpha, dx, incx, beta, dy, incy)
+            $fname(n, alpha, dx, incx, beta, dy, incy)
             dy
         end
     end
@@ -609,15 +601,13 @@ function axpby!(alpha::Number, x::AbstractArray{T}, beta::Number, y::AbstractArr
 end
 
 ## iamax
-for (fname, elty) in ((:idamax_,:Float64),
-                      (:isamax_,:Float32),
-                      (:izamax_,:ComplexF64),
-                      (:icamax_,:ComplexF32))
+for (fname, elty) in ((:idamax,:Float64),
+                      (:isamax,:Float32),
+                      (:izamax,:ComplexF64),
+                      (:icamax,:ComplexF32))
     @eval begin
         function iamax(n::Integer, dx::Union{Ptr{$elty}, AbstractArray{$elty}}, incx::Integer)
-            ccall((@blasfunc($fname), libblastrampoline),BlasInt,
-                (Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}),
-                n, dx, incx)
+            $fname(n, dx, incx)
         end
     end
 end
@@ -639,10 +629,10 @@ iamax
 # Level 2
 ## mv
 ### gemv
-for (fname, elty) in ((:dgemv_,:Float64),
-                      (:sgemv_,:Float32),
-                      (:zgemv_,:ComplexF64),
-                      (:cgemv_,:ComplexF32))
+for (fname, elty) in ((:dgemv,:Float64),
+                      (:sgemv,:Float32),
+                      (:zgemv,:ComplexF64),
+                      (:cgemv,:ComplexF32))
     @eval begin
              #SUBROUTINE DGEMV(TRANS,M,N,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
              #*     .. Scalar Arguments ..
@@ -675,13 +665,7 @@ for (fname, elty) in ((:dgemv_,:Float64),
             end
             lda >= size(A,1) || size(A,2) <= 1 || error("when `size(A,2) > 1`, `abs(stride(A,2))` must be at least `size(A,1)`")
             lda = max(1, size(A,1), lda)
-            GC.@preserve A X Y ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{$elty},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                 trans, size(A,1), size(A,2), alpha,
-                 pA, lda, pX, sX,
-                 beta, pY, sY, 1)
+            GC.@preserve A X Y $fname(trans, size(A,1), size(A,2), alpha, pA, lda, pX, sX, beta, pY, sY)
             Y
         end
         function gemv(trans::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, X::AbstractVector{$elty})
@@ -737,10 +721,10 @@ super-diagonals, and `alpha` is a scalar.
 """
 function gbmv end
 
-for (fname, elty) in ((:dgbmv_,:Float64),
-                      (:sgbmv_,:Float32),
-                      (:zgbmv_,:ComplexF64),
-                      (:cgbmv_,:ComplexF32))
+for (fname, elty) in ((:dgbmv,:Float64),
+                      (:sgbmv,:Float32),
+                      (:zgbmv,:ComplexF64),
+                      (:cgbmv,:ComplexF32))
     @eval begin
              # SUBROUTINE DGBMV(TRANS,M,N,KL,KU,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
              # *     .. Scalar Arguments ..
@@ -757,14 +741,7 @@ for (fname, elty) in ((:dgbmv_,:Float64),
             chkstride1(A)
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             py, sty = vec_pointer_stride(y, ArgumentError("dest vector with 0 stride is not allowed"))
-            GC.@preserve x y ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                 Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                 Ref{BlasInt}, Clong),
-                 trans, m, size(A,2), kl,
-                 ku, alpha, A, max(1,stride(A,2)),
-                 px, stx, beta, py, sty, 1)
+            GC.@preserve x y $fname(trans, m, size(A,2), kl, ku, alpha, A, max(1,stride(A,2)), px, stx, beta, py, sty)
             y
         end
         function gbmv(trans::AbstractChar, m::Integer, kl::Integer, ku::Integer, alpha::($elty), A::AbstractMatrix{$elty}, x::AbstractVector{$elty})
@@ -789,10 +766,10 @@ Only the [`ul`](@ref stdlib-blas-uplo) triangle of `A` is used.
 """
 function symv! end
 
-for (fname, elty, lib) in ((:dsymv_,:Float64,libblastrampoline),
-                           (:ssymv_,:Float32,libblastrampoline),
-                           (:zsymv_,:ComplexF64,libblastrampoline),
-                           (:csymv_,:ComplexF32,libblastrampoline))
+for (fname, elty) in ((:dsymv,:Float64),
+                      (:ssymv,:Float32),
+                      (:zsymv,:ComplexF64),
+                      (:csymv,:ComplexF32))
     # Note that the complex symv are not BLAS but auiliary functions in LAPACK
     @eval begin
              #      SUBROUTINE DSYMV(UPLO,N,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
@@ -820,13 +797,7 @@ for (fname, elty, lib) in ((:dsymv_,:Float64,libblastrampoline),
             chkstride1(A)
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             py, sty = vec_pointer_stride(y, ArgumentError("dest vector with 0 stride is not allowed"))
-            GC.@preserve x y ccall((@blasfunc($fname), $lib), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{$elty},
-                 Ptr{$elty}, Ref{BlasInt}, Clong),
-                 uplo, n, alpha, A,
-                 max(1,stride(A,2)), px, stx, beta,
-                 py, sty, 1)
+            GC.@preserve x y $fname(uplo, n, alpha, A, max(1,stride(A,2)), px, stx, beta, py, sty)
             y
         end
         function symv(uplo::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, x::AbstractVector{$elty})
@@ -865,8 +836,8 @@ Only the [`ul`](@ref stdlib-blas-uplo) triangle of `A` is used.
 """
 function hemv! end
 
-for (fname, elty) in ((:zhemv_,:ComplexF64),
-                      (:chemv_,:ComplexF32))
+for (fname, elty) in ((:zhemv,:ComplexF64),
+                      (:chemv,:ComplexF32))
     @eval begin
         function hemv!(uplo::AbstractChar, α::Union{$elty, Bool}, A::AbstractMatrix{$elty}, x::AbstractVector{$elty}, β::Union{$elty, Bool}, y::AbstractVector{$elty})
             chkuplo(uplo)
@@ -885,13 +856,7 @@ for (fname, elty) in ((:zhemv_,:ComplexF64),
             lda = max(1, stride(A, 2))
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             py, sty = vec_pointer_stride(y, ArgumentError("dest vector with 0 stride is not allowed"))
-            GC.@preserve x y ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{$elty},
-                 Ptr{$elty}, Ref{BlasInt}, Clong),
-                uplo, n, α, A,
-                lda, px, stx, β,
-                py, sty, 1)
+            GC.@preserve x y $fname(uplo, n, α, A, lda, px, stx, β, py, sty)
             y
         end
         function hemv(uplo::AbstractChar, α::($elty), A::AbstractMatrix{$elty}, x::AbstractVector{$elty})
@@ -921,8 +886,8 @@ Only the [`ul`](@ref stdlib-blas-uplo) triangle of `A` is used.
 hemv(ul, A, x)
 
 ### hpmv!, (HP) Hermitian packed matrix-vector operation defined as y := alpha*A*x + beta*y.
-for (fname, elty) in ((:zhpmv_, :ComplexF64),
-                      (:chpmv_, :ComplexF32))
+for (fname, elty) in ((:zhpmv, :ComplexF64),
+                      (:chpmv, :ComplexF32))
     @eval begin
         # SUBROUTINE ZHPMV(UPLO,N,ALPHA,AP,X,INCX,BETA,Y,INCY)
         # Y <- ALPHA*AP*X + BETA*Y
@@ -942,27 +907,7 @@ for (fname, elty) in ((:zhpmv_, :ComplexF64),
                        y::Union{Ptr{$elty}, AbstractArray{$elty}},
                        incy::Integer)
 
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                  (Ref{UInt8},     # uplo,
-                   Ref{BlasInt},   # n,
-                   Ref{$elty},     # α,
-                   Ptr{$elty},     # AP,
-                   Ptr{$elty},     # x,
-                   Ref{BlasInt},   # incx,
-                   Ref{$elty},     # β,
-                   Ptr{$elty},     # y, output
-                   Ref{BlasInt},   # incy
-                   Clong),         # length of uplo
-                  uplo,
-                  n,
-                  α,
-                  AP,
-                  x,
-                  incx,
-                  β,
-                  y,
-                  incy,
-                  1)
+            $fname(uplo, n, α, AP, x, incx, β, y, incy)
             return y
         end
     end
@@ -1014,8 +959,8 @@ Return the updated `y`.
 hpmv!
 
 ### sbmv, (SB) symmetric banded matrix-vector multiplication
-for (fname, elty) in ((:dsbmv_,:Float64),
-                      (:ssbmv_,:Float32))
+for (fname, elty) in ((:dsbmv,:Float64),
+                      (:ssbmv,:Float32))
     @eval begin
              #       SUBROUTINE DSBMV(UPLO,N,K,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
              # *     .. Scalar Arguments ..
@@ -1030,13 +975,9 @@ for (fname, elty) in ((:dsbmv_,:Float64),
             chkstride1(A)
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             py, sty = vec_pointer_stride(y, ArgumentError("dest vector with 0 stride is not allowed"))
-            GC.@preserve x y ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{$elty},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                 uplo, size(A,2), k, alpha,
-                 A, max(1,stride(A,2)), px, stx,
-                 beta, py, sty, 1)
+            GC.@preserve x y $fname(uplo, size(A,2), k, alpha,
+                                    A, max(1,stride(A,2)), px, stx,
+                                    beta, py, sty)
             y
         end
         function sbmv(uplo::AbstractChar, k::Integer, alpha::($elty), A::AbstractMatrix{$elty}, x::AbstractVector{$elty})
@@ -1081,8 +1022,8 @@ Return the updated `y`.
 sbmv!
 
 ### spmv!, (SP) symmetric packed matrix-vector operation defined as y := alpha*A*x + beta*y.
-for (fname, elty) in ((:dspmv_, :Float64),
-                      (:sspmv_, :Float32))
+for (fname, elty) in ((:dspmv, :Float64),
+                      (:sspmv, :Float32))
     @eval begin
         # SUBROUTINE DSPMV(UPLO,N,ALPHA,AP,X,INCX,BETA,Y,INCY)
         # Y <- ALPHA*AP*X + BETA*Y
@@ -1101,28 +1042,7 @@ for (fname, elty) in ((:dspmv_, :Float64),
                        β::$elty,
                        y::Union{Ptr{$elty}, AbstractArray{$elty}},
                        incy::Integer)
-
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                  (Ref{UInt8},     # uplo,
-                   Ref{BlasInt},   # n,
-                   Ref{$elty},     # α,
-                   Ptr{$elty},     # AP,
-                   Ptr{$elty},     # x,
-                   Ref{BlasInt},   # incx,
-                   Ref{$elty},     # β,
-                   Ptr{$elty},     # y, out
-                   Ref{BlasInt},   # incy
-                   Clong),         # length of uplo
-                  uplo,
-                  n,
-                  α,
-                  AP,
-                  x,
-                  incx,
-                  β,
-                  y,
-                  incy,
-                  1)
+            $fname(uplo, n, α, AP, x, incx, β, y, incy)
             return y
         end
     end
@@ -1174,8 +1094,8 @@ Return the updated `y`.
 spmv!
 
 ### spr!, (SP) symmetric packed matrix-vector operation defined as A := alpha*x*x' + A
-for (fname, elty) in ((:dspr_, :Float64),
-                      (:sspr_, :Float32))
+for (fname, elty) in ((:dspr, :Float64),
+                      (:sspr, :Float32))
     @eval begin
         function spr!(uplo::AbstractChar,
                       n::Integer,
@@ -1183,22 +1103,7 @@ for (fname, elty) in ((:dspr_, :Float64),
                       x::Union{Ptr{$elty}, AbstractArray{$elty}},
                       incx::Integer,
                       AP::Union{Ptr{$elty}, AbstractArray{$elty}})
-
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                  (Ref{UInt8},     # uplo,
-                   Ref{BlasInt},   # n,
-                   Ref{$elty},     # α,
-                   Ptr{$elty},     # x,
-                   Ref{BlasInt},   # incx,
-                   Ptr{$elty},     # AP,
-                   Clong),         # length of uplo
-                  uplo,
-                  n,
-                  α,
-                  x,
-                  incx,
-                  AP,
-                  1)
+            $fname(uplo, n, α, x, incx, AP)
             return AP
         end
     end
@@ -1245,8 +1150,8 @@ Return the updated `AP`.
 spr!
 
 ### hbmv, (HB) Hermitian banded matrix-vector multiplication
-for (fname, elty) in ((:zhbmv_,:ComplexF64),
-                      (:chbmv_,:ComplexF32))
+for (fname, elty) in ((:zhbmv,:ComplexF64),
+                      (:chbmv,:ComplexF32))
     @eval begin
              #       SUBROUTINE ZHBMV(UPLO,N,K,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
              # *     .. Scalar Arguments ..
@@ -1261,13 +1166,9 @@ for (fname, elty) in ((:zhbmv_,:ComplexF64),
             chkstride1(A)
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             py, sty = vec_pointer_stride(y, ArgumentError("dest vector with 0 stride is not allowed"))
-            GC.@preserve x y ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ref{$elty},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                 uplo, size(A,2), k, alpha,
-                 A, max(1,stride(A,2)), px, stx,
-                 beta, py, sty, 1)
+            $fname(uplo, size(A,2), k, alpha,
+                   A, max(1,stride(A,2)), px, stx,
+                   beta, py, sty)
             y
         end
         function hbmv(uplo::AbstractChar, k::Integer, alpha::($elty), A::AbstractMatrix{$elty}, x::AbstractVector{$elty})
@@ -1303,10 +1204,10 @@ The multiplication occurs in-place on `b`.
 """
 function trmv! end
 
-for (fname, elty) in ((:dtrmv_,:Float64),
-                        (:strmv_,:Float32),
-                        (:ztrmv_,:ComplexF64),
-                        (:ctrmv_,:ComplexF32))
+for (fname, elty) in ((:dtrmv,:Float64),
+                      (:strmv,:Float32),
+                      (:ztrmv,:ComplexF64),
+                      (:ctrmv,:ComplexF32))
     @eval begin
                 #       SUBROUTINE DTRMV(UPLO,TRANS,DIAG,N,A,LDA,X,INCX)
                 # *     .. Scalar Arguments ..
@@ -1323,12 +1224,7 @@ for (fname, elty) in ((:dtrmv_,:Float64),
             end
             chkstride1(A)
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
-            GC.@preserve x ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Clong, Clong, Clong),
-                 uplo, trans, diag, n,
-                 A, max(1,stride(A,2)), px, stx, 1, 1, 1)
+            GC.@preserve x $fname(uplo, trans, diag, n, A, max(1,stride(A,2)), px, stx)
             x
         end
         function trmv(uplo::AbstractChar, trans::AbstractChar, diag::AbstractChar, A::AbstractMatrix{$elty}, x::AbstractVector{$elty})
@@ -1360,10 +1256,10 @@ are assumed to be all ones.
 """
 function trsv end
 
-for (fname, elty) in ((:dtrsv_,:Float64),
-                        (:strsv_,:Float32),
-                        (:ztrsv_,:ComplexF64),
-                        (:ctrsv_,:ComplexF32))
+for (fname, elty) in ((:dtrsv,:Float64),
+                      (:strsv,:Float32),
+                      (:ztrsv,:ComplexF64),
+                      (:ctrsv,:ComplexF32))
     @eval begin
                 #       SUBROUTINE DTRSV(UPLO,TRANS,DIAG,N,A,LDA,X,INCX)
                 #       .. Scalar Arguments ..
@@ -1380,12 +1276,7 @@ for (fname, elty) in ((:dtrsv_,:Float64),
             end
             chkstride1(A)
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
-            GC.@preserve x ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Clong, Clong, Clong),
-                 uplo, trans, diag, n,
-                 A, max(1,stride(A,2)), px, stx, 1, 1, 1)
+            $fname(uplo, trans, diag, n, A, max(1,stride(A,2)), px, stx)
             x
         end
         function trsv(uplo::AbstractChar, trans::AbstractChar, diag::AbstractChar, A::AbstractMatrix{$elty}, x::AbstractVector{$elty})
@@ -1403,10 +1294,10 @@ Rank-1 update of the matrix `A` with vectors `x` and `y` as `alpha*x*y' + A`.
 """
 function ger! end
 
-for (fname, elty) in ((:dger_,:Float64),
-                      (:sger_,:Float32),
-                      (:zgerc_,:ComplexF64),
-                      (:cgerc_,:ComplexF32))
+for (fname, elty) in ((:dger,:Float64),
+                      (:sger,:Float32),
+                      (:zgerc,:ComplexF64),
+                      (:cgerc,:ComplexF32))
     @eval begin
         function ger!(α::$elty, x::AbstractVector{$elty}, y::AbstractVector{$elty}, A::AbstractMatrix{$elty})
             require_one_based_indexing(A, x, y)
@@ -1416,11 +1307,7 @@ for (fname, elty) in ((:dger_,:Float64),
             end
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             py, sty = vec_pointer_stride(y, ArgumentError("input vector with 0 stride is not allowed"))
-            GC.@preserve x y ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{BlasInt}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                 Ref{BlasInt}),
-                 m, n, α, px, stx, py, sty, A, max(1,stride(A,2)))
+            GC.@preserve x y $fname(m, n, α, px, stx, py, sty, A, max(1,stride(A,2)))
             A
         end
     end
@@ -1435,7 +1322,8 @@ Rank-1 update of the matrix `A` with vectors `x` and `y` as `alpha*x*transpose(y
 """
 function geru! end
 
-for (fname, elty) in ((:zgeru_,:ComplexF64), (:cgeru_,:ComplexF32))
+for (fname, elty) in ((:zgeru,:ComplexF64),
+                      (:cgeru,:ComplexF32))
     @eval begin
         function geru!(α::$elty, x::AbstractVector{$elty}, y::AbstractVector{$elty}, A::AbstractMatrix{$elty})
             require_one_based_indexing(A, x, y)
@@ -1445,11 +1333,7 @@ for (fname, elty) in ((:zgeru_,:ComplexF64), (:cgeru_,:ComplexF32))
             end
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             py, sty = vec_pointer_stride(y, ArgumentError("input vector with 0 stride is not allowed"))
-            GC.@preserve x y ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{BlasInt}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                 Ref{BlasInt}),
-                 m, n, α, px, stx, py, sty, A, max(1,stride(A,2)))
+            GC.@preserve x y $fname(m, n, α, px, stx, py, sty, A, max(1,stride(A,2)))
             A
         end
     end
@@ -1471,10 +1355,10 @@ Rank-1 update of the symmetric matrix `A` with vector `x` as `alpha*x*transpose(
 """
 function syr! end
 
-for (fname, elty, lib) in ((:dsyr_,:Float64,libblastrampoline),
-                           (:ssyr_,:Float32,libblastrampoline),
-                           (:zsyr_,:ComplexF64,libblastrampoline),
-                           (:csyr_,:ComplexF32,libblastrampoline))
+for (fname, elty) in ((:dsyr,:Float64),
+                      (:ssyr,:Float32),
+                      (:zsyr,:ComplexF64),
+                      (:csyr,:ComplexF32))
     @eval begin
         function syr!(uplo::AbstractChar, α::$elty, x::AbstractVector{$elty}, A::AbstractMatrix{$elty})
             chkuplo(uplo)
@@ -1484,10 +1368,7 @@ for (fname, elty, lib) in ((:dsyr_,:Float64,libblastrampoline),
                 throw(DimensionMismatch(lazy"A has size ($n,$n), x has length $(length(x))"))
             end
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
-            GC.@preserve x ccall((@blasfunc($fname), $lib), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}),
-                 uplo, n, α, px, stx, A, max(1,stride(A, 2)))
+            GC.@preserve x $fname(uplo, n, α, px, stx, A, max(1,stride(A, 2)))
             A
         end
     end
@@ -1504,8 +1385,8 @@ as `alpha*x*x' + A`.
 """
 function her! end
 
-for (fname, elty, relty) in ((:zher_,:ComplexF64, :Float64),
-                             (:cher_,:ComplexF32, :Float32))
+for (fname, elty, relty) in ((:zher,:ComplexF64, :Float64),
+                             (:cher,:ComplexF32, :Float32))
     @eval begin
         function her!(uplo::AbstractChar, α::$relty, x::AbstractVector{$elty}, A::AbstractMatrix{$elty})
             chkuplo(uplo)
@@ -1515,10 +1396,7 @@ for (fname, elty, relty) in ((:zher_,:ComplexF64, :Float64),
                 throw(DimensionMismatch(lazy"A has size ($n,$n), x has length $(length(x))"))
             end
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
-            GC.@preserve x ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{BlasInt}, Ref{$relty}, Ptr{$elty},
-                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                 uplo, n, α, px, stx, A, max(1,stride(A,2)), 1)
+            GC.@preserve x $fname(uplo, n, α, px, stx, A, max(1,stride(A,2)))
             A
         end
     end
@@ -1539,11 +1417,11 @@ Return the updated `C`.
 """
 function gemmt! end
 
-for (gemmt, elty) in
-        ((:dgemmt_,:Float64),
-         (:sgemmt_,:Float32),
-         (:zgemmt_,:ComplexF64),
-         (:cgemmt_,:ComplexF32))
+for (fname, elty) in
+        ((:dgemmt,:Float64),
+         (:sgemmt,:Float32),
+         (:zgemmt,:ComplexF64),
+         (:cgemmt,:ComplexF32))
     @eval begin
              # SUBROUTINE DGEMMT(UPLO,TRANSA,TRANSB,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
              # *     .. Scalar Arguments ..
@@ -1569,15 +1447,8 @@ for (gemmt, elty) in
             chkstride1(A)
             chkstride1(B)
             chkstride1(C)
-            ccall((@blasfunc($gemmt), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
-                 Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                 Ref{BlasInt}, Clong, Clong, Clong),
-                 uplo, transA, transB, n,
-                 ka, alpha, A, max(1,stride(A,2)),
-                 B, max(1,stride(B,2)), beta, C,
-                 max(1,stride(C,2)), 1, 1, 1)
+            $fname(uplo, transA, transB, n, ka, alpha, A, max(1,stride(A,2)),
+                   B, max(1,stride(B,2)), beta, C, max(1,stride(C,2)))
             C
         end
         function gemmt(uplo::AbstractChar, transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
@@ -1618,10 +1489,10 @@ Update `C` as `alpha*A*B + beta*C` or the other three variants according to
 function gemm! end
 
 for (gemm, elty) in
-        ((:dgemm_,:Float64),
-         (:sgemm_,:Float32),
-         (:zgemm_,:ComplexF64),
-         (:cgemm_,:ComplexF32))
+        ((:dgemm,:Float64),
+         (:sgemm,:Float32),
+         (:zgemm,:ComplexF64),
+         (:cgemm,:ComplexF32))
     @eval begin
              # SUBROUTINE DGEMM(TRANSA,TRANSB,M,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
              # *     .. Scalar Arguments ..
@@ -1649,15 +1520,10 @@ for (gemm, elty) in
             chkstride1(A)
             chkstride1(B)
             chkstride1(C)
-            ccall((@blasfunc($gemm), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                 Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                 Ref{BlasInt}, Clong, Clong),
-                 transA, transB, m, n,
-                 ka, alpha, A, max(1,stride(A,2)),
-                 B, max(1,stride(B,2)), beta, C,
-                 max(1,stride(C,2)), 1, 1)
+            $gemm(transA, transB, m, n,
+                  ka, alpha, A, max(1,stride(A,2)),
+                  B, max(1,stride(B,2)), beta, C,
+                  max(1,stride(C,2)))
             C
         end
         function gemm(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
@@ -1685,10 +1551,10 @@ gemm(tA, tB, A, B)
 
 
 ## (SY) symmetric matrix-matrix and matrix-vector multiplication
-for (mfname, elty) in ((:dsymm_,:Float64),
-                       (:ssymm_,:Float32),
-                       (:zsymm_,:ComplexF64),
-                       (:csymm_,:ComplexF32))
+for (fname, elty) in ((:dsymm,:Float64),
+                      (:ssymm,:Float32),
+                      (:zsymm,:ComplexF64),
+                      (:csymm,:ComplexF32))
     @eval begin
              #     SUBROUTINE DSYMM(SIDE,UPLO,M,N,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
              #     .. Scalar Arguments ..
@@ -1729,15 +1595,9 @@ for (mfname, elty) in ((:dsymm_,:Float64),
             chkstride1(A)
             chkstride1(B)
             chkstride1(C)
-            ccall((@blasfunc($mfname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                 Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                 Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
-                 Clong, Clong),
-                 side, uplo, m, n,
-                 alpha, A, max(1,stride(A,2)), B,
-                 max(1,stride(B,2)), beta, C, max(1,stride(C,2)),
-                 1, 1)
+            $fname(side, uplo, m, n,
+                   alpha, A, max(1,stride(A,2)), B,
+                   max(1,stride(B,2)), beta, C, max(1,stride(C,2)))
             C
         end
         function symm(side::AbstractChar, uplo::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
@@ -1777,8 +1637,8 @@ Update `C` as `alpha*A*B + beta*C` or `alpha*B*A + beta*C` according to [`side`]
 symm!
 
 ## (HE) Hermitian matrix-matrix and matrix-vector multiplication
-for (mfname, elty) in ((:zhemm_,:ComplexF64),
-                       (:chemm_,:ComplexF32))
+for (mfname, elty) in ((:zhemm,:ComplexF64),
+                       (:chemm,:ComplexF32))
     @eval begin
              #     SUBROUTINE DHEMM(SIDE,UPLO,M,N,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
              #     .. Scalar Arguments ..
@@ -1819,15 +1679,9 @@ for (mfname, elty) in ((:zhemm_,:ComplexF64),
             chkstride1(A)
             chkstride1(B)
             chkstride1(C)
-            ccall((@blasfunc($mfname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                 Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                 Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
-                 Clong, Clong),
-                 side, uplo, m, n,
-                 alpha, A, max(1,stride(A,2)), B,
-                 max(1,stride(B,2)), beta, C, max(1,stride(C,2)),
-                 1, 1)
+            $mfname(side, uplo, m, n,
+                    alpha, A, max(1,stride(A,2)), B,
+                    max(1,stride(B,2)), beta, C, max(1,stride(C,2)))
             C
         end
         function hemm(side::AbstractChar, uplo::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
@@ -1886,10 +1740,10 @@ according to [`trans`](@ref stdlib-blas-trans).
 """
 function syrk end
 
-for (fname, elty) in ((:dsyrk_,:Float64),
-                      (:ssyrk_,:Float32),
-                      (:zsyrk_,:ComplexF64),
-                      (:csyrk_,:ComplexF32))
+for (fname, elty) in ((:dsyrk,:Float64),
+                      (:ssyrk,:Float32),
+                      (:zsyrk,:ComplexF64),
+                      (:csyrk,:ComplexF32))
     @eval begin
         # SUBROUTINE DSYRK(UPLO,TRANS,N,K,ALPHA,A,LDA,BETA,C,LDC)
         # *     .. Scalar Arguments ..
@@ -1908,14 +1762,9 @@ for (fname, elty) in ((:dsyrk_,:Float64),
             if nn != n throw(DimensionMismatch(lazy"C has size ($n,$n), corresponding dimension of A is $nn")) end
             k  = size(A, trans == 'N' ? 2 : 1)
             chkstride1(A)
-            chkstride1(C)
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                   Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ref{$elty},
-                   Ptr{$elty}, Ref{BlasInt}, Clong, Clong),
-                  uplo, trans, n, k,
-                  alpha, A, max(1,stride(A,2)), beta,
-                  C, max(1,stride(C,2)), 1, 1)
+            $fname(uplo, trans, n, k,
+                   alpha, A, max(1,stride(A,2)), beta,
+                   C, max(1,stride(C,2)))
             C
         end
     end
@@ -1944,8 +1793,8 @@ triangle of `alpha*A*A'` or `alpha*A'*A`, according to [`trans`](@ref stdlib-bla
 """
 function herk end
 
-for (fname, elty, relty) in ((:zherk_, :ComplexF64, :Float64),
-                             (:cherk_, :ComplexF32, :Float32))
+for (fname, elty, relty) in ((:zherk, :ComplexF64, :Float64),
+                             (:cherk, :ComplexF32, :Float32))
     @eval begin
         # SUBROUTINE CHERK(UPLO,TRANS,N,K,ALPHA,A,LDA,BETA,C,LDC)
         # *     .. Scalar Arguments ..
@@ -1968,13 +1817,9 @@ for (fname, elty, relty) in ((:zherk_, :ComplexF64, :Float64),
             chkstride1(A)
             chkstride1(C)
             k  = size(A, trans == 'N' ? 2 : 1)
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                    Ref{$relty}, Ptr{$elty}, Ref{BlasInt}, Ref{$relty},
-                    Ptr{$elty}, Ref{BlasInt}, Clong, Clong),
-                    uplo, trans, n, k,
-                    α, A, max(1,stride(A,2)), β,
-                    C, max(1,stride(C,2)), 1, 1)
+            $fname(uplo, trans, n, k,
+                   α, A, max(1,stride(A,2)), β,
+                   C, max(1,stride(C,2)))
             C
         end
         function herk(uplo::AbstractChar, trans::AbstractChar, α::$relty, A::AbstractVecOrMat{$elty})
@@ -1986,10 +1831,10 @@ for (fname, elty, relty) in ((:zherk_, :ComplexF64, :Float64),
 end
 
 ## syr2k
-for (fname, elty) in ((:dsyr2k_,:Float64),
-                      (:ssyr2k_,:Float32),
-                      (:zsyr2k_,:ComplexF64),
-                      (:csyr2k_,:ComplexF32))
+for (fname, elty) in ((:dsyr2k,:Float64),
+                      (:ssyr2k,:Float32),
+                      (:zsyr2k,:ComplexF64),
+                      (:csyr2k,:ComplexF32))
     @eval begin
             #       SUBROUTINE DSYR2K(UPLO,TRANS,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
             #
@@ -2012,13 +1857,9 @@ for (fname, elty) in ((:dsyr2k_,:Float64),
             chkstride1(A)
             chkstride1(B)
             chkstride1(C)
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                 Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ref{$elty},
-                 Ptr{$elty}, Ref{BlasInt}, Clong, Clong),
-                 uplo, trans, n, k,
-                 alpha, A, max(1,stride(A,2)), B, max(1,stride(B,2)), beta,
-                 C, max(1,stride(C,2)), 1, 1)
+            $fname(uplo, trans, n, k,
+                   alpha, A, max(1,stride(A,2)), B, max(1,stride(B,2)), beta,
+                   C, max(1,stride(C,2)))
             C
         end
     end
@@ -2056,7 +1897,8 @@ or `transpose(A)*B + transpose(B)*A`, according to [`trans`](@ref stdlib-blas-tr
 """
 syr2k(uplo::AbstractChar, trans::AbstractChar, A::AbstractVecOrMat, B::AbstractVecOrMat) = syr2k(uplo, trans, one(eltype(A)), A, B)
 
-for (fname, elty1, elty2) in ((:zher2k_,:ComplexF64,:Float64), (:cher2k_,:ComplexF32,:Float32))
+for (fname, elty1, elty2) in ((:zher2k,:ComplexF64,:Float64),
+                              (:cher2k,:ComplexF32,:Float32))
     @eval begin
         # SUBROUTINE CHER2K(UPLO,TRANS,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
         #
@@ -2080,13 +1922,9 @@ for (fname, elty1, elty2) in ((:zher2k_,:ComplexF64,:Float64), (:cher2k_,:Comple
             chkstride1(B)
             chkstride1(C)
             k  = size(A, trans == 'N' ? 2 : 1)
-            ccall((@blasfunc($fname), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                    Ref{$elty1}, Ptr{$elty1}, Ref{BlasInt}, Ptr{$elty1}, Ref{BlasInt},
-                    Ref{$elty2},  Ptr{$elty1}, Ref{BlasInt}, Clong, Clong),
-                    uplo, trans, n, k,
-                    alpha, A, max(1,stride(A,2)), B, max(1,stride(B,2)),
-                    beta, C, max(1,stride(C,2)), 1, 1)
+            $fname(uplo, trans, n, k,
+                   alpha, A, max(1,stride(A,2)), B, max(1,stride(B,2)),
+                   beta, C, max(1,stride(C,2)))
             C
         end
         function her2k(uplo::AbstractChar, trans::AbstractChar, alpha::($elty1), A::AbstractVecOrMat{$elty1}, B::AbstractVecOrMat{$elty1})
@@ -2173,10 +2011,10 @@ are assumed to be all ones.
 function trsm end
 
 for (mmname, smname, elty) in
-        ((:dtrmm_,:dtrsm_,:Float64),
-         (:strmm_,:strsm_,:Float32),
-         (:ztrmm_,:ztrsm_,:ComplexF64),
-         (:ctrmm_,:ctrsm_,:ComplexF32))
+        ((:dtrmm,:dtrsm,:Float64),
+         (:strmm,:strsm,:Float32),
+         (:ztrmm,:ztrsm,:ComplexF64),
+         (:ctrmm,:ctrsm,:ComplexF32))
     @eval begin
         #       SUBROUTINE DTRMM(SIDE,UPLO,TRANSA,DIAG,M,N,ALPHA,A,LDA,B,LDB)
         # *     .. Scalar Arguments ..
@@ -2196,13 +2034,8 @@ for (mmname, smname, elty) in
             end
             chkstride1(A)
             chkstride1(B)
-            ccall((@blasfunc($mmname), libblastrampoline), Cvoid,
-                  (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                   Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                   Clong, Clong, Clong, Clong),
-                  side, uplo, transa, diag, m, n,
-                  alpha, A, max(1,stride(A,2)), B, max(1,stride(B,2)),
-                  1, 1, 1, 1)
+            $mmname(side, uplo, transa, diag, m, n,
+                    alpha, A, max(1,stride(A,2)), B, max(1,stride(B,2)))
             B
         end
         function trmm(side::AbstractChar, uplo::AbstractChar, transa::AbstractChar, diag::AbstractChar,
@@ -2227,15 +2060,9 @@ for (mmname, smname, elty) in
             end
             chkstride1(A)
             chkstride1(B)
-            ccall((@blasfunc($smname), libblastrampoline), Cvoid,
-                   (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
-                    Ref{BlasInt}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                    Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                    Clong, Clong, Clong, Clong),
-                   side, uplo, transa, diag,
-                   m, n, alpha, A,
-                   max(1,stride(A,2)), B, max(1,stride(B,2)),
-                   1, 1, 1, 1)
+            $smname(side, uplo, transa, diag,
+                    m, n, alpha, A,
+                    max(1,stride(A,2)), B, max(1,stride(B,2)))
             B
         end
         function trsm(side::AbstractChar, uplo::AbstractChar, transa::AbstractChar, diag::AbstractChar, alpha::$elty, A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
