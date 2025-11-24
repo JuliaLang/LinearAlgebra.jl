@@ -604,9 +604,13 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
     else # iszero(β) && A and B are non-empty
         a1 = firstindex(A, 1)
         a2 = firstindex(A, 2)
-        for j in axes(C, 2), i in axes(C, 1)
-            z1 = zero(A[i, a2]*A[a1, j] + A[i, a2]*A[a1, j])
-            C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+        for j in axes(C, 2)
+            A_1j = A[a1, j]
+            for i in axes(C, 1)
+                A_ij = A[i, a2]*A_1j
+                z1 = zero(A_ij + A_ij)
+                C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+            end
         end
     end
     iszero(α) && return C
