@@ -1241,4 +1241,29 @@ end
     @test C1 ≈ C2
 end
 
+@testset "matmul with zero-less types" begin
+    struct Mod <: Real
+        val::Int
+        modulo::Int
+        Mod(x::Int, y::Int) = new(x % y, y)
+    end
+
+    Base.:+(x::Mod, y::Mod) = Mod(x.val + y.val, x.modulo)
+    Base.:*(x::Mod, y::Mod) = Mod(x.val * y.val, x.modulo)
+    Base.zero(x::Mod) = Mod(0, x.modulo)
+
+    m = Mod.(rand(0:19, 5, 0), 20)
+    @test_throws MethodError m * copy(m')
+    for n in (2, 3, 5)
+        A = rand(0:19, n, n)
+        M = Mod.(A, 20)
+        @test M * M == Mod.(A * A, 20)
+        @test M' * M == Mod.(A' * A, 20)
+        @test M * M' == Mod.(A * A', 20)
+        @test M' * M' == Mod.(A' * A', 20)
+        @test M * M[:, 1] == Mod.(A * A[:, 1], 20)
+        @test M' * M[:, 1] == Mod.(A' * A[:, 1], 20)
+    end
+end
+
 end # module TestMatmul
