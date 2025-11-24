@@ -602,24 +602,10 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
     if (!iszero(β) || isempty(A)) # return C*beta
         _rmul_or_fill!(C, β)
     else # iszero(β) && A is non-empty
-        if aat
-            for j ∈ 1:m
-                A_1j = A[j,1]'
-                for i ∈ 1:j
-                    A_ij = A[i,1]*A_1j
-                    z1 = zero(A_ij + A_ij)
-                    C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
-                end
-            end
-        else # !aat
-            for j ∈ 1:n
-                A_1j = A[1,j]
-                for i ∈ 1:j
-                    A_ij = A[1,i]'A_1j
-                    z1 = zero(A_ij + A_ij)
-                    C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
-                end
-            end
+        aA_11 = abs2(A[1,1])
+        C_ij  = zero(aA_11 + aA_11)
+        for j ∈ 1:m, i ∈ 1:j
+            C[i,j] = C_ij
         end
     end
     iszero(α) && return C
