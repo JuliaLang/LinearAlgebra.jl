@@ -601,15 +601,24 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
 
     if (!iszero(β) || isempty(A)) # return C*beta
         _rmul_or_fill!(C, β)
-    else # iszero(β) && A and B are non-empty
-        a1 = firstindex(A, 1)
-        a2 = firstindex(A, 2)
-        for j in axes(C, 2)
-            A_1j = A[a1, j]
-            for i in axes(C, 1)
-                A_ij = A[i, a2]*A_1j
-                z1 = zero(A_ij + A_ij)
-                C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+    else # iszero(β) && A is non-empty
+        if aat
+            for j ∈ 1:m
+                A_1j = A[j,1]'
+                for i ∈ 1:j
+                    A_ij = A[i,1]*A_1j
+                    z1 = zero(A_ij + A_ij)
+                    C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+                end
+            end
+        else # !aat
+            for j ∈ 1:n
+                A_1j = A[1,j]
+                for i ∈ 1:j
+                    A_ij = A[1,i]'A_1j
+                    z1 = zero(A_ij + A_ij)
+                    C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+                end
             end
         end
     end
@@ -1152,9 +1161,13 @@ function _generic_matmatmul_nonadjtrans!(C, A, B, alpha, beta)
     else # iszero(beta) && A and B are non-empty
         a1 = firstindex(A, 2)
         b1 = firstindex(B, 1)
-        for j in axes(C, 2), i in axes(C, 1)
-            z1 = zero(A[i, a1]*B[b1, j] + A[i, a1]*B[b1, j])
-            C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+        for j in axes(C, 2)
+            B_1j = B[b1, j]
+            for i in axes(C, 1)
+                C_ij = A[i, a1] * B_1j
+                z1 = zero(C_ij + C_ij)
+                C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+            end
         end
     end
     iszero(alpha) && return C
@@ -1169,20 +1182,24 @@ function _generic_matmatmul_nonadjtrans!(C, A, B, alpha, beta)
     C
 end
 function _generic_matmatmul_adjtrans!(C, A, B, alpha, beta)
-    if (!iszero(beta) || isempty(A) || isempty(B)) # return C*beta
-        _rmul_or_fill!(C, beta)
-    else # iszero(beta) && A and B are non-empty
-        a1 = firstindex(A, 2)
-        b1 = firstindex(B, 1)
-        for j in axes(C, 2), i in axes(C, 1)
-            z1 = zero(A[i, a1]*B[b1, j] + A[i, a1]*B[b1, j])
-            C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
-        end
-    end
-    iszero(alpha) && return C
     t = _wrapperop(A)
     pB = parent(B)
     pA = parent(A)
+    if (!iszero(beta) || isempty(A) || isempty(B)) # return C*beta
+        _rmul_or_fill!(C, beta)
+    else # iszero(beta) && A and B are non-empty
+        a1 = firstindex(pA, 1)
+        b1 = firstindex(pB, 2)
+        for j in axes(C, 2)
+            tB_1j = t(pB[j, b1])
+            for i in axes(C, 1)
+                C_ij = t(pA[a1, i]) * tB_1j
+                z1 = zero(C_ij + C_ij)
+                C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+            end
+        end
+    end
+    iszero(alpha) && return C
     tmp = similar(C, axes(C, 2))
     ci = firstindex(C, 1)
     ta = t(alpha)
