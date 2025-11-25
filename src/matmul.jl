@@ -1148,8 +1148,7 @@ function _generic_matmatmul_nonadjtrans!(C, A, B, alpha, beta)
             B_1j = B[b1, j]
             for i in axes(C, 1)
                 C_ij = A[i, a1] * B_1j
-                z1 = zero(C_ij + C_ij)
-                C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+                C[i,j] = zero(C_ij + C_ij)
             end
         end
     end
@@ -1177,8 +1176,7 @@ function _generic_matmatmul_adjtrans!(C, A, B, alpha, beta)
             tB_1j = t(pB[j, b1])
             for i in axes(C, 1)
                 C_ij = t(pA[a1, i]) * tB_1j
-                z1 = zero(C_ij + C_ij)
-                C[i,j] = convert(promote_type(typeof(z1), eltype(C)), z1)
+                C[i,j] = zero(C_ij + C_ij)
             end
         end
     end
