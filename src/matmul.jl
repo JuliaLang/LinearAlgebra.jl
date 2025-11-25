@@ -603,10 +603,7 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
         _rmul_or_fill!(C, β)
     else # iszero(β) && A is non-empty
         aA_11 = abs2(A[1,1])
-        C_ij  = zero(aA_11 + aA_11)
-        for j ∈ 1:m, i ∈ 1:j
-            C[i,j] = C_ij
-        end
+        fill!(UpperTriangular(C), zero(aA_11 + aA_11))
     end
     iszero(α) && return C
     @inbounds if !conjugate
