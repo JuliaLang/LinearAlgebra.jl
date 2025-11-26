@@ -194,7 +194,7 @@ as well as whether hooks to various optimized methods for them in LAPACK are ava
 | [`UnitUpperTriangular`](@ref) |     |     | MV  | MV  | [`inv`](@ref), [`det`](@ref), [`logdet`](@ref)                                |
 | [`LowerTriangular`](@ref)     |     |     | MV  | MV  | [`inv`](@ref), [`det`](@ref), [`logdet`](@ref)                                |
 | [`UnitLowerTriangular`](@ref) |     |     | MV  | MV  | [`inv`](@ref), [`det`](@ref), [`logdet`](@ref)                                |
-| [`UpperHessenberg`](@ref)     |     |     |     |    | [`inv`](@ref), [`det`](@ref)                                |
+| [`UpperHessenberg`](@ref)     |     |     |     | MV  | [`inv`](@ref), [`det`](@ref), [`logdet`](@ref)                                |
 | [`SymTridiagonal`](@ref)      | M   | M   | MS  | MV  | [`eigmax`](@ref), [`eigmin`](@ref)                          |
 | [`Tridiagonal`](@ref)         | M   | M   | MS  | MV  |                                                             |
 | [`Bidiagonal`](@ref)          | M   | M   | MS  | MV  |                                                             |
