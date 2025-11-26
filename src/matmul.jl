@@ -460,7 +460,7 @@ end
     throw(DimensionMismatch(
             LazyString(
             "incompatible destination size: ",
-            lazy"the destination $strC of $size_or_len_str_C $C_size_len is incomatible with the product of a $strA of size $sizeA and a $strB of $size_or_len_str_B $B_size_len. ",
+            lazy"the destination $strC of $size_or_len_str_C $C_size_len is incompatible with the product of a $strA of size $sizeA and a $strB of $size_or_len_str_B $B_size_len. ",
             lazy"The destination must be of $size_or_len_str_dest $destsize."
             )
         )
