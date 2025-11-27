@@ -1010,7 +1010,7 @@ _ortho_eltype(T::Type{<:Number}) = typeof(one(T)/one(T))
 #Eigensystem
 eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) = sorteig!(copy(D.diag), sortby)
 eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
-sorteig!(reduce(vcat, eigvals(x; sortby=nothing) for x in D.diag), sortby) #For block matrices, etc.
+    sorteig!(reduce(vcat, eigvals(x; sortby=nothing) for x in D.diag), sortby) #For block matrices, etc.
 function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
     facts = [eigen(x; sortby=nothing) for x in D.diag]
     λ = reduce(vcat, f.values for f in facts)
