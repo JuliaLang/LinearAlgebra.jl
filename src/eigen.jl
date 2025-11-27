@@ -199,7 +199,7 @@ make rows and columns more equal in norm. The default is `true` for both options
 By default, the eigenvalues and vectors are sorted lexicographically by `(real(λ),imag(λ))`.
 A different comparison function `by(λ)` can be passed to `sortby`, or you can pass
 `sortby=nothing` to leave the eigenvalues in an arbitrary order.   Some special matrix types
-(e.g. [`SymTridiagonal`](@ref)) may implement their own sorting convention and not
+(e.g. [`Diagonal`](@ref) or [`SymTridiagonal`](@ref)) may implement their own sorting convention and not
 accept a `sortby` keyword.
 
 # Examples
