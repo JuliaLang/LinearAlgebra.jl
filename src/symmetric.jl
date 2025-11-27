@@ -774,6 +774,7 @@ function dot(x::AbstractVector, A::HermOrSym, y::AbstractVector)
     require_one_based_indexing(x, y)
     n = length(x)
     (n == length(y) == size(A, 1)) || throw(DimensionMismatch())
+    iszero(n) && return zero(dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y))))
     data = A.data
     s = dot(first(x), first(A), first(y))
     r = zero(s+s)
