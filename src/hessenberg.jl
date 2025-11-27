@@ -59,6 +59,9 @@ size(H::UpperHessenberg) = size(H.data)
 axes(H::UpperHessenberg) = axes(H.data)
 parent(H::UpperHessenberg) = H.data
 
+upperhessenbergdata(H::UpperHessenberg) = H.data
+upperhessenbergdata(A) = A
+
 # similar behaves like UpperTriangular
 similar(H::UpperHessenberg, ::Type{T}) where {T} = UpperHessenberg(similar(H.data, T))
 similar(H::UpperHessenberg, ::Type{T}, dims::Dims{N}) where {T,N} = similar(H.data, T, dims)
@@ -401,7 +404,7 @@ function dot(x::AbstractVector, H::UpperHessenberg, y::AbstractVector)
     m = size(H, 1)
     (length(x) == m == length(y)) || throw(DimensionMismatch())
     if iszero(m)
-        return dot(zero(eltype(x)), zero(eltype(H)), zero(eltype(y)))
+        return zero(dot(zero(eltype(x)), zero(eltype(H)), zero(eltype(y))))
     end
     x₁ = x[1]
     r = dot(x₁, H[1,1], y[1])

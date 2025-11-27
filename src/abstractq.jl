@@ -42,10 +42,13 @@ convert(::Type{AbstractQ{T}}, adjQ::AdjointQ) where {T} = convert(AbstractQ{T}, 
 
 # ... to matrix
 Matrix{T}(Q::AbstractQ) where {T} = convert(Matrix{T}, Q*I) # generic fallback, yields square matrix
-Matrix{T}(adjQ::AdjointQ{S}) where {T,S} = convert(Matrix{T}, lmul!(adjQ, Matrix{S}(I, size(adjQ))))
 Matrix(Q::AbstractQ{T}) where {T} = Matrix{T}(Q)
 Array{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
 Array(Q::AbstractQ) = Matrix(Q)
+AbstractMatrix(Q::AbstractQ) = Q*I
+AbstractArray(Q::AbstractQ) = AbstractMatrix(Q)
+AbstractMatrix{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
+AbstractArray{T}(Q::AbstractQ) where {T} = AbstractMatrix{T}(Q)
 convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray} = T(Q)
 # legacy
 @deprecate(convert(::Type{AbstractMatrix{T}}, Q::AbstractQ) where {T},
@@ -172,10 +175,10 @@ qsize_check(Q::AbstractQ, P::AbstractQ) =
 # mimic the AbstractArray fallback
 *(Q::AbstractQ{<:Number}) = Q
 
-(*)(Q::AbstractQ, J::UniformScaling) = Q*J.λ
-function (*)(Q::AbstractQ, b::Number)
-    T = promote_type(eltype(Q), typeof(b))
-    lmul!(convert(AbstractQ{T}, Q), Matrix{T}(b*I, size(Q)))
+(*)(Q::AbstractQ, b::Number) = Q*(b*I)
+function (*)(Q::AbstractQ, J::UniformScaling)
+    T = promote_type(eltype(Q), eltype(J))
+    lmul!(convert(AbstractQ{T}, Q), Matrix{T}(J, size(Q)))
 end
 function (*)(Q::AbstractQ, B::AbstractVector)
     T = promote_type(eltype(Q), eltype(B))
@@ -188,10 +191,10 @@ function (*)(Q::AbstractQ, B::AbstractMatrix)
     mul!(similar(B, T, (size(Q, 1), size(B, 2))), convert(AbstractQ{T}, Q), B)
 end
 
-(*)(J::UniformScaling, Q::AbstractQ) = J.λ*Q
-function (*)(a::Number, Q::AbstractQ)
-    T = promote_type(typeof(a), eltype(Q))
-    rmul!(Matrix{T}(a*I, size(Q)), convert(AbstractQ{T}, Q))
+(*)(a::Number, Q::AbstractQ) = (a*I)*Q
+function (*)(J::UniformScaling, Q::AbstractQ)
+    T = promote_type(eltype(J), eltype(Q))
+    rmul!(Matrix{T}(J, size(Q)), convert(AbstractQ{T}, Q))
 end
 function (*)(A::AbstractVector, Q::AbstractQ)
     T = promote_type(eltype(A), eltype(Q))

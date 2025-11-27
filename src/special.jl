@@ -292,19 +292,19 @@ end
 
 for f in (:+, :-)
     @eval function $f(D::Diagonal{<:Number}, S::Symmetric)
-        uplo = sym_uplo(S.uplo)
+        uplo = _sym_uplo(S.uplo)
         return Symmetric(parentof_applytri($f, Symmetric(D, uplo), S), uplo)
     end
     @eval function $f(S::Symmetric, D::Diagonal{<:Number})
-        uplo = sym_uplo(S.uplo)
+        uplo = _sym_uplo(S.uplo)
         return Symmetric(parentof_applytri($f, S, Symmetric(D, uplo)), uplo)
     end
     @eval function $f(D::Diagonal{<:Real}, H::Hermitian)
-        uplo = sym_uplo(H.uplo)
+        uplo = _sym_uplo(H.uplo)
         return Hermitian(parentof_applytri($f, Hermitian(D, uplo), H), uplo)
     end
     @eval function $f(H::Hermitian, D::Diagonal{<:Real})
-        uplo = sym_uplo(H.uplo)
+        uplo = _sym_uplo(H.uplo)
         return Hermitian(parentof_applytri($f, H, Hermitian(D, uplo)), uplo)
     end
 end
@@ -608,8 +608,8 @@ end
 # tridiagonal cholesky factorization
 function cholesky(S::RealSymHermitian{<:BiTriSym}, ::NoPivot = NoPivot(); check::Bool = true)
     T = choltype(S)
-    B = Bidiagonal{T}(diag(S, 0), diag(S, S.uplo == 'U' ? 1 : -1), sym_uplo(S.uplo))
-    cholesky!(Hermitian(B, sym_uplo(S.uplo)), NoPivot(); check = check)
+    B = Bidiagonal{T}(diag(S, 0), diag(S, S.uplo == 'U' ? 1 : -1), _sym_uplo(S.uplo))
+    cholesky!(Hermitian(B, _sym_uplo(S.uplo)), NoPivot(); check = check)
 end
 
 # istriu/istril for triangular wrappers of structured matrices

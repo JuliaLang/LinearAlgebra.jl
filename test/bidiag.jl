@@ -47,6 +47,8 @@ Random.seed!(1)
             # from vectors
             ubd = Bidiagonal(x, y, :U)
             lbd = Bidiagonal(x, y, :L)
+            @test LinearAlgebra.uplo(ubd) == :U
+            @test LinearAlgebra.uplo(lbd) == :L
             @test ubd != lbd || x === dv0
             @test ubd.dv === x
             @test lbd.ev === y

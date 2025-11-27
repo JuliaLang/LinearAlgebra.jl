@@ -259,4 +259,13 @@ end
     @test B.U * B.D * B.U' ≈ S
 end
 
+@testset "BunchKaufman array constructors #1461" begin
+    a = randn(5,5)
+    A = a'a
+    for ul in (:U, :L)
+        B = bunchkaufman(Symmetric(A, ul))
+        @test A ≈ Array(B) ≈ Matrix(B) ≈ AbstractArray(B) ≈ AbstractMatrix(B)
+    end
+end
+
 end # module TestBunchKaufman

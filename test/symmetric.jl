@@ -874,6 +874,21 @@ end
     @test det(Hermitian(A))::Float64 == det(A) == 0.0
 end
 
+@testset "issue #1437: inverse of Symmetric|Hermitian{<:Any,<:Diagonal} returns of Symmetric|Hermitian{<:Any,<:Diagonal}" begin
+    Dreal    = Diagonal(randn(3))
+    Dcomplex = Diagonal(randn(ComplexF64, 3))
+    # without wrapper
+    invDreal = inv(Dreal)
+    invDcomplex = inv(real(Dcomplex)) # because Hermitian implies a real diagonal
+    # with wrapper
+    SDreal = Symmetric(Dreal)
+    HDcomplex = Hermitian(Dcomplex)
+    @test inv(SDreal)::Symmetric{Float64,typeof(Dreal)} ≈ invDreal
+    @test inv(HDcomplex)::Hermitian{Float64,typeof(Dreal)} ≈ invDcomplex
+    Dcomplex[2,2] = 0
+    @test_throws SingularException inv(HDcomplex)
+end
+
 @testset "symmetric()/hermitian() for Numbers" begin
     @test LinearAlgebra.symmetric(1) == LinearAlgebra.symmetric(1, :U) == 1
     @test LinearAlgebra.symmetric_type(Int) == Int
@@ -1034,6 +1049,12 @@ end
         @test Aherm == Aherm.data == (A + A')/2
         @test Aherm isa Hermitian
         @test Aherm.uplo == LinearAlgebra.char_uplo(uplo)
+    end
+    @testset "hermitianpart for numbers" begin
+        @test hermitianpart(3 + 4im) == 3
+        @test hermitianpart(5) == 5.0
+        @test hermitianpart(2.5 + 4.3im) == 2.5
+        @test hermitianpart(-1 + 0im) == -1
     end
 end
 
@@ -1341,6 +1362,19 @@ end
     @test_throws msg LinearAlgebra.fillband!(Hermitian(A), 2im, -3, 3)
     msg = "lower and upper bands must be equal in magnitude and opposite in sign, got l=0, u=1"
     @test_throws msg LinearAlgebra.fillband!(Symmetric(A), 2, 0, 1)
+end
+
+@testset "sym_uplo" begin
+    @test LinearAlgebra.sym_uplo('U') == :U
+    @test LinearAlgebra.sym_uplo('L') == :L
+    @test_throws ArgumentError LinearAlgebra.sym_uplo('N')
+end
+
+@testset "uplo" begin
+    S = Symmetric([1 2; 3 4], :U)
+    @test LinearAlgebra.uplo(S) == :U
+    H = Hermitian([1 2; 3 4], :L)
+    @test LinearAlgebra.uplo(H) == :L
 end
 
 end # module TestSymmetric

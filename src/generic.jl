@@ -579,20 +579,14 @@ function generic_norm2(x)
     T = typeof(maxabs)
     if isfinite(length(x)*maxabs*maxabs) && !iszero(maxabs*maxabs) # Scaling not necessary
         sum::promote_type(Float64, T) = norm_sqr(v)
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             sum += norm_sqr(v)
         end
         ismissing(sum) && return missing
         return convert(T, sqrt(sum))
     else
         sum = abs2(norm(v)/maxabs)
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             sum += (norm(v)/maxabs)^2
         end
         ismissing(sum) && return missing
@@ -614,10 +608,7 @@ function generic_normp(x, p)
     spp::promote_type(Float64, T) = p
     if -1 <= p <= 1 || (isfinite(length(x)*maxabs^spp) && !iszero(maxabs^spp)) # scaling not necessary
         sum::promote_type(Float64, T) = norm(v)^spp
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             ismissing(v) && return missing
             sum += norm(v)^spp
         end
@@ -625,10 +616,7 @@ function generic_normp(x, p)
     else # rescaling
         sum = (norm(v)/maxabs)^spp
         ismissing(sum) && return missing
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             ismissing(v) && return missing
             sum += (norm(v)/maxabs)^spp
         end
@@ -996,7 +984,8 @@ function dot(x, y) # arbitrary iterables
     return s
 end
 
-dot(x::Number, y::Number) = conj(x) * y
+# the unary + is for type promotion in the Boolean case, mimicking the reduction in usual dot
+dot(x::Number, y::Number) = +(conj(x) * y)
 
 function dot(x::AbstractArray, y::AbstractArray)
     lx = length(x)
@@ -1045,6 +1034,8 @@ dot(x, A, y) = dot(x, A*y) # generic fallback for cases that are not covered by 
 
 function dot(x::AbstractVector, A::AbstractMatrix, y::AbstractVector)
     (axes(x)..., axes(y)...) == axes(A) || throw(DimensionMismatch())
+    # outermost zero call to avoid spurious sign ambiguity (like 0.0 - 0.0im)
+    any(isempty, (x, y)) && return zero(dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y))))
     T = typeof(dot(first(x), first(A), first(y)))
     s = zero(T)
     i₁ = first(eachindex(x))
@@ -1180,18 +1171,17 @@ end
 inv(A::Adjoint) = adjoint(inv(parent(A)))
 inv(A::Transpose) = transpose(inv(parent(A)))
 
-pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T<:Real} = _vectorpinv(transpose, v, tol)
-pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T<:Complex} = _vectorpinv(adjoint, v, tol)
-pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T} = _vectorpinv(adjoint, v, tol)
-function _vectorpinv(dualfn::Tf, v::AbstractVector{Tv}, tol) where {Tv,Tf}
-    res = dualfn(similar(v, typeof(zero(Tv) / (abs2(one(Tv)) + abs2(one(Tv))))))
+_pinvadjoint(v::AbstractVector{T}) where {T<:Real} = transpose(v)
+_pinvadjoint(v::AbstractVector) = adjoint(v)
+function pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T}
+    res = _pinvadjoint(similar(v, typeof(zero(T) / (abs2(one(T)) + abs2(one(T))))))
     den = sum(abs2, v)
     # as tol is the threshold relative to the maximum singular value, for a vector with
     # single singular value σ=√den, σ ≦ tol*σ is equivalent to den=0 ∨ tol≥1
     if iszero(den) || tol >= one(tol)
         fill!(res, zero(eltype(res)))
     else
-        res .= dualfn(v) ./ den
+        res .= _pinvadjoint(v) ./ den
     end
     return res
 end
@@ -1235,6 +1225,7 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
+    T = promote_op(\, eltype(A), eltype(B))
     if m == n
         if istril(A)
             if istriu(A)
@@ -1246,12 +1237,16 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(A) \ B
+        return lu(convert(AbstractArray{T}, A)) \ B
     end
-    return qr(A, ColumnNorm()) \ B
+    return qr(convert(AbstractArray{T}, A), ColumnNorm()) \ B
 end
 
-(\)(a::AbstractVector, b::AbstractArray) = pinv(a) * b
+function (\)(a::AbstractVector, b::AbstractArray)
+    den = sum(abs2, a)
+    goodden = den == 0 ? one(den) : den
+    return _pinvadjoint(a) * b / goodden
+end
 """
     A / B
 
@@ -1282,7 +1277,11 @@ function (/)(A::AbstractVecOrMat, B::AbstractVecOrMat)
 end
 # \(A::StridedMatrix,x::Number) = inv(A)*x Should be added at some point when the old elementwise version has been deprecated long enough
 # /(x::Number,A::StridedMatrix) = x*inv(A)
-/(x::Number, v::AbstractVector) = x*pinv(v)
+function (/)(x::Number, v::AbstractVector)
+    den = sum(abs2, v)
+    goodden = den == 0 ? one(den) : den
+    return (x / goodden) * _pinvadjoint(v)
+end
 
 cond(x::Number) = iszero(x) ? Inf : 1.0
 cond(x::Number, p) = cond(x)
@@ -2004,13 +2003,25 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     atol::Real=0,
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
-    d = norm(x - y)
+    d = norm_x_minus_y(x, y)
     if isfinite(d)
         return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
     else
         # Fall back to a component-wise approximate comparison
         # (mapreduce instead of all for greater generality [#44893])
         return mapreduce((a, b) -> isapprox(a, b; rtol=rtol, atol=atol, nans=nans), &, x, y)
+    end
+end
+
+norm_x_minus_y(x, y) = norm(x - y)
+FastContiguousArrayView{T,N,P<:Array,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
+const ArrayOrFastContiguousArrayView = Union{Array, FastContiguousArrayView}
+function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView)
+    Base.promote_shape(size(x), size(y)) # ensure compatible size
+    if isempty(x) && isempty(y)
+        norm(zero(eltype(x)) - zero(eltype(y)))
+    else
+        norm(Iterators.map(splat(-), zip(x,y)))
     end
 end
 

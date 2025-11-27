@@ -115,6 +115,13 @@ Bidiagonal(A::Bidiagonal) = A
 Bidiagonal{T}(A::Bidiagonal{T}) where {T} = A
 Bidiagonal{T}(A::Bidiagonal) where {T} = Bidiagonal{T}(A.dv, A.ev, A.uplo)
 
+"""
+    LinearAlgebra.uplo(S::Bidiagonal)::Symbol
+
+Return a `Symbol` corresponding to whether the upper (`:U`) or lower (`:L`) off-diagonal band is stored.
+"""
+uplo(B::Bidiagonal) = sym_uplo(B.uplo)
+
 _offdiagind(uplo) = uplo == 'U' ? 1 : -1
 
 @inline function Base.isassigned(A::Bidiagonal, i::Int, j::Int)
@@ -295,7 +302,7 @@ function show(io::IO, M::Bidiagonal)
     print(io, ", ")
     show(io, M.ev)
     print(io, ", ")
-    show(io, sym_uplo(M.uplo))
+    show(io, _sym_uplo(M.uplo))
     print(io, ")")
 end
 
@@ -910,12 +917,12 @@ function _bidimul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
     @inbounds begin
         # first row of C
         for j in 1:min(2, n)
-            C[1,j] += _add(A[1,j]*B[j,j])
+            C[1,j] += _add(A[1,j]*Bd[j])
         end
         # second row of C
         if n > 1
             for j in 1:min(3, n)
-                C[2,j] += _add(A[2,j]*B[j,j])
+                C[2,j] += _add(A[2,j]*Bd[j])
             end
         end
         for j in 3:n-2
@@ -926,13 +933,13 @@ function _bidimul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
         if n > 3
             # row before last of C
             for j in n-2:n
-                C[n-1,j] += _add(A[n-1,j]*B[j,j])
+                C[n-1,j] += _add(A[n-1,j]*Bd[j])
             end
         end
         # last row of C
         if n > 2
             for j in n-1:n
-                C[n,j] += _add(A[n,j]*B[j,j])
+                C[n,j] += _add(A[n,j]*Bd[j])
             end
         end
     end # inbounds
@@ -1285,7 +1292,7 @@ function dot(x::AbstractVector, B::Bidiagonal, y::AbstractVector)
     nx, ny = length(x), length(y)
     (nx == size(B, 1) == ny) || throw(DimensionMismatch())
     if nx ≤ 1
-        nx == 0 && return dot(zero(eltype(x)), zero(eltype(B)), zero(eltype(y)))
+        nx == 0 && return zero(dot(zero(eltype(x)), zero(eltype(B)), zero(eltype(y))))
         return dot(x[1], B.dv[1], y[1])
     end
     ev, dv = B.ev, B.dv

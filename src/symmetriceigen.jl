@@ -2,8 +2,12 @@
 
 # preserve HermOrSym wrapper
 # Call `copytrito!` instead of `copy_similar` to only copy the matching triangular half
-eigencopy_oftype(A::Hermitian, ::Type{S}) where S = Hermitian(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), sym_uplo(A.uplo))
-eigencopy_oftype(A::Symmetric, ::Type{S}) where S = Symmetric(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), sym_uplo(A.uplo))
+function eigencopy_oftype(A::Hermitian, ::Type{S}) where S
+    Hermitian(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), _sym_uplo(A.uplo))
+end
+function eigencopy_oftype(A::Symmetric, ::Type{S}) where S
+    Symmetric(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), _sym_uplo(A.uplo))
+end
 eigencopy_oftype(A::Symmetric{<:Complex}, ::Type{S}) where S = copyto!(similar(parent(A), S), A)
 
 """
@@ -314,8 +318,8 @@ end
 
 # Perform U' \ A / U in-place, where U::Union{UpperTriangular,Diagonal}
 UtiAUi!(A, U) = _UtiAUi!(A, U)
-UtiAUi!(A::Symmetric, U) = Symmetric(_UtiAUi!(copytri!(parent(A), A.uplo), U), sym_uplo(A.uplo))
-UtiAUi!(A::Hermitian, U) = Hermitian(_UtiAUi!(copytri!(parent(A), A.uplo, true), U), sym_uplo(A.uplo))
+UtiAUi!(A::Symmetric, U) = Symmetric(_UtiAUi!(copytri!(parent(A), A.uplo), U), _sym_uplo(A.uplo))
+UtiAUi!(A::Hermitian, U) = Hermitian(_UtiAUi!(copytri!(parent(A), A.uplo, true), U), _sym_uplo(A.uplo))
 _UtiAUi!(A, U) = rdiv!(ldiv!(U', A), U)
 
 function eigvals(A::HermOrSym{TA}, B::HermOrSym{TB}; kws...) where {TA,TB}

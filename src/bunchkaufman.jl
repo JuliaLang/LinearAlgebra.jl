@@ -130,7 +130,9 @@ function bunchkaufman!(A::StridedMatrix{<:BlasFloat}, rook::Bool = false; check:
 end
 
 bkcopy_oftype(A, S) = eigencopy_oftype(A, S)
-bkcopy_oftype(A::Symmetric{<:Complex}, S) = Symmetric(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), sym_uplo(A.uplo))
+function bkcopy_oftype(A::Symmetric{<:Complex}, S)
+    Symmetric(copytrito!(similar(parent(A), S, size(A)), A.data, A.uplo), _sym_uplo(A.uplo))
+end
 
 """
     bunchkaufman(A, rook::Bool=false; check = true) -> S::BunchKaufman
@@ -214,6 +216,12 @@ bunchkaufman(A::AbstractMatrix{T}, rook::Bool=false; check::Bool = true) where {
 BunchKaufman{T}(B::BunchKaufman) where {T} =
     BunchKaufman(convert(Matrix{T}, B.LD), B.ipiv, B.uplo, B.symmetric, B.rook, B.info)
 Factorization{T}(B::BunchKaufman) where {T} = BunchKaufman{T}(B)
+
+AbstractMatrix(B::BunchKaufman) = B.uplo == 'U' ? B.P'B.U*B.D*B.U'B.P : B.P'B.L*B.D*B.L'B.P
+AbstractArray(B::BunchKaufman) = AbstractMatrix(B)
+Matrix(B::BunchKaufman) = convert(Array, AbstractArray(B))
+Array(B::BunchKaufman) = Matrix(B)
+
 
 size(B::BunchKaufman) = size(getfield(B, :LD))
 size(B::BunchKaufman, d::Integer) = size(getfield(B, :LD), d)
