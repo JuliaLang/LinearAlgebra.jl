@@ -84,8 +84,7 @@ export
     trsm!,
     trsm
 
-using ..LinearAlgebra: libblastrampoline, BlasReal, BlasComplex, BlasFloat, BlasInt,
-    DimensionMismatch, checksquare, chkstride1, SingularException
+using ..LinearAlgebra: libblastrampoline, BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, chkstride1
 
 include("lbt.jl")
 
@@ -1370,11 +1369,6 @@ for (fname, elty) in ((:dtrsv_,:Float64),
                 throw(DimensionMismatch(lazy"size of A is $n != length(x) = $(length(x))"))
             end
             chkstride1(A)
-            if diag == 'N'
-                for i in 1:n
-                    iszero(A[i,i]) && throw(SingularException(i))
-                end
-            end
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             GC.@preserve x ccall((@blasfunc($fname), libblastrampoline), Cvoid,
                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
@@ -2098,7 +2092,7 @@ end
     her2k!(uplo, trans, alpha, A, B, beta, C)
 
 Rank-2k update of the Hermitian matrix `C` as
-`alpha*A*B' + alpha*B*A' + beta*C` or `alpha*A'*B + alpha*B'*A + beta*C`
+`alpha*A*B' + alpha'*B*A' + beta*C` or `alpha*A'*B + alpha'*B'*A + beta*C`
 according to [`trans`](@ref stdlib-blas-trans). The scalar `beta` has to be real.
 Only the [`uplo`](@ref stdlib-blas-uplo) triangle of `C` is used. Return `C`.
 """
@@ -2107,8 +2101,8 @@ function her2k! end
 """
     her2k(uplo, trans, alpha, A, B)
 
-Return the [`uplo`](@ref stdlib-blas-uplo) triangle of `alpha*A*B' + alpha*B*A'`
-or `alpha*A'*B + alpha*B'*A`, according to [`trans`](@ref stdlib-blas-trans).
+Return the [`uplo`](@ref stdlib-blas-uplo) triangle of `alpha*A*B' + alpha'*B*A'`
+or `alpha*A'*B + alpha'*B'*A`, according to [`trans`](@ref stdlib-blas-trans).
 """
 her2k(uplo, trans, alpha, A, B)
 
@@ -2223,11 +2217,6 @@ for (mmname, smname, elty) in
             end
             chkstride1(A)
             chkstride1(B)
-            if diag == 'N'
-                for i in 1:k
-                    iszero(A[i,i]) && throw(SingularException(i))
-                end
-            end
             ccall((@blasfunc($smname), libblastrampoline), Cvoid,
                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
                     Ref{BlasInt}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},

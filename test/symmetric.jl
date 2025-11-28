@@ -470,6 +470,10 @@ end
                 @test dot(symblockmu, symblockml) ≈ dot(msymblockmu, msymblockml)
                 @test dot(symblockml, symblockmu) ≈ dot(msymblockml, msymblockmu)
                 @test dot(symblockml, symblockml) ≈ dot(msymblockml, msymblockml)
+
+                # empty matrices
+                @test dot(mtype(ComplexF64[;;], :U), mtype(Float64[;;], :U)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
+                @test dot(mtype(ComplexF64[;;], :L), mtype(Float64[;;], :L)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
             end
         end
 
