@@ -71,8 +71,8 @@ let n = 10
         @test Array(Hc - H) == Array(Hc) - Array(H)
         @testset "ldiv and rdiv" begin
             for b in (b_, B_), H in (H, Hc, H', Hc', transpose(Hc))
-                @test H * (H \ b) ≈ b
-                @test (b' / H) * H ≈ (Matrix(b') / H) * H ≈ b'
+                @test H * (H \ b) ≈ H * ldiv!(H, copy(b)) ≈ b
+                @test (b' / H) * H ≈ (Matrix(b') / H) * H ≈ rdiv!(copy(b'), H) * H ≈ b'
                 @test (transpose(b) / H) * H ≈ (Matrix(transpose(b)) / H) * H ≈ transpose(b)
             end
         end
