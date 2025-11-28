@@ -305,7 +305,7 @@ function syevr_tri_eigvals(range::AbstractChar, dv::AbstractVector{T}, ev::Abstr
         end
     end
     # note that this function does not actually modify dv, ev, despite the !
-    values, iblock, isplit = LAPACK.stebz!(range, 'B', vl, vu, il, iu, -1.0, dv, ev)
+    values, iblock, isplit = LAPACK.stebz!(range, 'B', T(vl), T(vu), il, iu, -1.0, dv, ev)
     return values
 end
 syevr_tri_eigen(dv::AbstractVector{T}, ev::AbstractVector{T}) where {T<:BlasReal} =
