@@ -205,8 +205,8 @@ end
 @testset "unitful 3-arg *" begin
     for n in (2, 3, 5)
         λ = 5
-        A = randn(-10:10, n, n)
-        b = randn(-10:10, n)
+        A = rand(-10:10, n, n)
+        b = rand(-10:10, n)
         λu = Furlong{1}(λ)
         Au = Furlong{1}.(A)
         bu = Furlong{1}.(b)
