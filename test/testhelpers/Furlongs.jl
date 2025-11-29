@@ -78,7 +78,7 @@ for op in (:(==), :(!=), :<, :<=, :isless, :isequal)
 end
 for op in (:(==), :isequal)
     @eval $op(x::Furlong{p}, y::Furlong{q}) where {p,q} = false
-    @eval $op(x::Furlong, y::Number) = $op(promote(x, y)...)
+    @eval $op(x::Furlong, y::Number) = $op(x, convert(Furlong, y))
     @eval $op(x::Number, y::Furlong) = $op(y, x)
 end
 for (f,op) in ((:_plus,:+),(:_minus,:-),(:_times,:*),(:_div,://))
