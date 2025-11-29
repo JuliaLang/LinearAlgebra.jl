@@ -202,4 +202,21 @@ end
     @test (C \ b)::Vector{<:Furlong{0}} == (D \ b)::Vector{<:Furlong{0}} == Furlong{0}.([5, -12])
 end
 
+@testset "unitful 3-arg *" begin
+    for n in (2, 3, 5)
+        λ = 5
+        A = randn(-10:10, n, n)
+        b = randn(-10:10, n)
+        λu = Furlong{1}(λ)
+        Au = Furlong{1}.(A)
+        bu = Furlong{1}.(b)
+        @test Furlong{3}.(A*A*λ) == Au*Au*λu
+        @test Furlong{3}.(A'*A*λ) == Au'*Au*λu
+        @test Furlong{3}.(A*A'*λ) == Au*Au'*λu
+        @test Furlong{3}.(A'*A'*λ) == Au'*Au'*λu
+        @test Furlong{3}.(A*b*λ) == Au*bu*λu
+        @test Furlong{3}.(A'*b*λ) == Au'*bu*λu
+    end
+end
+
 end # module TestUnitfulLinAlg
