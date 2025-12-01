@@ -145,7 +145,6 @@ function copyto!(dest::PermutedDimsArray{T,2,perm}, src::AbstractQ) where {T,per
     end
     return dest
 end
-
 # used in concatenations: Base.__cat_offset1!
 Base._copy_or_fill!(A, inds, Q::AbstractQ) = copyto!(view(A, inds...), Q)
 # overloads of helper functions
