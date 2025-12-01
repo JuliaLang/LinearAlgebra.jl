@@ -1011,16 +1011,16 @@ end
 _ortho_eltype(T) = Base.promote_op(/, T, T)
 _ortho_eltype(T::Type{<:Number}) = typeof(one(T)/one(T))
 
-# TODO Docstrings for eigvals, eigvecs, eigen all mention permute, scale, sortby as keyword args
-# but not all of them below provide them. Do we need to fix that?
 #Eigensystem
-eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true) = copy(D.diag)
-eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true) =
-    reduce(vcat, eigvals(x) for x in D.diag) #For block matrices, etc.
-function eigvecs(D::Diagonal{T}) where {T<:AbstractMatrix}
-    diag_vecs = [ eigvecs(x) for x in D.diag ]
+eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing) = sorteig!(copy(D.diag), sortby)
+eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing) =
+    sorteig!(reduce(vcat, eigvals(x; sortby=nothing) for x in D.diag), sortby) #For block matrices, etc.
+function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
+    facts = [eigen(x; sortby=nothing) for x in D.diag]
+    λ = reduce(vcat, f.values for f in facts)
+    diag_vecs = [f.vectors for f in facts]
     matT = promote_type(map(typeof, diag_vecs)...)
-    ncols_diag = [ size(x, 2) for x in D.diag ]
+    ncols_diag = [size(x, 2) for x in D.diag]
     nrows = size(D, 1)
     vecs = Matrix{Vector{eltype(matT)}}(undef, nrows, sum(ncols_diag))
     for j in axes(D, 2), i in axes(D, 1)
@@ -1035,14 +1035,14 @@ function eigvecs(D::Diagonal{T}) where {T<:AbstractMatrix}
             end
         end
     end
-    return vecs
+    return λ, vecs
 end
 function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing)
     if any(!isfinite, D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
     Td = _ortho_eltype(eltype(D))
-    λ = eigvals(D)
+    λ = eigvals(D; sortby=nothing)
     if !isnothing(sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
         λ = λ[p]
@@ -1059,8 +1059,7 @@ function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=tr
     if any(any(!isfinite, x) for x in D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
-    λ = eigvals(D)
-    evecs = eigvecs(D)
+    λ, evecs = _eigen(D)
     if !isnothing(sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
         λ = λ[p]
