@@ -196,7 +196,7 @@ TransUpperHessenberg{T,S<:UpperHessenberg{T}} = Transpose{T, S}
 AdjOrTransUpperHessenberg{T,S<:UpperHessenberg{T}} = AdjOrTrans{T, S}
 
 function (\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat)
-    TFB = typeof(oneunit(eltype(H)) \ oneunit(eltype(B)))
+    TFB = typeof(oneunit(eltype(H)) \ zero(eltype(B)))
     return ldiv!(H, copy_similar(B, TFB))
 end
 
@@ -204,7 +204,7 @@ end
 (/)(B::AbstractMatrix, H::AdjUpperHessenberg) = _rdiv(B, H)
 (/)(B::AbstractMatrix, H::TransUpperHessenberg) = _rdiv(B, H)
 function _rdiv(B, H)
-    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(H)))
+    TFB = typeof(zero(eltype(B)) / oneunit(eltype(H)))
     return rdiv!(copy_similar(B, TFB), H)
 end
 
