@@ -500,8 +500,18 @@ function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α::Bool, β)
 end
 
 # THE one big BLAS dispatch. This is split into two methods to improve latency
-Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
+function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
                                     α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:Number}
+    return _generic_matmatmul_wrapper!(C, tA, tB, A, B, α, β, val)
+end
+# This method is only useful for GEMM, as syrk and herk require A and B to have the same eltype
+# In GEMM, however, we may reinetrpret a complex A as a real array before carrying out the matmul
+function generic_matmatmul_wrapper!(C::StridedMatrix{Complex{T}}, tA, tB, A::StridedVecOrMat{Complex{T}}, B::StridedVecOrMat{T},
+                                    α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:BlasReal}
+    return _generic_matmatmul_wrapper!(C, tA, tB, A, B, α, β, val)
+end
+Base.@constprop :aggressive function _generic_matmatmul_wrapper!(C::StridedMatrix{<:Number}, tA, tB, A::StridedVecOrMat{<:Number}, B::StridedVecOrMat{<:Number},
+                                    α::Number, β::Number, val::BlasFlag.SyrkHerkGemm)
     mA, nA = lapack_size(tA, A)
     mB, nB = lapack_size(tB, B)
     if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
