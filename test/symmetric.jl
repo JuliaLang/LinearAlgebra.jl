@@ -1209,7 +1209,7 @@ end
     end
 end
 
-@testset "partly iniitalized matrices" begin
+@testset "partly initialized matrices" begin
     a = Matrix{BigFloat}(undef, 2,2)
     a[1] = 1; a[3] = 1; a[4] = 1
     h = Hermitian(a)

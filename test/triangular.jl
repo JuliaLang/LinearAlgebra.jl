@@ -260,7 +260,7 @@ const TESTDIR = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
     end
 end
 
-@testset "inplace mul of appropriate types should preserve triagular structure" begin
+@testset "inplace mul of appropriate types should preserve triangular structure" begin
     for elty1 in (Float64, ComplexF32), elty2 in (Float64, ComplexF32)
         T = promote_type(elty1, elty2)
         M1 = rand(elty1, 5, 5)
