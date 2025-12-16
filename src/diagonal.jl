@@ -409,7 +409,7 @@ end
 function lmul!(D::Diagonal, B::AbstractVecOrMat)
     matmul_size_check(size(D), size(B))
     axes(D.diag, 1) == axes(B, 1) ||
-        throw(ArgumentError(lazy"second axis of D, $(axes(D, 2)), does not match first axis of A, $(axes(A, 1))"))
+        throw(ArgumentError(lazy"second axis of D, $(axes(D, 2)), does not match first axis of B, $(axes(B, 1))"))
     for I in CartesianIndices(B)
         row = I[1]
         @inbounds B[I] = D.diag[row] * B[I]
