@@ -146,15 +146,13 @@ function copyto!(dest::PermutedDimsArray{T,2,perm}, src::AbstractQ) where {T,per
     return dest
 end
 # used in concatenations: Base.__cat_offset1!
-Base._copy_or_fill!(A, inds, Q::AbstractQ) = (A[inds...] = collect(Q))
+Base._copy_or_fill!(A, inds, Q::AbstractQ) = copyto!(view(A, inds...), Q)
 # overloads of helper functions
 Base.cat_size(A::AbstractQ) = size(A)
 Base.cat_size(A::AbstractQ, d) = size(A, d)
 Base.cat_length(a::AbstractQ) = prod(size(a))
 Base.cat_ndims(a::AbstractQ) = ndims(a)
 Base.cat_indices(A::AbstractQ, d) = axes(A, d)
-Base.cat_similar(A::AbstractQ, T::Type, shape::Tuple) = Array{T}(undef, shape)
-Base.cat_similar(A::AbstractQ, T::Type, shape::Vector) = Array{T}(undef, shape...)
 
 function show(io::IO, ::MIME{Symbol("text/plain")}, Q::AbstractQ)
     print(io, Base.dims2string(size(Q)), ' ', summary(Q))
