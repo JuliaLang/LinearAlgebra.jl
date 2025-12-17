@@ -1520,6 +1520,13 @@ end
     @test opnorm(D, Inf) == opnorm(A, Inf)
 end
 
+@testset "Matrix conversion without zero" begin
+    D = Diagonal(fill(ones(2,2), 4))
+    M = Matrix(D)
+    @test M isa Matrix{eltype(D)}
+    @test M == D
+end
+
 @testset "issymmetric with NaN" begin
     D = Diagonal(fill(NaN,3))
     A = Array(D)
