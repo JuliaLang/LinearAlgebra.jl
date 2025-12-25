@@ -573,7 +573,7 @@ for (T, trans, real) in [(:Symmetric, :transpose, :identity), (:(Hermitian{<:Uni
             if n != size(B, 2)
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)) but B has dimensions $(size(B))"))
             end
-
+            iszero(n) && return $real(zero(dot(zero(eltype(A)), zero(eltype(B)))))
             dotprod = $real(zero(dot(first(A), first(B))))
             @inbounds if A.uplo == 'U' && B.uplo == 'U'
                 for j in 1:n

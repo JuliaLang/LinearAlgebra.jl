@@ -470,6 +470,10 @@ end
                 @test dot(symblockmu, symblockml) ≈ dot(msymblockmu, msymblockml)
                 @test dot(symblockml, symblockmu) ≈ dot(msymblockml, msymblockmu)
                 @test dot(symblockml, symblockml) ≈ dot(msymblockml, msymblockml)
+
+                # empty matrices
+                @test dot(mtype(ComplexF64[;;], :U), mtype(Float64[;;], :U)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
+                @test dot(mtype(ComplexF64[;;], :L), mtype(Float64[;;], :L)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
             end
         end
 
@@ -874,6 +878,21 @@ end
     @test det(Hermitian(A))::Float64 == det(A) == 0.0
 end
 
+@testset "issue #1437: inverse of Symmetric|Hermitian{<:Any,<:Diagonal} returns of Symmetric|Hermitian{<:Any,<:Diagonal}" begin
+    Dreal    = Diagonal(randn(3))
+    Dcomplex = Diagonal(randn(ComplexF64, 3))
+    # without wrapper
+    invDreal = inv(Dreal)
+    invDcomplex = inv(real(Dcomplex)) # because Hermitian implies a real diagonal
+    # with wrapper
+    SDreal = Symmetric(Dreal)
+    HDcomplex = Hermitian(Dcomplex)
+    @test inv(SDreal)::Symmetric{Float64,typeof(Dreal)} ≈ invDreal
+    @test inv(HDcomplex)::Hermitian{Float64,typeof(Dreal)} ≈ invDcomplex
+    Dcomplex[2,2] = 0
+    @test_throws SingularException inv(HDcomplex)
+end
+
 @testset "symmetric()/hermitian() for Numbers" begin
     @test LinearAlgebra.symmetric(1) == LinearAlgebra.symmetric(1, :U) == 1
     @test LinearAlgebra.symmetric_type(Int) == Int
@@ -1190,7 +1209,7 @@ end
     end
 end
 
-@testset "partly iniitalized matrices" begin
+@testset "partly initialized matrices" begin
     a = Matrix{BigFloat}(undef, 2,2)
     a[1] = 1; a[3] = 1; a[4] = 1
     h = Hermitian(a)

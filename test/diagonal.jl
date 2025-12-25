@@ -413,7 +413,7 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
     @test factorize(D) == D
 
     @testset "Eigensystem" begin
-        eigD = eigen(D)
+        eigD = eigen(D, sortby=nothing)
         @test Diagonal(eigD.values) == D
         @test eigD.vectors == Matrix(I, size(D))
         eigsortD = eigen(D, sortby=LinearAlgebra.eigsortby)
@@ -564,7 +564,7 @@ end
 @testset "svdvals and eigvals (#11120/#11247)" begin
     D = Diagonal(Matrix{Float64}[randn(3,3), randn(2,2)])
     @test sort([svdvals(D)...;], rev = true) ≈ svdvals([D.diag[1] zeros(3,2); zeros(2,3) D.diag[2]])
-    @test sort([eigvals(D)...;], by=LinearAlgebra.eigsortby) ≈ eigvals([D.diag[1] zeros(3,2); zeros(2,3) D.diag[2]])
+    @test eigvals(D, sortby=LinearAlgebra.eigsortby) ≈ eigvals([D.diag[1] zeros(3,2); zeros(2,3) D.diag[2]])
 end
 
 @testset "eigvals should return a copy of the diagonal" begin
@@ -853,7 +853,7 @@ end
 @testset "Eigensystem for block diagonal (issue #30681)" begin
     I2 = Matrix(I, 2,2)
     D = Diagonal([2.0*I2, 3.0*I2])
-    eigD = eigen(D)
+    eigD = eigen(D; sortby=LinearAlgebra.eigsortby)
     evals = [ 2.0, 2.0, 3.0, 3.0 ]
     evecs = [ [[ 1.0, 0.0 ]]  [[ 0.0, 1.0 ]]  [[ 0.0, 0.0 ]]  [[ 0.0, 0.0 ]];
               [[ 0.0, 0.0 ]]  [[ 0.0, 0.0 ]]  [[ 1.0, 0.0 ]]  [[ 0.0, 1.0 ]] ]
@@ -863,7 +863,7 @@ end
 
     I3 = Matrix(I, 3,3)
     D = Diagonal([[0.0 -1.0; 1.0 0.0], 2.0*I3])
-    eigD = eigen(D)
+    eigD = eigen(D; sortby=LinearAlgebra.eigsortby)
     evals = [ -1.0im, 1.0im, 2.0, 2.0, 2.0 ]
     evecs = [ [[ 1/sqrt(2)+0im, 1/sqrt(2)*im ]]  [[ 1/sqrt(2)+0im, -1/sqrt(2)*im ]]  [[ 0.0, 0.0 ]]       [[ 0.0, 0.0 ]]      [[ 0.0, 0.0]];
               [[ 0.0, 0.0, 0.0 ]]                [[ 0.0, 0.0, 0.0 ]]                 [[ 1.0, 0.0, 0.0 ]]  [[ 0.0, 1.0, 0.0 ]] [[ 0.0, 0.0, 1.0]] ]
@@ -988,7 +988,9 @@ end
     D = Diagonal(1:4)
     A = OffsetArray(rand(4,4), 2, 2)
     @test_throws ArgumentError D * A
+    @test_throws ArgumentError lmul!(D, A)
     @test_throws ArgumentError A * D
+    @test_throws ArgumentError rmul!(A, D)
     @test_throws ArgumentError mul!(similar(A, size(A)), A, D)
     @test_throws ArgumentError mul!(similar(A, size(A)), D, A)
 end
@@ -1066,8 +1068,9 @@ end
 @testset "eigenvalue sorting" begin
     D = Diagonal([0.4, 0.2, -1.3])
     @test eigvals(D) == eigen(D).values == [0.4, 0.2, -1.3] # not sorted by default
+    @test eigvals(D; sortby=LinearAlgebra.eigsortby) == [-1.3, 0.2, 0.4] # sortby keyword supported for eigvals(::Diagonal)
     @test eigvals(Matrix(D)) == eigen(Matrix(D)).values == [-1.3, 0.2, 0.4] # sorted even if diagonal special case is detected
-    E = eigen(D, sortby=abs) # sortby keyword supported for eigen(::Diagonal)
+    E = eigen(D; sortby=abs) # sortby keyword supported for eigen(::Diagonal)
     @test E.values == [0.2, 0.4, -1.3]
     @test E.vectors == [0 1 0; 1 0 0; 0 0 1]
 end
