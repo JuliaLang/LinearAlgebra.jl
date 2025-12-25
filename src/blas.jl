@@ -793,7 +793,7 @@ for (fname, elty, lib) in ((:dsymv_,:Float64,libblastrampoline),
                            (:ssymv_,:Float32,libblastrampoline),
                            (:zsymv_,:ComplexF64,libblastrampoline),
                            (:csymv_,:ComplexF32,libblastrampoline))
-    # Note that the complex symv are not BLAS but auiliary functions in LAPACK
+    # Note that the complex symv are not BLAS but auxiliary functions in LAPACK
     @eval begin
              #      SUBROUTINE DSYMV(UPLO,N,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
              #     .. Scalar Arguments ..

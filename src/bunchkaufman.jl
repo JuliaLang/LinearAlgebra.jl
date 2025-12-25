@@ -1341,8 +1341,8 @@ to `0`.
     `rank` by pushing one or more eigenvalues across the threshold. These
     variations can even occur due to changes in floating-point errors between
     different Julia versions, architectures, compilers, or operating systems.
-    In particular, the size of the entries of the tringular factor directly
-    influende the scale of the eigenvalues of the diagonal factor, so it is
+    In particular, the size of the entries of the triangular factor directly
+    influence the scale of the eigenvalues of the diagonal factor, so it is
     strongly recommended to use rook pivoting is the inertia is going to be
     computed.
     On the other hand, if the matrix has rational entries, the inertia

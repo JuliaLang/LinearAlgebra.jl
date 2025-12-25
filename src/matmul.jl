@@ -317,7 +317,7 @@ end
             BlasFlag.SYRK
         elseif (tA_uc == 'C' && tB_uc == 'N') || (tA_uc == 'N' && tB_uc == 'C')
             BlasFlag.HERK
-        else isntc
+        else
             BlasFlag.GEMM
         end
     else
@@ -465,7 +465,7 @@ end
     throw(DimensionMismatch(
             LazyString(
             "incompatible destination size: ",
-            lazy"the destination $strC of $size_or_len_str_C $C_size_len is incomatible with the product of a $strA of size $sizeA and a $strB of $size_or_len_str_B $B_size_len. ",
+            lazy"the destination $strC of $size_or_len_str_C $C_size_len is incompatible with the product of a $strA of size $sizeA and a $strB of $size_or_len_str_B $B_size_len. ",
             lazy"The destination must be of $size_or_len_str_dest $destsize."
             )
         )
@@ -499,7 +499,7 @@ function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α::Bool, β)
     return false
 end
 
-# THE one big BLAS dispatch. This is split into two methods to improve latency
+# THE one big BLAS dispatch. This is split into syrk/herk/gemm and symm/hemm/none methods to improve latency
 Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
                                     α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:Number}
     mA, nA = lapack_size(tA, A)
@@ -511,6 +511,12 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
     _syrk_herk_gemm_wrapper!(C, tA, tB, A, B, α, β, val)
     return C
 end
+
+function generic_matmatmul_wrapper!(C::StridedVecOrMat{Complex{T}}, tA, tB, A::StridedVecOrMat{Complex{T}}, B::StridedVecOrMat{T},
+                    α::Number, β::Number, ::Val{BlasFlag.GEMM}) where {T<:BlasReal}
+    gemm_wrapper!(C, tA, tB, A, B, α, β)
+end
+
 Base.@constprop :aggressive function _syrk_herk_gemm_wrapper!(C, tA, tB, A, B, α, β, ::Val{BlasFlag.SYRK})
     if A === B
         tA_uc = uppercase(tA) # potentially strip a WrapperChar
@@ -599,11 +605,17 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
         throw(DimensionMismatch(lazy"output matrix has size: $(size(C)), but should have size $((mA, mA))"))
     end
 
-    _rmul_or_fill!(C, β)
+    if (!iszero(β) || isempty(A)) # return C*beta
+        _rmul_or_fill!(C, β)
+    else # iszero(β) && A is non-empty
+        aA_11 = abs2(A[1,1])
+        fill!(UpperTriangular(C), zero(aA_11 + aA_11))
+    end
+    (iszero(α) || isempty(A)) && return C
     @inbounds if !conjugate
         if aat
             for k ∈ 1:n, j ∈ 1:m
-                αA_jk = A[j, k] * α
+                αA_jk = @stable_muladdmul MulAddMul(α, false)(A[j, k])
                 for i ∈ 1:j
                     C[i, j] += A[i, k] * αA_jk
                 end
@@ -614,17 +626,17 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
                 for k ∈ 2:m
                     temp += A[k, i] * A[k, j]
                 end
-                C[i, j] += temp * α
+                C[i, j] += @stable_muladdmul MulAddMul(α, false)(temp)
             end
         end
     else
         if aat
             for k ∈ 1:n, j ∈ 1:m
-                αA_jk_bar = conj(A[j, k]) * α
+                αA_jk_bar = @stable_muladdmul MulAddMul(α, false)(conj(A[j, k]))
                 for i ∈ 1:j-1
                     C[i, j] += A[i, k] * αA_jk_bar
                 end
-                C[j, j] += abs2(A[j, k]) * α
+                C[j, j] += @stable_muladdmul MulAddMul(α, false)(abs2(A[j, k]))
             end
         else
             for j ∈ 1:n
@@ -633,13 +645,13 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
                     for k ∈ 2:m
                         temp += conj(A[k, i]) * A[k, j]
                     end
-                    C[i, j] += temp * α
+                    C[i, j] += @stable_muladdmul MulAddMul(α, false)(temp)
                 end
                 temp = abs2(A[1, j])
                 for k ∈ 2:m
                     temp += abs2(A[k, j])
                 end
-                C[j, j] += temp * α
+                C[j, j] += @stable_muladdmul MulAddMul(α, false)(temp)
             end
         end
     end
@@ -651,14 +663,6 @@ Base.@constprop :aggressive generic_matmatmul!(C::StridedMatrix{T}, tA, tB, A::S
         _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
     generic_matmatmul!(C, tA, tB, A, B, _add.alpha, _add.beta)
 
-function generic_matmatmul_wrapper!(C::StridedVecOrMat{Complex{T}}, tA, tB, A::StridedVecOrMat{Complex{T}}, B::StridedVecOrMat{T},
-                    α::Number, β::Number, ::Val{true}) where {T<:BlasReal}
-    gemm_wrapper!(C, tA, tB, A, B, α, β)
-end
-Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedVecOrMat{Complex{T}}, tA, tB, A::StridedVecOrMat{Complex{T}}, B::StridedVecOrMat{T},
-                    alpha::Number, beta::Number, ::Val{false}) where {T<:BlasReal}
-    _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
-end
 # legacy method
 Base.@constprop :aggressive generic_matmatmul!(C::StridedVecOrMat{Complex{T}}, tA, tB, A::StridedVecOrMat{Complex{T}}, B::StridedVecOrMat{T},
         _add::MulAddMul = MulAddMul()) where {T<:BlasReal} =
@@ -1069,7 +1073,8 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
             elseif length(B) == 0
                 C[i] = zero(eltype(C))
             else
-                C[i] = zero(A[i]*B[1] + A[i]*B[1])
+                ci   = @stable_muladdmul MulAddMul(alpha,false)(A[i]*B[1])
+                C[i] = zero(ci + ci)
             end
         end
         if !iszero(alpha)
@@ -1132,7 +1137,20 @@ __generic_matmatmul!(C, A, B, alpha, beta, ::Val{true}) = _generic_matmatmul_non
 __generic_matmatmul!(C, A, B, alpha, beta, ::Val{false}) = _generic_matmatmul_generic!(C, A, B, alpha, beta)
 
 function _generic_matmatmul_nonadjtrans!(C, A, B, alpha, beta)
-    _rmul_or_fill!(C, beta)
+    # _rmul_or_fill!(C, beta) spelled out more carefully to allow for zero-less eltypes
+    if (!iszero(beta) || isempty(A) || isempty(B)) # return C*beta
+        _rmul_or_fill!(C, beta)
+    else # iszero(beta) && A and B are non-empty
+        a1 = firstindex(A, 2)
+        b1 = firstindex(B, 1)
+        for j in axes(C, 2)
+            B_1j = B[b1, j]
+            for i in axes(C, 1)
+                C_ij = @stable_muladdmul MulAddMul(alpha, false)(A[i, a1] * B_1j)
+                C[i,j] = zero(C_ij + C_ij)
+            end
+        end
+    end
     (iszero(alpha) || isempty(A) || isempty(B)) && return C
     @inbounds for n in axes(B, 2), k in axes(B, 1)
         # Balpha = B[k,n] * alpha, but we skip the multiplication in case isone(alpha)
@@ -1145,20 +1163,40 @@ function _generic_matmatmul_nonadjtrans!(C, A, B, alpha, beta)
     C
 end
 function _generic_matmatmul_adjtrans!(C, A, B, alpha, beta)
-    _rmul_or_fill!(C, beta)
-    (iszero(alpha) || isempty(A) || isempty(B)) && return C
     t = _wrapperop(A)
     pB = parent(B)
     pA = parent(A)
-    tmp = similar(C, axes(C, 2))
+    if (!iszero(beta) || isempty(A) || isempty(B))
+        _rmul_or_fill!(C, beta)
+    else # iszero(beta) && A and B are non-empty
+        a1 = firstindex(pA, 1)
+        b1 = firstindex(pB, 2)
+        for j in axes(C, 2)
+            tB_1j = t(pB[j, b1])
+            for i in axes(C, 1)
+                C_ij = @stable_muladdmul MulAddMul(alpha, false)(t(pA[a1, i]) * tB_1j)
+                C[i,j] = zero(C_ij + C_ij)
+            end
+        end
+    end
+    (iszero(alpha) || isempty(A) || isempty(B)) && return C
+    tmp = similar(C, promote_op(matprod, typeof(first(A)), typeof(first(B))), axes(C, 2))
     ci = firstindex(C, 1)
     ta = t(alpha)
-    for i in axes(A, 1)
-        mul!(tmp, pB, view(pA, :, i))
-        @views C[ci,:] .+= t.(ta .* tmp)
-        ci += 1
+    if isone(ta)
+        for i in axes(A, 1)
+            mul!(tmp, pB, view(pA, :, i))
+            @views C[ci,:] .+= t.(tmp)
+            ci += 1
+        end
+    else
+        for i in axes(A, 1)
+            mul!(tmp, pB, view(pA, :, i))
+            @views C[ci,:] .+= t.(ta .* tmp)
+            ci += 1
+        end
     end
-    C
+    return C
 end
 function _generic_matmatmul_generic!(C, A, B, alpha, beta)
     if iszero(alpha) || isempty(A) || isempty(B)
@@ -1395,7 +1433,7 @@ mat_vec_scalar(A::StridedMaybeAdjOrTransMat, x::StridedVector, γ) = _mat_vec_sc
 mat_vec_scalar(A::AdjOrTransAbsVec, x::StridedVector, γ) = (A * x) * γ
 
 function _mat_vec_scalar(A, x, γ)
-    T = promote_type(eltype(A), eltype(x), typeof(γ))
+    T = promote_op(*, promote_op(matprod, eltype(A), eltype(x)), typeof(γ))
     C = similar(A, T, axes(A,1))
     mul!(C, A, x, γ, false)
 end
@@ -1405,7 +1443,7 @@ mat_mat_scalar(A::StridedMaybeAdjOrTransMat, B::StridedMaybeAdjOrTransMat, γ) =
     _mat_mat_scalar(A, B, γ)
 
 function _mat_mat_scalar(A, B, γ)
-    T = promote_type(eltype(A), eltype(B), typeof(γ))
+    T = promote_op(*, promote_op(matprod, eltype(A), eltype(B)), typeof(γ))
     C = similar(A, T, axes(A,1), axes(B,2))
     mul!(C, A, B, γ, false)
 end
