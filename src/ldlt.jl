@@ -120,8 +120,9 @@ function ldlt!(S::SymTridiagonal{T,V}) where {T,V}
     e = S.ev
     @inbounds for i in 1:n-1
         iszero(d[i]) && throw(ZeroPivotException(i))
-        e[i] /= d[i]
-        d[i+1] -= e[i]^2*d[i]
+        new_ei = e[i] / d[i]
+        d[i+1] -= new_ei * e[i]
+        e[i] = new_ei
     end
     return LDLt{T,SymTridiagonal{T,V}}(S)
 end
