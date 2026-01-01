@@ -13,6 +13,8 @@ StridedMaybeAdjOrTransVecOrMat{T} = Union{StridedVecOrMat{T}, AdjOrTrans{<:Any, 
 
 matprod(x, y) = x*y + x*y
 
+nonzeroinds(v::AbstractVector) = eachindex(v)
+
 # dot products
 
 dot(x::StridedVecLike{T}, y::StridedVecLike{T}) where {T<:BlasReal} = BLAS.dot(x, y)
@@ -1055,7 +1057,7 @@ function __generic_matvecmul!(f::F, C::AbstractVector, A::AbstractVecOrMat, B::A
                 aoffs = (k-1)*Astride
                 firstterm = f(A[aoffs + 1]) * B[1]
                 s = zero(firstterm + firstterm)
-                for i = eachindex(B)
+                for i in nonzeroinds(B)
                     s += f(A[aoffs+i]) * B[i]
                 end
                 @stable_muladdmul _modify!(MulAddMul(alpha,beta), s, C, k)
@@ -1078,7 +1080,7 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
             end
         end
         if !iszero(alpha)
-            for k = eachindex(B)
+            for k in nonzeroinds(B)
                 aoffs = (k-1)*Astride
                 b = @stable_muladdmul MulAddMul(alpha,false)(B[k])
                 for i = eachindex(C)
