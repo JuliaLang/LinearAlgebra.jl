@@ -73,3 +73,50 @@ LinearAlgebra v1.6 Release Notes
 - `(+)(::UniformScaling)` is now defined, making `+I` a valid unary operation ([#36784](https://github.com/JuliaLang/julia/pull/36784))
 - Instances of `UniformScaling` are no longer `isequal` to matrices; previous behavior violated the rule that `isequal(x, y)` implies `hash(x) == hash(y)`
 - Transposing `*Triangular` matrices now returns matrices of the opposite triangular type, consistent with `adjoint!(::*Triangular)` and `transpose!(::*Triangular)`. Packages containing methods with, e.g., `Adjoint{<:Any,<:LowerTriangular{<:Any,<:OwnMatrixType}}` should replace that by `UpperTriangular{<:Any,<:Adjoint{<:Any,<:OwnMatrixType}}` in the method signature ([#38168](https://github.com/JuliaLang/julia/pull/38168))
+
+LinearAlgebra v1.5 Release Notes
+=======================
+
+- The BLAS submodule now supports the level-2 BLAS subroutine `hpmv!` ([#34211](https://github.com/JuliaLang/julia/issues/34211)).
+- `normalize` now supports multidimensional arrays ([#34239](https://github.com/JuliaLang/julia/issues/34239)).
+- `lq` factorizations can now be used to compute the minimum-norm solution to under-determined systems ([#34350](https://github.com/JuliaLang/julia/issues/34350)).
+- `sqrt(::Hermitian)` now treats slightly negative eigenvalues as zero for nearly semidefinite matrices, and accepts a new `rtol` keyword argument for this tolerance ([#35057](https://github.com/JuliaLang/julia/issues/35057)).
+- The BLAS submodule now supports the level-2 BLAS subroutine `spmv!` ([#34320](https://github.com/JuliaLang/julia/issues/34320)).
+- The BLAS submodule now supports the level-1 BLAS subroutine `rot!` ([#35124](https://github.com/JuliaLang/julia/issues/35124)).
+- New generic `rotate!(x, y, c, s)` and `reflect!(x, y, c, s)` functions ([#35124](https://github.com/JuliaLang/julia/issues/35124)).
+
+LinearAlgebra v1.4 Release Notes
+=======================
+
+- `qr` and `qr!` functions support `blocksize` keyword argument ([#33053](https://github.com/JuliaLang/julia/issues/33053)).
+- `dot` now admits a 3-argument method `dot(x, A, y)` to compute generalized dot products `dot(x, A*y)` without computing and storing an intermediate result `A*y` ([#32739](https://github.com/JuliaLang/julia/issues/32739)).
+- `ldlt` and non-pivoted `lu` now throw a new `ZeroPivotException` type ([#33372](https://github.com/JuliaLang/julia/issues/33372)).
+- `cond(A, p)` with `p=1` or `p=Inf` now computes the exact condition number instead of an estimate ([#33547](https://github.com/JuliaLang/julia/issues/33547)).
+- `UniformScaling` objects may now be exponentiated such that `(a*I)^x = a^x * I`.
+
+LinearAlgebra v1.3 Release Notes
+=======================
+
+- The BLAS submodule no longer exports `dot`, which conflicted with that in LinearAlgebra ([#31838](https://github.com/JuliaLang/julia/issues/31838)).
+- `diagm` and `spdiagm` now accept optional `m,n` initial arguments to specify a size ([#31654](https://github.com/JuliaLang/julia/issues/31654)).
+- `Hessenberg` factorizations `H` now support efficient shifted solves `(H+µI) \ b` and determinants, and use a specialized tridiagonal factorization for Hermitian matrices. There is also a new `UpperHessenberg` matrix type ([#31853](https://github.com/JuliaLang/julia/issues/31853)).
+- Added keyword argument `alg` to `svd` and `svd!` to switch between different SVD algorithms ([#31057](https://github.com/JuliaLang/julia/issues/31057)).
+- Five-argument `mul!(C, A, B, α, β)` now implements in-place multiplication fused with addition C = A B α + C β ([#23919](https://github.com/JuliaLang/julia/issues/23919)).
+
+LinearAlgebra v1.2 Release Notes
+=======================
+
+- Added keyword arguments `rtol` and `atol` to `pinv` and `nullspace` ([#29998](https://github.com/JuliaLang/julia/issues/29998)).
+- `UniformScaling` instances are now callable such that e.g. `I(3)` will produce a `Diagonal` matrix ([#30298](https://github.com/JuliaLang/julia/issues/30298)).
+- Eigenvalues λ of general matrices are now sorted lexicographically by (Re λ, Im λ) ([#21598](https://github.com/JuliaLang/julia/issues/21598)).
+- `one` for structured matrices (`Diagonal`, `Bidiagonal`, `Tridiagonal`, `Symtridiagonal`) now preserves structure and type ([#29777](https://github.com/JuliaLang/julia/issues/29777)).
+- `diagm(v)` is now shorthand for `diagm(0 => v)` ([#31125](https://github.com/JuliaLang/julia/issues/31125)).
+
+LinearAlgebra v1.1 Release Notes
+=======================
+
+- `isdiag` and `isposdef` now support `Diagonal` and `UniformScaling` ([#29638](https://github.com/JuliaLang/julia/issues/29638)).
+- Added `mul!`, `rmul!`, and `lmul!` methods for `UniformScaling` ([#29506](https://github.com/JuliaLang/julia/issues/29506)).
+- `Symmetric` and `Hermitian` matrices now preserve the wrapper when scaled with a number ([#29469](https://github.com/JuliaLang/julia/issues/29469)).
+- Exponentiation operator `^` now supports raising an `Irrational` to an `AbstractMatrix` power ([#29782](https://github.com/JuliaLang/julia/issues/29782)).
+- Added keyword arguments `rtol` and `atol` to `rank` ([#29926](https://github.com/JuliaLang/julia/issues/29926)).
