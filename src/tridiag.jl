@@ -278,29 +278,74 @@ end
 ldiv!(A::SymTridiagonal, B::AbstractVecOrMat; shift::Number=false) = ldiv!(ldlt(A, shift=shift), B)
 rdiv!(B::AbstractVecOrMat, A::SymTridiagonal; shift::Number=false) = rdiv!(B, ldlt(A, shift=shift))
 
-eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = Eigen(LAPACK.stegr!('V', A.dv, A.ev)...)
+# tridiagonal eigensolver meta-algorithm from LAPACK.syevr! for alg==RobustRepresentations()
+#   - if all eigenvalues are desired, call stev == sterf (eigvals) or stegr == stemr (eigen)
+#   - otherwise, and also if an error occurs, fall back to stebz and (if eigvecs wanted) stein
+function syevr_tri_eigen(range::AbstractChar, dv::AbstractVector{T}, ev::AbstractVector{T}, vl::Real, vu::Real, il::Integer, iu::Integer) where {T<:BlasReal}
+    if range == 'A' || (range == 'I' && il == 1 && iu == length(dv))
+        try
+            # need to copy dv, ev so that they are available for fallbacks, below
+            return Eigen(LAPACK.stegr!('V', range, copymutable(dv), copymutable(ev), vl, vu, il, iu)...)
+        catch ex
+            ex isa LAPACKException || rethrow()
+        end
+    end
+    # note that these functions do not actually modify dv, ev, despite the !
+    values, iblock, isplit = LAPACK.stebz!(range, 'B', T(vl), T(vu), il, iu, -1.0, dv, ev)
+    vectors = LAPACK.stein!(dv, ev, values, iblock, isplit)
+    return Eigen(values, vectors)
+end
+function syevr_tri_eigvals(range::AbstractChar, dv::AbstractVector{T}, ev::AbstractVector{T}, vl::Real, vu::Real, il::Integer, iu::Integer) where {T<:BlasReal}
+    if range == 'A' || (range == 'I' && il == 1 && iu == length(dv))
+        try
+            # need to copy dv, ev so that they are available for fallbacks, below
+            return LAPACK.stev!('N', copymutable(dv), copymutable(ev))[1]
+        catch ex
+            ex isa LAPACKException || rethrow()
+        end
+    end
+    # note that this function does not actually modify dv, ev, despite the !
+    values, iblock, isplit = LAPACK.stebz!(range, 'B', T(vl), T(vu), il, iu, -1.0, dv, ev)
+    return values
+end
+syevr_tri_eigen(dv::AbstractVector{T}, ev::AbstractVector{T}) where {T<:BlasReal} =
+    syevr_tri_eigen('A', dv, ev, 0.0, 0.0, 0, 0)
+syevr_tri_eigvals(dv::AbstractVector{T}, ev::AbstractVector{T}) where {T<:BlasReal} =
+    syevr_tri_eigvals('A', dv, ev, 0.0, 0.0, 0, 0)
+
+eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = syevr_tri_eigen(A.dv, A.ev)
+eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = syevr_tri_eigen(A.dv, A.ev)
 eigen(A::SymTridiagonal{T}) where T = eigen!(copymutable_oftype(A, eigtype(T)))
 
 eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange) =
-    Eigen(LAPACK.stegr!('V', 'I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)...)
+    syevr_tri_eigen('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)
+eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange) =
+    syevr_tri_eigen('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)
 eigen(A::SymTridiagonal{T}, irange::UnitRange) where T =
     eigen!(copymutable_oftype(A, eigtype(T)), irange)
 
 eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real) =
-    Eigen(LAPACK.stegr!('V', 'V', A.dv, A.ev, vl, vu, 0, 0)...)
+    syevr_tri_eigen('V', A.dv, A.ev, vl, vu, 0, 0)
+eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real) =
+    syevr_tri_eigen('V', A.dv, A.ev, vl, vu, 0, 0)
 eigen(A::SymTridiagonal{T}, vl::Real, vu::Real) where T =
     eigen!(copymutable_oftype(A, eigtype(T)), vl, vu)
 
-eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = LAPACK.stev!('N', A.dv, A.ev)[1]
+eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = syevr_tri_eigvals(A.dv, A.ev)
+eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = syevr_tri_eigvals(A.dv, A.ev)
 eigvals(A::SymTridiagonal{T}) where T = eigvals!(copymutable_oftype(A, eigtype(T)))
 
 eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange) =
-    LAPACK.stegr!('N', 'I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)[1]
+    syevr_tri_eigvals('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)
+eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange) =
+    syevr_tri_eigvals('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)
 eigvals(A::SymTridiagonal{T}, irange::UnitRange) where T =
     eigvals!(copymutable_oftype(A, eigtype(T)), irange)
 
 eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real) =
-    LAPACK.stegr!('N', 'V', A.dv, A.ev, vl, vu, 0, 0)[1]
+    syevr_tri_eigvals('V', A.dv, A.ev, vl, vu, 0, 0)
+eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real) =
+    syevr_tri_eigvals('V', A.dv, A.ev, vl, vu, 0, 0)
 eigvals(A::SymTridiagonal{T}, vl::Real, vu::Real) where T =
     eigvals!(copymutable_oftype(A, eigtype(T)), vl, vu)
 
