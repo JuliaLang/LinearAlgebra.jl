@@ -13,8 +13,6 @@ StridedMaybeAdjOrTransVecOrMat{T} = Union{StridedVecOrMat{T}, AdjOrTrans{<:Any, 
 
 matprod(x, y) = x*y + x*y
 
-nonzeroinds(v::AbstractVector) = eachindex(v)
-
 # dot products
 
 dot(x::StridedVecLike{T}, y::StridedVecLike{T}) where {T<:BlasReal} = BLAS.dot(x, y)

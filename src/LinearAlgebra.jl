@@ -551,6 +551,7 @@ include("exceptions.jl")
 include("generic.jl")
 
 include("blas.jl")
+include("sparse_interface.jl")
 include("matmul.jl")
 include("lapack.jl")
 
