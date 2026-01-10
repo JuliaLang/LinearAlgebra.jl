@@ -1181,19 +1181,16 @@ function _generic_matmatmul_adjtrans!(C, A, B, alpha, beta)
     end
     (iszero(alpha) || isempty(A) || isempty(B)) && return C
     tmp = similar(C, promote_op(matprod, typeof(first(A)), typeof(first(B))), axes(C, 2))
-    ci = firstindex(C, 1)
     ta = t(alpha)
     if isone(ta)
-        for i in axes(A, 1)
-            mul!(tmp, pB, view(pA, :, i))
+        for ci in axes(C, 1)
+            mul!(tmp, pB, view(pA, :, ci))
             @views C[ci,:] .+= t.(tmp)
-            ci += 1
         end
     else
-        for i in axes(A, 1)
-            mul!(tmp, pB, view(pA, :, i))
+        for ci in axes(C, 1)
+            mul!(tmp, pB, view(pA, :, ci))
             @views C[ci,:] .+= t.(ta .* tmp)
-            ci += 1
         end
     end
     return C
