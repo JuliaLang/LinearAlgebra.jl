@@ -930,7 +930,9 @@ adjoint(D::Diagonal) = Diagonal(_vecadjoint(D.diag))
 permutedims(D::Diagonal) = D
 permutedims(D::Diagonal, perm) = (Base.checkdims_perm(axes(D), axes(D), perm); D)
 
-function diag(D::Diagonal, k::Integer=0)
+diag(D::Diagonal) = D.diag
+
+function diag(D::Diagonal, k::Integer)
     # every branch call similar(..., ::Int) to make sure the
     # same vector type is returned independent of k
     dinds = diagind(D, k, IndexStyle(D))
