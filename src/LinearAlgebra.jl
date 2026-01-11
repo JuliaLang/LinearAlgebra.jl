@@ -81,7 +81,6 @@ export
     condskeel,
     copy_adjoint!,
     copy_transpose!,
-    copyto!,
     copytrito!,
     cross,
     det,
@@ -158,11 +157,6 @@ export
     tril,
     triu!,
     triu,
-
-
-# Operators
-    \,
-    /,
 
 # Constants
     I
