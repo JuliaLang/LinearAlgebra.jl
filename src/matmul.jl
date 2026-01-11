@@ -1145,18 +1145,18 @@ function _generic_matmatmul_nonadjtrans!(C, A, B, alpha, beta)
         b1 = firstindex(B, 1)
         for j in axes(C, 2)
             B_1j = B[b1, j]
-            for i in axes(C, 1)
+            for i in nzrows(C, j)
                 C_ij = @stable_muladdmul MulAddMul(alpha, false)(A[i, a1] * B_1j)
                 C[i,j] = zero(C_ij + C_ij)
             end
         end
     end
     (iszero(alpha) || isempty(A) || isempty(B)) && return C
-    @inbounds for n in axes(B, 2), k in axes(B, 1)
+    @inbounds for n in axes(B, 2), k in nzrows(B, n)
         # Balpha = B[k,n] * alpha, but we skip the multiplication in case isone(alpha)
         Balpha = @stable_muladdmul MulAddMul(alpha, false)(B[k,n])
         !ismissing(Balpha) && iszero(Balpha) && continue
-        @simd for m in axes(A, 1)
+        @simd for m in nzrows(A, k)
             C[m,n] = muladd(A[m,k], Balpha, C[m,n])
         end
     end
@@ -1204,7 +1204,7 @@ function _generic_matmatmul_generic!(C, A, B, alpha, beta)
     @inbounds for i in axes(A, 1), j in axes(B, 2)
         z2 = zero(A[i, a1]*B[b1, j] + A[i, a1]*B[b1, j])
         Ctmp = convert(promote_type(eltype(C), typeof(z2)), z2)
-        @simd for k in axes(A, 2)
+        @simd for k in intersect(nzcols(A, i), nzrows(B, j))
             Ctmp = muladd(A[i, k], B[k, j], Ctmp)
         end
         @stable_muladdmul _modify!(MulAddMul(alpha,beta), Ctmp, C, (i,j))
