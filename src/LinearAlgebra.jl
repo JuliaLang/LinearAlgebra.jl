@@ -145,6 +145,7 @@ export
     rotate!,
     schur!,
     schur,
+    seba,
     svd!,
     svd,
     svdvals!,
