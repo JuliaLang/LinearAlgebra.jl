@@ -52,7 +52,7 @@ AbstractArray{T}(Q::AbstractQ) where {T} = AbstractMatrix{T}(Q)
 convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray} = T(Q)
 # legacy
 @deprecate(convert(::Type{AbstractMatrix{T}}, Q::AbstractQ) where {T},
-    convert(LinearAlgebra.AbstractQ{T}, Q), false)
+    convert(LinearAlgebra.AbstractQ{T}, Q))
 
 function size(Q::AbstractQ, dim::Integer)
     if dim < 1
