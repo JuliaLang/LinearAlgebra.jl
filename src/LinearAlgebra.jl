@@ -70,7 +70,7 @@ export
 
 # Functions
     adjoint!,
-    adjoint,
+    # adjoint, # exported by Base
     axpby!,
     axpy!,
     bunchkaufman!,
@@ -81,7 +81,7 @@ export
     condskeel,
     copy_adjoint!,
     copy_transpose!,
-    copyto!,
+    # copyto!, # exported by Base
     copytrito!,
     cross,
     det,
@@ -111,8 +111,8 @@ export
     issymmetric,
     istril,
     istriu,
-    kron!,
-    kron,
+    # kron!, # exported by Base
+    # kron, # exported by Base
     ldiv!,
     ldlt!,
     ldlt,
@@ -153,7 +153,7 @@ export
     sylvester,
     tr,
     transpose!,
-    transpose,
+    # transpose, # exported by Base
     tril!,
     tril,
     triu!,
@@ -161,8 +161,8 @@ export
 
 
 # Operators
-    \,
-    /,
+    # \, # exported by Base
+    # /, # exported by Base
 
 # Constants
     I
