@@ -496,9 +496,11 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
 end
 
 @testset "axes" begin
-    v = OffsetArray(1:3)
-    D = Diagonal(v)
-    @test axes(D) isa NTuple{2,typeof(axes(v,1))}
+    for v in (OffsetArray(1:3), OffsetArray(-4:3))
+        D = Diagonal(v)
+        @test D[1,1] == 1
+        @test axes(D) isa NTuple{2,typeof(axes(v,1))}
+    end
 end
 
 @testset "rdiv! (#40887)" begin
