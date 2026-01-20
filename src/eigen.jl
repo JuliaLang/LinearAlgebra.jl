@@ -671,3 +671,101 @@ AbstractMatrix(F::Eigen) = F.vectors * Diagonal(F.values) / F.vectors
 AbstractArray(F::Eigen) = AbstractMatrix(F)
 Matrix(F::Eigen) = Array(AbstractArray(F))
 Array(F::Eigen) = Matrix(F)
+
+"""
+    seba(V :: Matrix; Rinit :: Union{Nothing, Matrix} = nothing, maxiter :: Int64 = 5000)
+
+Sparse EigenBasis Algorithm (SEBA) computes a sparse basis for the span of an input collection of vectors. Returns matrices `S`, `R` composed of columns of sparse basis vectors of the subspace spanned by the columns of `V` and the rotation matrix `R` used to achieve this. More details in Froyland et al. (2019), https://doi.org/10.1016/j.cnsns.2019.04.012.
+
+# Examples
+```jldoctest
+julia> a = [1.0 0.0; 0.0 1.0]
+2×2 Matrix{Float64}:
+ 1.0  0.0
+ 0.0  1.0
+
+ julia> rot = [cos(pi/3) -sin(pi/3); sin(pi/3) cos(pi/3)]
+2×2 Matrix{Float64}:
+ 0.5       -0.866025
+ 0.866025   0.5
+
+ julia> S, R = seba(rot*a); S
+ 2×2 Matrix{Float64}:
+ 0.0   1.0
+ 1.0  -0.0
+
+ julia> R
+2×2 Matrix{Float64}:
+ 0.866025  -0.5
+ 0.5        0.866025
+ ```
+"""
+function seba(V :: Matrix; Rinit :: Union{Nothing, Matrix} = nothing, maxiter :: Int64 = 5000)
+
+    # Inputs: 
+    # V is pxr matrix (r vectors of length p as columns)
+    # Rinit is an (optional) initial rotation matrix.
+    # maxiter is the maximum number of iterations allowed
+
+    # Outputs:
+    # S is pxr matrix with columns approximately spanning the column space of V
+    # R is the optimal rotation that acts on V, which followed by thresholding, produces S
+
+    # Begin SEBA algorithm
+
+    F = qr(V) # Enforce orthonormality
+    V = Matrix(F.Q)
+    p, r = size(V)
+    μ = 0.99 / sqrt(p)
+
+    S = zeros(size(V))
+    # Perturb near-constant vectors
+    for j = 1:r
+        if maximum(V[:, j]) - minimum(V[:, j]) < 1e-14
+            V[:, j] = V[:, j] .+ (rand(p) .- 1 / 2) * 1e-12
+        end
+    end
+
+    # Initialise rotation
+    if Rinit ≡ nothing
+        Rnew = I
+    else
+        # Ensure orthonormality of Rinit
+        F = svd(Rinit)
+        Rnew = F.U * F.Vt
+    end
+
+    # Define soft-threshold function:  soft threshold scalar z by threshold μ
+    soft_threshold(z, μ) = sign(z) * max(abs(z) - μ, 0)
+
+    # Preallocate matrices
+    R = zeros(r, r)
+    S = zeros(p, r)
+
+    iter = 0
+    while norm(Rnew - R) > 1e-12 && iter < maxiter
+        iter = iter + 1
+        R = Rnew
+        # Threshold to solve sparse approximation problem
+        S .= soft_threshold.(V * R', μ)
+        # Normalize columns of S
+        foreach(normalize!, eachcol(S))
+        # Polar decomposition to solve Procrustes problem
+        F = svd(S' * V)
+        Rnew = F.U * F.Vt
+    end
+
+    # Choose correct parity of vectors and scale so largest value is 1
+    for i = 1:r
+        S[:, i] = S[:, i] * sign(sum(S[:, i]))
+        S[:, i] = S[:, i] / maximum(S[:, i])
+    end
+
+    # Sort so that most reliable vectors appear first
+    ind = sortperm(vec(minimum(S, dims=1)), rev=true)
+    S = S[:, ind]
+
+    error = norm(Rnew - R)
+    return S, R
+
+end
