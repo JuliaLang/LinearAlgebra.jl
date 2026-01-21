@@ -121,8 +121,8 @@ MulAddMul() = MulAddMul{true,true,Bool,Bool}(true, false)
 @inline (p::MulAddMul{false})(x) = x * p.alpha
 @inline (::MulAddMul{true, true})(x, _) = x
 @inline (p::MulAddMul{false, true})(x, _) = x * p.alpha
-@inline (p::MulAddMul{true, false})(x, y) = x + y * p.beta
-@inline (p::MulAddMul{false, false})(x, y) = x * p.alpha + y * p.beta
+@inline (p::MulAddMul{true, false})(x, y) = muladd(y, p.beta, x)
+@inline (p::MulAddMul{false, false})(x, y) = muladd(y, p.beta, x * p.alpha)
 
 _iszero_alpha(m::MulAddMul) = iszero(m.alpha)
 _iszero_alpha(m::MulAddMul{true}) = false
@@ -2147,19 +2147,20 @@ function copytrito!(B::AbstractMatrix, A::AbstractMatrix, uplo::AbstractChar)
     BLAS.chkuplo(uplo)
     B === A && return B
     m,n = size(A)
+    d = min(m,n)
     A = Base.unalias(B, A)
     if uplo == 'U'
-        LAPACK.lacpy_size_check(size(B), (n < m ? n : m, n))
+        LAPACK.lacpy_size_check(size(B), (d, n))
         # extract the parents for UpperTriangular matrices
         Bv, Av = uppertridata(B), uppertridata(A)
         for j in axes(A,2), i in axes(A,1)[begin : min(j,end)]
             @inbounds Bv[i,j] = Av[i,j]
         end
     else # uplo == 'L'
-        LAPACK.lacpy_size_check(size(B), (m, m < n ? m : n))
+        LAPACK.lacpy_size_check(size(B), (m, d))
         # extract the parents for LowerTriangular matrices
         Bv, Av = lowertridata(B), lowertridata(A)
-        for j in axes(A,2), i in axes(A,1)[j:end]
+        for j in axes(A,2)[1:d], i in axes(A,1)[j:end]
             @inbounds Bv[i,j] = Av[i,j]
         end
     end
