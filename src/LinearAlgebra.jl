@@ -713,6 +713,12 @@ const LAPACKFactorizations{T,S} = Union{
 (\)(F::AdjointFactorization{<:Any,<:LAPACKFactorizations}, B::AbstractVecOrMat) = ldiv(F, B)
 (\)(F::TransposeFactorization{<:Any,<:LU}, B::AbstractVecOrMat) = ldiv(F, B)
 
+# return the "scalar" type for vector fields, if possible
+_scalartype(::Type{T}) where {T<:Number} = T
+_scalartype(::Type{T}) where T = _scalartype(T, Base.IteratorEltype(T))
+_scalartype(::Type{T}, ::Base.HasEltype) where T = _scalartype(eltype(T))
+_scalartype(::Type{T}, ::Base.EltypeUnknown) where T = T
+
 function ldiv(F::Factorization, B::AbstractVecOrMat)
     require_one_based_indexing(B)
     m, n = size(F)
@@ -720,12 +726,13 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
         throw(DimensionMismatch("arguments must have the same number of rows"))
     end
 
-    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(F)))
+    TFB = typeof(zero(_scalartype(eltype(B))) / oneunit(eltype(F)))
     FF = Factorization{TFB}(F)
 
     # For wide problem we (often) compute a minimum norm solution. The solution
     # is larger than the right hand side so we use size(F, 2).
-    BB = _zeros(TFB, B, n)
+    TBB = typeof(zero(eltype(B)) / oneunit(eltype(F)))
+    BB = _zeros(TBB, B, n)
 
     if n > size(B, 1)
         # Underdetermined
