@@ -1503,3 +1503,49 @@ end
 @inline _mul_cost(A,B) = _mul_cost(A) + _mul_cost(B) + *(_mul_sizes(A)..., last(_mul_sizes(B)))
 @inline _mul_sizes(A::AbstractMatrix) = size(A)
 @inline _mul_sizes((A,B)::Tuple) = first(_mul_sizes(A)), last(_mul_sizes(B))
+
+
+# efficient modular matrix exponentiation
+"""
+    powermod(x::Matrix{T}, p::M, m::K)::Matrix{T} where {T<:Integer, M<:Integer, K<:Integer}
+
+Raise integer matrix to the power modulo m.
+
+# Examples
+```jldoctest
+julia> powermod([1 1; 1 0], 400, 1_000_000_007)
+2×2 Matrix{Int64}:
+ 340453264  967250938
+ 967250938  373202333
+
+julia> powermod([big(1) big(1); big(1) big(0)], big(12341234), 1_000_000_007)
+2×2 Matrix{BigInt}:
+ 998959323  547189956
+ 547189956  451769367
+```
+"""
+function powermod(x::Matrix{T}, p::M, m::K)::Matrix{T} where {T<:Integer, M<:Integer, K<:Integer}
+    p <= 0 && return I
+    p == 1 && return x
+    x_p = copy(x)
+    x_p_tmp = Matrix{T}(undef, size(x)...)
+    res_set = false
+    res = Matrix{T}(undef, size(x)...)
+    res_tmp = Matrix{T}(undef, size(x)...)
+
+    while p > 0
+        if isodd(p)
+            if res_set
+                mul!(res_tmp, res, x_p)
+                res .= res_tmp .% m
+            else
+                res .= x_p
+                res_set = true
+            end
+        end
+        mul!(x_p_tmp, x_p, x_p)
+        x_p .= x_p_tmp .% m
+        p >>= 1
+    end
+    res
+end
