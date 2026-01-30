@@ -1524,7 +1524,7 @@ julia> powermod([big(1) big(1); big(1) big(0)], big(12341234), 1_000_000_007)
  547189956  451769367
 ```
 """
-function powermod(x::Matrix{T}, p::M, m::K)::Matrix{T} where {T<:Integer, M<:Integer, K<:Integer}
+function Base.powermod(x::Matrix{T}, p::M, m::K)::Matrix{T} where {T<:Integer, M<:Integer, K<:Integer}
     p <= 0 && return I
     p == 1 && return x
     x_p = copy(x)
