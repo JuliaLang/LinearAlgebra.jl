@@ -1274,7 +1274,8 @@ end
     @test powermod(A, 0, m) == Diagonal([1, 1])
     @test powermod(A, 1, m) == A
     @test powermod(A, 10, m) == [89 55; 55 34]
-    @test powermod(A, 400, m) == [340453264 967250938; 967250938 373202333]
+    @test powermod(A, 400, 10007) == [7980 2010; 2010 5970]
+    @test powermod(big.(A), 400, m) == big.([340453264 967250938; 967250938 373202333])
 end
 
 end # module TestMatmul
