@@ -1271,7 +1271,7 @@ end
     A = [1 1; 1 0]
     m = 1_000_000_007
 
-    @test powermod(A, 0, m) == I
+    @test powermod(A, 0, m) == Diagonal([1, 1])
     @test powermod(A, 1, m) == A
     @test powermod(A, 10, m) == [89 55; 55 34]
     @test powermod(A, 400, m) == [340453264 967250938; 967250938 373202333]

@@ -1525,7 +1525,7 @@ julia> powermod([big(1) big(1); big(1) big(0)], big(12341234), 1_000_000_007)
 ```
 """
 function Base.powermod(x::Matrix{T}, p::M, m::K)::Matrix{T} where {T<:Integer, M<:Integer, K<:Integer}
-    p <= 0 && return I
+    p <= 0 && return Diagonal(ones(eltype(x), size(x)[1]))
     p == 1 && return x
     x_p = copy(x)
     x_p_tmp = Matrix{T}(undef, size(x)...)
