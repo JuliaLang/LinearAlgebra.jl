@@ -380,6 +380,13 @@ Base.cconvert(::Type{Ptr{T}}, A::Transpose{<:Any, <:AbstractVecOrMat}) where {T}
 Base.elsize(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVecOrMat} = Base.elsize(P)
 Base.elsize(::Type{<:Transpose{<:Any, P}}) where {P<:AbstractVecOrMat} = Base.elsize(P)
 
+@static if isdefined(Base, :has_strided_get) && isdefined(Base, :has_strided_set)
+    Base.has_strided_get(A::Adjoint{<:Real, <:AbstractVecOrMat}) = Base.has_strided_get(A.parent)
+    Base.has_strided_get(A::Transpose{<:Any, <:AbstractVecOrMat}) = Base.has_strided_get(A.parent)
+    Base.has_strided_set(A::Adjoint{<:Real, <:AbstractVecOrMat}) = Base.has_strided_set(A.parent)
+    Base.has_strided_set(A::Transpose{<:Any, <:AbstractVecOrMat}) = Base.has_strided_set(A.parent)
+end
+
 # for vectors, the semantics of the wrapped and unwrapped types differ
 # so attempt to maintain both the parent and wrapper type insofar as possible
 similar(A::AdjOrTransAbsVec) = wrapperop(A)(similar(A.parent))
