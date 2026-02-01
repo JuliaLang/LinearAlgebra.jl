@@ -190,8 +190,29 @@ fzero(t::Tuple{Any}) = Some(only(t))
 fzero(S::StructuredMatrix) = Some(zero(eltype(S)))
 fzero(::StructuredMatrix{<:AbstractMatrix{T}}) where {T<:Number} = Some(haszero(T) ? zero(T)*I : nothing)
 fzero(x) = nothing
+
+# There exist known functions where zeros of structured matrices are preserved under
+# broadcasting regardless of other arguments. Some of these depend on the position
+# of the structured matrix in the broadcast, i.e binary operations where other arguments
+# must be on the right and entirely nonzero.
+const ZeroAbsorbingFuncs = Union{
+    typeof(*), typeof(dot), typeof(&), typeof(lcm)
+}
+const LeftAbsorbingFuncs = Union{
+    typeof(/), typeof(div), typeof(mod), typeof(rem), typeof(%)
+}
+
+# For such functions, we add cases not covered above, and fallback otherwise
+fzero(::ZeroAbsorbingFuncs, ::AbstractArray{T}, ::Any) where {T<:Number} = Some(haszero(T) ? zero(T) : nothing)
+fzero(::ZeroAbsorbingFuncs, s::StructuredMatrix, ::Any) = fzero(s)
+# Each function in LeftAbsorbingFuncs returns NaN/Inf/error when zero is on the right. 
+# We check against this and return a Some(one).
+fzero(::LeftAbsorbingFuncs, a::AbstractArray{T}, i) where {T<:Number} = (i == 1 || any(iszero, a)) ? nothing : Some(one(T))
+fzero(::LeftAbsorbingFuncs, s::StructuredMatrix, ::Any) = fzero(s)
+fzero(::Any, x, ::Any) = fzero(x)
+
 function fzero(bc::Broadcast.Broadcasted)
-    args = map(fzero, bc.args)
+    args = map(i -> fzero(bc.f, bc.args[i], i), eachindex(bc.args))
     return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
 end
 
