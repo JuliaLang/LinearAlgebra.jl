@@ -206,7 +206,7 @@ const ZeroAbsorbingFuncs = Union{
     typeof(*), typeof(dot), typeof(&), typeof(lcm)
 }
 const LeftAbsorbingFuncs = Union{
-    typeof(/), typeof(div), typeof(mod), typeof(rem), typeof(%)
+    typeof(/), typeof(div), typeof(mod), typeof(rem)
 }
 
 # For such functions, we add cases not covered above, and fallback otherwise
