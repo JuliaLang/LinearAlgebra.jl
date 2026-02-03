@@ -179,7 +179,7 @@ function fzeropreserving(bc)
     iszerodefined(typeof(v2)) ? iszero(v2) : isequal(v2, 0)
 end
 
-# broadcasts with SymTridiagonal and arrays with more than one entry are symmetry breaking.
+# broadcasts with SymTridiagonal and arrays with more than one entry will generally break symmetry.
 # This is useful for knowing whether to materialize a Tridiagonal for zero-preserving functions. 
 function issymmetrybreaking(bc::Broadcasted{StructuredMatrixStyle{SymTridiagonal}})
     any(x -> !(x isa SymTridiagonal || all(y -> length(y) == 1, axes(x))), bc.args)
