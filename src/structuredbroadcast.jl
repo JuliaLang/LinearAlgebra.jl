@@ -185,8 +185,6 @@ function issymmetrybreaking(bc::Broadcasted{StructuredMatrixStyle{SymTridiagonal
     any(x -> !(x isa SymTridiagonal || all(y -> length(y) == 1, axes(x))), bc.args)
 end
 
-issymmetrybreaking(x) = false
-
 # Like sparse matrices, we assume that the zero-preservation property of a broadcasted
 # expression is stable.  We can test the zero-preservability by applying the function
 # in cases where all other arguments are known scalars against a zero from the structured
@@ -239,7 +237,7 @@ function Base.similar(bc::Broadcasted{StructuredMatrixStyle{T}}, ::Type{ElType})
     inds = axes(bc)
     fzerobc = fzeropreserving(bc)
     if isstructurepreserving(bc) || (fzerobc && !(T <: Union{UnitLowerTriangular,UnitUpperTriangular}))
-        if issymmetrybreaking(bc)
+        if T <: SymTridiagonal && issymmetrybreaking(bc)
             return similar(convert(Broadcasted{StructuredMatrixStyle{Tridiagonal}}, bc), ElType)
         end
         return structured_broadcast_alloc(bc, T, ElType, map(length, inds))
