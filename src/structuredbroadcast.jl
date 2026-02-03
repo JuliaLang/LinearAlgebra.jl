@@ -179,7 +179,8 @@ function fzeropreserving(bc)
     iszerodefined(typeof(v2)) ? iszero(v2) : isequal(v2, 0)
 end
 
-# assuming zero-preservation, scalar arguments with SymTridiagonal will preserve symmetry
+# broadcasts with SymTridiagonal and arrays with more than one entry are symmetry breaking.
+# This is useful for knowing whether to materialize a Tridiagonal for zero-preserving functions. 
 function issymmetrybreaking(bc::Broadcasted{StructuredMatrixStyle{SymTridiagonal}})
     any(x -> !(x isa SymTridiagonal || all(y -> length(y) == 1, axes(x))), bc.args)
 end
@@ -213,7 +214,7 @@ fzero(::ZeroAbsorbingFuncs, ::AbstractArray{T}) where {T<:Number} = Some(haszero
 fzero(::ZeroAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
 fzero(::ZeroAbsorbingFuncs, x) = fzero(x)
 # Each function in LeftAbsorbingFuncs returns NaN/Inf/error when zero is on the right. 
-# We check against this and return nothing if true. This falls back to a dense matrix
+# We check for any zeros and return nothing if true. This falls back to a dense matrix
 # as with the scalar case.
 fzero(::LeftAbsorbingFuncs, a::AbstractArray{T}) where {T<:Number} = any(iszero, a) ? nothing : Some(one(T))
 fzero(::LeftAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
