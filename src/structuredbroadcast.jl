@@ -180,9 +180,10 @@ function fzeropreserving(bc)
 end
 
 # broadcasts with SymTridiagonal and arrays with more than one entry will generally break symmetry.
-# This is useful for knowing whether to materialize a Tridiagonal for zero-preserving functions. 
+# A 1 x 1 SymTridiagonal will always break symmetry for type stability.
+# This is useful for knowing whether to materialize a Tridiagonal for zero-preserving functions.
 function issymmetrybreaking(bc::Broadcasted{StructuredMatrixStyle{SymTridiagonal}})
-    any(x -> !(x isa SymTridiagonal || all(y -> length(y) == 1, axes(x))), bc.args)
+    any(x -> !xor(x isa SymTridiagonal, all(y -> length(y) == 1, axes(x))),bc.args)
 end
 
 # Like sparse matrices, we assume that the zero-preservation property of a broadcasted

@@ -110,29 +110,29 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
 
         S = SymTridiagonal(rand(N), rand(max(0,N-1)))
         fS = Array(S)
-        Stri = N == 1 ? typeof(S) : typeof(Tridiagonal(S)) # Symmetry unaffected for N = 1
+        Stri = N == 1 ? typeof(Tridiagonal(S)) : typeof(S) # 1 x 1 SymTridiagonals will always break symmetry for type stability
 
-        @test (Q = broadcast(sin, S); typeof(Q) == typeof(S) && Q == broadcast(sin, fS))
+        @test (Q = broadcast(sin, S); typeof(Q) == Stri && Q == broadcast(sin, fS))
         @test broadcast!(sin, Z, S) == broadcast(sin, fS)
         @test (Q = broadcast(cos, S); Q isa Matrix && Q == broadcast(cos, fS))
         @test broadcast!(cos, Z, S) == broadcast(cos, fS)
-        @test (Q = broadcast(*, s, S); typeof(Q) == typeof(S) && Q == broadcast(*, s, fS))
+        @test (Q = broadcast(*, s, S); typeof(Q) == Stri && Q == broadcast(*, s, fS))
         @test broadcast!(*, Z, s, S) == broadcast(*, s, fS)
         @test (Q = broadcast(+, fV, fA, S); Q isa Matrix && Q == broadcast(+, fV, fA, fS))
         @test broadcast!(+, Z, fV, fA, S) == broadcast(+, fV, fA, fS)
-        @test (Q = broadcast(*, s, fV, fA, S); typeof(Q) == Stri && Q == broadcast(*, s, fV, fA, fS))
+        @test (Q = broadcast(*, s, fV, fA, S); typeof(Q) == typeof(Tridiagonal(S)) && Q == broadcast(*, s, fV, fA, fS))
         @test broadcast!(*, Z, s, fV, fA, S) == broadcast(*, s, fV, fA, fS)
 
         @test S .* 2.0 == S .* (2.0,) == fS .* 2.0
-        @test S .* 2.0 isa SymTridiagonal
-        @test S .* (2.0,) isa SymTridiagonal
+        @test S .* 2.0 isa Stri
+        @test S .* (2.0,) isa Stri
         @test isequal(S .* Inf, fS .* Inf)
 
         two = 2
         @test S .^ 2 ==  S .^ (2,) == fS .^ 2 == S .^ two
-        @test S .^ 2 isa typeof(S) # special cased, as isstructurepreserving
-        @test S .^ (2,) isa SymTridiagonal
-        @test S .^ two isa SymTridiagonal
+        @test S .^ 2 isa Stri
+        @test S .^ (2,) isa Stri
+        @test S .^ two isa Stri
         @test S .^ 0 == fS .^ 0
         @test S .^ -1 == fS .^ -1
 
