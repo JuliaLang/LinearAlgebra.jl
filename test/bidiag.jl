@@ -1159,6 +1159,13 @@ end
     end
 end
 
+@testset "Matrix conversion without zero" begin
+    D = Bidiagonal(fill(ones(2,2), 4), fill(ones(2,2), 3), :U)
+    M = Matrix(D)
+    @test M isa Matrix{eltype(D)}
+    @test M == D
+end
+
 @testset "convert to Bidiagonal" begin
     M = diagm(0 => [1,2,3], 1=>[4,5])
     B = convert(Bidiagonal, M)
