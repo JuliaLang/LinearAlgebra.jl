@@ -1402,12 +1402,6 @@ See also [`muladd`](@ref), [`dot`](@ref).
     mat_vec_scalar(B,C,α)
 *(α::RealOrComplex, B::AbstractMatrix{<:RealOrComplex}, C::AbstractMatrix{<:RealOrComplex}) =
     mat_mat_scalar(B,C,α)
-# make sure we direct towards the reinterpret-trick (BLAS)
-*(α::RealOrComplex, B::StridedMatrix{Complex{T}}, C::StridedVector{T}) where {T<:BlasReal} = α * (B*C)
-*(α::RealOrComplex, B::StridedMatrix{Complex{T}}, C::StridedMatrix{T}) where {T<:BlasReal} = α * (B*C)
-# disambiguation, helps to prevent second allocation
-*(α::Real, B::StridedMatrix{Complex{T}}, C::StridedVector{T}) where {T<:BlasReal} = mat_vec_scalar(B,C,α)
-*(α::Real, B::StridedMatrix{Complex{T}}, C::StridedMatrix{T}) where {T<:BlasReal} = mat_mat_scalar(B,C,α)
 
 *(α::Number, u::AbstractVector, tv::AdjOrTransAbsVec) = broadcast(*, α, u, tv)
 *(u::AbstractVector, tv::AdjOrTransAbsVec, γ::Number) = broadcast(*, u, tv, γ)
@@ -1433,6 +1427,10 @@ end
 
 mat_vec_scalar(A, x, γ) = A * (x * γ)  # fallback
 mat_vec_scalar(A::StridedMaybeAdjOrTransMat, x::StridedVector, γ) = _mat_vec_scalar(A, x, γ)
+mat_vec_scalar(A::StridedMatrix{Complex{T}}, x::StridedVector{T}, γ) where {T<:BlasReal} =
+    (A * x) * γ
+mat_vec_scalar(A::StridedMatrix{Complex{T}}, x::StridedVector{T}, γ::Real) where {T<:BlasReal} =
+    _mat_vec_scalar(A, x, γ)
 mat_vec_scalar(A::AdjOrTransAbsVec, x::StridedVector, γ) = (A * x) * γ
 
 function _mat_vec_scalar(A, x, γ)
@@ -1443,6 +1441,10 @@ end
 
 mat_mat_scalar(A, B, γ) = (A*B) * γ # fallback
 mat_mat_scalar(A::StridedMaybeAdjOrTransMat, B::StridedMaybeAdjOrTransMat, γ) =
+    _mat_mat_scalar(A, B, γ)
+mat_mat_scalar(A::StridedMatrix{Complex{T}}, B::StridedMaybeAdjOrTransMat{T}, γ) where {T<:BlasReal} =
+    (A*B) * γ
+mat_mat_scalar(A::StridedMatrix{Complex{T}}, B::StridedMaybeAdjOrTransMat{T}, γ::Real) where {T<:BlasReal} =
     _mat_mat_scalar(A, B, γ)
 
 function _mat_mat_scalar(A, B, γ)
