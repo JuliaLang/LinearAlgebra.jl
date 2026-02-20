@@ -1108,6 +1108,15 @@ end
     @test M44 * M42 * M24 ≈ (M44 * M42) * M24 ≈ M44 * (M42 * M24)
 end
 
+@testset "3-arg *, RealOrComplex * Matrix{Complex} * Matrix{Real}" begin
+    a = one()
+    A = randn(ComplexF64, 5, 5)
+    B = randn(5, 5)
+    b = randn(5)
+    @test complex(a)*A*B ≈ a*A*B ≈ A*B
+    @test complex(a)*A*b ≈ a*A*b ≈ A*b
+end
+
 @testset "4-arg *, by type" begin
     y = [im, 20, 30 + 40im]
     z = [-1, 200 + im, -3]

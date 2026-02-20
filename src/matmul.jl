@@ -1402,6 +1402,12 @@ See also [`muladd`](@ref), [`dot`](@ref).
     mat_vec_scalar(B,C,α)
 *(α::RealOrComplex, B::AbstractMatrix{<:RealOrComplex}, C::AbstractMatrix{<:RealOrComplex}) =
     mat_mat_scalar(B,C,α)
+# make sure we direct towards the reinterpret-trick (BLAS)
+*(α::RealOrComplex, B::StridedMatrix{Complex{T}}, C::StridedVector{T}) where {T<:BlasReal} = α * (B*C)
+*(α::RealOrComplex, B::StridedMatrix{Complex{T}}, C::StridedMatrix{T}) where {T<:BlasReal} = α * (B*C)
+# disambiguation, helps to prevent second allocation
+*(α::Real, B::StridedMatrix{Complex{T}}, C::StridedVector{T}) where {T<:BlasReal} = mat_vec_scalar(B,C,α)
+*(α::Real, B::StridedMatrix{Complex{T}}, C::StridedMatrix{T}) where {T<:BlasReal} = mat_mat_scalar(B,C,α)
 
 *(α::Number, u::AbstractVector, tv::AdjOrTransAbsVec) = broadcast(*, α, u, tv)
 *(u::AbstractVector, tv::AdjOrTransAbsVec, γ::Number) = broadcast(*, u, tv, γ)
