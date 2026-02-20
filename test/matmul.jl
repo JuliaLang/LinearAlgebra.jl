@@ -1109,12 +1109,12 @@ end
 end
 
 @testset "3-arg *, RealOrComplex * Matrix{Complex} * Matrix{Real}" begin
-    a = one(Float64)
+    a = 0.5 + 2.5im
     A = randn(ComplexF64, 5, 5)
     B = randn(Float64, 5, 5)
     b = randn(Float64, 5)
-    @test complex(a)*A*B ≈ a*A*B ≈ A*B
-    @test complex(a)*A*b ≈ a*A*b ≈ A*b
+    @test a*A*B ≈ real(a)*A*B + im*(imag(a)*A*B) ≈ A * (a*B)
+    @test a*A*b ≈ real(a)*A*b + im*(imag(a)*A*b) ≈ A * (a*b)
 end
 
 @testset "4-arg *, by type" begin
