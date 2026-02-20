@@ -692,6 +692,12 @@ end
 
 # Special handling for adj/trans vec
 matprod_dest(A::Diagonal, B::AdjOrTransAbsVec, TS) = similar(B, TS)
+# Hermitian and Adjoint multiplication is handled by conjugating the terms
+matprod_dest(H::Hermitian, A::AdjointAbsMat, TS) = adjoint(matprod_dest(adjoint(A), H, TS))
+matprod_dest(A::AdjointAbsMat, H::Hermitian, TS) = adjoint(matprod_dest(H, adjoint(A), TS))
+# Symmetric and Transpose multiplication is handled by transposing the terms
+matprod_dest(S::Symmetric, T::TransposeAbsMat, TS) = transpose(matprod_dest(transpose(T), S, TS))
+matprod_dest(T::TransposeAbsMat, S::Symmetric, TS) = transpose(matprod_dest(S, transpose(T), TS))
 
 # General fallback definition for handling under- and overdetermined system as well as square problems
 # While this definition is pretty general, it does e.g. promote to common element type of lhs and rhs
