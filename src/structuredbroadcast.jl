@@ -179,6 +179,13 @@ function fzeropreserving(bc)
     iszerodefined(typeof(v2)) ? iszero(v2) : isequal(v2, 0)
 end
 
+# broadcasts with SymTridiagonal and arrays with more than one entry will generally break symmetry.
+# A 1 x 1 SymTridiagonal will always break symmetry for type stability.
+# This is useful for knowing whether to materialize a Tridiagonal for zero-preserving functions.
+function issymmetrybreaking(bc::Broadcasted{StructuredMatrixStyle{SymTridiagonal}})
+    any(x -> !xor(x isa SymTridiagonal, all(y -> length(y) == 1, axes(x))),bc.args)
+end
+
 # Like sparse matrices, we assume that the zero-preservation property of a broadcasted
 # expression is stable.  We can test the zero-preservability by applying the function
 # in cases where all other arguments are known scalars against a zero from the structured
@@ -190,7 +197,39 @@ fzero(t::Tuple{Any}) = Some(only(t))
 fzero(S::StructuredMatrix) = Some(zero(eltype(S)))
 fzero(::StructuredMatrix{<:AbstractMatrix{T}}) where {T<:Number} = Some(haszero(T) ? zero(T)*I : nothing)
 fzero(x) = nothing
-function fzero(bc::Broadcast.Broadcasted)
+
+# There exist known functions where zeros of structured matrices are preserved under
+# broadcasting regardless of other arguments. Some of these require the zeros to be on
+# the left and all other arguments entirely nonzero, namely division.
+const ZeroAbsorbingFuncs = Union{
+    typeof(*), typeof(dot), typeof(&), typeof(lcm)
+}
+const LeftAbsorbingFuncs = Union{
+    typeof(/), typeof(div), typeof(mod), typeof(rem)
+}
+
+# For such functions, we add cases not covered above, and fallback otherwise
+fzero(::ZeroAbsorbingFuncs, ::AbstractArray{T}) where {T<:Number} = Some(haszero(T) ? zero(T) : nothing)
+fzero(::ZeroAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
+fzero(::ZeroAbsorbingFuncs, x) = fzero(x)
+# Each function in LeftAbsorbingFuncs returns NaN/Inf/error when zero is on the right. 
+# We check for any zeros and return nothing if true. This falls back to a dense matrix
+# as with the scalar case.
+fzero(::LeftAbsorbingFuncs, a::AbstractArray{T}) where {T<:Number} = any(iszero, a) ? nothing : Some(one(T))
+fzero(::LeftAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
+fzero(::LeftAbsorbingFuncs, x) = fzero(x)
+
+function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:LeftAbsorbingFuncs, <:Tuple{StructuredMatrix, Vararg{Any}}})
+    args = map(x -> fzero(bc.f, x), bc.args)
+    return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
+end
+
+function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:ZeroAbsorbingFuncs})
+    args = map(x -> fzero(bc.f, x), bc.args)
+    return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
+end
+
+function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:Any})
     args = map(fzero, bc.args)
     return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
 end
@@ -199,6 +238,9 @@ function Base.similar(bc::Broadcasted{StructuredMatrixStyle{T}}, ::Type{ElType})
     inds = axes(bc)
     fzerobc = fzeropreserving(bc)
     if isstructurepreserving(bc) || (fzerobc && !(T <: Union{UnitLowerTriangular,UnitUpperTriangular}))
+        if T <: SymTridiagonal && issymmetrybreaking(bc)
+            return similar(convert(Broadcasted{StructuredMatrixStyle{Tridiagonal}}, bc), ElType)
+        end
         return structured_broadcast_alloc(bc, T, ElType, map(length, inds))
     elseif fzerobc && T <: UnitLowerTriangular
         return similar(convert(Broadcasted{StructuredMatrixStyle{LowerTriangular}}, bc), ElType)

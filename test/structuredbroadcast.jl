@@ -21,12 +21,12 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
         D = Diagonal(rand(N))
         B = Bidiagonal(rand(N), rand(max(0,N-1)), :U)
         T = Tridiagonal(rand(max(0,N-1)), rand(N), rand(max(0,N-1)))
-        S = SymTridiagonal(rand(N), rand(max(0,N-1)))
+        
         U = UpperTriangular(rand(N,N))
         L = LowerTriangular(rand(N,N))
         UH = UpperHessenberg(rand(N,N))
         M = Matrix(rand(N,N))
-        structuredarrays = (D, B, T, U, L, M, S, UH)
+        structuredarrays = (D, B, T, U, L, M, UH)
         fstructuredarrays = map(Array, structuredarrays)
         @testset "$(nameof(typeof(X)))" for (X, fX) in zip(structuredarrays, fstructuredarrays)
             @test (Q = broadcast(sin, X); typeof(Q) == typeof(X) && Q == broadcast(sin, fX))
@@ -37,7 +37,7 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
             @test broadcast!(*, Z, s, X) == broadcast(*, s, fX)
             @test (Q = broadcast(+, fV, fA, X); Q isa Matrix && Q == broadcast(+, fV, fA, fX))
             @test broadcast!(+, Z, fV, fA, X) == broadcast(+, fV, fA, fX)
-            @test (Q = broadcast(*, s, fV, fA, X); Q isa Matrix && Q == broadcast(*, s, fV, fA, fX))
+            @test (Q = broadcast(*, s, fV, fA, X); Q isa typeof(X) && Q == broadcast(*, s, fV, fA, fX))
             @test broadcast!(*, Z, s, fV, fA, X) == broadcast(*, s, fV, fA, fX)
 
             @test X .* 2.0 == X .* (2.0,) == fX .* 2.0
@@ -84,7 +84,7 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
             @test broadcast!(*, Z, s, X) == broadcast(*, s, fX)
             @test (Q = broadcast(+, fV, fA, X); Q isa Matrix && Q == broadcast(+, fV, fA, fX))
             @test broadcast!(+, Z, fV, fA, X) == broadcast(+, fV, fA, fX)
-            @test (Q = broadcast(*, s, fV, fA, X); Q isa Matrix && Q == broadcast(*, s, fV, fA, fX))
+            @test (Q = broadcast(*, s, fV, fA, X); typeof(Q) == Ttri && Q == broadcast(*, s, fV, fA, fX))
             @test broadcast!(*, Z, s, fV, fA, X) == broadcast(*, s, fV, fA, fX)
 
             @test X .* 2.0 == X .* (2.0,) == fX .* 2.0
@@ -108,6 +108,34 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
             end
         end
 
+        S = SymTridiagonal(rand(N), rand(max(0,N-1)))
+        fS = Array(S)
+        Stri = N == 1 ? typeof(Tridiagonal(S)) : typeof(S) # 1 x 1 SymTridiagonals will always break symmetry for type stability
+
+        @test (Q = broadcast(sin, S); typeof(Q) == Stri && Q == broadcast(sin, fS))
+        @test broadcast!(sin, Z, S) == broadcast(sin, fS)
+        @test (Q = broadcast(cos, S); Q isa Matrix && Q == broadcast(cos, fS))
+        @test broadcast!(cos, Z, S) == broadcast(cos, fS)
+        @test (Q = broadcast(*, s, S); typeof(Q) == Stri && Q == broadcast(*, s, fS))
+        @test broadcast!(*, Z, s, S) == broadcast(*, s, fS)
+        @test (Q = broadcast(+, fV, fA, S); Q isa Matrix && Q == broadcast(+, fV, fA, fS))
+        @test broadcast!(+, Z, fV, fA, S) == broadcast(+, fV, fA, fS)
+        @test (Q = broadcast(*, s, fV, fA, S); typeof(Q) == typeof(Tridiagonal(S)) && Q == broadcast(*, s, fV, fA, fS))
+        @test broadcast!(*, Z, s, fV, fA, S) == broadcast(*, s, fV, fA, fS)
+
+        @test S .* 2.0 == S .* (2.0,) == fS .* 2.0
+        @test S .* 2.0 isa Stri
+        @test S .* (2.0,) isa Stri
+        @test isequal(S .* Inf, fS .* Inf)
+
+        two = 2
+        @test S .^ 2 ==  S .^ (2,) == fS .^ 2 == S .^ two
+        @test S .^ 2 isa Stri
+        @test S .^ (2,) isa Stri
+        @test S .^ two isa Stri
+        @test S .^ 0 == fS .^ 0
+        @test S .^ -1 == fS .^ -1
+
         @testset "type-stability in Bidiagonal" begin
             B2 = @inferred (B -> .- B)(B)
             @test B2 isa Bidiagonal
@@ -124,6 +152,20 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
             B2 = @inferred (B -> 1 .\ B)(B)
             @test B2 isa Bidiagonal
             @test B2 == B
+        end
+
+        @testset "left zero absorbing functions" begin
+            fD = fdiagonals[1]
+            @test (Q = broadcast(/, D, fV); Q isa Diagonal && Q == broadcast(/, fD, fV))
+            @test (Q = broadcast(/, fV, D); Q isa Matrix && Q == broadcast(/, fV, fD))
+            if N > 0
+                a = copy(fV)
+                a[1] = 0
+                @test (Q = broadcast(/, D, a); Q isa Matrix 
+                    && Q[2:end, :] == broadcast(/, fD, a)[2:end, :]
+                    && Q[1, 1] == Inf
+                    && all(isnan, Q[1, 2:end]))
+            end
         end
     end
 end
