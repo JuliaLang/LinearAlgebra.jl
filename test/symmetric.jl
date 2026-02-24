@@ -1381,4 +1381,18 @@ end
     @test LinearAlgebra.uplo(H) == :L
 end
 
+@testset "triu/tril with immutable arrays" begin
+    A = ImmutableArray([1 2; 3 4])
+    for T in (Symmetric, Hermitian), uplo in (:U, :L)
+        H = T(A, uplo)
+        MH = Matrix(H)
+        @test triu(H,-1) == triu(MH,-1)
+        @test triu(H) == triu(MH)
+        @test triu(H,1) == triu(MH,1)
+        @test tril(H,1) == tril(MH,1)
+        @test tril(H) == tril(MH)
+        @test tril(H,-1) == tril(MH,-1)
+    end
+end
+
 end # module TestSymmetric
