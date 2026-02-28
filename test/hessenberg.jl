@@ -320,4 +320,14 @@ end
     @test U == U2
 end
 
+@testset "eigensolvers" begin
+    for T in (Float32, Float64, ComplexF32, ComplexF64)
+        H = UpperHessenberg(randn(T, 5,5))
+        λ = eigvals(H)
+        F = eigen(H)
+        @test λ ≈ eigvals(Matrix(H)) ≈ F.values
+        @test H * F.vectors ≈ F.vectors * Diagonal(λ)
+    end
+end
+
 end # module TestHessenberg
