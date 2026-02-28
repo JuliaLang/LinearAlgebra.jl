@@ -131,6 +131,7 @@ SymTridiagonal(S::SymTridiagonal) = S
 
 function convert(::Type{T}, A::AbstractMatrix) where T<:SymTridiagonal
     checksquare(A)
+    A isa T && return A
     _checksymmetric(A) && isbanded(A, -1, 1) ? T(A) : throw(InexactError(:convert, T, A))
 end
 
@@ -638,6 +639,7 @@ end
 
 function convert(::Type{T}, A::AbstractMatrix) where T<:Tridiagonal
     checksquare(A)
+    A isa T && return A
     isbanded(A, -1, 1) ? T(A) : throw(InexactError(:convert, T, A))
 end
 
