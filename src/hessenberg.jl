@@ -430,13 +430,14 @@ function dot(x::AbstractVector, H::UpperHessenberg, y::AbstractVector)
     return r
 end
 
-# faster eigenvalues, since we can skip the intermediate step of Hessenberg factorization
-function eigvals!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasComplex}
-    ilo, ihi, _ = LAPACK.gebal!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), triu!(H.data, -1))
+# faster eigenvalues, since we can skip the intermediate step of Hessenberg factorization.
+# note: permute==true is ignored, since that could spoil the upper-Hessenberg structure
+function eigvals!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasComplex}
+    ilo, ihi, _ = LAPACK.gebal!(scale ? 'S' : 'N', triu!(H.data, -1))
     return sorteig!(LAPACK.hseqr!('E', 'N', 1, size(H,1), H.data, H.data)[3], sortby)
 end
-function eigvals!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasReal}
-    ilo, ihi, _ = LAPACK.gebal!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), triu!(H.data, -1))
+function eigvals!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasReal}
+    ilo, ihi, _ = LAPACK.gebal!(scale ? 'S' : 'N', triu!(H.data, -1))
     _, _, vals = LAPACK.hseqr!('E', 'N', 1, size(H,1), H.data, H.data)
     return sorteig!(isreal(vals) ? real(vals) : vals, sortby)
 end
@@ -447,9 +448,9 @@ end
 eigencopy_oftype(H::UpperHessenberg, S) = UpperHessenberg(eigencopy_oftype(H.data, S))
 
 # fallback to dense algorithms
-eigvals!(H::UpperHessenberg; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
+eigvals!(H::UpperHessenberg; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
     eigvals!(triu!(H.data,-1); permute, scale, sortby)
-eigen!(H::UpperHessenberg; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
+eigen!(H::UpperHessenberg; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
     eigen!(triu!(H.data,-1); permute, scale, sortby)
 
 ######################################################################################
