@@ -639,6 +639,7 @@ end
 
 function convert(::Type{T}, A::AbstractMatrix) where T<:Tridiagonal
     checksquare(A)
+    A isa T && return A
     isbanded(A, -1, 1) ? T(A) : throw(InexactError(:convert, T, A))
 end
 
