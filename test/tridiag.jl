@@ -549,6 +549,7 @@ end
 
 @testset "convert for SymTridiagonal" begin
     STF32 = SymTridiagonal{Float32}(fill(1f0, 5), fill(1f0, 4))
+    @test convert(typeof(STF32), STF32) === STF32
     @test convert(SymTridiagonal{Float64}, STF32)::SymTridiagonal{Float64} == STF32
     @test convert(AbstractMatrix{Float64}, STF32)::SymTridiagonal{Float64} == STF32
 end
@@ -1140,6 +1141,16 @@ end
         end
         @test_throws InexactError convert(SymTridiagonal, fill(5, 4, 4))
         @test_throws InexactError convert(SymTridiagonal, diagm(0=>fill(NaN,4)))
+    end
+    @testset "convert from same type" begin
+        T = Tridiagonal(1:3, 1:4, 1:3)
+        @test convert(Tridiagonal, T) === T
+        @test convert(Tridiagonal{eltype(T)}, T) === T
+        @test convert(typeof(T), T) === T
+        S = SymTridiagonal(1:4, 1:3)
+        @test convert(SymTridiagonal, S) === S
+        @test convert(SymTridiagonal{eltype(S)}, S) === S
+        @test convert(typeof(S), S) === S
     end
 end
 
