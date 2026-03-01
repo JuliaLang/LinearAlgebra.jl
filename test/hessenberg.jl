@@ -294,10 +294,14 @@ end
 end
 
 @testset "multiplication with empty HessenbergQ" begin
-    @test ones(2, 0)*hessenberg(zeros(0,0)).Q == zeros(2,0)
-    @test_throws DimensionMismatch ones(2, 1)*hessenberg(zeros(0,0)).Q
-    @test hessenberg(zeros(0,0)).Q * ones(0, 2) == zeros(0,2)
-    @test_throws DimensionMismatch hessenberg(zeros(0,0)).Q * ones(1, 2)
+    for A in (zeros(0,0), Symmetric(zeros(0,0)))
+        Q = hessenberg(A).Q
+        @test Matrix(Q) == zeros(0, 0)
+        @test ones(2, 0) * Q == zeros(2,0)
+        @test_throws DimensionMismatch ones(2, 1) * Q
+        @test Q * ones(0, 2) == zeros(0,2)
+        @test_throws DimensionMismatch Q * ones(1, 2)
+    end
 end
 
 @testset "fillband" begin
