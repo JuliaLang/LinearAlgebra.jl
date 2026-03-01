@@ -1427,6 +1427,10 @@ end
 
 mat_vec_scalar(A, x, γ) = A * (x * γ)  # fallback
 mat_vec_scalar(A::StridedMaybeAdjOrTransMat, x::StridedVector, γ) = _mat_vec_scalar(A, x, γ)
+mat_vec_scalar(A::StridedMatrix{Complex{T}}, x::StridedVector{T}, γ) where {T<:BlasReal} =
+    (A * x) * γ
+mat_vec_scalar(A::StridedMatrix{Complex{T}}, x::StridedVector{T}, γ::Real) where {T<:BlasReal} =
+    _mat_vec_scalar(A, x, γ)
 mat_vec_scalar(A::AdjOrTransAbsVec, x::StridedVector, γ) = (A * x) * γ
 
 function _mat_vec_scalar(A, x, γ)
@@ -1437,6 +1441,10 @@ end
 
 mat_mat_scalar(A, B, γ) = (A*B) * γ # fallback
 mat_mat_scalar(A::StridedMaybeAdjOrTransMat, B::StridedMaybeAdjOrTransMat, γ) =
+    _mat_mat_scalar(A, B, γ)
+mat_mat_scalar(A::StridedMatrix{Complex{T}}, B::StridedMaybeAdjOrTransMat{T}, γ) where {T<:BlasReal} =
+    (A*B) * γ
+mat_mat_scalar(A::StridedMatrix{Complex{T}}, B::StridedMaybeAdjOrTransMat{T}, γ::Real) where {T<:BlasReal} =
     _mat_mat_scalar(A, B, γ)
 
 function _mat_mat_scalar(A, B, γ)
