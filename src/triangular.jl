@@ -2676,6 +2676,15 @@ sqrt(A::UnitLowerTriangular) = copy(transpose(sqrt(copy(transpose(A)))))
 # square root of upper triangular or real upper quasitriangular matrix
 function sqrt_quasitriu(A0; blockwidth = eltype(A0) <: Complex ? 512 : 256)
     n = checksquare(A0)
+    if isa(eltype(A0), AbstractFloat)
+        nonzero_eig = sum([abs(e)>floatmin(eltype(A0)) for e in diag(A0)]) # if its a float type, check if the float is greater than the smallest representable float
+    else
+        nonzero_eig = sum([!iszero(e) for e in diag(A0)]) # check if there are less than n-1 nonzero eigenvalues
+    end
+    if (nonzero_eig < n - 1)
+        @warn "Matrix has less than $(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."
+    end
+    
     T = eltype(A0)
     Tr = typeof(sqrt(real(zero(T))))
     Tc = typeof(sqrt(complex(zero(T))))
