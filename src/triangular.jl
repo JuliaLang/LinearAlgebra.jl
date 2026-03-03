@@ -2682,7 +2682,7 @@ function sqrt_quasitriu(A0; blockwidth = eltype(A0) <: Complex ? 512 : 256)
         nonzero_eig = count(!iszero, diag(A0)) # check if there are less than n-1 nonzero eigenvalues
     end
     if (nonzero_eig < n - 1)
-        @warn "Matrix has less than $(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."
+        @warn "Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."
     end
     
     T = eltype(A0)
