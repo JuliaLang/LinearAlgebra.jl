@@ -2677,7 +2677,7 @@ sqrt(A::UnitLowerTriangular) = copy(transpose(sqrt(copy(transpose(A)))))
 function sqrt_quasitriu(A0; blockwidth = eltype(A0) <: Complex ? 512 : 256)
     n = checksquare(A0)
     if isa(eltype(A0), AbstractFloat)
-        nonzero_eig = sum([abs(e)>floatmin(eltype(A0)) for e in diag(A0)]) # if its a float type, check if the float is greater than the smallest representable float
+        nonzero_eig = count(x->abs(x)>=eps(eltype(A0))*norm(A0), diag(A0)) # if its a float, check if the eigenvalue is greater than eps*(2-norm of matrix)
     else
         nonzero_eig = count(!iszero, diag(A0)) # check if there are less than n-1 nonzero eigenvalues
     end
