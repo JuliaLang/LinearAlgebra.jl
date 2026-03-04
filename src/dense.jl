@@ -1016,6 +1016,8 @@ and then the complex square root of the triangular factor.
 If a real square root exists, then an extension of this method [^H87] that computes the real
 Schur form and then the real square root of the quasi-triangular factor is instead used.
 
+When there are less than n-1 nonzero eigenvalues, the square root may not exist so a warning is printed. Eigenvalues of magnitude less than `eps(max|λ|)` are treated as zero.
+
 [^BH83]:
 
     Åke Björck and Sven Hammarling, "A Schur method for the square root of a matrix",
@@ -1065,7 +1067,7 @@ function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
             is_sqrt_real = !any(x -> isreal(x) && real(x) < 0, SchurF.values)
             # sqrt_quasitriu uses LAPACK functions for non-triu inputs
             if typeof(sqrt(zero(T))) <: BlasFloat && is_sqrt_real
-                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T) * SchurF.Z'
+                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T, SchurF.values) * SchurF.Z'
             else
                 SchurS = Schur{Complex}(SchurF)
                 sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T)) * SchurS.Z'

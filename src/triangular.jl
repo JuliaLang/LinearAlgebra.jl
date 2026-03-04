@@ -2650,7 +2650,7 @@ end
 
 # End of auxiliary functions for matrix logarithm and matrix power
 
-sqrt(A::UpperTriangular) = sqrt_quasitriu(A)
+sqrt(A::UpperTriangular) = sqrt_quasitriu(A, diagview(A)) # matrix is upper triangular, so eigenvalues are just the diagonals
 function sqrt(A::UnitUpperTriangular{T}) where T
     B = A.data
     t = typeof(sqrt(zero(T)))
@@ -2674,13 +2674,11 @@ sqrt(A::UnitLowerTriangular) = copy(transpose(sqrt(copy(transpose(A)))))
 # Auxiliary functions for matrix square root
 
 # square root of upper triangular or real upper quasitriangular matrix
-function sqrt_quasitriu(A0; blockwidth = eltype(A0) <: Complex ? 512 : 256)
+# A0 is triangular or quasitriangular matrix, evals is the eigenvalues
+function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Complex ? 512 : 256)
     n = checksquare(A0)
-    if isa(eltype(A0), AbstractFloat)
-        nonzero_eig = count(x->abs(x)>=eps(eltype(A0))*norm(A0), diag(A0)) # if its a float, check if the eigenvalue is greater than eps*(2-norm of matrix)
-    else
-        nonzero_eig = count(!iszero, diag(A0)) # check if there are less than n-1 nonzero eigenvalues
-    end
+    atol = eps(generic_normInf(evals)) # should work for any numeric data type
+    nonzero_eig = count(x->abs(x)>=atol, evals) # count number of eigenvalues that are \approx 0
     if (nonzero_eig < n - 1)
         @warn "Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."
     end
