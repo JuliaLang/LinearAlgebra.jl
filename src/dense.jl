@@ -1016,7 +1016,7 @@ and then the complex square root of the triangular factor.
 If a real square root exists, then an extension of this method [^H87] that computes the real
 Schur form and then the real square root of the quasi-triangular factor is instead used.
 
-When there are less than n-1 nonzero eigenvalues, the square root may not exist so a warning is printed. Eigenvalues of magnitude less than `eps(max|λ|)` are treated as zero.
+When an $n \times n$ matrix has fewer than $n-1$ nonzero eigenvalues, the square root may not exist, so a warning is printed. Eigenvalues of magnitude less than `eps(max|λ|)` are treated as zero.
 
 [^BH83]:
 
