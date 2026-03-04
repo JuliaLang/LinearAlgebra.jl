@@ -2678,7 +2678,7 @@ sqrt(A::UnitLowerTriangular) = copy(transpose(sqrt(copy(transpose(A)))))
 function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Complex ? 512 : 256)
     n = checksquare(A0)
     atol = eps(generic_normInf(evals)) # should work for any numeric data type
-    nonzero_eig = count(x->abs(x)>=atol, evals) # count number of eigenvalues that are \approx 0
+    nonzero_eig = count(x -> abs(x) > atol, evals) # count eigenvalues ≉ 0
     if (nonzero_eig < n - 1)
         @warn "Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."
     end
