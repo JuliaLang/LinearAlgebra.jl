@@ -798,6 +798,12 @@ end
     @test convert(AbstractMatrix{Float64}, Bu)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bu
     @test convert(AbstractArray{Float64}, Bl)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bl
     @test convert(AbstractMatrix{Float64}, Bl)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bl
+
+    @testset "convert to Bidiagonal from same type" begin
+        @test convert(typeof(Bu), Bu) === Bu
+        @test convert(Bidiagonal{eltype(Bu)}, Bu) === Bu
+        @test convert(Bidiagonal, Bu) === Bu
+    end
 end
 
 @testset "block-bidiagonal matrix" begin

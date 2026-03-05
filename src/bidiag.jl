@@ -249,6 +249,7 @@ AbstractMatrix{T}(A::Bidiagonal{T}) where {T} = copy(A)
 
 function convert(::Type{T}, A::AbstractMatrix) where T<:Bidiagonal
     checksquare(A)
+    A isa T && return A
     isbanded(A, -1, 1) || throw(InexactError(:convert, T, A))
     iszero(diagview(A, 1)) ? T(A, :L) :
         iszero(diagview(A, -1)) ? T(A, :U) : throw(InexactError(:convert, T, A))
