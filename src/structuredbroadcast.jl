@@ -191,7 +191,13 @@ fzero(S::StructuredMatrix) = Some(zero(eltype(S)))
 fzero(::StructuredMatrix{<:AbstractMatrix{T}}) where {T<:Number} = Some(haszero(T) ? zero(T)*I : nothing)
 fzero(x) = nothing
 function fzero(bc::Broadcast.Broadcasted)
-    args = map(fzero, bc.args)
+    # Type-assert to prevent inference from widening the result type to AbstractArray.
+    # Broadcasted.args is always <: Tuple by construction, but when the Broadcasted type
+    # parameter is not fully known (e.g., Broadcasted{StructuredMatrixStyle{T} where T}),
+    # inference may widen args, causing any(isnothing, args) to create a cached
+    # MethodInstance any(::typeof(isnothing), ::AbstractArray) that is invalidated by
+    # any package defining any(f, ::AbstractArraySubtype).
+    args = map(fzero, bc.args)::Tuple
     return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
 end
 
