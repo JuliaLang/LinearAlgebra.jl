@@ -2650,8 +2650,9 @@ end
 
 # End of auxiliary functions for matrix logarithm and matrix power
 
-sqrt(A::UpperTriangular) = sqrt_quasitriu(A, diagview(A)) # matrix is upper triangular, so eigenvalues are just the diagonals
-function sqrt(A::UnitUpperTriangular{T}) where T
+sqrt(A::UpperTriangular; check=true) = sqrt_quasitriu(A, diagview(A), check=check) # matrix is upper triangular, so eigenvalues are just the diagonals
+# shouldn't need to do a check for UnitUpperTriangular because the eigenvalues are all 1, flag included so the function call lines up
+function sqrt(A::UnitUpperTriangular{T}; check=true) where T 
     B = A.data
     t = typeof(sqrt(zero(T)))
     R = Matrix{t}(I, size(A))
@@ -2668,20 +2669,15 @@ function sqrt(A::UnitUpperTriangular{T}) where T
     end
     return UnitUpperTriangular(R)
 end
-sqrt(A::LowerTriangular) = copy(transpose(sqrt(copy(transpose(A)))))
-sqrt(A::UnitLowerTriangular) = copy(transpose(sqrt(copy(transpose(A)))))
+sqrt(A::LowerTriangular; check=true) = copy(transpose(sqrt(copy(transpose(A)), check=check)))
+sqrt(A::UnitLowerTriangular; check=true) = copy(transpose(sqrt(copy(transpose(A)), check=check)))
 
 # Auxiliary functions for matrix square root
 
 # square root of upper triangular or real upper quasitriangular matrix
 # A0 is triangular or quasitriangular matrix, evals is the eigenvalues
-function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Complex ? 512 : 256)
+function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Complex ? 512 : 256, check=true)
     n = checksquare(A0)
-    atol = eps(generic_normInf(evals)) # should work for any numeric data type
-    nonzero_eig = count(x -> abs(x) > atol, evals) # count eigenvalues ≉ 0
-    if (nonzero_eig < n - 1)
-        @warn "Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."
-    end
     
     T = eltype(A0)
     Tr = typeof(sqrt(real(zero(T))))
@@ -2709,6 +2705,17 @@ function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Co
         R = zeros(Tc, size(A0))
     end
     _sqrt_quasitriu!(R, A; blockwidth=blockwidth, n=n)
+    if check
+        if eltype(A0) <: Real || eltype(A0) <: Complex
+            test = R^2≈A0
+        else
+            test = generic_normInf(R*R - A0) <= eps(generic_normInf(A0)) # when eltype is not real or complex, use the norm
+        end
+        if !test
+            throw_sqrterror(evals, n)
+        end
+    end
+
     Rc = eltype(A0) <: Real ? R : complex(R)
     if A0 isa UpperTriangular
         return UpperTriangular(Rc)
@@ -2716,6 +2723,18 @@ function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Co
         return UnitUpperTriangular(Rc)
     else
         return Rc
+    end
+end
+
+# throw an error when the sqrt function does not work
+function throw_sqrterror(evals::AbstractVector, n::Int)
+    atol = eps(generic_normInf(evals)) # should work for any numeric data type
+    nonzero_eig = count(x -> abs(x) > atol, evals) # count eigenvalues ≉ 0
+    if (nonzero_eig < n - 1)
+        # algorithm failed because matrix has fewer than n-1 nonzero eigenvalues
+        throw(ArgumentError("Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."))
+    else
+        throw("Square root algorithm failed to produce square root to numerical precision")
     end
 end
 
