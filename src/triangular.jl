@@ -2705,14 +2705,21 @@ function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Co
         R = zeros(Tc, size(A0))
     end
     _sqrt_quasitriu!(R, A; blockwidth=blockwidth, n=n)
+
+    # check that the algorithm worked
     if check
-        if eltype(A0) <: Real || eltype(A0) <: Complex
-            test = R^2≈A0
-        else
-            test = generic_normInf(R*R - A0) <= eps(generic_normInf(A0)) # when eltype is not real or complex, use the norm
-        end
-        if !test
-            throw_sqrterror(evals, n)
+        atol = eps(generic_normInf(evals)) # should work for any numeric data type
+        nonzero_eig = count(x -> abs(x) > atol, evals) # count eigenvalues ≉ 0
+        if (nonzero_eig < n - 1) # in the regime where the algorithm could fail
+            if eltype(A0) <: Real || eltype(A0) <: Complex
+                rtol_test = eps(float(one(eltype(A0))))^(1/4) # check that 1/4 of the digits match
+                test = isapprox(R^2,A0,rtol=rtol_test)
+            else
+                test = generic_normInf(R*R - A0) <= (eps(generic_normInf(A0)))^(1/4) # when eltype is not real or complex, use the norm
+            end
+            if !test
+                throw(ArgumentError("Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."))
+            end
         end
     end
 
@@ -2723,18 +2730,6 @@ function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Co
         return UnitUpperTriangular(Rc)
     else
         return Rc
-    end
-end
-
-# throw an error when the sqrt function does not work
-function throw_sqrterror(evals::AbstractVector, n::Int)
-    atol = eps(generic_normInf(evals)) # should work for any numeric data type
-    nonzero_eig = count(x -> abs(x) > atol, evals) # count eigenvalues ≉ 0
-    if (nonzero_eig < n - 1)
-        # algorithm failed because matrix has fewer than n-1 nonzero eigenvalues
-        throw(ArgumentError("Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."))
-    else
-        throw("Square root algorithm failed to produce square root to numerical precision")
     end
 end
 
