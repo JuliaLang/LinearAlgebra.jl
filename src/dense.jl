@@ -996,7 +996,7 @@ log(A::AdjointAbsMat) = adjoint(log(parent(A)))
 log(A::TransposeAbsMat) = transpose(log(parent(A)))
 
 """
-    sqrt(A::AbstractMatrix)
+    sqrt(A::AbstractMatrix; check=true)
 
 If `A` has no negative real eigenvalues, compute the principal matrix square root of `A`,
 that is the unique matrix ``X`` with eigenvalues having positive real part such that
@@ -1015,6 +1015,8 @@ Björck-Hammarling method [^BH83], which computes the complex Schur form ([`schu
 and then the complex square root of the triangular factor.
 If a real square root exists, then an extension of this method [^H87] that computes the real
 Schur form and then the real square root of the quasi-triangular factor is instead used.
+
+When an $n \times n$ matrix has fewer than $n-1$ nonzero eigenvalues, the square root may not exist. In this case, and when the `check` flag is true, the algorithm will verify `X^2≈A` and throw and error if not. 
 
 [^BH83]:
 
@@ -1043,7 +1045,7 @@ julia> sqrt(A)
 """
 sqrt(::AbstractMatrix)
 
-function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
+function sqrt(A::AbstractMatrix{T}; check=true) where {T<:Union{Real,Complex}}
     if checksquare(A) == 0
         return copy(float(A))
     elseif isdiag(A)
@@ -1053,33 +1055,33 @@ function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
             return applydiagonal(sqrt, A)
         end
     elseif ishermitian(A)
-        return _safe_parent(sqrt(Hermitian(A)))
+        return _safe_parent(sqrt(Hermitian(A))) # dont need to check for hermitian matrices
     elseif istriu(A)
-        return triu!(parent(sqrt(UpperTriangular(A))))
+        return triu!(parent(sqrt(UpperTriangular(A), check=check)))
     elseif isreal(A)
         SchurF = schur(real(A))
         if istriu(SchurF.T)
-            sqrtA = SchurF.Z * sqrt(UpperTriangular(SchurF.T)) * SchurF.Z'
+            sqrtA = SchurF.Z * sqrt(UpperTriangular(SchurF.T), check=check) * SchurF.Z'
         else
             # real sqrt exists whenever no eigenvalues are negative
             is_sqrt_real = !any(x -> isreal(x) && real(x) < 0, SchurF.values)
             # sqrt_quasitriu uses LAPACK functions for non-triu inputs
             if typeof(sqrt(zero(T))) <: BlasFloat && is_sqrt_real
-                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T) * SchurF.Z'
+                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T, SchurF.values, check=check) * SchurF.Z'
             else
                 SchurS = Schur{Complex}(SchurF)
-                sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T)) * SchurS.Z'
+                sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T), check=check) * SchurS.Z'
             end
         end
         return eltype(A) <: Complex ? complex(sqrtA) : sqrtA
     else
         SchurF = schur(A)
-        return SchurF.vectors * sqrt(UpperTriangular(SchurF.T)) * SchurF.vectors'
+        return SchurF.vectors * sqrt(UpperTriangular(SchurF.T), check=check) * SchurF.vectors'
     end
 end
 
-sqrt(A::AdjointAbsMat) = adjoint(sqrt(parent(A)))
-sqrt(A::TransposeAbsMat) = transpose(sqrt(parent(A)))
+sqrt(A::AdjointAbsMat; check=true) = adjoint(sqrt(parent(A), check=check))
+sqrt(A::TransposeAbsMat, check=true) = transpose(sqrt(parent(A), check=check))
 
 """
     cbrt(A::AbstractMatrix{<:Real})

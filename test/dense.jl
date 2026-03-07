@@ -1000,7 +1000,7 @@ end
     @test sqrt(x2)^2 ≈ x2
 
     x3 = [-1 -eps() 0 0; eps() -1 0 0; 0 0 -1 -eps(); 0 0 eps() Inf]
-    @test all(isnan, sqrt(x3))
+    @test all(isnan, sqrt(x3, check=false))
 
     # test overflow/underflow handled
     x4 = [0 -1e200; 1e200 0]
@@ -1011,6 +1011,11 @@ end
 
     x6 = [1.0 1e200; -1e-200 1.0]
     @test sqrt(x6)^2 ≈ x6
+end
+
+@testset "issue #1548" begin
+    A = [0 1; 0 0]
+    @test_throws ArgumentError sqrt(A)
 end
 
 @testset "matrix logarithm block diagonal underflow/overflow" begin
