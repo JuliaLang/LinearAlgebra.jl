@@ -1016,7 +1016,7 @@ and then the complex square root of the triangular factor.
 If a real square root exists, then an extension of this method [^H87] that computes the real
 Schur form and then the real square root of the quasi-triangular factor is instead used.
 
-When an $n \times n$ matrix has fewer than $n-1$ nonzero eigenvalues, the square root may not exist. In this case, and when the `check` flag is true, the algorithm will verify `X^2≈A` and throw and error if not. 
+When an $n \times n$ matrix has fewer than $n-1$ nonzero eigenvalues, the square root may not exist. In this case, and when the `check` flag is true, the algorithm will verify `X^2≈A` and throw an error if not. 
 
 [^BH83]:
 
