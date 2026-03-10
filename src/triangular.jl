@@ -2709,16 +2709,11 @@ function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Co
     # check that the algorithm worked
     if check
         atol = eps(generic_normInf(evals)) # should work for any numeric data type
-        nonzero_eig = count(x -> abs(x) > atol, evals) # count eigenvalues ≉ 0
-        if (nonzero_eig < n - 1) # in the regime where the algorithm could fail
-            if eltype(A0) <: Real || eltype(A0) <: Complex
-                rtol_test = eps(float(one(eltype(A0))))^(1/4) # check that 1/4 of the digits match
-                test = isapprox(R^2,A0,rtol=rtol_test)
-            else
-                test = generic_normInf(R*R - A0) <= (eps(generic_normInf(A0)))^(1/4) # when eltype is not real or complex, use the norm
-            end
+        zero_eig = count(x -> abs(x) <= atol, evals) # count eigenvalues = 0
+        if (zero_eig > 1) # in the regime where the algorithm could fail
+            test = generic_normInf(R*R .-= A0) <= eps(generic_normInf(A0))^(1//4) # when eltype is not real or complex, use the norm
             if !test
-                throw(ArgumentError("Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues. Square root may be inaccurate or matrix may not have a square root."))
+                throw(ArgumentError("Failed to produce matrix with X^2≈A. Set `check=false` to ignore. Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues so square root may be inaccurate or matrix may not have a square root."))
             end
         end
     end
