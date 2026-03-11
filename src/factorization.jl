@@ -135,7 +135,7 @@ end
 
 function (\)(F::Factorization, B::AbstractVecOrMat)
     require_one_based_indexing(B)
-    TFB = typeof(oneunit(eltype(F)) \ oneunit(eltype(B)))
+    TFB = typeof(oneunit(eltype(F)) \ zero(eltype(B)))
     ldiv!(F, copy_similar(B, TFB))
 end
 (\)(F::TransposeFactorization, B::AbstractVecOrMat) = conj!(adjoint(F.parent) \ conj.(B))
@@ -179,7 +179,7 @@ end
 
 function (/)(B::AbstractMatrix, F::Factorization)
     require_one_based_indexing(B)
-    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(F)))
+    TFB = typeof(zero(eltype(B)) / oneunit(eltype(F)))
     rdiv!(copy_similar(B, TFB), F)
 end
 # reinterpretation trick for complex lhs and real factorization
