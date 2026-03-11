@@ -6082,7 +6082,7 @@ for (orghr, elty) in
             require_one_based_indexing(A, tau)
             chkstride1(A, tau)
             n = checksquare(A)
-            if n - length(tau) != 1
+            if !iszero(n) && (n - length(tau) != 1)
                 throw(DimensionMismatch(lazy"tau has length $(length(tau)), needs $(n - 1)"))
             end
             work = Vector{$elty}(undef, 1)
@@ -6339,7 +6339,7 @@ for (orgtr, elty) in
             require_one_based_indexing(A, tau)
             chkstride1(A, tau)
             n = checksquare(A)
-            if n - length(tau) != 1
+            if !iszero(n) && (n - length(tau) != 1)
                 throw(DimensionMismatch(lazy"tau has length $(length(tau)), needs $(n - 1)"))
             end
             chkuplo(uplo)
@@ -6396,7 +6396,7 @@ for (ormtr, elty) in
             chktrans(trans)
             mC, nC = size(C, 1), size(C, 2)
 
-            if n - length(tau) != 1
+            if !iszero(n) && (n - length(tau) != 1)
                 throw(DimensionMismatch(lazy"tau has length $(length(tau)), needs $(n - 1)"))
             end
             if (side == 'L' && mC != n) || (side == 'R' && nC != n)
