@@ -2711,7 +2711,7 @@ function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Co
         atol = eps(generic_normInf(evals)) # should work for any numeric data type
         zero_eig = count(x -> abs(x) <= atol, evals) # count eigenvalues ≈ 0
         if (zero_eig > 1) # in the regime where the algorithm could fail
-            test = generic_normInf(R*R .-= A0) <= eps(generic_normInf(A0))^(1//4) # when eltype is not real or complex, use the norm
+            test = generic_normInf(R*R .-= A0) <= eps(generic_normInf(A0))^(1//4)
             if !test
                 throw(ArgumentError("Failed to produce matrix with X^2≈A. Set `check=false` to ignore. Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues so square root may be inaccurate or matrix may not have a square root."))
             end
