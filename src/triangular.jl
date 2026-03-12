@@ -2709,7 +2709,7 @@ function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Co
     # check that the algorithm worked
     if check
         atol = eps(generic_normInf(evals)) # should work for any numeric data type
-        zero_eig = count(x -> abs(x) <= atol, evals) # count eigenvalues = 0
+        zero_eig = count(x -> abs(x) <= atol, evals) # count eigenvalues ≈ 0
         if (zero_eig > 1) # in the regime where the algorithm could fail
             test = generic_normInf(R*R .-= A0) <= eps(generic_normInf(A0))^(1//4) # when eltype is not real or complex, use the norm
             if !test
