@@ -2713,7 +2713,7 @@ function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Co
         if (zero_eig > 1) # in the regime where the algorithm could fail
             test = generic_normInf(R*R .-= A0) <= eps(typeof(atol))^(1//4) * generic_normInf(A0)
             if !test
-                throw(ArgumentError("Failed to produce matrix with X^2≈A. Set `check=false` to ignore. Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues so square root may be inaccurate or matrix may not have a square root."))
+                throw(ArgumentError("Failed to produce matrix with X^2≈A. Pass `check=false` to ignore. Matrix has fewer than n-1=$(n - 1) nonzero eigenvalues so square root may be inaccurate or matrix may not have a square root."))
             end
         end
     end
