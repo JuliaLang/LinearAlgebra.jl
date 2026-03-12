@@ -1057,7 +1057,7 @@ function sqrt(A::AbstractMatrix{T}; check=true) where {T<:Union{Real,Complex}}
     elseif ishermitian(A)
         return _safe_parent(sqrt(Hermitian(A))) # dont need to check for hermitian matrices
     elseif istriu(A)
-        return triu!(parent(sqrt(UpperTriangular(A), check=check)))
+        return triu!(parent(sqrt(UpperTriangular(A); check)))
     elseif isreal(A)
         SchurF = schur(real(A))
         if istriu(SchurF.T)
