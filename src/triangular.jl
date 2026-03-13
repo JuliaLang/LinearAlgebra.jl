@@ -1996,6 +1996,46 @@ for mat in (:AbstractVector, :AbstractMatrix)
         TAB = promote_op(/, eltype(A), eltype(B))
         _rdiv!(similar(A, TAB, size(A)), A, B)
     end
+    # For BLAS consistency, potentially promote both factors
+    @eval function mul(A::UpperOrLowerTriangular{<:BlasFloat}, B::$mat{<:BlasFloat})
+        require_one_based_indexing(B)
+        TAB = promote_op(matprod, eltype(A), eltype(B))
+        BB = copy_similar(B, TAB)
+        lmul!(convert(AbstractArray{TAB}, A), BB)
+    end
+    @eval function \(A::Union{UnitUpperTriangular{<:BlasFloat},UnitLowerTriangular{<:BlasFloat}}, B::$mat{<:BlasFloat})
+        require_one_based_indexing(B)
+        TAB = _inner_type_promotion(\, eltype(A), eltype(B))
+        BB = copy_similar(B, TAB)
+        ldiv!(convert(AbstractArray{TAB}, A), BB)
+    end
+    ### Left division with triangle to the left hence rhs cannot be transposed. Quotients.
+    @eval function \(A::Union{UpperTriangular{<:BlasFloat},LowerTriangular{<:BlasFloat}}, B::$mat{<:BlasFloat})
+        require_one_based_indexing(B)
+        TAB = promote_op(\, eltype(A), eltype(B))
+        BB = copy_similar(B, TAB)
+        ldiv!(convert(AbstractArray{TAB}, A), BB)
+    end
+    ### Right division with triangle to the right hence lhs cannot be transposed. No quotients.
+    @eval function /(A::$mat{<:BlasFloat}, B::Union{UnitUpperTriangular{<:BlasFloat}, UnitLowerTriangular{<:BlasFloat}})
+        require_one_based_indexing(A)
+        TAB = _inner_type_promotion(/, eltype(A), eltype(B))
+        AA = copy_similar(A, TAB)
+        rdiv!(AA, convert(AbstractArray{TAB}, B))
+    end
+    ### Right division with triangle to the right hence lhs cannot be transposed. Quotients.
+    @eval function /(A::$mat{<:BlasFloat}, B::Union{UpperTriangular{<:BlasFloat},LowerTriangular{<:BlasFloat}})
+        require_one_based_indexing(A)
+        TAB = promote_op(/, eltype(A), eltype(B))
+        AA = copy_similar(A, TAB)
+        rdiv!(AA, convert(AbstractArray{TAB}, B))
+    end
+end
+function mul(A::AbstractMatrix{<:BlasFloat}, B::UpperOrLowerTriangular{<:BlasFloat})
+    require_one_based_indexing(A)
+    TAB = promote_op(matprod, eltype(A), eltype(B))
+    AA = copy_similar(A, TAB)
+    rmul!(AA, convert(AbstractArray{TAB}, B))
 end
 
 ## Some Triangular-Triangular cases. We might want to write tailored methods
