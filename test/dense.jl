@@ -1014,8 +1014,18 @@ end
 end
 
 @testset "issue #1548" begin
+    # check that error is thrown when matrix has no square root
     A = [0 1; 0 0]
     @test_throws ArgumentError sqrt(A)
+
+    # check that error is not thrown when algorithm works (even if there are many zero eigenvalues
+    X = randn(5,5)
+    A = X * Diagonal([0,0,0,1,2]) / X # should work fine b/c matrix is non-defective
+    @test sqrt(A)^2 ≈ A
+    X = randn(5,5)
+    A = X * Diagonal([0,0,0,0,3]) / X # should work fine b/c matrix is non-defective
+    @test sqrt(A)^2 ≈ A
+    @test iszero(sqrt(zeros(6,6)))
 end
 
 @testset "matrix logarithm block diagonal underflow/overflow" begin

@@ -989,7 +989,8 @@ function log(A::SelfAdjoint)
 end
 
 # sqrt has rtol kwarg to handle matrices that are semidefinite up to roundoff errors
-function sqrt(A::SelfAdjoint; rtol = eps(real(float(eltype(A)))) * size(A, 1))
+# note that `check` is passed to the function for consistancy with the dense sqrt function, but it is not used as the matrix should always at least have a complex square root (just from eigendecomposition)
+function sqrt(A::SelfAdjoint; check=true, rtol = eps(real(float(eltype(A)))) * size(A, 1))
     F = eigen(A)
     λ₀ = -maximum(abs, F.values) * rtol # treat λ ≥ λ₀ as "zero" eigenvalues up to roundoff
     if all(λ -> λ ≥ λ₀, F.values)
