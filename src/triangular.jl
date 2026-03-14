@@ -2650,7 +2650,7 @@ end
 
 # End of auxiliary functions for matrix logarithm and matrix power
 
-sqrt(A::UpperTriangular; check=true) = sqrt_quasitriu(A, diagview(A), check=check) # matrix is upper triangular, so eigenvalues are just the diagonals
+sqrt(A::UpperTriangular; check::Bool=true) = sqrt_quasitriu(A, diagview(A); check=check) # matrix is upper triangular, so eigenvalues are just the diagonals
 # shouldn't need to do a check for UnitUpperTriangular because the eigenvalues are all 1, flag included so the function call lines up
 function sqrt(A::UnitUpperTriangular{T}; check=true) where T 
     B = A.data
@@ -2669,14 +2669,14 @@ function sqrt(A::UnitUpperTriangular{T}; check=true) where T
     end
     return UnitUpperTriangular(R)
 end
-sqrt(A::LowerTriangular; check=true) = copy(transpose(sqrt(copy(transpose(A)), check=check)))
-sqrt(A::UnitLowerTriangular; check=true) = copy(transpose(sqrt(copy(transpose(A)), check=check)))
+sqrt(A::LowerTriangular; check::Bool=true) = copy(transpose(sqrt(copy(transpose(A)); check)))
+sqrt(A::UnitLowerTriangular; check::Bool=true) = copy(transpose(sqrt(copy(transpose(A)); check)))
 
 # Auxiliary functions for matrix square root
 
 # square root of upper triangular or real upper quasitriangular matrix
 # A0 is triangular or quasitriangular matrix, evals is the eigenvalues
-function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Complex ? 512 : 256, check=true)
+function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Complex ? 512 : 256, check::Bool=true)
     n = checksquare(A0)
     
     T = eltype(A0)
@@ -2708,7 +2708,7 @@ function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Co
 
     # check that the algorithm worked
     if check
-        atol = eps(generic_normInf(evals)) # should work for any numeric data type
+        atol = eps(generic_normInf(evals)) * size(A, 1) # should work for any numeric data type
         zero_eig = count(x -> abs(x) <= atol, evals) # count eigenvalues ≈ 0
         if (zero_eig > 1) # in the regime where the algorithm could fail
             test = generic_normInf(R*R .-= A0) <= eps(typeof(atol))^(1//4) * generic_normInf(A0)

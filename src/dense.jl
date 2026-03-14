@@ -1045,7 +1045,7 @@ julia> sqrt(A)
 """
 sqrt(::AbstractMatrix)
 
-function sqrt(A::AbstractMatrix{T}; check=true) where {T<:Union{Real,Complex}}
+function sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Real,Complex}}
     if checksquare(A) == 0
         return copy(float(A))
     elseif isdiag(A)
@@ -1061,7 +1061,7 @@ function sqrt(A::AbstractMatrix{T}; check=true) where {T<:Union{Real,Complex}}
     elseif isreal(A)
         SchurF = schur(real(A))
         if istriu(SchurF.T)
-            sqrtA = SchurF.Z * sqrt(UpperTriangular(SchurF.T), check=check) * SchurF.Z'
+            sqrtA = SchurF.Z * sqrt(UpperTriangular(SchurF.T); check) * SchurF.Z'
         else
             # real sqrt exists whenever no eigenvalues are negative
             is_sqrt_real = !any(x -> isreal(x) && real(x) < 0, SchurF.values)
@@ -1070,18 +1070,18 @@ function sqrt(A::AbstractMatrix{T}; check=true) where {T<:Union{Real,Complex}}
                 sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T, SchurF.values, check=check) * SchurF.Z'
             else
                 SchurS = Schur{Complex}(SchurF)
-                sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T), check=check) * SchurS.Z'
+                sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T); check) * SchurS.Z'
             end
         end
         return eltype(A) <: Complex ? complex(sqrtA) : sqrtA
     else
         SchurF = schur(A)
-        return SchurF.vectors * sqrt(UpperTriangular(SchurF.T), check=check) * SchurF.vectors'
+        return SchurF.vectors * sqrt(UpperTriangular(SchurF.T); check) * SchurF.vectors'
     end
 end
 
-sqrt(A::AdjointAbsMat; check=true) = adjoint(sqrt(parent(A), check=check))
-sqrt(A::TransposeAbsMat, check=true) = transpose(sqrt(parent(A), check=check))
+sqrt(A::AdjointAbsMat; check::Bool=true) = adjoint(sqrt(parent(A); check))
+sqrt(A::TransposeAbsMat, check::Bool=true) = transpose(sqrt(parent(A); check))
 
 """
     cbrt(A::AbstractMatrix{<:Real})
