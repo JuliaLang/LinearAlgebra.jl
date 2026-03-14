@@ -1972,74 +1972,71 @@ _inner_type_promotion(op, ::Type{TA}, ::Type{TB}) where {TA,TB} =
     promote_op(op, TA, TB)
 ## The general promotion methods
 for mat in (:AbstractVector, :AbstractMatrix)
+    @eval function mul(A::UpperOrLowerTriangular, B::$mat)
+        require_one_based_indexing(B)
+        TAB = promote_op(matprod, eltype(A), eltype(B))
+        if TAB <: BlasFloat
+            lmul!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
+        else
+            mul!(matprod_dest(A, B, TAB), A, B)
+        end
+    end
     ### Left division with triangle to the left hence rhs cannot be transposed. No quotients.
     @eval function \(A::Union{UnitUpperTriangular,UnitLowerTriangular}, B::$mat)
         require_one_based_indexing(B)
         TAB = _inner_type_promotion(\, eltype(A), eltype(B))
-        ldiv!(similar(B, TAB, size(B)), A, B)
+        if TAB <: BlasFloat
+            ldiv!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
+        else
+            ldiv!(similar(B, TAB, size(B)), A, B)
+        end
     end
     ### Left division with triangle to the left hence rhs cannot be transposed. Quotients.
     @eval function \(A::Union{UpperTriangular,LowerTriangular}, B::$mat)
         require_one_based_indexing(B)
         TAB = promote_op(\, eltype(A), eltype(B))
-        ldiv!(similar(B, TAB, size(B)), A, B)
+        if TAB <: BlasFloat
+            ldiv!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
+        else
+            ldiv!(similar(B, TAB, size(B)), A, B)
+        end
     end
     ### Right division with triangle to the right hence lhs cannot be transposed. No quotients.
     @eval function /(A::$mat, B::Union{UnitUpperTriangular, UnitLowerTriangular})
         require_one_based_indexing(A)
         TAB = _inner_type_promotion(/, eltype(A), eltype(B))
-        _rdiv!(similar(A, TAB, size(A)), A, B)
+        if TAB <: BlasFloat
+            rdiv!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
+        else
+            _rdiv!(similar(A, TAB, size(A)), A, B)
+        end
     end
     ### Right division with triangle to the right hence lhs cannot be transposed. Quotients.
     @eval function /(A::$mat, B::Union{UpperTriangular,LowerTriangular})
         require_one_based_indexing(A)
         TAB = promote_op(/, eltype(A), eltype(B))
-        _rdiv!(similar(A, TAB, size(A)), A, B)
-    end
-    # For BLAS consistency, potentially promote both factors
-    @eval function mul(A::UpperOrLowerTriangular{<:BlasFloat}, B::$mat{<:BlasFloat})
-        require_one_based_indexing(B)
-        TAB = promote_op(matprod, eltype(A), eltype(B))
-        BB = copy_similar(B, TAB)
-        lmul!(convert(AbstractArray{TAB}, A), BB)
-    end
-    @eval function \(A::Union{UnitUpperTriangular{<:BlasFloat},UnitLowerTriangular{<:BlasFloat}}, B::$mat{<:BlasFloat})
-        require_one_based_indexing(B)
-        TAB = _inner_type_promotion(\, eltype(A), eltype(B))
-        BB = copy_similar(B, TAB)
-        ldiv!(convert(AbstractArray{TAB}, A), BB)
-    end
-    ### Left division with triangle to the left hence rhs cannot be transposed. Quotients.
-    @eval function \(A::Union{UpperTriangular{<:BlasFloat},LowerTriangular{<:BlasFloat}}, B::$mat{<:BlasFloat})
-        require_one_based_indexing(B)
-        TAB = promote_op(\, eltype(A), eltype(B))
-        BB = copy_similar(B, TAB)
-        ldiv!(convert(AbstractArray{TAB}, A), BB)
-    end
-    ### Right division with triangle to the right hence lhs cannot be transposed. No quotients.
-    @eval function /(A::$mat{<:BlasFloat}, B::Union{UnitUpperTriangular{<:BlasFloat}, UnitLowerTriangular{<:BlasFloat}})
-        require_one_based_indexing(A)
-        TAB = _inner_type_promotion(/, eltype(A), eltype(B))
-        AA = copy_similar(A, TAB)
-        rdiv!(AA, convert(AbstractArray{TAB}, B))
-    end
-    ### Right division with triangle to the right hence lhs cannot be transposed. Quotients.
-    @eval function /(A::$mat{<:BlasFloat}, B::Union{UpperTriangular{<:BlasFloat},LowerTriangular{<:BlasFloat}})
-        require_one_based_indexing(A)
-        TAB = promote_op(/, eltype(A), eltype(B))
-        AA = copy_similar(A, TAB)
-        rdiv!(AA, convert(AbstractArray{TAB}, B))
+        if TAB <: BlasFloat
+            rdiv!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
+        else
+            _rdiv!(similar(A, TAB, size(A)), A, B)
+        end
     end
 end
-function mul(A::AbstractMatrix{<:BlasFloat}, B::UpperOrLowerTriangular{<:BlasFloat})
+function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     require_one_based_indexing(A)
     TAB = promote_op(matprod, eltype(A), eltype(B))
-    AA = copy_similar(A, TAB)
-    rmul!(AA, convert(AbstractArray{TAB}, B))
+    if TAB <: BlasFloat
+        rmul!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
+    else
+        mul!(mul!(matprod_dest(A, B, TAB), A, B), A, B)
+    end
 end
 
 ## Some Triangular-Triangular cases. We might want to write tailored methods
 ## for these cases, but I'm not sure it is worth it.
+# disambiguation from the above methods
+mul(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
+    @invoke mul(A::typeof(A), B::AbstractMatrix)
 for f in (:mul, :\)
     @eval begin
         ($f)(A::LowerTriangular, B::LowerTriangular) =
