@@ -2028,7 +2028,7 @@ function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     if TAB <: BlasFloat
         rmul!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
     else
-        mul!(mul!(matprod_dest(A, B, TAB), A, B), A, B)
+        mul!(matprod_dest(A, B, TAB), A, B)
     end
 end
 
