@@ -150,7 +150,7 @@ end
 function givensAlgorithm(f::Complex{T}, g::Complex{T}) where T<:AbstractFloat
     onepar = one(T)
     T0 = typeof(onepar) # dimensionless
-    zeropar = T0(zero(T)) # must be dimensionless
+    zeropar = zero(onepar) # must be dimensionless
     czero = complex(zeropar)
 
     abs1(ff) = max(abs(real(ff)), abs(imag(ff)))
