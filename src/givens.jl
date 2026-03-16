@@ -77,7 +77,7 @@ floatmin2(::Type{T}) where {T} = (twopar = 2one(T); twopar^trunc(Integer,log(flo
 function givensAlgorithm(f::T, g::T) where T<:AbstractFloat
     onepar = one(T)
     T0 = typeof(onepar) # dimensionless
-    zeropar = T0(zero(T)) # must be dimensionless
+    zeropar = zero(onepar) # must be dimensionless
 
     # need both dimensionful and dimensionless versions of these:
     safmn2 = floatmin2(T0)
