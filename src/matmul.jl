@@ -1212,6 +1212,18 @@ function _generic_matmatmul_generic!(C, A, B, alpha, beta)
     C
 end
 
+# multiply small matrices
+
+struct MatMulSmall!{M, N} <: Function end
+
+const matmul2x2! = MatMulSmall!{2, 2}()
+const matmul3x3! = MatMulSmall!{3, 3}()
+
+function (m::MatMulSmall!)(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix, α = true)
+    β = false
+    m(C, tA, tB, A, B, α, β)
+end
+
 # multiply 2x2 matrices
 function matmul2x2(tA, tB, A::AbstractMatrix{T}, B::AbstractMatrix{S}) where {T,S}
     matmul2x2!(similar(B, promote_op(matprod, T, S), 2, 2), tA, tB, A, B)
@@ -1280,8 +1292,7 @@ function _modify2x2!(Aelements, Belements, C, _add)
     end # inbounds
     C
 end
-function matmul2x2!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix,
-                    α = true, β = false)
+function matmul2x2!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix, α, β)
     Aelements, Belements = _matmul2x2_elements(C, tA, tB, A, B)
     @stable_muladdmul _modify2x2!(Aelements, Belements, C, MulAddMul(α, β))
     C
@@ -1358,9 +1369,7 @@ function _modify3x3!(Aelements, Belements, C, _add)
     end # inbounds
     C
 end
-function matmul3x3!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix,
-                    α = true, β = false)
-
+function matmul3x3!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix, α, β)
     Aelements, Belements = _matmul3x3_elements(C, tA, tB, A, B)
     @stable_muladdmul _modify3x3!(Aelements, Belements, C, MulAddMul(α, β))
     C
