@@ -483,17 +483,15 @@ function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β)
     (n, k) = lapack_size('N', C)
     product_is_empty = iszero(n) || iszero(k)  # `isempty(C)`
     if (n == nA) && (mA == mB) && (k == kB) && (product_is_empty || (n == mA == k ≤ 3))
-        if n == 2
+        if n == 1
+            matmul1x1!(C, tA, tB, A, B, α, β)
+        elseif n == 2
             matmul2x2!(C, tA, tB, A, B, α, β)
-            return true
-        end
-        if n == 3
+        elseif n == 3
             matmul3x3!(C, tA, tB, A, B, α, β)
-            return true
         end
-        if product_is_empty
-            return true  # nothing to do
-        end
+        # for `n == 0` the product is empty, so there is nothing to do
+        return true
     end
     return false
 end
@@ -1215,12 +1213,65 @@ end
 
 struct MatMulSmall!{M, N} <: Function end
 
+const matmul1x1! = MatMulSmall!{1, 1}()
 const matmul2x2! = MatMulSmall!{2, 2}()
 const matmul3x3! = MatMulSmall!{3, 3}()
 
 function (m::MatMulSmall!)(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix, α = true)
     β = false
     m(C, tA, tB, A, B, α, β)
+end
+
+# multiply 1x1 matrices
+
+function __matmul1x1_elements(tA, A::AbstractVecOrMat)
+    @inbounds begin
+    tA_uc = uppercase(tA) # possibly unwrap a WrapperChar
+    a11 = A[1,1]
+    if tA_uc == 'N'
+        A11 = a11
+    elseif tA_uc == 'T'
+        # TODO making these lazy could improve perf
+        A11 = copy(transpose(a11))
+    elseif tA_uc == 'C'
+        # TODO making these lazy could improve perf
+        A11 = copy(a11')
+    elseif tA_uc == 'S'
+        if isuppercase(tA) # tA == 'S'
+            A11 = symmetric(a11, :U)
+        else
+            A11 = symmetric(a11, :L)
+        end
+    elseif tA_uc == 'H'
+        if isuppercase(tA) # tA == 'H'
+            A11 = hermitian(a11, :U)
+        else # if tA == 'h'
+            A11 = hermitian(a11, :L)
+        end
+    end
+    end # inbounds
+    (A11,)
+end
+
+__matmul1x1_elements(tA, tB, A, B) = __matmul1x1_elements(tA, A), __matmul1x1_elements(tB, B)
+
+function _matmul1x1_elements(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat)
+    __matmul_checks(C, A, B, (1,1))
+    __matmul1x1_elements(tA, tB, A, B)
+end
+
+function _modify1x1!(Aelements, Belements, C, _add)
+    (A11,), (B11,) = Aelements, Belements
+    @inbounds begin
+    _modify!(_add, A11*B11, C, (1,1))
+    end # inbounds
+    C
+end
+
+function matmul1x1!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, α, β)
+    Aelements, Belements = _matmul1x1_elements(C, tA, tB, A, B)
+    @stable_muladdmul _modify1x1!(Aelements, Belements, C, MulAddMul(α, β))
+    C
 end
 
 # multiply 2x2 matrices
