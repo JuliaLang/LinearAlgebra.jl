@@ -481,7 +481,8 @@ function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β)
     (nA, mA) = lapack_size(tA, A)
     (mB, kB) = lapack_size(tB, B)
     (n, k) = lapack_size('N', C)
-    if n == k == nA == mA == mB == kB ≤ 3
+    product_is_empty = iszero(n) || iszero(k)  # `isempty(C)`
+    if (n == nA) && (mA == mB) && (k == kB) && (product_is_empty || (n == mA == k ≤ 3))
         if n == 2
             matmul2x2!(C, tA, tB, A, B, α, β)
             return true
@@ -489,6 +490,9 @@ function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β)
         if n == 3
             matmul3x3!(C, tA, tB, A, B, α, β)
             return true
+        end
+        if product_is_empty
+            return true  # nothing to do
         end
     end
     return false
