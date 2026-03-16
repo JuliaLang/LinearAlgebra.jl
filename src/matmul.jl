@@ -1230,12 +1230,15 @@ end
 
 function __matmul_checks(C, A, B, sz)
     require_one_based_indexing(C, A, B)
-    matmul_size_check(size(C), size(A), size(B))
+    shape_A = lapack_size('N', A)
+    shape_B = lapack_size('N', B)
+    shape_C = lapack_size('N', C)
+    matmul_size_check(shape_C, shape_A, shape_B)
     if C === A || B === C
         throw(ArgumentError("output matrix must not be aliased with input matrix"))
     end
-    if !(size(A) == size(B) == sz) # if A and B are both of size sz, C must also be of size sz for the matmul_size_check to pass
-        pos, mismatched_sz = size(A) != sz ? ("first", size(A)) : ("second", size(B))
+    if !(shape_A == shape_B == sz) # if A and B are both of size sz, C must also be of size sz for the matmul_size_check to pass
+        pos, mismatched_sz = shape_A != sz ? ("first", shape_A) : ("second", shape_B)
         throw(DimensionMismatch(lazy"expected size: $sz, but got size $mismatched_sz for the $pos matrix"))
     end
     return nothing
