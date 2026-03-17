@@ -91,7 +91,9 @@ end
         @test only(wrapper_a(A) * wrapper_b(B)) == 15
     end
     for (wrapper_a, wrapper_b) in Iterators.product(mul_wrappers, mul_wrappers)
-        @test wrapper_a(AA) * wrapper_b(BB) == Array(wrapper_a(AA)) * Array(wrapper_b(BB))
+        A = reshape(copy(AA), (1, 1))
+        B = reshape(copy(BB), (1, 1))
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
     end
     @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 2, 2), AA, BB)
 end
