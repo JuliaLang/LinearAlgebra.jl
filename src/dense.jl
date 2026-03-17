@@ -1055,7 +1055,7 @@ function sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Real,Compl
             return applydiagonal(sqrt, A)
         end
     elseif ishermitian(A)
-        return _safe_parent(sqrt(Hermitian(A))) # dont need to check for hermitian matrices
+        return _safe_parent(sqrt(Hermitian(A); check))
     elseif istriu(A)
         return triu!(parent(sqrt(UpperTriangular(A); check)))
     elseif isreal(A)
