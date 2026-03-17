@@ -321,13 +321,16 @@ end
 end
 
 @testset "eigensolvers" begin
-    for T in (Float32, Float64, ComplexF32, ComplexF64)
+    for T in (Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64)
         H = UpperHessenberg(randn(T, 5,5))
         λ = eigvals(H)
-        λ2 = @invoke eigvals!(copy(H)::UpperHessenberg) # test fallback
         F = eigen(H)
-        @test λ ≈ eigvals(Matrix(H)) ≈ F.values ≈ λ2
+        @test λ ≈ eigvals(Matrix(H)) ≈ F.values
         @test H * F.vectors ≈ F.vectors * Diagonal(λ)
+        if T <: BlasFloat
+            λ2 = @invoke eigvals!(copy(H)::UpperHessenberg) # test fallback
+            @test λ ≈ λ2
+        end
     end
 end
 
