@@ -1217,7 +1217,7 @@ const matmul1x1! = MatMulSmall!{1, 1}()
 const matmul2x2! = MatMulSmall!{2, 2}()
 const matmul3x3! = MatMulSmall!{3, 3}()
 
-function (m::MatMulSmall!)(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix, α = true)
+function (m::MatMulSmall!)(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, α = true)
     β = false
     m(C, tA, tB, A, B, α, β)
 end
