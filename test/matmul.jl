@@ -80,6 +80,20 @@ end
     @test Matrix{ComplexF64}(undef, 5, 0) |> t -> t't == zeros(0, 0)
     @test Matrix{ComplexF64}(undef, 5, 0) |> t -> t * t' == zeros(5, 5)
 end
+@testset "1x1 matmul" begin
+    AA = [3]
+    BB = [5]
+    AAi = [3 + im]
+    BBi = [5 + 2im]
+    reprs(x::AbstractVector) = (copy(x), view(copy(x), 1:1), reshape(copy(x), (1, 1)), view(reshape(copy(x), (1, 1)), 1:1, 1:1))
+    for A in reprs(A), B in reprs(B), (wrapper_a, wrapper_b) in Iterators.product(mul_wrappers, mul_wrappers)
+        @test only(wrapper_a(A) * wrapper_b(B)) == 15
+    end
+    for (wrapper_a, wrapper_b) in Iterators.product(mul_wrappers, mul_wrappers)
+        @test wrapper_a(AA) * wrapper_b(BB) == Array(wrapper_a(AA)) * Array(wrapper_b(BB))
+    end
+    @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 2, 2), AA, BB)
+end
 @testset "2x2 matmul" begin
     AA = [1 2; 3 4]
     BB = [5 6; 7 8]
