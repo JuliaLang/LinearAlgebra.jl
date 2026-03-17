@@ -2650,7 +2650,7 @@ end
 
 # End of auxiliary functions for matrix logarithm and matrix power
 
-sqrt(A::UpperTriangular; check::Bool=true) = sqrt_quasitriu(A, diagview(A); check=check) # matrix is upper triangular, so eigenvalues are just the diagonals
+sqrt(A::UpperTriangular; check::Bool=true) = sqrt_quasitriu(A, diagview(A); check) # matrix is upper triangular, so eigenvalues are just the diagonals
 # shouldn't need to do a check for UnitUpperTriangular because the eigenvalues are all 1, flag included so the function call lines up
 function sqrt(A::UnitUpperTriangular{T}; check=true) where T 
     B = A.data
