@@ -1067,7 +1067,7 @@ function sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Real,Compl
             is_sqrt_real = !any(x -> isreal(x) && real(x) < 0, SchurF.values)
             # sqrt_quasitriu uses LAPACK functions for non-triu inputs
             if typeof(sqrt(zero(T))) <: BlasFloat && is_sqrt_real
-                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T, SchurF.values, check=check) * SchurF.Z'
+                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T, SchurF.values; check) * SchurF.Z'
             else
                 SchurS = Schur{Complex}(SchurF)
                 sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T); check) * SchurS.Z'
