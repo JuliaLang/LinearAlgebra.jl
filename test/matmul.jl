@@ -84,9 +84,21 @@ end
     AA = [3]
     BB = [5]
     reprs(x::AbstractVector) = (copy(x), view(copy(x), 1:1), reshape(copy(x), (1, 1)), view(reshape(copy(x), (1, 1)), 1:1, 1:1))
-    for A in reprs(AA), B in reprs(BB), (wrapper_a, wrapper_b) in Iterators.product(mul_wrappers, mul_wrappers)
-        ((A isa AbstractMatrix) || (B isa AbstractMatrix)) &&
-        @test only(wrapper_a(A) * wrapper_b(B)) == 15
+    for A in reprs(AA), B in reprs(BB)
+        a2 = A isa AbstractMatrix
+        b2 = B isa AbstractMatrix
+        a2 && b2 &&
+        for (wrapper_a, wrapper_b) in Iterators.product(mul_wrappers, mul_wrappers)
+            @test only(wrapper_a(A) * wrapper_b(B)) == 15
+        end
+        a2 && !b2 &&
+        for wrapper_a in mul_wrappers
+            @test only(wrapper_a(A) * B) == 15
+        end
+        !a2 && b2 &&
+        for wrapper_b in mul_wrappers
+            @test only(A * wrapper_b(B)) == 15
+        end
     end
     for (wrapper_a, wrapper_b) in Iterators.product(mul_wrappers, mul_wrappers)
         A = reshape(copy(AA), (1, 1))
