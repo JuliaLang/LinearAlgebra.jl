@@ -86,7 +86,7 @@ end
     AAi = [3 + im]
     BBi = [5 + 2im]
     reprs(x::AbstractVector) = (copy(x), view(copy(x), 1:1), reshape(copy(x), (1, 1)), view(reshape(copy(x), (1, 1)), 1:1, 1:1))
-    for A in reprs(A), B in reprs(B), (wrapper_a, wrapper_b) in Iterators.product(mul_wrappers, mul_wrappers)
+    for A in reprs(AA), B in reprs(BB), (wrapper_a, wrapper_b) in Iterators.product(mul_wrappers, mul_wrappers)
         @test only(wrapper_a(A) * wrapper_b(B)) == 15
     end
     for (wrapper_a, wrapper_b) in Iterators.product(mul_wrappers, mul_wrappers)
