@@ -472,7 +472,7 @@ end
     )
 end
 
-function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β)
+function matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β)
     if α isa Bool
         # Optimization: A precondition is that `α` is nonzero, so if `α isa Bool`,
         # `α === true` follows. Let the compiler know.
@@ -542,7 +542,7 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
     if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
         return _rmul_or_fill!(C, β)
     end
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
     alpha, beta = promote(α, β, zero(T))
     blasfn = _valtypeparam(val)
     if alpha isa Union{Bool,T} && beta isa Union{Bool,T} && blasfn ∈ (BlasFlag.SYMM, BlasFlag.HEMM)
@@ -892,7 +892,7 @@ Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::Ab
     mB, nB = lapack_size(tB, B)
 
     matmul_size_check(size(C), (mA, nA), (mB, nB))
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
 
     if C === A || B === C
         throw(ArgumentError("output matrix must not be aliased with input matrix"))
@@ -915,7 +915,7 @@ gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
 Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
                        A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
                        α::Number, β::Number) where {T<:Number}
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
     return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
 end
 
