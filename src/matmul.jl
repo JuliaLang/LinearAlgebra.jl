@@ -1262,9 +1262,7 @@ end
 
 function _modify1x1!(Aelements, Belements, C, _add)
     (A11,), (B11,) = Aelements, Belements
-    @inbounds begin
-    _modify!(_add, A11*B11, C, (1,1))
-    end # inbounds
+    @inbounds _modify!(_add, A11*B11, C, (1,1))
     C
 end
 
