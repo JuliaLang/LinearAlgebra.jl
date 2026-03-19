@@ -454,8 +454,8 @@ eigen!(H::UpperHessenberg; permute::Bool=false, scale::Bool=true, sortby::Union{
     eigen!(triu!(H.data,-1); permute, scale, sortby)
 
 
-schur!(A::UpperHessenberg{T}) where {T<:BlasFloat} = Schur(LinearAlgebra.LAPACK.hseqr!(parent(A))...)
-schur!(A::UpperHessenberg) = schur!(triu!(H.data, -1)) # fallback to dense algorithm
+schur!(H::UpperHessenberg{T}) where {T<:BlasFloat} = Schur(LinearAlgebra.LAPACK.hseqr!(H.data)...)
+schur!(H::UpperHessenberg) = schur!(triu!(H.data, -1)) # fallback to dense algorithm
 
 ######################################################################################
 # Hessenberg factorizations Q(H+μI)Q' of A+μI:
