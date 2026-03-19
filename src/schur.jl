@@ -102,8 +102,6 @@ julia> A
 """
 schur!(A::StridedMatrix{<:BlasFloat}) = Schur(LinearAlgebra.LAPACK.gees!('V', A)...)
 
-schur!(A::UpperHessenberg{T}) where {T<:BlasFloat} = Schur(LinearAlgebra.LAPACK.hseqr!(parent(A))...)
-
 """
     schur(A) -> F::Schur
 
@@ -154,8 +152,7 @@ julia> t == F.T && z == F.Z && vals == F.values
 true
 ```
 """
-schur(A::AbstractMatrix{T}) where {T} = schur!(copy_similar(A, eigtype(T)))
-schur(A::UpperHessenberg{T}) where {T} = schur!(copy_similar(A, eigtype(T)))
+schur(A::AbstractMatrix{T}) where {T} = schur!(eigencopy_oftype(A, eigtype(T)))
 function schur(A::RealHermSymComplexHerm)
     F = eigen(A; sortby=nothing)
     return Schur(typeof(F.vectors)(Diagonal(F.values)), F.vectors, F.values)
