@@ -1081,7 +1081,7 @@ function sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Real,Compl
 end
 
 sqrt(A::AdjointAbsMat; check::Bool=true) = adjoint(sqrt(parent(A); check))
-sqrt(A::TransposeAbsMat, check::Bool=true) = transpose(sqrt(parent(A); check))
+sqrt(A::TransposeAbsMat; check::Bool=true) = transpose(sqrt(parent(A); check))
 
 """
     cbrt(A::AbstractMatrix{<:Real})
