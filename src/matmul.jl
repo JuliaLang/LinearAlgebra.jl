@@ -1273,9 +1273,6 @@ function matmul1x1!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::Abstrac
 end
 
 # multiply 2x2 matrices
-function matmul2x2(tA, tB, A::AbstractMatrix{T}, B::AbstractMatrix{S}) where {T,S}
-    matmul2x2!(similar(B, promote_op(matprod, T, S), 2, 2), tA, tB, A, B)
-end
 
 function __matmul_checks(C, A, B, sz)
     require_one_based_indexing(C, A, B)
@@ -1350,9 +1347,6 @@ function matmul2x2!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMat
 end
 
 # Multiply 3x3 matrices
-function matmul3x3(tA, tB, A::AbstractMatrix{T}, B::AbstractMatrix{S}) where {T,S}
-    matmul3x3!(similar(B, promote_op(matprod, T, S), 3, 3), tA, tB, A, B)
-end
 
 # separate function with the core of matmul3x3! that doesn't depend on a MulAddMul
 function _matmul3x3_elements(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix)
