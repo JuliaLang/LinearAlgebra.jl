@@ -212,7 +212,11 @@ end
     fact3 = @invoke schur!(copy(A)::UpperHessenberg) # test fallback
     @test sort(fact1.values, by=reim) ≈ sort(fact2.values, by=reim) ≈ sort(fact3.values, by=reim)
     @test fact1.Z * fact1.T * fact1.Z' ≈ B ≈ fact3.Z * fact3.T * fact3.Z'
-
+    fact3 = @invoke schur!(copy(A)::UpperHessenberg) # test fallback
+    fact4 = Schur(LinearAlgebra.LAPACK.hseqr!(copy(A.data))...) # call specialized method
+    @test fact1 == fact4
+    @test sort(fact1.values, by=reim) ≈ sort(fact2.values, by=reim) ≈ sort(fact3.values, by=reim)
+    @test fact1.Z * fact1.T * fact1.Z' ≈ B ≈ fact3.Z * fact3.T * fact3.Z'
 
     A = UpperHessenberg(rand(Int32, 50, 50))
     B = Array(A)
