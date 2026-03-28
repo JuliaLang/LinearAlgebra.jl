@@ -234,6 +234,7 @@ const RealHermSymComplexSym{T<:Real,S} = Union{Hermitian{T,S}, Symmetric{T,S}, S
 const RealHermSymSymTriComplexHerm{T<:Real} = Union{RealHermSymComplexSym{T}, SymTridiagonal{T}}
 const RealSymHermitian{S} = Union{Symmetric{<:Real,S}, Hermitian{<:Any,S}}
 const SelfAdjoint = Union{SymTridiagonal{<:Real}, Symmetric{<:Real}, Hermitian}
+const SelfAdjointRealOrComplex = Union{SymTridiagonal{<:Real}, Symmetric{<:Real}, Hermitian{<:Union{Real,Complex}}}
 
 wrappertype(::Union{Symmetric, SymTridiagonal}) = Symmetric
 wrappertype(::Hermitian) = Hermitian
@@ -754,20 +755,24 @@ for f in (:+, :-)
 end
 
 mul(A::HermOrSym, B::HermOrSym) = A * copyto!(similar(parent(B)), B)
-# catch a few potential BLAS-cases
-function mul(A::HermOrSym{<:BlasFloat,<:StridedMatrix}, B::AdjOrTrans{<:BlasFloat,<:StridedMatrix})
-    matmul_size_check(size(A), size(B))
-    T = promote_type(eltype(A), eltype(B))
-    mul!(similar(B, T, (size(A, 1), size(B, 2))),
-            convert(AbstractMatrix{T}, A),
-            copy_oftype(B, T)) # make sure the AdjOrTrans wrapper is resolved
-end
-function mul(A::AdjOrTrans{<:BlasFloat,<:StridedMatrix}, B::HermOrSym{<:BlasFloat,<:StridedMatrix})
-    matmul_size_check(size(A), size(B))
-    T = promote_type(eltype(A), eltype(B))
-    mul!(similar(B, T, (size(A, 1), size(B, 2))),
-            copy_oftype(A, T), # make sure the AdjOrTrans wrapper is resolved
-            convert(AbstractMatrix{T}, B))
+
+# Multiplication of Hermitian and Adjoint with an Adjoint destination
+# may conjugate the terms to delegate the multiplication to the parents of the adjoints
+# Only defined for commutative numbers
+for (AdjTransT, SymHermT) in (
+        (:(Adjoint{<:Union{Real,Complex}}), :SelfAdjointRealOrComplex),
+        (:(Transpose{<:Union{Real,Complex}}), :RealHermSymComplexSym))
+
+    @eval begin
+        function mul!(C::$AdjTransT, A::$SymHermT, B::$AdjTransT, α::Union{Real,Complex}, β::Union{Real,Complex})
+            mul!(wrapperop(C)(C), wrapperop(B)(B), A, wrapperop(C)(α), wrapperop(C)(β))
+            return C
+        end
+        function mul!(C::$AdjTransT, A::$AdjTransT, B::$SymHermT, α::Union{Real,Complex}, β::Union{Real,Complex})
+            mul!(wrapperop(C)(C), B, wrapperop(A)(A), wrapperop(C)(α), wrapperop(C)(β))
+            return C
+        end
+    end
 end
 
 function dot(x::AbstractVector, A::HermOrSym, y::AbstractVector)

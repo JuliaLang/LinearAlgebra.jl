@@ -330,9 +330,13 @@ end
         end
         fds = [abs.(d) for d in ds]
         @test abs.(A)::mat_type == mat_type(fds...)
-        @testset "Multiplication with strided matrix/vector" begin
+        @testset "Multiplication with strided matrix/vector, and their adjoint/transpose" begin
             @test (x = fill(1.,n); A*x ≈ Array(A)*x)
             @test (X = fill(1.,n,2); A*X ≈ Array(A)*X)
+            @test (X = fill(1.,2,n); A * X' ≈ Array(A) * X')
+            @test (X = fill(1.,n,2); X' * A ≈ X' * Array(A))
+            @test (X = fill(1.,2,n); A * transpose(X) ≈ Array(A) * transpose(X))
+            @test (X = fill(1.,n,2); transpose(X) * A ≈ transpose(X) * Array(A))
         end
         @testset "Binary operations" begin
             B = mat_type == Tridiagonal ? mat_type(a, b, c) : mat_type(b, a)
