@@ -224,7 +224,7 @@ function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:LeftAbsorbingFuncs, <:T
     return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
 end
 
-function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:ZeroAbsorbingFuncs})
+function fzero(bc::Broadcast.Broadcasted{<:Union{Nothing, Broadcast.BroadcastStyle}, <:Any, <:ZeroAbsorbingFuncs})
     args = map(x -> fzero(bc.f, x), bc.args)
     return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
 end
