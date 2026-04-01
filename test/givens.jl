@@ -114,7 +114,7 @@ MockMeasurement{T}(z::Complex) where {T<:AbstractFloat} =
 MockMeasurement{T}(r::Rational{P}) where {P,T<:AbstractFloat} = MockMeasurement{T}(T(r))
 MockMeasurement{T}(x::MockMeasurement{T}) where {T<:AbstractFloat} = x
 MockMeasurement{T}(c::AbstractChar) where {T<:AbstractFloat} = error("undefined")
-MockMeasurement{T}(x::Base.TwicePrecision) where {T<:AbstractFloat} = error("undefined")
+MockMeasurement{T}(x::Base.TwicePrecision) where {T<:AbstractFloat} = MockMeasurement(T(x))
 #these methods are actually needed
 import Base: promote_rule, floatmin, eps, ==, <, -, +, <=, sqrt
 one(::Type{<:MockMeasurement{T}}) where {T<:Real} = one(T)
