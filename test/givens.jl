@@ -108,12 +108,10 @@ struct MockMeasurement{T<:AbstractFloat} <: AbstractFloat
     data::T
 end
 #these methods are only needed for preventing ambiguities
-MockMeasurement{T}(z::Complex) where {T<:AbstractFloat} =
-    isreal(z) ? MockMeasurement{T}(real(z))::MockMeasurement{T} :
-        throw(InexactError(nameof(MockMeasurement{T}), MockMeasurement{T}, z))
-MockMeasurement{T}(r::Rational{P}) where {P,T<:AbstractFloat} = MockMeasurement{T}(T(r))
 MockMeasurement{T}(x::MockMeasurement{T}) where {T<:AbstractFloat} = x
-MockMeasurement{T}(c::AbstractChar) where {T<:AbstractFloat} = error("undefined")
+MockMeasurement{T}(z::Complex) where {T<:AbstractFloat} = MockMeasurement(T(z))
+MockMeasurement{T}(r::Rational{P}) where {P,T<:AbstractFloat} = MockMeasurement(T(r))
+MockMeasurement{T}(c::AbstractChar) where {T<:AbstractFloat} = MockMeasurement(T(c))
 MockMeasurement{T}(x::Base.TwicePrecision) where {T<:AbstractFloat} = MockMeasurement(T(x))
 #these methods are actually needed
 import Base: promote_rule, floatmin, eps, ==, <, -, +, <=, sqrt
