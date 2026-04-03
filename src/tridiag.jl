@@ -8,7 +8,7 @@ struct SymTridiagonal{T, V<:AbstractVector{T}} <: AbstractMatrix{T}
     ev::V                        # superdiagonal
     function SymTridiagonal{T, V}(dv, ev) where {T, V<:AbstractVector{T}}
         require_one_based_indexing(dv, ev)
-        if length(dv) - 1 != length(ev)
+        if length(ev) != length(dv)-1 && !(length(dv) == 0 && length(ev) == 0)
             throw(DimensionMismatch(lazy"subdiagonal has wrong length. Has length $(length(ev)), but should be $(length(dv) - 1)."))
         end
         new{T, V}(dv, ev)
