@@ -555,7 +555,7 @@ end
 end
 
 @testset "Issue #26994 (and the empty case)" begin
-    T = SymTridiagonal([1.0],[3.0])
+    T = SymTridiagonal([1.0],Float64[])
     x = ones(1)
     @test T*x == ones(1)
     @test SymTridiagonal(ones(0), ones(0)) * ones(0, 2) == ones(0, 2)
@@ -678,15 +678,9 @@ end
 
 # Issue #38765
 @testset "Eigendecomposition with different lengths" begin
-    # length(A.ev) can be either length(A.dv) or length(A.dv) - 1
-    A = SymTridiagonal(fill(1.0, 3), fill(-1.0, 3))
+    A = SymTridiagonal(fill(1.0, 3), fill(-1.0, 2))
     F = eigen(A)
-    A2 = SymTridiagonal(fill(1.0, 3), fill(-1.0, 2))
-    F2 = eigen(A2)
-    test_approx_eq_modphase(F.vectors, F2.vectors)
-    @test F.values ≈ F2.values ≈ eigvals(A) ≈ eigvals(A2)
-    @test eigvecs(A) ≈ eigvecs(A2)
-    @test eigvecs(A, eigvals(A)[1:1]) ≈ eigvecs(A2, eigvals(A2)[1:1])
+    @test F.values ≈ eigvals(A)
 end
 
 @testset "non-commutative algebra (#39701)" begin
@@ -728,8 +722,7 @@ end
 
     # complex
     # https://github.com/JuliaLang/julia/pull/41037#discussion_r645524081
-    S = SymTridiagonal(randn(5) .+ 0im, randn(5) .+ 0im)
-    S.ev[end] = im
+    S = SymTridiagonal(randn(5) .+ 0im, randn(4) .+ 0im)
     @test issymmetric(S)
     @test ishermitian(S)
 
@@ -773,7 +766,7 @@ end
 @testset "non-number eltype" begin
     @testset "sum for SymTridiagonal" begin
         dv = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:10]
-        ev = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:10]
+        ev = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:9]
         S = SymTridiagonal(dv, ev)
         Sdense = Matrix(S)
         @test Sdense == collect(S)
@@ -792,7 +785,7 @@ end
     end
     @testset "== between Tridiagonal and SymTridiagonal" begin
         dv = [SizedArray{(2,2)}([1 2;3 4]) for i in 1:4]
-        ev = [SizedArray{(2,2)}([3 4;1 2]) for i in 1:4]
+        ev = [SizedArray{(2,2)}([3 4;1 2]) for i in 1:3]
         S = SymTridiagonal(dv, ev)
         Sdense = Matrix(S)
         @test S == Tridiagonal(diag(Sdense, -1), diag(Sdense),  diag(Sdense, 1)) == S
@@ -804,12 +797,6 @@ end
     ev, dv = [1:4;], [1:5;]
     S = SymTridiagonal(dv, ev)
     T = Tridiagonal(zero(ev), zero(dv), zero(ev))
-    @test copyto!(T, S) == S
-    @test copyto!(zero(S), T) == T
-
-    ev2 = [1:5;]
-    S = SymTridiagonal(dv, ev2)
-    T = Tridiagonal(zeros(length(ev2)-1), zero(dv), zeros(length(ev2)-1))
     @test copyto!(T, S) == S
     @test copyto!(zero(S), T) == T
 
