@@ -61,6 +61,7 @@ end
             c += im*convert(Vector{elty}, randn(n - 1))
         end
     end
+    @test_throws DimensionMismatch SymTridiagonal(d, d)
     @test_throws DimensionMismatch SymTridiagonal(dl, fill(elty(1), n+1))
     @test_throws ArgumentError SymTridiagonal(rand(n, n))
     @test_throws ArgumentError Tridiagonal(dl, dl, dl)
@@ -190,19 +191,6 @@ end
         @test !isdiag(Tridiagonal(dl,d,zerosdu))
         @test !isdiag(Tridiagonal(zerosdl,d,du))
         @test !isdiag(Tridiagonal(dl,d,du))
-
-        # Test methods that could fail due to dv and ev having the same length
-        # see #41089
-
-        badev = zero(d)
-        badev[end] = 1
-        S = SymTridiagonal(d, badev)
-
-        @test istriu(S, -2)
-        @test istriu(S, 0)
-        @test !istriu(S, 2)
-
-        @test isdiag(S)
     end
 
     @testset "iszero and isone" begin
@@ -229,12 +217,6 @@ end
         @test isone(Sone)
         @test !iszero(Smix)
         @test !isone(Smix)
-
-        badev = zeros(elty, 3)
-        badev[end] = 1
-
-        @test isone(SymTridiagonal(ones(elty, 3), badev))
-        @test iszero(SymTridiagonal(zeros(elty, 3), badev))
     end
 
     @testset for mat_type in (Tridiagonal, SymTridiagonal)
