@@ -529,6 +529,21 @@ end
     @test Tridiagonal([1, 2], [4, 5, 1], [6.0, 7]) == [4.0 6.0 0.0; 1.0 5.0 7.0; 0.0 2.0 1.0]
 end
 
+@testset "SymTridiagonal dv and ev lengths" begin
+    # https://github.com/JuliaLang/LinearAlgebra.jl/issues/629
+
+    # Empty matrix can have length(dv) == length(ev)
+    @test SymTridiagonal(Float64[], Float64[]) isa SymTridiagonal
+
+    @test SymTridiagonal(ones(1), Float64[]) isa SymTridiagonal
+
+    # Must have length(dv) = length(ev) + 1
+    @test_throws DimensionMismatch SymTridiagonal(ones(1), ones(1))
+    @test_throws DimensionMismatch SymTridiagonal(ones(2), ones(2))
+    @test_throws DimensionMismatch SymTridiagonal(ones(4), ones(2))
+    @test_throws DimensionMismatch SymTridiagonal(ones(4), ones(5))
+end
+
 @testset "convert for SymTridiagonal" begin
     STF32 = SymTridiagonal{Float32}(fill(1f0, 5), fill(1f0, 4))
     @test convert(typeof(STF32), STF32) === STF32
