@@ -828,7 +828,12 @@ end
 
 function kron(A::Diagonal, B::SymTridiagonal)
     kdv = kron(A.diag, B.dv)
-    kev = _droplast!(convert(Vector, kron(A.diag, _pushzero(B.ev))))
+    kev_long = kron(A.diag, _pushzero(_evview(B)))
+
+    # We must drop the last element while preserving the type
+    kev = similar(kev_long, length(kev_long)-1);
+    @inbounds kev .= kev_long[begin:end-1]
+
     SymTridiagonal(kdv, kev)
 end
 function kron(A::Diagonal, B::Tridiagonal)
