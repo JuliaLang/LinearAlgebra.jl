@@ -828,8 +828,7 @@ end
 
 function kron(A::Diagonal, B::SymTridiagonal)
     kdv = kron(A.diag, B.dv)
-    # We don't need to drop the last element
-    kev = kron(A.diag, _pushzero(_evview(B)))
+    kev = _droplast!(convert(Vector, kron(A.diag, _pushzero(B.ev))))
     SymTridiagonal(kdv, kev)
 end
 function kron(A::Diagonal, B::Tridiagonal)

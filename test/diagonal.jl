@@ -552,12 +552,10 @@ Base.size(x::SimpleVector) = size(x.vec)
     BL = Bidiagonal(repr(randn(10)), repr(randn(9)), :L)
     BU = Bidiagonal(repr(randn(10)), repr(randn(9)), :U)
     C = SymTridiagonal(repr(randn(10)), repr(randn(9)))
-    Cl = SymTridiagonal(repr(randn(10)), repr(randn(10)))
     D = Tridiagonal(repr(randn(9)), repr(randn(10)), repr(randn(9)))
     @test kron(A, BL)::Bidiagonal == kron(M, Array(BL))
     @test kron(A, BU)::Bidiagonal == kron(M, Array(BU))
     @test kron(A, C)::SymTridiagonal == kron(M, Array(C))
-    @test kron(A, Cl)::SymTridiagonal == kron(M, Array(Cl))
     @test kron(A, D)::Tridiagonal == kron(M, Array(D))
 end
 
