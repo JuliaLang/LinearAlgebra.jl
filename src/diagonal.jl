@@ -828,11 +828,23 @@ end
 
 function kron(A::Diagonal, B::SymTridiagonal)
     kdv = kron(A.diag, B.dv)
-    kev_long = kron(A.diag, _pushzero(_evview(B)))
-
-    # We must drop the last element while preserving the type
-    kev = similar(kev_long, length(kev_long)-1);
-    @inbounds kev .= kev_long[begin:end-1]
+    kev = similar(kdv, length(kdv) - 1)
+    z = zero(first(kdv))
+    counter = 0
+    @inbounds for i in firstindex(A.diag):lastindex(A.diag) - 1
+        ai = A.diag[i]
+        for bj in B.ev
+            counter += 1
+            kev[counter] = ai * bj
+        end
+        counter += 1
+        kev[counter] = z
+    end
+    ai = last(A.diag)
+    @inbounds for bj in B.ev
+        counter += 1
+        kev[counter] = ai * bj
+    end
 
     SymTridiagonal(kdv, kev)
 end
