@@ -826,34 +826,37 @@ function kron!(C::Diagonal, A::Diagonal, B::Diagonal)
     return C
 end
 
-function kron(A::Diagonal, B::SymTridiagonal)
-    kdv = kron(A.diag, B.dv)
-    kev = similar(kdv, length(kdv) - 1)
-    z = zero(first(kdv))
+#efficient way of doing kron(a, [b; 0])[1:end-1]
+function _diagonal_kron!(c, a, b)
+    z = zero(first(a) * first(b))
     counter = 0
-    @inbounds for i in firstindex(A.diag):lastindex(A.diag) - 1
-        ai = A.diag[i]
-        for bj in B.ev
+    @inbounds for i in firstindex(a):lastindex(a) - 1
+        ai = a[i]
+        for bj in b
             counter += 1
-            kev[counter] = ai * bj
+            c[counter] = ai * bj
         end
         counter += 1
-        kev[counter] = z
+        c[counter] = z
     end
-    ai = last(A.diag)
-    @inbounds for bj in B.ev
+    ai = last(a)
+    @inbounds for bj in b
         counter += 1
-        kev[counter] = ai * bj
+        c[counter] = ai * bj
     end
+    return c
+end
 
-    SymTridiagonal(kdv, kev)
+function kron(A::Diagonal, B::SymTridiagonal)
+    kdv = kron(A.diag, B.dv)
+    kev = _diagonal_kron!(similar(kdv, length(kdv) - 1), A.diag, B.ev)
+    return SymTridiagonal(kdv, kev)
 end
 function kron(A::Diagonal, B::Tridiagonal)
-    # `_droplast!` is only guaranteed to work with `Vector`
-    kd = convert(Vector, kron(A.diag, B.d))
-    kdl = _droplast!(convert(Vector, kron(A.diag, _pushzero(B.dl))))
-    kdu = _droplast!(convert(Vector, kron(A.diag, _pushzero(B.du))))
-    Tridiagonal(kdl, kd, kdu)
+    kd = kron(A.diag, B.d)
+    kdl = _diagonal_kron!(similar(kd, length(kd) - 1), A.diag, B.dl)
+    kdu = _diagonal_kron!(similar(kd, length(kd) - 1), A.diag, B.du)
+    return Tridiagonal(kdl, kd, kdu)
 end
 
 @inline function kron!(C::AbstractMatrix, A::Diagonal, B::AbstractMatrix)

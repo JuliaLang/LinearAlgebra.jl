@@ -666,10 +666,6 @@ _evview(S::SymTridiagonal) = @view S.ev[begin:begin + length(S.dv) - 2]
 _zeros(::Type{T}, b::AbstractVector, n::Integer) where {T} = zeros(T, max(length(b), n))
 _zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B, 1), n), size(B, 2))
 
-# append a zero element / drop the last element
-_pushzero(A) = (B = similar(A, length(A)+1); @inbounds B[begin:end-1] .= A; @inbounds B[end] = zero(eltype(B)); B)
-_droplast!(A) = deleteat!(A, lastindex(A))
-
 # destination type for matmul
 matprod_dest(A::StructuredMatrix, B::StructuredMatrix, TS) = similar(B, TS, size(B))
 matprod_dest(A, B::StructuredMatrix, TS) = similar(A, TS, size(A))
