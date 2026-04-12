@@ -1358,7 +1358,9 @@ function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
 end
 
 ### Generic promotion methods and fallbacks
-\(A::Bidiagonal, B::AbstractVecOrMat) =
+\(A::Bidiagonal, B::AbstractVector) =
+    ldiv!(similar(B, promote_op(\, eltype(A), eltype(B))), A, B)
+\(A::Bidiagonal, B::AbstractMatrix) =
     ldiv!(matprod_dest(A, B, promote_op(\, eltype(A), eltype(B))), A, B)
 
 ### Triangular specializations
