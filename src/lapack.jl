@@ -4049,9 +4049,6 @@ for (stev, stebz, stegr, stein, elty) in
             ne = length(ev)
             if ne == n - 1
                 eev = [ev; zero($elty)]
-            elseif ne == n
-                eev = copy(ev)
-                eev[n] = zero($elty)
             else
                 throw(DimensionMismatch(lazy"ev has length $ne but needs one less than or equal to dv's length, $n)"))
             end
