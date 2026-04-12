@@ -655,13 +655,6 @@ _unwrap(A::AbstractVecOrMat) = A
 _cut_B(x::AbstractVector, r::UnitRange) = length(x)  > length(r) ? x[r]   : x
 _cut_B(X::AbstractMatrix, r::UnitRange) = size(X, 1) > length(r) ? X[r,:] : X
 
-# In the past, SymTridiagonal ev could be the same length as dv, but the last element was
-# ignored. However, some methods can fail if they read the entire ev
-# rather than just the meaningful elements. This is a helper function
-# for getting only the meaningful elements of ev. See #41089
-# See https://github.com/JuliaLang/LinearAlgebra.jl/issues/629
-_evview(S::SymTridiagonal) = @view S.ev[begin:begin + length(S.dv) - 2]
-
 ## append right hand side with zeros if necessary
 _zeros(::Type{T}, b::AbstractVector, n::Integer) where {T} = zeros(T, max(length(b), n))
 _zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B, 1), n), size(B, 2))
