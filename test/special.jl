@@ -482,7 +482,6 @@ end
 
 @testset "Ensure Strided * (Sym)Tridiagonal is Dense" begin
     x = rand(3)
-    y = rand(3)
     z = rand(2)
 
     l = rand(12, 12)
