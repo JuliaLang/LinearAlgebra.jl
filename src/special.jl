@@ -27,8 +27,6 @@ _diagview(S::SymTridiagonal) = diagview(S)
 # conversions from SymTridiagonal to other special matrix types
 Diagonal(A::SymTridiagonal) = Diagonal(_diagview(A))
 
-# These can fail when ev has the same length as dv
-# TODO: Revisit when a good solution for #42477 is found
 Bidiagonal(A::SymTridiagonal{<:Number}) =
     iszero(A.ev) ? Bidiagonal(A.dv, A.ev, :U) :
         throw(ArgumentError("matrix cannot be represented as Bidiagonal"))
