@@ -1031,8 +1031,8 @@ end
     @test (T / D)::Tridiagonal{Float64} == T
     # matrix eltype case
     K = 5
-    for elty in (Float64, ComplexF32), overlength in (1,)
-        S = SymTridiagonal([rand(elty, 2, 2) for _ in 1:K], [rand(elty, 2, 2) for _ in 1:K-overlength])
+    for elty in (Float64, ComplexF32)
+        S = SymTridiagonal([rand(elty, 2, 2) for _ in 1:K], [rand(elty, 2, 2) for _ in 1:K-1])
         T = Tridiagonal([rand(elty, 2, 2) for _ in 1:K-1], [rand(elty, 2, 2) for _ in 1:K], [rand(elty, 2, 2) for _ in 1:K-1])
         D = Diagonal(randn(elty, K))
         SM = fill(zeros(elty, 2, 2), K, K)
