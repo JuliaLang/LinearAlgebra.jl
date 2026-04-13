@@ -259,6 +259,8 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
         @test D*transpose(D2) ≈ M*transpose(DM2)
         @test D2*transpose(D) ≈ DM2*transpose(M)
         @test D2*D' ≈ DM2*M'
+        v = randn(1)
+        @test v / Diagonal(fill(2, 1)) ≈ [v[1] / 2]
 
         #division of two Diagonals
         @test D/D2 ≈ Diagonal(D.diag./D2.diag)
