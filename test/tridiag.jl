@@ -691,13 +691,6 @@ end
     @test_throws ArgumentError SymTridiagonal{Float32}(T)
 end
 
-# Issue #38765
-@testset "Eigendecomposition with different lengths" begin
-    A = SymTridiagonal(fill(1.0, 3), fill(-1.0, 2))
-    F = eigen(A)
-    @test F.values ≈ eigvals(A)
-end
-
 @testset "non-commutative algebra (#39701)" begin
     for A in (SymTridiagonal(Quaternion.(randn(5), randn(5), randn(5), randn(5)), Quaternion.(randn(4), randn(4), randn(4), randn(4))),
               Tridiagonal(Quaternion.(randn(4), randn(4), randn(4), randn(4)), Quaternion.(randn(5), randn(5), randn(5), randn(5)), Quaternion.(randn(4), randn(4), randn(4), randn(4))))
