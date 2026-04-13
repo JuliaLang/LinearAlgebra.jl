@@ -5429,7 +5429,7 @@ for (syev, syevr, syevd, sygvd, elty) in
                 end
             end
             zm = jobz == 'V' ? m[] : 0
-            resize!(W, m[]), reshape(resize!(Z, ldz * zm), ldz, zm)
+            resize!(W, m[]), reshape(sizehint!(resize!(Z, ldz * zm), ldz * zm), ldz, zm)
         end
         syevr!(jobz::AbstractChar, A::AbstractMatrix{$elty}) =
             syevr!(jobz, 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
@@ -5639,7 +5639,7 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
                 end
             end
             zm = jobz == 'V' ? m[] : 0
-            resize!(W, m[]), reshape(resize!(Z, ldz * zm), ldz, zm)
+            resize!(W, m[]), reshape(sizehint!(resize!(Z, ldz * zm), ldz * zm), ldz, zm)
         end
         syevr!(jobz::AbstractChar, A::AbstractMatrix{$elty}) =
             syevr!(jobz, 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
