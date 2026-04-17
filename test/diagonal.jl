@@ -259,6 +259,9 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
         @test D*transpose(D2) ≈ M*transpose(DM2)
         @test D2*transpose(D) ≈ DM2*transpose(M)
         @test D2*D' ≈ DM2*M'
+        v = randn(5)
+        @test v / Diagonal(fill(2, 1)) ≈ v / 2
+        @test_throws DimensionMismatch ones(2) / Diagonal(ones(2))
 
         #division of two Diagonals
         @test D/D2 ≈ Diagonal(D.diag./D2.diag)
@@ -413,7 +416,7 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
     @test factorize(D) == D
 
     @testset "Eigensystem" begin
-        eigD = eigen(D)
+        eigD = eigen(D, sortby=nothing)
         @test Diagonal(eigD.values) == D
         @test eigD.vectors == Matrix(I, size(D))
         eigsortD = eigen(D, sortby=LinearAlgebra.eigsortby)
@@ -552,19 +555,17 @@ Base.size(x::SimpleVector) = size(x.vec)
     BL = Bidiagonal(repr(randn(10)), repr(randn(9)), :L)
     BU = Bidiagonal(repr(randn(10)), repr(randn(9)), :U)
     C = SymTridiagonal(repr(randn(10)), repr(randn(9)))
-    Cl = SymTridiagonal(repr(randn(10)), repr(randn(10)))
     D = Tridiagonal(repr(randn(9)), repr(randn(10)), repr(randn(9)))
     @test kron(A, BL)::Bidiagonal == kron(M, Array(BL))
     @test kron(A, BU)::Bidiagonal == kron(M, Array(BU))
     @test kron(A, C)::SymTridiagonal == kron(M, Array(C))
-    @test kron(A, Cl)::SymTridiagonal == kron(M, Array(Cl))
     @test kron(A, D)::Tridiagonal == kron(M, Array(D))
 end
 
 @testset "svdvals and eigvals (#11120/#11247)" begin
     D = Diagonal(Matrix{Float64}[randn(3,3), randn(2,2)])
     @test sort([svdvals(D)...;], rev = true) ≈ svdvals([D.diag[1] zeros(3,2); zeros(2,3) D.diag[2]])
-    @test sort([eigvals(D)...;], by=LinearAlgebra.eigsortby) ≈ eigvals([D.diag[1] zeros(3,2); zeros(2,3) D.diag[2]])
+    @test eigvals(D, sortby=LinearAlgebra.eigsortby) ≈ eigvals([D.diag[1] zeros(3,2); zeros(2,3) D.diag[2]])
 end
 
 @testset "eigvals should return a copy of the diagonal" begin
@@ -853,7 +854,7 @@ end
 @testset "Eigensystem for block diagonal (issue #30681)" begin
     I2 = Matrix(I, 2,2)
     D = Diagonal([2.0*I2, 3.0*I2])
-    eigD = eigen(D)
+    eigD = eigen(D; sortby=LinearAlgebra.eigsortby)
     evals = [ 2.0, 2.0, 3.0, 3.0 ]
     evecs = [ [[ 1.0, 0.0 ]]  [[ 0.0, 1.0 ]]  [[ 0.0, 0.0 ]]  [[ 0.0, 0.0 ]];
               [[ 0.0, 0.0 ]]  [[ 0.0, 0.0 ]]  [[ 1.0, 0.0 ]]  [[ 0.0, 1.0 ]] ]
@@ -863,7 +864,7 @@ end
 
     I3 = Matrix(I, 3,3)
     D = Diagonal([[0.0 -1.0; 1.0 0.0], 2.0*I3])
-    eigD = eigen(D)
+    eigD = eigen(D; sortby=LinearAlgebra.eigsortby)
     evals = [ -1.0im, 1.0im, 2.0, 2.0, 2.0 ]
     evecs = [ [[ 1/sqrt(2)+0im, 1/sqrt(2)*im ]]  [[ 1/sqrt(2)+0im, -1/sqrt(2)*im ]]  [[ 0.0, 0.0 ]]       [[ 0.0, 0.0 ]]      [[ 0.0, 0.0]];
               [[ 0.0, 0.0, 0.0 ]]                [[ 0.0, 0.0, 0.0 ]]                 [[ 1.0, 0.0, 0.0 ]]  [[ 0.0, 1.0, 0.0 ]] [[ 0.0, 0.0, 1.0]] ]
@@ -988,7 +989,9 @@ end
     D = Diagonal(1:4)
     A = OffsetArray(rand(4,4), 2, 2)
     @test_throws ArgumentError D * A
+    @test_throws ArgumentError lmul!(D, A)
     @test_throws ArgumentError A * D
+    @test_throws ArgumentError rmul!(A, D)
     @test_throws ArgumentError mul!(similar(A, size(A)), A, D)
     @test_throws ArgumentError mul!(similar(A, size(A)), D, A)
 end
@@ -1007,8 +1010,8 @@ end
 end
 
 @testset "(Sym)Tridiagonal division by Diagonal" begin
-    for K in (5, 1), elty in (Float64, ComplexF32), overlength in (1, 0)
-        S = SymTridiagonal(randn(elty, K), randn(elty, K-overlength))
+    for K in (5, 1), elty in (Float64, ComplexF32)
+        S = SymTridiagonal(randn(elty, K), randn(elty, K-1))
         T = Tridiagonal(randn(elty, K-1), randn(elty, K), randn(elty, K-1))
         D = Diagonal(randn(elty, K))
         D0 = Diagonal(zeros(elty, K))
@@ -1031,8 +1034,8 @@ end
     @test (T / D)::Tridiagonal{Float64} == T
     # matrix eltype case
     K = 5
-    for elty in (Float64, ComplexF32), overlength in (1, 0)
-        S = SymTridiagonal([rand(elty, 2, 2) for _ in 1:K], [rand(elty, 2, 2) for _ in 1:K-overlength])
+    for elty in (Float64, ComplexF32)
+        S = SymTridiagonal([rand(elty, 2, 2) for _ in 1:K], [rand(elty, 2, 2) for _ in 1:K-1])
         T = Tridiagonal([rand(elty, 2, 2) for _ in 1:K-1], [rand(elty, 2, 2) for _ in 1:K], [rand(elty, 2, 2) for _ in 1:K-1])
         D = Diagonal(randn(elty, K))
         SM = fill(zeros(elty, 2, 2), K, K)
@@ -1066,8 +1069,9 @@ end
 @testset "eigenvalue sorting" begin
     D = Diagonal([0.4, 0.2, -1.3])
     @test eigvals(D) == eigen(D).values == [0.4, 0.2, -1.3] # not sorted by default
+    @test eigvals(D; sortby=LinearAlgebra.eigsortby) == [-1.3, 0.2, 0.4] # sortby keyword supported for eigvals(::Diagonal)
     @test eigvals(Matrix(D)) == eigen(Matrix(D)).values == [-1.3, 0.2, 0.4] # sorted even if diagonal special case is detected
-    E = eigen(D, sortby=abs) # sortby keyword supported for eigen(::Diagonal)
+    E = eigen(D; sortby=abs) # sortby keyword supported for eigen(::Diagonal)
     @test E.values == [0.2, 0.4, -1.3]
     @test E.vectors == [0 1 0; 1 0 0; 0 0 1]
 end
@@ -1574,6 +1578,25 @@ end
     @test D == D2
     LinearAlgebra.fillband!(D, 0, 10, 10)
     @test D == D2
+end
+
+@testset "norm" begin
+    # test x ≈ y but also ensure that the types are identical
+    function test_isapprox_and_type(x::T, y::T) where {T}
+        @test x ≈ y
+    end
+    @testset "size(D,1) = $(size(D,1))" for D in ( Diagonal(1:3), Diagonal(1:1), Diagonal(1:0) )
+        A = Array(D)
+        @testset for p in -2:2
+            p == 0 && continue
+            s = sum(float.(abs.(D)).^p)^(1/p)
+            test_isapprox_and_type(norm(D, p), isempty(D) ? zero(s) : s)
+            test_isapprox_and_type(norm(D, p), norm(A, p))
+        end
+        test_isapprox_and_type(norm(D, Inf), norm(A, Inf))
+        test_isapprox_and_type(norm(D, -Inf), norm(A, -Inf))
+        test_isapprox_and_type(norm(D, 0), norm(A, 0))
+    end
 end
 
 end # module TestDiagonal

@@ -17,6 +17,7 @@ using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.Furlongs
 
 Random.seed!(123)
 
@@ -95,6 +96,18 @@ n = 5 # should be odd
 
     @testset "det with nonstandard Number type" begin
         elty <: Real && @test det(Dual.(triu(A), zero(A))) isa Dual
+    end
+    if elty <: Int
+        @testset "det no overflow - triangular" begin
+            A = diagm([typemax(elty), typemax(elty)])
+            @test det(A) == det(float(A))
+        end
+    end
+    @testset "det with units - triangular" begin
+        for dim in 0:4
+            A = diagm(Furlong.(ones(elty, dim)))
+            @test det(A) == Furlong{dim}(one(elty))
+        end
     end
 end
 
@@ -742,12 +755,16 @@ end
 end
 
 @testset "generalized dot #32739" begin
-    for elty in (Int, Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
+    for elty in (Bool, Int, Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
         n = 10
         if elty <: Int
             A = rand(-n:n, n, n)
             x = rand(-n:n, n)
             y = rand(-n:n, n)
+        elseif elty <: Bool
+            A = rand(elty, n, n)
+            x = rand(elty, n)
+            y = rand(elty, n)
         elseif elty <: Real
             A = convert(Matrix{elty}, randn(n,n))
             x = rand(elty, n)
@@ -757,7 +774,7 @@ end
             x = rand(elty, n)
             y = rand(elty, n)
         end
-        @test dot(x, A, y) ≈ dot(A'x, y) ≈ *(x', A, y) ≈ (x'A)*y
+        @test (@inferred dot(x, A, y)) ≈ dot(A'x, y) ≈ *(x', A, y) ≈ (x'A)*y
         @test dot(x, A', y) ≈ dot(A*x, y) ≈ *(x', A', y) ≈ (x'A')*y
         elty <: Real && @test dot(x, transpose(A), y) ≈ dot(x, transpose(A)*y) ≈ *(x', transpose(A), y) ≈ (x'*transpose(A))*y
         B = reshape([A], 1, 1)
@@ -766,6 +783,10 @@ end
         @test dot(x, B, y) ≈ dot(B'x, y)
         @test dot(x, B', y) ≈ dot(B*x, y)
         elty <: Real && @test dot(x, transpose(B), y) ≈ dot(x, transpose(B)*y)
+    end
+    for (m, n) in ((0, 0), (1, 0), (0, 1))
+        v = zeros(ComplexF64, m); a = zeros(ComplexF64, m, n); w = zeros(Float64, n)
+        @test dot(v, a, w) === zero(ComplexF64)
     end
 end
 
@@ -928,6 +949,34 @@ end
     B = view(M, 2:4, 1:1)
     copytrito!(B, A, 'L')
     @test B == A2
+end
+
+@testset "isapprox for Arrays" begin
+    A = rand(3,3)
+    n = @allocated isapprox(A, A)
+    @test n == 0
+    @test Int[] ≈ Int[]
+end
+
+@testset "issue 930" begin
+    A = rand(Int, 2, 2)
+    B = rand(Int, 2, 3)
+    C = rand(Int, 2)
+    for T ∈ (Float32, BigFloat)
+        v = randn(T, 2)
+        x = @inferred C \ v
+        @test eltype(x) <: T
+        x = @inferred zero(C) \ v
+        @test eltype(x) <: T
+        x = @inferred T(1) / C
+        @test eltype(x) <: T
+        x = @inferred T(1) / zero(C)
+        @test eltype(x) <: T
+        for M ∈ (A, B)
+            x = @inferred M \ v
+            @test eltype(x) <: T
+        end
+    end
 end
 
 end # module TestGeneric

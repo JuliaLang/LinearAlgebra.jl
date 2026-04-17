@@ -276,6 +276,8 @@ eigvecs(A::Union{Number, AbstractMatrix}; kws...) =
 eigvecs(F::Union{Eigen, GeneralizedEigen}) = F.vectors
 
 eigvals(F::Union{Eigen, GeneralizedEigen}) = F.values
+eigmin(F::Union{Eigen, GeneralizedEigen}) = minimum(eigvals(F))
+eigmax(F::Union{Eigen, GeneralizedEigen}) = maximum(eigvals(F))
 
 """
     eigvals!(A; permute::Bool=true, scale::Bool=true, sortby) -> values
@@ -357,13 +359,8 @@ eigvals(x::Number; kwargs...) = imag(x) == 0 ? real(x) : x
 """
     eigmax(A; permute::Bool=true, scale::Bool=true)
 
-Return the largest eigenvalue of `A`.
-The option `permute=true` permutes the matrix to become
-closer to upper triangular, and `scale=true` scales the matrix by its diagonal elements to
-make rows and columns more equal in norm.
-Note that if the eigenvalues of `A` are complex,
-this method will fail, since complex numbers cannot
-be sorted.
+Return the largest eigenvalue of `A`, assuming they are all real, and throwing an error otherwise.
+The `permute` and `scale` keyword arguments are the same as for [`eigen`](@ref).
 
 # Examples
 ```jldoctest
@@ -388,23 +385,18 @@ Stacktrace:
 ```
 """
 function eigmax(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
-    v = eigvals(A, permute = permute, scale = scale)
+    v = eigvals(A; permute, scale)
     if eltype(v)<:Complex
         throw(DomainError(A, "`A` cannot have complex eigenvalues."))
     end
-    maximum(v)
+    return maximum(v)
 end
 
 """
     eigmin(A; permute::Bool=true, scale::Bool=true)
 
-Return the smallest eigenvalue of `A`.
-The option `permute=true` permutes the matrix to become
-closer to upper triangular, and `scale=true` scales the matrix by its diagonal elements to
-make rows and columns more equal in norm.
-Note that if the eigenvalues of `A` are complex,
-this method will fail, since complex numbers cannot
-be sorted.
+Return the smallest eigenvalue of `A`, assuming they are all real, and throwing an error otherwise.
+The `permute` and `scale` keyword arguments are the same as for [`eigen`](@ref).
 
 # Examples
 ```jldoctest
@@ -428,13 +420,12 @@ Stacktrace:
 [...]
 ```
 """
-function eigmin(A::Union{Number, AbstractMatrix};
-                permute::Bool=true, scale::Bool=true)
-    v = eigvals(A, permute = permute, scale = scale)
+function eigmin(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
+    v = eigvals(A; permute, scale)
     if eltype(v)<:Complex
         throw(DomainError(A, "`A` cannot have complex eigenvalues."))
     end
-    minimum(v)
+    return minimum(v)
 end
 
 inv(A::Eigen) = A.vectors * inv(Diagonal(A.values)) / A.vectors

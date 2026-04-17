@@ -47,6 +47,8 @@ Random.seed!(1)
             # from vectors
             ubd = Bidiagonal(x, y, :U)
             lbd = Bidiagonal(x, y, :L)
+            @test LinearAlgebra.uplo(ubd) == :U
+            @test LinearAlgebra.uplo(lbd) == :L
             @test ubd != lbd || x === dv0
             @test ubd.dv === x
             @test lbd.ev === y
@@ -796,6 +798,12 @@ end
     @test convert(AbstractMatrix{Float64}, Bu)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bu
     @test convert(AbstractArray{Float64}, Bl)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bl
     @test convert(AbstractMatrix{Float64}, Bl)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bl
+
+    @testset "convert to Bidiagonal from same type" begin
+        @test convert(typeof(Bu), Bu) === Bu
+        @test convert(Bidiagonal{eltype(Bu)}, Bu) === Bu
+        @test convert(Bidiagonal, Bu) === Bu
+    end
 end
 
 @testset "block-bidiagonal matrix" begin
@@ -1144,29 +1152,17 @@ end
 end
 
 @testset "opnorms" begin
-    B = Bidiagonal([1,-2,3,-4], [1,2,3], 'U')
-
-    @test opnorm(B, 1) == opnorm(Matrix(B), 1)
-    @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
-    @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
-
-    B = Bidiagonal([1,-2,3,-4], [1,2,3], 'L')
-
-    @test opnorm(B, 1) == opnorm(Matrix(B), 1)
-    @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
-    @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
-
-    B = Bidiagonal([2], Int[], 'L')
-
-    @test opnorm(B, 1) == opnorm(Matrix(B), 1)
-    @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
-    @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
-
-    B = Bidiagonal([2], Int[], 'U')
-
-    @test opnorm(B, 1) == opnorm(Matrix(B), 1)
-    @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
-    @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
+    for B in (Bidiagonal([1,-2,3,-4], [1,2,3], 'U'),
+                Bidiagonal([1,-2,3,-4], [1,2,3], 'L'),
+                Bidiagonal([2], Int[], 'L'),
+                Bidiagonal([2], Int[], 'U'),
+                Bidiagonal([1,-2], [-4], 'U'),
+                Bidiagonal([1,-2], [-4], 'L')
+            )
+        @test opnorm(B, 1) == opnorm(Matrix(B), 1)
+        @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
+        @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
+    end
 end
 
 @testset "convert to Bidiagonal" begin

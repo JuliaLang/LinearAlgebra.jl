@@ -104,6 +104,7 @@ Diagonal{T}(A::AbstractMatrix) where T = Diagonal{T}(diag(A))
 Diagonal{T,V}(A::AbstractMatrix) where {T,V<:AbstractVector{T}} = Diagonal{T,V}(diag(A))
 function convert(::Type{T}, A::AbstractMatrix) where T<:Diagonal
     checksquare(A)
+    A isa T && return A
     isdiag(A) ? T(A) : throw(InexactError(:convert, T, A))
 end
 
@@ -358,6 +359,8 @@ end
 
 function rmul!(A::AbstractMatrix, D::Diagonal)
     matmul_size_check(size(A), size(D))
+    axes(A, 2) == axes(D.diag, 1) ||
+        throw(ArgumentError(lazy"second axis of A, $(axes(A,2)), does not match first axis of D, $(axes(D, 1))"))
     for I in CartesianIndices(A)
         row, col = Tuple(I)
         @inbounds A[row, col] *= D.diag[col]
@@ -406,6 +409,8 @@ end
 
 function lmul!(D::Diagonal, B::AbstractVecOrMat)
     matmul_size_check(size(D), size(B))
+    axes(D.diag, 1) == axes(B, 1) ||
+        throw(ArgumentError(lazy"second axis of D, $(axes(D, 2)), does not match first axis of B, $(axes(B, 1))"))
     for I in CartesianIndices(B)
         row = I[1]
         @inbounds B[I] = D.diag[row] * B[I]
@@ -601,7 +606,8 @@ function (*)(Da::Diagonal, Db::Diagonal, Dc::Diagonal)
     return Diagonal(Da.diag .* Db.diag .* Dc.diag)
 end
 
-/(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matprod_dest(A, D, promote_op(/, eltype(A), eltype(D))), A, D)
+/(A::AbstractVector, D::Diagonal) = _rdiv!(similar(A, promote_op(/, eltype(A), eltype(D))), A, D)
+/(A::AbstractMatrix, D::Diagonal) = _rdiv!(matprod_dest(A, D, promote_op(/, eltype(A), eltype(D))), A, D)
 
 rdiv!(A::AbstractVecOrMat, D::Diagonal) = @inline _rdiv!(A, A, D)
 # avoid copy when possible via internal 3-arg backend
@@ -612,10 +618,10 @@ function _rdiv!(B::AbstractVecOrMat, A::AbstractVecOrMat, D::Diagonal)
     if (k = length(dd)) != n
         throw(DimensionMismatch(lazy"left hand side has $n columns but D is $k by $k"))
     end
-    @inbounds for j in 1:n
+    @inbounds for j in axes(A,2)
         ddj = dd[j]
         iszero(ddj) && throw(SingularException(j))
-        for i in 1:m
+        for i in axes(A,1)
             B[i, j] = A[i, j] / ddj
         end
     end
@@ -640,7 +646,17 @@ function ldiv!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
     (m, n) == (m′, n′) || throw(DimensionMismatch(lazy"expect output to be $m by $n, but got $m′ by $n′"))
     j = findfirst(iszero, D.diag)
     isnothing(j) || throw(SingularException(j))
-    @inbounds for j = 1:n, i = 1:m
+    _ldiv_Diagonal_loop!(B, D, A)
+    B
+end
+function _ldiv_Diagonal_loop!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
+    dd = D.diag
+    @. B = dd \ A
+    B
+end
+function _ldiv_Diagonal_loop!(B::StridedVecOrMat, D::Diagonal, A::StridedVecOrMat)
+    dd = D.diag
+    @inbounds for j in axes(A,2), i in axes(A,1)
         B[i, j] = dd[i] \ A[i, j]
     end
     B
@@ -811,18 +827,37 @@ function kron!(C::Diagonal, A::Diagonal, B::Diagonal)
     return C
 end
 
+#efficient way of doing kron(a, [b; 0])[1:end-1]
+function _diagonal_kron!(c, a, b)
+    z = zero(first(a) * first(b))
+    counter = 0
+    @inbounds for i in firstindex(a):lastindex(a) - 1
+        ai = a[i]
+        for bj in b
+            counter += 1
+            c[counter] = ai * bj
+        end
+        counter += 1
+        c[counter] = z
+    end
+    ai = last(a)
+    @inbounds for bj in b
+        counter += 1
+        c[counter] = ai * bj
+    end
+    return c
+end
+
 function kron(A::Diagonal, B::SymTridiagonal)
     kdv = kron(A.diag, B.dv)
-    # We don't need to drop the last element
-    kev = kron(A.diag, _pushzero(_evview(B)))
-    SymTridiagonal(kdv, kev)
+    kev = _diagonal_kron!(similar(kdv, length(kdv) - 1), A.diag, B.ev)
+    return SymTridiagonal(kdv, kev)
 end
 function kron(A::Diagonal, B::Tridiagonal)
-    # `_droplast!` is only guaranteed to work with `Vector`
-    kd = convert(Vector, kron(A.diag, B.d))
-    kdl = _droplast!(convert(Vector, kron(A.diag, _pushzero(B.dl))))
-    kdu = _droplast!(convert(Vector, kron(A.diag, _pushzero(B.du))))
-    Tridiagonal(kdl, kd, kdu)
+    kd = kron(A.diag, B.d)
+    kdl = _diagonal_kron!(similar(kd, length(kd) - 1), A.diag, B.dl)
+    kdu = _diagonal_kron!(similar(kd, length(kd) - 1), A.diag, B.du)
+    return Tridiagonal(kdl, kd, kdu)
 end
 
 @inline function kron!(C::AbstractMatrix, A::Diagonal, B::AbstractMatrix)
@@ -960,6 +995,10 @@ function inv(D::Diagonal{T}) where T
     Diagonal(Di)
 end
 
+# Ensure doubly wrapped matrices use efficient diagonal methods and return a Symmetric/Hermitian type
+inv(A::Symmetric{<:Number,<:Diagonal}) = Symmetric(inv(A.data), sym_uplo(A.uplo))
+inv(A::Hermitian{<:Number,<:Diagonal}) = Hermitian(inv(real(A.data)), sym_uplo(A.uplo))
+
 function pinv(D::Diagonal{T}) where T
     Di = similar(D.diag, typeof(inv(oneunit(T))))
     for i = 1:length(D.diag)
@@ -997,16 +1036,16 @@ end
 _ortho_eltype(T) = Base.promote_op(/, T, T)
 _ortho_eltype(T::Type{<:Number}) = typeof(one(T)/one(T))
 
-# TODO Docstrings for eigvals, eigvecs, eigen all mention permute, scale, sortby as keyword args
-# but not all of them below provide them. Do we need to fix that?
 #Eigensystem
-eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true) = copy(D.diag)
-eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true) =
-    reduce(vcat, eigvals(x) for x in D.diag) #For block matrices, etc.
-function eigvecs(D::Diagonal{T}) where {T<:AbstractMatrix}
-    diag_vecs = [ eigvecs(x) for x in D.diag ]
+eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing) = sorteig!(copy(D.diag), sortby)
+eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing) =
+    sorteig!(reduce(vcat, eigvals(x; sortby=nothing) for x in D.diag), sortby) #For block matrices, etc.
+function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
+    facts = [eigen(x; sortby=nothing) for x in D.diag]
+    λ = reduce(vcat, f.values for f in facts)
+    diag_vecs = [f.vectors for f in facts]
     matT = promote_type(map(typeof, diag_vecs)...)
-    ncols_diag = [ size(x, 2) for x in D.diag ]
+    ncols_diag = [size(x, 2) for x in D.diag]
     nrows = size(D, 1)
     vecs = Matrix{Vector{eltype(matT)}}(undef, nrows, sum(ncols_diag))
     for j in axes(D, 2), i in axes(D, 1)
@@ -1021,14 +1060,14 @@ function eigvecs(D::Diagonal{T}) where {T<:AbstractMatrix}
             end
         end
     end
-    return vecs
+    return λ, vecs
 end
 function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing)
     if any(!isfinite, D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
     Td = _ortho_eltype(eltype(D))
-    λ = eigvals(D)
+    λ = eigvals(D; sortby=nothing)
     if !isnothing(sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
         λ = λ[p]
@@ -1045,8 +1084,7 @@ function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=tr
     if any(any(!isfinite, x) for x in D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
-    λ = eigvals(D)
-    evecs = eigvecs(D)
+    λ, evecs = _eigen(D)
     if !isnothing(sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
         λ = λ[p]
@@ -1100,6 +1138,23 @@ end
 *(x::TransposeAbsVec, D::Diagonal, y::AbstractVector) = _mapreduce_prod(*, x, D, y)
 /(u::AdjointAbsVec, D::Diagonal) = (D' \ u')'
 /(u::TransposeAbsVec, D::Diagonal) = transpose(transpose(D) \ transpose(u))
+
+# norm
+function generic_normMinusInf(D::Diagonal)
+    norm_diag = norm(D.diag, -Inf)
+    return size(D,1) > 1 ? min(norm_diag, zero(norm_diag)) : norm_diag
+end
+generic_normInf(D::Diagonal) = norm(D.diag, Inf)
+generic_norm1(D::Diagonal) = norm(D.diag, 1)
+generic_norm2(D::Diagonal) = norm(D.diag)
+function generic_normp(D::Diagonal, p)
+    v = norm(D.diag, p)
+    if size(D,1) > 1 && p < 0
+        v = norm(zero(v), p)
+    end
+    return v
+end
+norm_x_minus_y(D1::Diagonal, D2::Diagonal) = norm_x_minus_y(D1.diag, D2.diag)
 
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)

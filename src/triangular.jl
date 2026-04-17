@@ -238,10 +238,22 @@ Base.isassigned(A::UpperOrLowerTriangular, i::Int, j::Int) =
 Base.isstored(A::UpperOrLowerTriangular, i::Int, j::Int) =
     _shouldforwardindex(A, i, j) ? Base.isstored(A.data, i, j) : false
 
-@propagate_inbounds getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Int, j::Int) where {T} =
-    _shouldforwardindex(A, i, j) ? A.data[i,j] : ifelse(i == j, oneunit(T), zero(T))
-@propagate_inbounds getindex(A::Union{LowerTriangular, UpperTriangular}, i::Int, j::Int) =
-    _shouldforwardindex(A, i, j) ? A.data[i,j] : diagzero(A,i,j)
+@propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Int, j::Int) where {T}
+    if _shouldforwardindex(A, i, j)
+        A.data[i,j]
+    else
+        @boundscheck checkbounds(A, i, j)
+        ifelse(i == j, oneunit(T), zero(T))
+    end
+end
+@propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, i::Int, j::Int)
+    if _shouldforwardindex(A, i, j)
+        A.data[i,j]
+    else
+        @boundscheck checkbounds(A, i, j)
+        @inbounds diagzero(A,i,j)
+    end
+end
 
 _shouldforwardindex(U::UpperTriangular, b::BandIndex) = b.band >= 0
 _shouldforwardindex(U::LowerTriangular, b::BandIndex) = b.band <= 0
@@ -250,68 +262,102 @@ _shouldforwardindex(U::UnitLowerTriangular, b::BandIndex) = b.band < 0
 
 # these specialized getindex methods enable constant-propagation of the band
 Base.@constprop :aggressive @propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, b::BandIndex) where {T}
-    _shouldforwardindex(A, b) ? A.data[b] : ifelse(b.band == 0, oneunit(T), zero(T))
+    if _shouldforwardindex(A, b)
+        A.data[b]
+    else
+        @boundscheck checkbounds(A, b)
+        ifelse(b.band == 0, oneunit(T), zero(T))
+    end
 end
 Base.@constprop :aggressive @propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, b::BandIndex)
-    _shouldforwardindex(A, b) ? A.data[b] : diagzero(A.data, b)
+    if _shouldforwardindex(A, b)
+        A.data[b]
+    else
+        @boundscheck checkbounds(A, b)
+        @inbounds diagzero(A, b)
+    end
 end
 
-_zero_triangular_half_str(::Type{<:UpperOrUnitUpperTriangular}) = "lower"
-_zero_triangular_half_str(::Type{<:LowerOrUnitLowerTriangular}) = "upper"
-
-@noinline function throw_nonzeroerror(T, @nospecialize(x), i, j)
-    Ts = _zero_triangular_half_str(T)
-    Tn = nameof(T)
+@noinline function throw_nonzeroerror(Tn::Symbol, @nospecialize(x), i, j)
+    zero_half = Tn in (:UpperTriangular, :UnitUpperTriangular) ? "lower" : "upper"
+    nstr = Tn === :UpperTriangular ? "n" : ""
     throw(ArgumentError(
-        lazy"cannot set index in the $Ts triangular part ($i, $j) of an $Tn matrix to a nonzero value ($x)"))
+        LazyString(
+            lazy"cannot set index ($i, $j) in the $zero_half triangular part ",
+            lazy"of a$nstr $Tn matrix to a nonzero value ($x)")
+        )
+    )
 end
-@noinline function throw_nononeerror(T, @nospecialize(x), i, j)
-    Tn = nameof(T)
+@noinline function throw_nonuniterror(Tn::Symbol, @nospecialize(x), i, j)
     throw(ArgumentError(
-        lazy"cannot set index on the diagonal ($i, $j) of an $Tn matrix to a non-unit value ($x)"))
+        lazy"cannot set index ($i, $j) on the diagonal of a $Tn matrix to a non-unit value ($x)"))
 end
 
 @propagate_inbounds function setindex!(A::UpperTriangular, x, i::Integer, j::Integer)
-    if i > j
-        iszero(x) || throw_nonzeroerror(typeof(A), x, i, j)
-    else
+    if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
+    else
+        @boundscheck checkbounds(A, i, j)
+        # the value must be convertible to the eltype for setindex! to be meaningful
+        # however, the converted value is unused, and the compiler is free to remove
+        # the conversion if the call is guaranteed to succeed
+        convert(eltype(A), x)
+        iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
     end
     return A
 end
 
 @propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Integer, j::Integer)
-    if i > j
-        iszero(x) || throw_nonzeroerror(typeof(A), x, i, j)
-    elseif i == j
-        x == oneunit(x) || throw_nononeerror(typeof(A), x, i, j)
-    else
+    if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
+    else
+        @boundscheck checkbounds(A, i, j)
+        # the value must be convertible to the eltype for setindex! to be meaningful
+        # however, the converted value is unused, and the compiler is free to remove
+        # the conversion if the call is guaranteed to succeed
+        convert(eltype(A), x)
+        if i == j # diagonal
+            x == oneunit(eltype(A)) || throw_nonuniterror(nameof(typeof(A)), x, i, j)
+        else
+            iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
+        end
     end
     return A
 end
 
 @propagate_inbounds function setindex!(A::LowerTriangular, x, i::Integer, j::Integer)
-    if i < j
-        iszero(x) || throw_nonzeroerror(typeof(A), x, i, j)
-    else
+    if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
+    else
+        @boundscheck checkbounds(A, i, j)
+        # the value must be convertible to the eltype for setindex! to be meaningful
+        # however, the converted value is unused, and the compiler is free to remove
+        # the conversion if the call is guaranteed to succeed
+        convert(eltype(A), x)
+        iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
     end
     return A
 end
 
 @propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Integer, j::Integer)
-    if i < j
-        iszero(x) || throw_nonzeroerror(typeof(A), x, i, j)
-    elseif i == j
-        x == oneunit(x) || throw_nononeerror(typeof(A), x, i, j)
-    else
+    if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
+    else
+        @boundscheck checkbounds(A, i, j)
+        # the value must be convertible to the eltype for setindex! to be meaningful
+        # however, the converted value is unused, and the compiler is free to remove
+        # the conversion if the call is guaranteed to succeed
+        convert(eltype(A), x)
+        if i == j  # diagonal
+            x == oneunit(eltype(A)) || throw_nonuniterror(nameof(typeof(A)), x, i, j)
+        else
+            iszero(x) || throw_nonzeroerror(nameof(typeof(A)), x, i, j)
+        end
     end
     return A
 end
 
-@noinline function throw_setindex_structuralzero_error(T, @nospecialize(x))
+@noinline function throw_setindex_structuralzero_error(T::DataType, @nospecialize(x))
     Ts = _zero_triangular_half_str(T)
     Tn = nameof(T)
     throw(ArgumentError(
@@ -560,7 +606,7 @@ for (T, UT) in ((:UpperTriangular, :UnitUpperTriangular), (:LowerTriangular, :Un
     @eval @inline function _copy!(A::$UT, B::$T)
         for dind in diagind(A, IndexStyle(A))
             if A[dind] != B[dind]
-                throw_nononeerror(typeof(A), B[dind], Tuple(dind)...)
+                throw_nonuniterror(nameof(typeof(A)), B[dind], Tuple(dind)...)
             end
         end
         _copy!($T(parent(A)), B)
@@ -741,7 +787,7 @@ function _triscale!(A::UpperOrUnitUpperTriangular, B::UnitUpperTriangular, c::Nu
     checksize1(A, B)
     _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
-        @inbounds _modify!(_add, c, A, (j,j))
+        @inbounds _modify!(_add, B[BandIndex(0,j)] * c, A, (j,j))
         for i in firstindex(B.data,1):(j - 1)
             @inbounds _modify!(_add, B.data[i,j] * c, A.data, (i,j))
         end
@@ -752,7 +798,7 @@ function _triscale!(A::UpperOrUnitUpperTriangular, c::Number, B::UnitUpperTriang
     checksize1(A, B)
     _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
-        @inbounds _modify!(_add, c, A, (j,j))
+        @inbounds _modify!(_add, c * B[BandIndex(0,j)], A, (j,j))
         for i in firstindex(B.data,1):(j - 1)
             @inbounds _modify!(_add, c * B.data[i,j], A.data, (i,j))
         end
@@ -783,7 +829,7 @@ function _triscale!(A::LowerOrUnitLowerTriangular, B::UnitLowerTriangular, c::Nu
     checksize1(A, B)
     _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
-        @inbounds _modify!(_add, c, A, (j,j))
+        @inbounds _modify!(_add, B[BandIndex(0,j)] * c, A, (j,j))
         for i in (j + 1):lastindex(B.data,1)
             @inbounds _modify!(_add, B.data[i,j] * c, A.data, (i,j))
         end
@@ -794,7 +840,7 @@ function _triscale!(A::LowerOrUnitLowerTriangular, c::Number, B::UnitLowerTriang
     checksize1(A, B)
     _iszero_alpha(_add) && return _rmul_or_fill!(A, _add.beta)
     for j in axes(B.data,2)
-        @inbounds _modify!(_add, c, A, (j,j))
+        @inbounds _modify!(_add, c * B[BandIndex(0,j)], A, (j,j))
         for i in (j + 1):lastindex(B.data,1)
             @inbounds _modify!(_add, c * B.data[i,j], A.data, (i,j))
         end
@@ -847,7 +893,7 @@ function dot(x::AbstractVector, A::UpperTriangular, y::AbstractVector)
     m = size(A, 1)
     (length(x) == m == length(y)) || throw(DimensionMismatch())
     if iszero(m)
-        return dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y)))
+        return zero(dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y))))
     end
     x₁ = x[1]
     r = dot(x₁, A[1,1], y[1])
@@ -868,7 +914,7 @@ function dot(x::AbstractVector, A::UnitUpperTriangular, y::AbstractVector)
     m = size(A, 1)
     (length(x) == m == length(y)) || throw(DimensionMismatch())
     if iszero(m)
-        return dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y)))
+        return zero(dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y))))
     end
     x₁ = first(x)
     r = dot(x₁, y[1])
@@ -890,7 +936,7 @@ function dot(x::AbstractVector, A::LowerTriangular, y::AbstractVector)
     m = size(A, 1)
     (length(x) == m == length(y)) || throw(DimensionMismatch())
     if iszero(m)
-        return dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y)))
+        return zero(dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y))))
     end
     r = zero(typeof(dot(first(x), first(A), first(y))))
     @inbounds for j in axes(A, 2)
@@ -910,7 +956,7 @@ function dot(x::AbstractVector, A::UnitLowerTriangular, y::AbstractVector)
     m = size(A, 1)
     (length(x) == m == length(y)) || throw(DimensionMismatch())
     if iszero(m)
-        return dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y)))
+        return zero(dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y))))
     end
     r = zero(typeof(dot(first(x), first(y))))
     @inbounds for j in axes(A, 2)
@@ -2604,8 +2650,9 @@ end
 
 # End of auxiliary functions for matrix logarithm and matrix power
 
-sqrt(A::UpperTriangular) = sqrt_quasitriu(A)
-function sqrt(A::UnitUpperTriangular{T}) where T
+sqrt(A::UpperTriangular; check::Bool=true) = sqrt_quasitriu(A, diagview(A); check) # matrix is upper triangular, so eigenvalues are just the diagonals
+# shouldn't need to do a check for UnitUpperTriangular because the eigenvalues are all 1, flag included so the function call lines up
+function sqrt(A::UnitUpperTriangular{T}; check=true) where T 
     B = A.data
     t = typeof(sqrt(zero(T)))
     R = Matrix{t}(I, size(A))
@@ -2622,14 +2669,16 @@ function sqrt(A::UnitUpperTriangular{T}) where T
     end
     return UnitUpperTriangular(R)
 end
-sqrt(A::LowerTriangular) = copy(transpose(sqrt(copy(transpose(A)))))
-sqrt(A::UnitLowerTriangular) = copy(transpose(sqrt(copy(transpose(A)))))
+sqrt(A::LowerTriangular; check::Bool=true) = copy(transpose(sqrt(copy(transpose(A)); check)))
+sqrt(A::UnitLowerTriangular; check::Bool=true) = copy(transpose(sqrt(copy(transpose(A)); check)))
 
 # Auxiliary functions for matrix square root
 
 # square root of upper triangular or real upper quasitriangular matrix
-function sqrt_quasitriu(A0; blockwidth = eltype(A0) <: Complex ? 512 : 256)
+# A0 is triangular or quasitriangular matrix, evals is the eigenvalues
+function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Complex ? 512 : 256, check::Bool=true)
     n = checksquare(A0)
+    
     T = eltype(A0)
     Tr = typeof(sqrt(real(zero(T))))
     Tc = typeof(sqrt(complex(zero(T))))
@@ -2656,6 +2705,19 @@ function sqrt_quasitriu(A0; blockwidth = eltype(A0) <: Complex ? 512 : 256)
         R = zeros(Tc, size(A0))
     end
     _sqrt_quasitriu!(R, A; blockwidth=blockwidth, n=n)
+
+    # check that the algorithm worked
+    if check
+        atol = eps(generic_normInf(evals)) * size(A, 1) # should work for any numeric data type
+        zero_eig = count(x -> abs(x) <= atol, evals) # count eigenvalues ≈ 0
+        if (zero_eig > 1) # in the regime where the algorithm could fail
+            test = generic_normInf(R*R .-= A0) <= eps(typeof(atol))^(1//4) * generic_normInf(A0)
+            if !test
+                throw(DomainError("Failed to produce matrix with X^2≈A. Pass `check=false` to ignore. Matrix has two or more null eigenvalues so square root may be inaccurate or matrix may not have a square root."))
+            end
+        end
+    end
+
     Rc = eltype(A0) <: Real ? R : complex(R)
     if A0 isa UpperTriangular
         return UpperTriangular(Rc)

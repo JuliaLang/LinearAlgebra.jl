@@ -66,14 +66,16 @@ end
 
 @testset "matrix square root quasi-triangular blockwise" begin
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
-        A = schur(rand(T, 100, 100)^2).T
-        @test LinearAlgebra.sqrt_quasitriu(A; blockwidth=16)^2 ≈ A
+        schurA = schur(rand(T, 100, 100)^2)
+        A = schurA.T
+        @test LinearAlgebra.sqrt_quasitriu(A, schurA.values; blockwidth=16)^2 ≈ A
     end
     n = 256
     A = rand(ComplexF64, n, n)
-    U = schur(A).T
+    schurA = schur(A)
+    U = schurA.T
     Ubig = Complex{BigFloat}.(U)
-    @test LinearAlgebra.sqrt_quasitriu(U; blockwidth=64) ≈ LinearAlgebra.sqrt_quasitriu(Ubig; blockwidth=64)
+    @test LinearAlgebra.sqrt_quasitriu(U, schurA.values; blockwidth=64) ≈ LinearAlgebra.sqrt_quasitriu(Ubig, schurA.values; blockwidth=64)
 end
 
 @testset "sylvester quasi-triangular blockwise" begin
@@ -260,7 +262,7 @@ const TESTDIR = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
     end
 end
 
-@testset "inplace mul of appropriate types should preserve triagular structure" begin
+@testset "inplace mul of appropriate types should preserve triangular structure" begin
     for elty1 in (Float64, ComplexF32), elty2 in (Float64, ComplexF32)
         T = promote_type(elty1, elty2)
         M1 = rand(elty1, 5, 5)
@@ -641,11 +643,11 @@ end
         @testset "error message" begin
             A = UpperTriangular(Ap)
             B = UpperTriangular(Bp)
-            @test_throws "cannot set index in the lower triangular part" copyto!(A, B)
+            @test_throws "cannot set index (3, 1) in the lower triangular part" copyto!(A, B)
 
             A = LowerTriangular(Ap)
             B = LowerTriangular(Bp)
-            @test_throws "cannot set index in the upper triangular part" copyto!(A, B)
+            @test_throws "cannot set index (1, 2) in the upper triangular part" copyto!(A, B)
         end
     end
 
@@ -950,6 +952,10 @@ end
     @test 2\U == 2\M
     @test U*2 == M*2
     @test 2*U == 2*M
+
+    U2 = copy(U)
+    @test rmul!(U, 1) == U2
+    @test lmul!(1, U) == U2
 end
 
 @testset "scaling partly initialized unit triangular" begin
@@ -963,6 +969,77 @@ end
         @test 2 * U == 2 * C
         @test U / 2 == C / 2
         @test 2 \ U == 2 \ C
+    end
+end
+
+@testset "indexing checks" begin
+    P = [1 2; 3 4]
+    @testset "getindex" begin
+        U = UnitUpperTriangular(P)
+        @test_throws BoundsError U[0,0]
+        @test_throws BoundsError U[1,0]
+        @test_throws BoundsError U[BandIndex(0,0)]
+        @test_throws BoundsError U[BandIndex(-1,0)]
+
+        U = UpperTriangular(P)
+        @test_throws BoundsError U[1,0]
+        @test_throws BoundsError U[BandIndex(-1,0)]
+
+        L = UnitLowerTriangular(P)
+        @test_throws BoundsError L[0,0]
+        @test_throws BoundsError L[0,1]
+        @test_throws BoundsError U[BandIndex(0,0)]
+        @test_throws BoundsError U[BandIndex(1,0)]
+
+        L = LowerTriangular(P)
+        @test_throws BoundsError L[0,1]
+        @test_throws BoundsError L[BandIndex(1,0)]
+    end
+    @testset "setindex!" begin
+        A = SizedArrays.SizedArray{(2,2)}(P)
+        M = fill(A, 2, 2)
+        U = UnitUpperTriangular(M)
+        @test_throws "Cannot `convert` an object of type $Int" U[1,1] = 1
+        non_unit_msg = "cannot set index $((1,1)) on the diagonal of a UnitUpperTriangular matrix to a non-unit value"
+        @test_throws non_unit_msg U[1,1] = A
+        L = UnitLowerTriangular(M)
+        @test_throws "Cannot `convert` an object of type $Int" L[1,1] = 1
+        non_unit_msg = "cannot set index $((1,1)) on the diagonal of a UnitLowerTriangular matrix to a non-unit value"
+        @test_throws non_unit_msg L[1,1] = A
+
+        for UT in (UnitUpperTriangular, UpperTriangular)
+            U = UT(M)
+            @test_throws "Cannot `convert` an object of type $Int" U[2,1] = 0
+        end
+        for LT in (UnitLowerTriangular, LowerTriangular)
+            L = LT(M)
+            @test_throws "Cannot `convert` an object of type $Int" L[1,2] = 0
+        end
+
+        U = UnitUpperTriangular(P)
+        @test_throws BoundsError U[0,0] = 1
+        @test_throws BoundsError U[1,0] = 0
+
+        U = UpperTriangular(P)
+        @test_throws BoundsError U[1,0] = 0
+
+        L = UnitLowerTriangular(P)
+        @test_throws BoundsError L[0,0] = 1
+        @test_throws BoundsError L[0,1] = 0
+
+        L = LowerTriangular(P)
+        @test_throws BoundsError L[0,1] = 0
+    end
+end
+
+@testset "unit triangular l/rdiv!" begin
+    A = rand(3,3)
+    @testset for (UT,T) in ((UnitUpperTriangular, UpperTriangular),
+                            (UnitLowerTriangular, LowerTriangular))
+        UnitTri = UT(A)
+        Tri = T(LinearAlgebra.full(UnitTri))
+        @test 2 \ UnitTri ≈ 2 \ Tri
+        @test UnitTri / 2 ≈ Tri / 2
     end
 end
 

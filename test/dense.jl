@@ -1013,6 +1013,21 @@ end
     @test sqrt(x6)^2 ≈ x6
 end
 
+@testset "issue #1548" begin
+    # check that error is thrown when matrix has no square root
+    A = [0 1; 0 0]
+    @test_throws DomainError sqrt(A)
+
+    # check that error is not thrown when algorithm works (even if there are many zero eigenvalues
+    X = randn(5,5)
+    A = X * Diagonal([0,0,0,1,2]) / X # should work fine b/c matrix is non-defective
+    @test sqrt(A)^2 ≈ A
+    X = randn(5,5)
+    A = X * Diagonal([0,0,0,0,3]) / X # should work fine b/c matrix is non-defective
+    @test sqrt(A)^2 ≈ A
+    @test iszero(sqrt(zeros(6,6)))
+end
+
 @testset "matrix logarithm block diagonal underflow/overflow" begin
     x1 = [0 -1e200; 1e200 0]
     @test exp(log(x1)) ≈ x1
@@ -1428,6 +1443,17 @@ end
     @test log(D) ≈ log(UpperTriangular(D))
     D = diagm([2.0, 2.0*im])
     @test log(D) ≈ log(UpperTriangular(D))
+end
+
+@testset "issue 1362" begin
+    A = zeros(2,2)
+    B = zeros(2,3)
+    C = zeros(2,2,1)
+    @test LinearAlgebra.checksquare(A) == 2
+    @test LinearAlgebra.checksquare(A,A) == [2, 2]
+    @test_throws DimensionMismatch LinearAlgebra.checksquare(B)
+    @test_throws DimensionMismatch LinearAlgebra.checksquare(C)
+    @test_throws DimensionMismatch LinearAlgebra.checksquare(A,B)
 end
 
 end # module TestDense

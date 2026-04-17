@@ -3989,8 +3989,8 @@ for (stev, stebz, stegr, stein, elty) in
             @chkvalidparam 1 job ('N', 'V')
             chkstride1(dv, ev)
             n = length(dv)
-            if length(ev) != n - 1 && length(ev) != n
-                throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than or equal to dv's length, $n)"))
+            if length(ev) != n - 1
+                throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
             Zmat = similar(dv, $elty, (n, job != 'N' ? n : 0))
             work = Vector{$elty}(undef, max(1, 2n-2))
@@ -4049,11 +4049,8 @@ for (stev, stebz, stegr, stein, elty) in
             ne = length(ev)
             if ne == n - 1
                 eev = [ev; zero($elty)]
-            elseif ne == n
-                eev = copy(ev)
-                eev[n] = zero($elty)
             else
-                throw(DimensionMismatch(lazy"ev has length $ne but needs one less than or equal to dv's length, $n)"))
+                throw(DimensionMismatch(lazy"ev has length $ne but needs one less than dv's length, $n)"))
             end
 
             abstol = Vector{$elty}(undef, 1)
@@ -4100,11 +4097,8 @@ for (stev, stebz, stegr, stein, elty) in
             ne = length(ev_in)
             if ne == n - 1
                 ev = [ev_in; zero($elty)]
-            elseif ne == n
-                ev = copy(ev_in)
-                ev[n] = zero($elty)
             else
-                throw(DimensionMismatch(lazy"ev_in has length $ne but needs one less than or equal to dv's length, $n)"))
+                throw(DimensionMismatch(lazy"ev_in has length $ne but needs one less than dv's length, $n)"))
             end
             ldz = n #Leading dimension
             #Number of eigenvalues to find
@@ -6082,7 +6076,7 @@ for (orghr, elty) in
             require_one_based_indexing(A, tau)
             chkstride1(A, tau)
             n = checksquare(A)
-            if n - length(tau) != 1
+            if !iszero(n) && (n - length(tau) != 1)
                 throw(DimensionMismatch(lazy"tau has length $(length(tau)), needs $(n - 1)"))
             end
             work = Vector{$elty}(undef, 1)
@@ -6339,7 +6333,7 @@ for (orgtr, elty) in
             require_one_based_indexing(A, tau)
             chkstride1(A, tau)
             n = checksquare(A)
-            if n - length(tau) != 1
+            if !iszero(n) && (n - length(tau) != 1)
                 throw(DimensionMismatch(lazy"tau has length $(length(tau)), needs $(n - 1)"))
             end
             chkuplo(uplo)
@@ -6396,7 +6390,7 @@ for (ormtr, elty) in
             chktrans(trans)
             mC, nC = size(C, 1), size(C, 2)
 
-            if n - length(tau) != 1
+            if !iszero(n) && (n - length(tau) != 1)
                 throw(DimensionMismatch(lazy"tau has length $(length(tau)), needs $(n - 1)"))
             end
             if (side == 'L' && mC != n) || (side == 'R' && nC != n)
@@ -7179,19 +7173,27 @@ for (fn, elty) in ((:dlacpy_, :Float64),
             chkstride1(A, B)
             m, n = size(A)
             m1, n1 = size(B)
+            minmn = min(m, n)
             if uplo == 'U'
-                lacpy_size_check((m1, n1), (n < m ? n : m, n))
+                lacpy_size_check((m1, n1), (minmn, n))
             elseif uplo == 'L'
-                lacpy_size_check((m1, n1), (m, m < n ? m : n))
+                lacpy_size_check((m1, n1), (m, minmn))
             else
                 lacpy_size_check((m1, n1), (m, n))
             end
             lda = max(1, stride(A, 2))
             ldb = max(1, stride(B, 2))
-            ccall((@blasfunc($fn), libblastrampoline), Cvoid,
-                 (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                  Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
-                  uplo, m, n, A, lda, B, ldb, 1)
+            if uplo == 'L' # handles https://github.com/Reference-LAPACK/lapack/issues/1183
+                ccall((@blasfunc($fn), libblastrampoline), Cvoid,
+                    (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
+                    Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
+                    uplo, m, minmn, A, lda, B, ldb, 1)
+            else
+                ccall((@blasfunc($fn), libblastrampoline), Cvoid,
+                    (Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
+                    Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Clong),
+                    uplo, m, n, A, lda, B, ldb, 1)
+            end
             B
         end
     end
