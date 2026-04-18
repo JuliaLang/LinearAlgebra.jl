@@ -1878,10 +1878,10 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol), alg::Algorithm = default_svd_alg(A))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
-    SVD = svd(A; full=true)
+    SVD = svd(A; full=true, alg)
     tol = max(atol, SVD.S[1]*rtol)
     indstart = sum(s -> s .> tol, SVD.S) + 1
     return copy((@view SVD.Vt[indstart:end,:])')
