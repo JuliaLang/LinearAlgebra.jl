@@ -261,9 +261,8 @@ similar(B::Bidiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = simi
 tr(B::Bidiagonal) = sum(B.dv)
 
 function kron(A::Diagonal, B::Bidiagonal)
-    # `_droplast!` is only guaranteed to work with `Vector`
-    kdv = convert(Vector, kron(diag(A), B.dv))
-    kev = _droplast!(convert(Vector, kron(diag(A), _pushzero(B.ev))))
+    kdv = kron(A.diag, B.dv)
+    kev = _diagonal_kron!(similar(kdv, length(kdv) - 1), A.diag, B.ev)
     Bidiagonal(kdv, kev, B.uplo)
 end
 
@@ -1358,7 +1357,9 @@ function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
 end
 
 ### Generic promotion methods and fallbacks
-\(A::Bidiagonal, B::AbstractVecOrMat) =
+\(A::Bidiagonal, B::AbstractVector) =
+    ldiv!(similar(B, promote_op(\, eltype(A), eltype(B))), A, B)
+\(A::Bidiagonal, B::AbstractMatrix) =
     ldiv!(matprod_dest(A, B, promote_op(\, eltype(A), eltype(B))), A, B)
 
 ### Triangular specializations

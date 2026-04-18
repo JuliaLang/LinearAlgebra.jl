@@ -104,6 +104,39 @@ oneunit(::Type{<:MockUnitful{T}}) where T = MockUnitful(one(T))
     @test r.data ≈ 5.0
 end
 
+struct MockMeasurement{T<:AbstractFloat} <: AbstractFloat
+    data::T
+end
+#these methods are only needed for preventing ambiguities
+MockMeasurement{T}(x::MockMeasurement{T}) where {T<:AbstractFloat} = x
+MockMeasurement{T}(z::Complex) where {T<:AbstractFloat} = MockMeasurement(T(z))
+MockMeasurement{T}(r::Rational{P}) where {P,T<:AbstractFloat} = MockMeasurement(T(r))
+MockMeasurement{T}(c::AbstractChar) where {T<:AbstractFloat} = MockMeasurement(T(c))
+MockMeasurement{T}(x::Base.TwicePrecision) where {T<:AbstractFloat} = MockMeasurement(T(x))
+#these methods are actually needed
+import Base: promote_rule, floatmin, eps, ==, <, -, +, <=, sqrt
+one(::Type{<:MockMeasurement{T}}) where {T<:Real} = one(T)
+promote_rule(::Type{MockMeasurement{T}}, ::Type{<:Real}) where {T} = MockMeasurement{T}
+for f in (:floatmin, :eps, :oneunit)
+    @eval $f(::Type{MockMeasurement{T}}) where {T<:AbstractFloat} = $f(T)
+end
+for f in (:-, :sqrt)
+    @eval $f(x::MockMeasurement) = MockMeasurement($f(x.data))
+end
+for f in (:*, :+, :/)
+    @eval $f(x::MockMeasurement, y::MockMeasurement) = MockMeasurement($f(x.data,y.data))
+end
+for f in (:<, :(==), :(<=))
+    @eval $f(x::MockMeasurement, y::MockMeasurement) = $f(x.data,y.data)
+end
+
+@testset "measurement givens rotation unitful $T " for T in (Float64, ComplexF64)
+    g, r = givens(MockMeasurement(T(3)), MockMeasurement(T(4)), 1, 2)
+    @test g.c ≈ 3/5
+    @test g.s ≈ 4/5
+    @test r.data ≈ 5.0
+end
+
 # 51554
 # avoid infinite loop on Inf inputs
 @testset "givensAlgorithm - Inf inputs" for T in (Float64, ComplexF64)

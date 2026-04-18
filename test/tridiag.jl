@@ -61,6 +61,7 @@ end
             c += im*convert(Vector{elty}, randn(n - 1))
         end
     end
+    @test_throws DimensionMismatch SymTridiagonal(d, d)
     @test_throws DimensionMismatch SymTridiagonal(dl, fill(elty(1), n+1))
     @test_throws ArgumentError SymTridiagonal(rand(n, n))
     @test_throws ArgumentError Tridiagonal(dl, dl, dl)
@@ -190,19 +191,6 @@ end
         @test !isdiag(Tridiagonal(dl,d,zerosdu))
         @test !isdiag(Tridiagonal(zerosdl,d,du))
         @test !isdiag(Tridiagonal(dl,d,du))
-
-        # Test methods that could fail due to dv and ev having the same length
-        # see #41089
-
-        badev = zero(d)
-        badev[end] = 1
-        S = SymTridiagonal(d, badev)
-
-        @test istriu(S, -2)
-        @test istriu(S, 0)
-        @test !istriu(S, 2)
-
-        @test isdiag(S)
     end
 
     @testset "iszero and isone" begin
@@ -229,12 +217,6 @@ end
         @test isone(Sone)
         @test !iszero(Smix)
         @test !isone(Smix)
-
-        badev = zeros(elty, 3)
-        badev[end] = 1
-
-        @test isone(SymTridiagonal(ones(elty, 3), badev))
-        @test iszero(SymTridiagonal(zeros(elty, 3), badev))
     end
 
     @testset for mat_type in (Tridiagonal, SymTridiagonal)
@@ -547,6 +529,21 @@ end
     @test Tridiagonal([1, 2], [4, 5, 1], [6.0, 7]) == [4.0 6.0 0.0; 1.0 5.0 7.0; 0.0 2.0 1.0]
 end
 
+@testset "SymTridiagonal dv and ev lengths" begin
+    # https://github.com/JuliaLang/LinearAlgebra.jl/issues/629
+
+    # Empty matrix can have length(dv) == length(ev)
+    @test SymTridiagonal(Float64[], Float64[]) isa SymTridiagonal
+
+    @test SymTridiagonal(ones(1), Float64[]) isa SymTridiagonal
+
+    # Must have length(dv) = length(ev) + 1
+    @test_throws DimensionMismatch SymTridiagonal(ones(1), ones(1))
+    @test_throws DimensionMismatch SymTridiagonal(ones(2), ones(2))
+    @test_throws DimensionMismatch SymTridiagonal(ones(4), ones(2))
+    @test_throws DimensionMismatch SymTridiagonal(ones(4), ones(5))
+end
+
 @testset "convert for SymTridiagonal" begin
     STF32 = SymTridiagonal{Float32}(fill(1f0, 5), fill(1f0, 4))
     @test convert(typeof(STF32), STF32) === STF32
@@ -573,7 +570,7 @@ end
 end
 
 @testset "Issue #26994 (and the empty case)" begin
-    T = SymTridiagonal([1.0],[3.0])
+    T = SymTridiagonal([1.0],Float64[])
     x = ones(1)
     @test T*x == ones(1)
     @test SymTridiagonal(ones(0), ones(0)) * ones(0, 2) == ones(0, 2)
@@ -694,19 +691,6 @@ end
     @test_throws ArgumentError SymTridiagonal{Float32}(T)
 end
 
-# Issue #38765
-@testset "Eigendecomposition with different lengths" begin
-    # length(A.ev) can be either length(A.dv) or length(A.dv) - 1
-    A = SymTridiagonal(fill(1.0, 3), fill(-1.0, 3))
-    F = eigen(A)
-    A2 = SymTridiagonal(fill(1.0, 3), fill(-1.0, 2))
-    F2 = eigen(A2)
-    test_approx_eq_modphase(F.vectors, F2.vectors)
-    @test F.values ≈ F2.values ≈ eigvals(A) ≈ eigvals(A2)
-    @test eigvecs(A) ≈ eigvecs(A2)
-    @test eigvecs(A, eigvals(A)[1:1]) ≈ eigvecs(A2, eigvals(A2)[1:1])
-end
-
 @testset "non-commutative algebra (#39701)" begin
     for A in (SymTridiagonal(Quaternion.(randn(5), randn(5), randn(5), randn(5)), Quaternion.(randn(4), randn(4), randn(4), randn(4))),
               Tridiagonal(Quaternion.(randn(4), randn(4), randn(4), randn(4)), Quaternion.(randn(5), randn(5), randn(5), randn(5)), Quaternion.(randn(4), randn(4), randn(4), randn(4))))
@@ -746,8 +730,7 @@ end
 
     # complex
     # https://github.com/JuliaLang/julia/pull/41037#discussion_r645524081
-    S = SymTridiagonal(randn(5) .+ 0im, randn(5) .+ 0im)
-    S.ev[end] = im
+    S = SymTridiagonal(randn(5) .+ 0im, randn(4) .+ 0im)
     @test issymmetric(S)
     @test ishermitian(S)
 
@@ -791,7 +774,7 @@ end
 @testset "non-number eltype" begin
     @testset "sum for SymTridiagonal" begin
         dv = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:10]
-        ev = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:10]
+        ev = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:9]
         S = SymTridiagonal(dv, ev)
         Sdense = Matrix(S)
         @test Sdense == collect(S)
@@ -810,7 +793,7 @@ end
     end
     @testset "== between Tridiagonal and SymTridiagonal" begin
         dv = [SizedArray{(2,2)}([1 2;3 4]) for i in 1:4]
-        ev = [SizedArray{(2,2)}([3 4;1 2]) for i in 1:4]
+        ev = [SizedArray{(2,2)}([3 4;1 2]) for i in 1:3]
         S = SymTridiagonal(dv, ev)
         Sdense = Matrix(S)
         @test S == Tridiagonal(diag(Sdense, -1), diag(Sdense),  diag(Sdense, 1)) == S
@@ -822,12 +805,6 @@ end
     ev, dv = [1:4;], [1:5;]
     S = SymTridiagonal(dv, ev)
     T = Tridiagonal(zero(ev), zero(dv), zero(ev))
-    @test copyto!(T, S) == S
-    @test copyto!(zero(S), T) == T
-
-    ev2 = [1:5;]
-    S = SymTridiagonal(dv, ev2)
-    T = Tridiagonal(zeros(length(ev2)-1), zero(dv), zeros(length(ev2)-1))
     @test copyto!(T, S) == S
     @test copyto!(zero(S), T) == T
 

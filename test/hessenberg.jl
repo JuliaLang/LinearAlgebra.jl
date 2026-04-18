@@ -294,10 +294,14 @@ end
 end
 
 @testset "multiplication with empty HessenbergQ" begin
-    @test ones(2, 0)*hessenberg(zeros(0,0)).Q == zeros(2,0)
-    @test_throws DimensionMismatch ones(2, 1)*hessenberg(zeros(0,0)).Q
-    @test hessenberg(zeros(0,0)).Q * ones(0, 2) == zeros(0,2)
-    @test_throws DimensionMismatch hessenberg(zeros(0,0)).Q * ones(1, 2)
+    for A in (zeros(0,0), Symmetric(zeros(0,0)))
+        Q = hessenberg(A).Q
+        @test Matrix(Q) == zeros(0, 0)
+        @test ones(2, 0) * Q == zeros(2,0)
+        @test_throws DimensionMismatch ones(2, 1) * Q
+        @test Q * ones(0, 2) == zeros(0,2)
+        @test_throws DimensionMismatch Q * ones(1, 2)
+    end
 end
 
 @testset "fillband" begin
@@ -318,6 +322,20 @@ end
     @test U == U2
     LinearAlgebra.fillband!(U, -10, 10, 10)
     @test U == U2
+end
+
+@testset "eigensolvers" begin
+    for T in (Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64)
+        H = UpperHessenberg(randn(T, 5,5))
+        λ = eigvals(H)
+        F = eigen(H)
+        @test λ ≈ eigvals(Matrix(H)) ≈ F.values
+        @test H * F.vectors ≈ F.vectors * Diagonal(λ)
+        if T <: LinearAlgebra.BlasFloat
+            λ2 = @invoke eigvals!(copy(H)::UpperHessenberg) # test fallback
+            @test λ ≈ λ2
+        end
+    end
 end
 
 end # module TestHessenberg

@@ -8,8 +8,8 @@ struct SymTridiagonal{T, V<:AbstractVector{T}} <: AbstractMatrix{T}
     ev::V                        # superdiagonal
     function SymTridiagonal{T, V}(dv, ev) where {T, V<:AbstractVector{T}}
         require_one_based_indexing(dv, ev)
-        if !(length(dv) - 1 <= length(ev) <= length(dv))
-            throw(DimensionMismatch(lazy"subdiagonal has wrong length. Has length $(length(ev)), but should be either $(length(dv) - 1) or $(length(dv))."))
+        if length(ev) != length(dv)-1 && !(length(dv) == 0 && length(ev) == 0)
+            throw(DimensionMismatch(lazy"subdiagonal has wrong length. Has length $(length(ev)), but should be $(length(dv) - 1)."))
         end
         new{T, V}(dv, ev)
     end
@@ -166,7 +166,7 @@ similar(S::SymTridiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = 
 
 # copyto! for matching axes
 _copyto_banded!(dest::SymTridiagonal, src::SymTridiagonal) =
-    (copyto!(dest.dv, src.dv); copyto!(dest.ev, _evview(src)); dest)
+    (copyto!(dest.dv, src.dv); copyto!(dest.ev, src.ev); dest)
 
 #Elementary operations
 for func in (:conj, :copy, :real, :imag)
@@ -186,15 +186,15 @@ function permutedims(S::SymTridiagonal, perm)
 end
 Base.copy(S::Adjoint{<:Any,<:SymTridiagonal}) = SymTridiagonal(map(x -> copy.(adjoint.(x)), (S.parent.dv, S.parent.ev))...)
 
-ishermitian(S::SymTridiagonal) = isreal(S.dv) && isreal(_evview(S))
+ishermitian(S::SymTridiagonal) = isreal(S.dv) && isreal(S.ev)
 issymmetric(S::SymTridiagonal) = true
 
 tr(S::SymTridiagonal) = sum(symmetric, S.dv)
 
 _diagiter(M::SymTridiagonal{<:Number}) = M.dv
 _diagiter(M::SymTridiagonal) = (symmetric(x, :U) for x in M.dv)
-_eviter_transposed(M::SymTridiagonal{<:Number}) = _evview(M)
-_eviter_transposed(M::SymTridiagonal) = (transpose(x) for x in _evview(M))
+_eviter_transposed(M::SymTridiagonal{<:Number}) = M.ev
+_eviter_transposed(M::SymTridiagonal) = (transpose(x) for x in M.ev)
 
 function diag(M::SymTridiagonal, n::Integer=0)
     # every branch call similar(..., ::Int) to make sure the
@@ -204,7 +204,7 @@ function diag(M::SymTridiagonal, n::Integer=0)
     if n == 0
         return copyto!(v, _diagiter(M))
     elseif n == 1
-        return copyto!(v, _evview(M))
+        return copyto!(v, M.ev)
     elseif n == -1
         return copyto!(v, _eviter_transposed(M))
     else
@@ -215,8 +215,8 @@ function diag(M::SymTridiagonal, n::Integer=0)
     return v
 end
 
-+(A::SymTridiagonal, B::SymTridiagonal) = SymTridiagonal(A.dv+B.dv, _evview(A)+_evview(B))
--(A::SymTridiagonal, B::SymTridiagonal) = SymTridiagonal(A.dv-B.dv, _evview(A)-_evview(B))
++(A::SymTridiagonal, B::SymTridiagonal) = SymTridiagonal(A.dv+B.dv, A.ev+B.ev)
+-(A::SymTridiagonal, B::SymTridiagonal) = SymTridiagonal(A.dv-B.dv, A.ev-B.ev)
 -(A::SymTridiagonal) = SymTridiagonal(-A.dv, -A.ev)
 *(A::SymTridiagonal, B::Number) = SymTridiagonal(A.dv*B, A.ev*B)
 *(B::Number, A::SymTridiagonal) = SymTridiagonal(B*A.dv, B*A.ev)
@@ -228,7 +228,7 @@ function rmul!(A::SymTridiagonal, x::Number)
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
     rmul!(A.dv, x)
-    rmul!(_evview(A), x)
+    rmul!(A.ev, x)
     return A
 end
 function lmul!(x::Number, B::SymTridiagonal)
@@ -239,15 +239,15 @@ function lmul!(x::Number, B::SymTridiagonal)
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
     lmul!(x, B.dv)
-    lmul!(x, _evview(B))
+    lmul!(x, B.ev)
     return B
 end
 /(A::SymTridiagonal, B::Number) = SymTridiagonal(A.dv/B, A.ev/B)
 \(B::Number, A::SymTridiagonal) = SymTridiagonal(B\A.dv, B\A.ev)
 ==(A::SymTridiagonal{<:Number}, B::SymTridiagonal{<:Number}) =
-    (A.dv == B.dv) && (_evview(A) == _evview(B))
+    (A.dv == B.dv) && (A.ev == B.ev)
 ==(A::SymTridiagonal, B::SymTridiagonal) =
-    size(A) == size(B) && all(i -> A[i,i] == B[i,i], axes(A, 1)) && (_evview(A) == _evview(B))
+    size(A) == size(B) && all(i -> A[i,i] == B[i,i], axes(A, 1)) && (A.ev == B.ev)
 
 function dot(x::AbstractVector, S::SymTridiagonal, y::AbstractVector)
     require_one_based_indexing(x, y)
@@ -359,15 +359,15 @@ Base.@constprop :aggressive function istriu(M::SymTridiagonal, k::Integer=0)
     if k <= -1
         return true
     elseif k == 0
-        return iszero(_evview(M))
+        return iszero(M.ev)
     else # k >= 1
-        return iszero(_evview(M)) && iszero(M.dv)
+        return iszero(M.ev) && iszero(M.dv)
     end
 end
 Base.@constprop :aggressive istril(M::SymTridiagonal, k::Integer) = istriu(M, -k)
-iszero(M::SymTridiagonal) =  iszero(_evview(M)) && iszero(M.dv)
-isone(M::SymTridiagonal) =  iszero(_evview(M)) && all(isone, M.dv)
-isdiag(M::SymTridiagonal) =  iszero(_evview(M))
+iszero(M::SymTridiagonal) =  iszero(M.ev) && iszero(M.dv)
+isone(M::SymTridiagonal) =  iszero(M.ev) && all(isone, M.dv)
+isdiag(M::SymTridiagonal) =  iszero(M.ev)
 
 
 function tril!(M::SymTridiagonal{T}, k::Integer=0) where T
@@ -927,7 +927,7 @@ end
 ==(A::Tridiagonal, B::Tridiagonal) = (A.dl==B.dl) && (A.d==B.d) && (A.du==B.du)
 function ==(A::Tridiagonal, B::SymTridiagonal)
     iseq = all(Iterators.map((x, y) -> x == transpose(y), A.du, A.dl))
-    iseq = iseq && A.du == _evview(B)
+    iseq = iseq && A.du == B.ev
     iseq && all(Iterators.map((x, y) -> x == symmetric(y, :U), A.d, B.dv))
 end
 ==(A::SymTridiagonal, B::Tridiagonal) = B == A
@@ -947,7 +947,7 @@ end
 
 Base._sum(A::Tridiagonal, ::Colon) = sum(A.d) + sum(A.dl) + sum(A.du)
 function Base._sum(A::SymTridiagonal, ::Colon)
-    se = sum(_evview(A))
+    se = sum(A.ev)
     symmetric(sum(A.dv), :U) + se + transpose(se)
 end
 
@@ -1124,7 +1124,7 @@ end
 # combinations of Tridiagonal and Symtridiagonal
 # copyto! for matching axes
 function _copyto_banded!(A::Tridiagonal, B::SymTridiagonal)
-    Bev = _evview(B)
+    Bev = B.ev
     A.du .= Bev
     # Broadcast identity for numbers to access the faster copyto! path
     # This uses the fact that transpose(x::Number) = x and symmetric(x::Number) = x
@@ -1135,7 +1135,7 @@ end
 function _copyto_banded!(A::SymTridiagonal, B::Tridiagonal)
     issymmetric(B) || throw(ArgumentError("cannot copy an asymmetric Tridiagonal matrix to a SymTridiagonal"))
     A.dv .= B.d
-    _evview(A) .= B.du
+    A.ev .= B.du
     return A
 end
 
