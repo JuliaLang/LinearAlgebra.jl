@@ -1840,7 +1840,7 @@ end
 ## Basis for null space
 
 """
-    nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ, alg::Algorithm=default_svd_algorithm(A))
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes a basis for the nullspace of `M` by including the singular
@@ -1850,6 +1850,9 @@ where `σ₁` is `M`'s largest singular value.
 By default, the relative tolerance `rtol` is `n*ϵ`, where `n`
 is the size of the smallest dimension of `M`, and `ϵ` is the [`eps`](@ref) of
 the element type of `M`.
+
+The desired algorithm, `alg` is passed through to `svd`. The available algorithms will
+be the same as that of ['svd'](@ref).
 
 # Examples
 ```jldoctest
