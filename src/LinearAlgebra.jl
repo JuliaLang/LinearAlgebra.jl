@@ -666,6 +666,7 @@ _zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B
 # without defining methods for both the orderings
 matprod_dest(A, B::Diagonal, TS) = _matprod_dest_diag(A, TS)
 matprod_dest(A::Diagonal, B, TS) = _matprod_dest_diag(B, TS)
+matprod_dest(A::Diagonal, B::AbstractVector, TS) = _matprod_dest_diag(B, TS)
 matprod_dest(A::Diagonal, B::Diagonal, TS) = _matprod_dest_diag(B, TS)
 _matprod_dest_diag(A, TS) = similar(A, TS)
 _matprod_dest_diag(A::HermOrSym, TS) = similar(A, TS, size(A))
