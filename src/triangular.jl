@@ -1974,6 +1974,9 @@ _inner_type_promotion(op, ::Type{TA}, ::Type{TB}) where {TA,TB} =
 for mat in (:AbstractVector, :AbstractMatrix)
     @eval function mul(A::UpperOrLowerTriangular, B::$mat)
         require_one_based_indexing(B)
+        if size(A, 2) != size(B, 1)
+            throw(DimensionMismatch(lazy"second dimension of left hand side A, $(size(A, 2)), and first dimension of right hand side B, $(size(B, 1)), must be equal"))
+        end
         TAB = promote_op(matprod, eltype(A), eltype(B))
         C = matprod_dest(A, B, TAB)
         if TAB <: BlasFloat
@@ -1985,6 +1988,9 @@ for mat in (:AbstractVector, :AbstractMatrix)
     ### Left division with triangle to the left hence rhs cannot be transposed. No quotients.
     @eval function \(A::Union{UnitUpperTriangular,UnitLowerTriangular}, B::$mat)
         require_one_based_indexing(B)
+        if size(A, 2) != size(B, 1)
+            throw(DimensionMismatch(lazy"second dimension of left hand side A, $(size(A, 2)), and first dimension of right hand side B, $(size(B, 1)), must be equal"))
+        end
         TAB = _inner_type_promotion(\, eltype(A), eltype(B))
         C = matprod_dest(A, B, TAB)
         if TAB <: BlasFloat
@@ -1996,6 +2002,9 @@ for mat in (:AbstractVector, :AbstractMatrix)
     ### Left division with triangle to the left hence rhs cannot be transposed. Quotients.
     @eval function \(A::Union{UpperTriangular,LowerTriangular}, B::$mat)
         require_one_based_indexing(B)
+        if size(A, 2) != size(B, 1)
+            throw(DimensionMismatch(lazy"second dimension of left hand side A, $(size(A, 2)), and first dimension of right hand side B, $(size(B, 1)), must be equal"))
+        end
         TAB = promote_op(\, eltype(A), eltype(B))
         C = matprod_dest(A, B, TAB)
         if TAB <: BlasFloat
@@ -2007,6 +2016,9 @@ for mat in (:AbstractVector, :AbstractMatrix)
     ### Right division with triangle to the right hence lhs cannot be transposed. No quotients.
     @eval function /(A::$mat, B::Union{UnitUpperTriangular, UnitLowerTriangular})
         require_one_based_indexing(A)
+        if size(B, 1) != size(A, 2)
+            throw(DimensionMismatch(lazy"right hand side B needs first dimension of size $(size(A,2)), has size $(size(B,1))"))
+        end
         TAB = _inner_type_promotion(/, eltype(A), eltype(B))
         C = matprod_dest(A, B, TAB)
         if TAB <: BlasFloat
@@ -2018,6 +2030,9 @@ for mat in (:AbstractVector, :AbstractMatrix)
     ### Right division with triangle to the right hence lhs cannot be transposed. Quotients.
     @eval function /(A::$mat, B::Union{UpperTriangular,LowerTriangular})
         require_one_based_indexing(A)
+        if size(B, 1) != size(A, 2)
+            throw(DimensionMismatch(lazy"right hand side B needs first dimension of size $(size(A,2)), has size $(size(B,1))"))
+        end
         TAB = promote_op(/, eltype(A), eltype(B))
         C = matprod_dest(A, B, TAB)
         if TAB <: BlasFloat
@@ -2029,6 +2044,9 @@ for mat in (:AbstractVector, :AbstractMatrix)
 end
 function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     require_one_based_indexing(A)
+    if size(B, 1) != size(A, 2)
+        throw(DimensionMismatch(lazy"right hand side B needs first dimension of size $(size(A,2)), has size $(size(B,1))"))
+    end
     TAB = promote_op(matprod, eltype(A), eltype(B))
     C = matprod_dest(A, B, TAB)
     if TAB <: BlasFloat
