@@ -1992,7 +1992,7 @@ for mat in (:AbstractVector, :AbstractMatrix)
         if TAB <: BlasFloat
             ldiv!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
         else
-            ldiv!(matprod_dest(A, B, TAB), A, B)
+            ldiv!(similar(B, TAB, size(B)), A, B)
         end
     end
     ### Left division with triangle to the left hence rhs cannot be transposed. Quotients.
@@ -2002,7 +2002,7 @@ for mat in (:AbstractVector, :AbstractMatrix)
         if TAB <: BlasFloat
             ldiv!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
         else
-            ldiv!(matprod_dest(A, B, TAB), A, B)
+            ldiv!(similar(B, TAB, size(B)), A, B)
         end
     end
     ### Right division with triangle to the right hence lhs cannot be transposed. No quotients.
@@ -2012,7 +2012,7 @@ for mat in (:AbstractVector, :AbstractMatrix)
         if TAB <: BlasFloat
             rdiv!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
         else
-            _rdiv!(matprod_dest(A, B, TAB), A, B)
+            _rdiv!(similar(A, TAB, size(A)), A, B)
         end
     end
     ### Right division with triangle to the right hence lhs cannot be transposed. Quotients.
@@ -2022,7 +2022,7 @@ for mat in (:AbstractVector, :AbstractMatrix)
         if TAB <: BlasFloat
             rdiv!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
         else
-            _rdiv!(matprod_dest(A, B, TAB), A, B)
+            _rdiv!(similar(A, TAB, size(A)), A, B)
         end
     end
 end
