@@ -84,6 +84,8 @@ export
     trsm!,
     trsm
 
+public set_num_threads, get_num_threads
+
 using ..LinearAlgebra: libblastrampoline, BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, chkstride1
 
 include("lbt.jl")

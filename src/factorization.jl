@@ -35,7 +35,7 @@ struct TransposeFactorization{T,S<:Factorization} <: Factorization{T}
     parent::S
 end
 TransposeFactorization(F::Factorization) =
-    TransposeFactorization{Base.promote_op(adjoint,eltype(F)),typeof(F)}(F)
+    TransposeFactorization{Base.promote_op(transpose,eltype(F)),typeof(F)}(F)
 
 eltype(::Type{<:Factorization{T}}) where {T} = T
 size(F::AdjointFactorization) = reverse(size(parent(F)))

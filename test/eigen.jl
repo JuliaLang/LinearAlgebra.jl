@@ -299,4 +299,11 @@ end
     @test λ == [1.0, 8.0]
 end
 
+@testset "memory allocation with range given (#1425)" begin
+    A = Hermitian(Float64[1 2 3; 2 4 5; 3 5 1])
+    e, V = eigen(A, -5, 1) # should only get 2 eigenvalues/ eigenvectors
+    V1 = copy(V)
+    @test Base.summarysize(V) == Base.summarysize(V1)
+end
+
 end # module TestEigen

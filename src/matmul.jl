@@ -617,14 +617,14 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
             for k ∈ 1:n, j ∈ 1:m
                 αA_jk = @stable_muladdmul MulAddMul(α, false)(A[j, k])
                 for i ∈ 1:j
-                    C[i, j] += A[i, k] * αA_jk
+                    C[i, j] = muladd(A[i, k], αA_jk, C[i, j])
                 end
             end
         else
             for j ∈ 1:n, i ∈ 1:j
                 temp = A[1, i] * A[1, j]
                 for k ∈ 2:m
-                    temp += A[k, i] * A[k, j]
+                    temp = muladd(A[k, i], A[k, j], temp)
                 end
                 C[i, j] += @stable_muladdmul MulAddMul(α, false)(temp)
             end
@@ -634,7 +634,7 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
             for k ∈ 1:n, j ∈ 1:m
                 αA_jk_bar = @stable_muladdmul MulAddMul(α, false)(conj(A[j, k]))
                 for i ∈ 1:j-1
-                    C[i, j] += A[i, k] * αA_jk_bar
+                    C[i, j] = muladd(A[i, k], αA_jk_bar, C[i, j])
                 end
                 C[j, j] += @stable_muladdmul MulAddMul(α, false)(abs2(A[j, k]))
             end
@@ -643,7 +643,7 @@ function generic_syrk!(C::StridedMatrix{T}, A::StridedVecOrMat{T}, conjugate::Bo
                 for i ∈ 1:j-1
                     temp = conj(A[1, i]) * A[1, j]
                     for k ∈ 2:m
-                        temp += conj(A[k, i]) * A[k, j]
+                        temp = muladd(conj(A[k, i]), A[k, j], temp)
                     end
                     C[i, j] += @stable_muladdmul MulAddMul(α, false)(temp)
                 end
@@ -1213,9 +1213,6 @@ function _generic_matmatmul_generic!(C, A, B, alpha, beta)
 end
 
 # multiply 2x2 matrices
-function matmul2x2(tA, tB, A::AbstractMatrix{T}, B::AbstractMatrix{S}) where {T,S}
-    matmul2x2!(similar(B, promote_op(matprod, T, S), 2, 2), tA, tB, A, B)
-end
 
 function __matmul_checks(C, A, B, sz)
     require_one_based_indexing(C, A, B)
@@ -1288,9 +1285,6 @@ function matmul2x2!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMat
 end
 
 # Multiply 3x3 matrices
-function matmul3x3(tA, tB, A::AbstractMatrix{T}, B::AbstractMatrix{S}) where {T,S}
-    matmul3x3!(similar(B, promote_op(matprod, T, S), 3, 3), tA, tB, A, B)
-end
 
 # separate function with the core of matmul3x3! that doesn't depend on a MulAddMul
 function _matmul3x3_elements(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix)

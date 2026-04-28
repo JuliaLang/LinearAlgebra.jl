@@ -606,7 +606,8 @@ function (*)(Da::Diagonal, Db::Diagonal, Dc::Diagonal)
     return Diagonal(Da.diag .* Db.diag .* Dc.diag)
 end
 
-/(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matprod_dest(A, D, promote_op(/, eltype(A), eltype(D))), A, D)
+/(A::AbstractVector, D::Diagonal) = _rdiv!(similar(A, promote_op(/, eltype(A), eltype(D))), A, D)
+/(A::AbstractMatrix, D::Diagonal) = _rdiv!(matprod_dest(A, D, promote_op(/, eltype(A), eltype(D))), A, D)
 
 rdiv!(A::AbstractVecOrMat, D::Diagonal) = @inline _rdiv!(A, A, D)
 # avoid copy when possible via internal 3-arg backend
@@ -826,18 +827,37 @@ function kron!(C::Diagonal, A::Diagonal, B::Diagonal)
     return C
 end
 
+#efficient way of doing kron(a, [b; 0])[1:end-1]
+function _diagonal_kron!(c, a, b)
+    z = zero(first(a) * first(b))
+    counter = 0
+    @inbounds for i in firstindex(a):lastindex(a) - 1
+        ai = a[i]
+        for bj in b
+            counter += 1
+            c[counter] = ai * bj
+        end
+        counter += 1
+        c[counter] = z
+    end
+    ai = last(a)
+    @inbounds for bj in b
+        counter += 1
+        c[counter] = ai * bj
+    end
+    return c
+end
+
 function kron(A::Diagonal, B::SymTridiagonal)
     kdv = kron(A.diag, B.dv)
-    # We don't need to drop the last element
-    kev = kron(A.diag, _pushzero(_evview(B)))
-    SymTridiagonal(kdv, kev)
+    kev = _diagonal_kron!(similar(kdv, length(kdv) - 1), A.diag, B.ev)
+    return SymTridiagonal(kdv, kev)
 end
 function kron(A::Diagonal, B::Tridiagonal)
-    # `_droplast!` is only guaranteed to work with `Vector`
-    kd = convert(Vector, kron(A.diag, B.d))
-    kdl = _droplast!(convert(Vector, kron(A.diag, _pushzero(B.dl))))
-    kdu = _droplast!(convert(Vector, kron(A.diag, _pushzero(B.du))))
-    Tridiagonal(kdl, kd, kdu)
+    kd = kron(A.diag, B.d)
+    kdl = _diagonal_kron!(similar(kd, length(kd) - 1), A.diag, B.dl)
+    kdu = _diagonal_kron!(similar(kd, length(kd) - 1), A.diag, B.du)
+    return Tridiagonal(kdl, kd, kdu)
 end
 
 @inline function kron!(C::AbstractMatrix, A::Diagonal, B::AbstractMatrix)

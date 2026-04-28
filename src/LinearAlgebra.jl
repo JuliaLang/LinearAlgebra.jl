@@ -655,32 +655,20 @@ _unwrap(A::AbstractVecOrMat) = A
 _cut_B(x::AbstractVector, r::UnitRange) = length(x)  > length(r) ? x[r]   : x
 _cut_B(X::AbstractMatrix, r::UnitRange) = size(X, 1) > length(r) ? X[r,:] : X
 
-# SymTridiagonal ev can be the same length as dv, but the last element is
-# ignored. However, some methods can fail if they read the entire ev
-# rather than just the meaningful elements. This is a helper function
-# for getting only the meaningful elements of ev. See #41089
-_evview(S::SymTridiagonal) = @view S.ev[begin:begin + length(S.dv) - 2]
-
 ## append right hand side with zeros if necessary
 _zeros(::Type{T}, b::AbstractVector, n::Integer) where {T} = zeros(T, max(length(b), n))
 _zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B, 1), n), size(B, 2))
 
-# append a zero element / drop the last element
-_pushzero(A) = (B = similar(A, length(A)+1); @inbounds B[begin:end-1] .= A; @inbounds B[end] = zero(eltype(B)); B)
-_droplast!(A) = deleteat!(A, lastindex(A))
-
 # destination type for matmul
-matprod_dest(A::StructuredMatrix, B::StructuredMatrix, TS) = similar(B, TS, size(B))
-matprod_dest(A, B::StructuredMatrix, TS) = similar(A, TS, size(A))
-matprod_dest(A::StructuredMatrix, B, TS) = similar(B, TS, size(B))
 # diagonal is special, as it does not change the structure of the other matrix
 # we call similar without a size to preserve the type of the matrix wherever possible
 # reroute through _matprod_dest_diag to allow speicalizing on the type of the StructuredMatrix
 # without defining methods for both the orderings
-matprod_dest(A::StructuredMatrix, B::Diagonal, TS) = _matprod_dest_diag(A, TS)
-matprod_dest(A::Diagonal, B::StructuredMatrix, TS) = _matprod_dest_diag(B, TS)
+matprod_dest(A, B::Diagonal, TS) = _matprod_dest_diag(A, TS)
+matprod_dest(A::Diagonal, B, TS) = _matprod_dest_diag(B, TS)
 matprod_dest(A::Diagonal, B::Diagonal, TS) = _matprod_dest_diag(B, TS)
 _matprod_dest_diag(A, TS) = similar(A, TS)
+_matprod_dest_diag(A::HermOrSym, TS) = similar(A, TS, size(A))
 _matprod_dest_diag(A::UnitUpperTriangular, TS) = UpperTriangular(similar(parent(A), TS))
 _matprod_dest_diag(A::UnitLowerTriangular, TS) = LowerTriangular(similar(parent(A), TS))
 function _matprod_dest_diag(A::SymTridiagonal, TS)
@@ -689,9 +677,6 @@ function _matprod_dest_diag(A::SymTridiagonal, TS)
     dv = similar(A, TS, n)
     Tridiagonal(ev, dv, similar(ev))
 end
-
-# Special handling for adj/trans vec
-matprod_dest(A::Diagonal, B::AdjOrTransAbsVec, TS) = similar(B, TS)
 
 # General fallback definition for handling under- and overdetermined system as well as square problems
 # While this definition is pretty general, it does e.g. promote to common element type of lhs and rhs
