@@ -453,6 +453,10 @@ eigvals!(H::UpperHessenberg; permute::Bool=false, scale::Bool=true, sortby::Unio
 eigen!(H::UpperHessenberg; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
     eigen!(triu!(H.data,-1); permute, scale, sortby)
 
+
+schur!(H::UpperHessenberg{T}) where {T<:BlasFloat} = Schur(LinearAlgebra.LAPACK.hseqr!(H.data)...)
+schur!(H::UpperHessenberg) = schur!(triu!(H.data, -1)) # fallback to dense algorithm
+
 ######################################################################################
 # Hessenberg factorizations Q(H+μI)Q' of A+μI:
 

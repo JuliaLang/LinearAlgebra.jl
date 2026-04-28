@@ -3989,8 +3989,8 @@ for (stev, stebz, stegr, stein, elty) in
             @chkvalidparam 1 job ('N', 'V')
             chkstride1(dv, ev)
             n = length(dv)
-            if length(ev) != n - 1 && length(ev) != n
-                throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than or equal to dv's length, $n)"))
+            if length(ev) != n - 1
+                throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
             Zmat = similar(dv, $elty, (n, job != 'N' ? n : 0))
             work = Vector{$elty}(undef, max(1, 2n-2))
@@ -4049,11 +4049,8 @@ for (stev, stebz, stegr, stein, elty) in
             ne = length(ev)
             if ne == n - 1
                 eev = [ev; zero($elty)]
-            elseif ne == n
-                eev = copy(ev)
-                eev[n] = zero($elty)
             else
-                throw(DimensionMismatch(lazy"ev has length $ne but needs one less than or equal to dv's length, $n)"))
+                throw(DimensionMismatch(lazy"ev has length $ne but needs one less than dv's length, $n)"))
             end
 
             abstol = Vector{$elty}(undef, 1)
@@ -4100,11 +4097,8 @@ for (stev, stebz, stegr, stein, elty) in
             ne = length(ev_in)
             if ne == n - 1
                 ev = [ev_in; zero($elty)]
-            elseif ne == n
-                ev = copy(ev_in)
-                ev[n] = zero($elty)
             else
-                throw(DimensionMismatch(lazy"ev_in has length $ne but needs one less than or equal to dv's length, $n)"))
+                throw(DimensionMismatch(lazy"ev_in has length $ne but needs one less than dv's length, $n)"))
             end
             ldz = n #Leading dimension
             #Number of eigenvalues to find
@@ -5429,7 +5423,7 @@ for (syev, syevr, syevd, sygvd, elty) in
                 end
             end
             zm = jobz == 'V' ? m[] : 0
-            resize!(W, m[]), reshape(resize!(Z, ldz * zm), ldz, zm)
+            resize!(W, m[]), reshape(sizehint!(resize!(Z, ldz * zm), ldz * zm), ldz, zm)
         end
         syevr!(jobz::AbstractChar, A::AbstractMatrix{$elty}) =
             syevr!(jobz, 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
@@ -5639,7 +5633,7 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
                 end
             end
             zm = jobz == 'V' ? m[] : 0
-            resize!(W, m[]), reshape(resize!(Z, ldz * zm), ldz, zm)
+            resize!(W, m[]), reshape(sizehint!(resize!(Z, ldz * zm), ldz * zm), ldz, zm)
         end
         syevr!(jobz::AbstractChar, A::AbstractMatrix{$elty}) =
             syevr!(jobz, 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)

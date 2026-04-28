@@ -436,6 +436,9 @@ end
     @test pinv(Transpose(realvec))::Vector{Float64} ≈ pinv(rowrealvec)
     @test pinv(Adjoint(complexvec))::Vector{ComplexF64} ≈ pinv(conj(rowcomplexvec))
     @test pinv(Transpose(complexvec))::Vector{ComplexF64} ≈ pinv(rowcomplexvec)
+    # test that tol is passed through for TransposeAbsVec
+    @test pinv(Transpose(realvec), 1e100) == zeros(4)
+    @test pinv(Adjoint(realvec), 1e100) == zeros(4)
 end
 
 @testset "Adjoint/Transpose-wrapped vector left-division" begin
