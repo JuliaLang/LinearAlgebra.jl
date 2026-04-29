@@ -1358,33 +1358,33 @@ end
 
 ### Generic promotion methods and fallbacks
 \(A::Bidiagonal, B::AbstractVecOrMat) =
-    ldiv!(matprod_dest(A, B, promote_op(\, eltype(A), eltype(B))), A, B)
+    ldiv!(matldiv_dest(A, B), A, B)
 
 ### Triangular specializations
 for tri in (:UpperTriangular, :UnitUpperTriangular)
     @eval function \(B::Bidiagonal, U::$tri)
-        A = ldiv!(matprod_dest(B, U, promote_op(\, eltype(B), eltype(U))), B, U)
+        A = ldiv!(matldiv_dest(B, U), B, U)
         return B.uplo == 'U' ? UpperTriangular(A) : A
     end
     @eval function \(U::$tri, B::Bidiagonal)
-        A = ldiv!(matprod_dest(U, B, promote_op(\, eltype(U), eltype(B))), U, B)
+        A = ldiv!(matldiv_dest(U, B), U, B)
         return B.uplo == 'U' ? UpperTriangular(A) : A
     end
 end
 for tri in (:LowerTriangular, :UnitLowerTriangular)
     @eval function \(B::Bidiagonal, L::$tri)
-        A = ldiv!(matprod_dest(B, L, promote_op(\, eltype(B), eltype(L))), B, L)
+        A = ldiv!(matldiv_dest(B, L), B, L)
         return B.uplo == 'L' ? LowerTriangular(A) : A
     end
     @eval function \(L::$tri, B::Bidiagonal)
-        A = ldiv!(matprod_dest(L, B, promote_op(\, eltype(L), eltype(B))), L, B)
+        A = ldiv!(matldiv_dest(L, B), L, B)
         return B.uplo == 'L' ? LowerTriangular(A) : A
     end
 end
 
 ### Diagonal specialization
 function \(B::Bidiagonal, D::Diagonal)
-    A = ldiv!(similar(D, promote_op(\, eltype(B), eltype(D)), size(D)), B, D)
+    A = ldiv!(matldiv_dest(B, D), B, D)
     return B.uplo == 'U' ? UpperTriangular(A) : LowerTriangular(A)
 end
 
@@ -1431,34 +1431,33 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
 end
 rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
 
-/(A::AbstractMatrix, B::Bidiagonal) =
-    _rdiv!(similar(A, promote_op(/, eltype(A), eltype(B)), size(A)), A, B)
+/(A::AbstractMatrix, B::Bidiagonal) = _rdiv!(matrdiv_dest(A, B), A, B)
 
 ### Triangular specializations
 for tri in (:UpperTriangular, :UnitUpperTriangular)
     @eval function /(U::$tri, B::Bidiagonal)
-        A = _rdiv!(matprod_dest(U, B, promote_op(/, eltype(U), eltype(B))), U, B)
+        A = _rdiv!(matrdiv_dest(U, B), U, B)
         return B.uplo == 'U' ? UpperTriangular(A) : A
     end
     @eval function /(B::Bidiagonal, U::$tri)
-        A = _rdiv!(matprod_dest(B, U, promote_op(/, eltype(B), eltype(U))), B, U)
+        A = _rdiv!(matrdiv_dest(B, U), B, U)
         return B.uplo == 'U' ? UpperTriangular(A) : A
     end
 end
 for tri in (:LowerTriangular, :UnitLowerTriangular)
     @eval function /(L::$tri, B::Bidiagonal)
-        A = _rdiv!(matprod_dest(L, B, promote_op(/, eltype(L), eltype(B))), L, B)
+        A = _rdiv!(matrdiv_dest(L, B), L, B)
         return B.uplo == 'L' ? LowerTriangular(A) : A
     end
     @eval function /(B::Bidiagonal, L::$tri)
-        A = _rdiv!(matprod_dest(B, L, promote_op(/, eltype(B), eltype(L))), B, L)
+        A = _rdiv!(matrdiv_dest(B, L), B, L)
         return B.uplo == 'L' ? LowerTriangular(A) : A
     end
 end
 
 ### Diagonal specialization
 function /(D::Diagonal, B::Bidiagonal)
-    A = _rdiv!(similar(D, promote_op(/, eltype(D), eltype(B)), size(D)), D, B)
+    A = _rdiv!(matrdiv_dest(D, B), D, B)
     return B.uplo == 'U' ? UpperTriangular(A) : LowerTriangular(A)
 end
 

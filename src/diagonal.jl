@@ -606,8 +606,10 @@ function (*)(Da::Diagonal, Db::Diagonal, Dc::Diagonal)
     return Diagonal(Da.diag .* Db.diag .* Dc.diag)
 end
 
-# flipped order in matprod_dest is on purpose, to put the vector argument on second place
-/(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matprod_dest(D, A, promote_op(/, eltype(A), eltype(D))), A, D)
+matrdiv_dest(A, D::Diagonal) = similar(A, promote_op(/, eltype(A), eltype(D)))
+matrdiv_dest(A::HermOrSym, D::Diagonal) = similar(A, promote_op(/, eltype(A), eltype(D)), size(A))
+
+/(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matrdiv_dest(A, D), A, D)
 
 rdiv!(A::AbstractVecOrMat, D::Diagonal) = @inline _rdiv!(A, A, D)
 # avoid copy when possible via internal 3-arg backend
@@ -628,7 +630,10 @@ function _rdiv!(B::AbstractVecOrMat, A::AbstractVecOrMat, D::Diagonal)
     B
 end
 
-\(D::Diagonal, B::AbstractVecOrMat) = ldiv!(matprod_dest(D, B, promote_op(\, eltype(D), eltype(B))), D, B)
+matldiv_dest(D::Diagonal, B) = similar(B, promote_op(\, eltype(D), eltype(B)))
+matldiv_dest(D::Diagonal, B::HermOrSym) = similar(B, promote_op(\, eltype(D), eltype(B)), size(B))
+
+\(D::Diagonal, B::AbstractVecOrMat) = ldiv!(matldiv_dest(D, B), D, B)
 
 ldiv!(D::Diagonal, B::AbstractVecOrMat) = @inline ldiv!(B, D, B)
 function ldiv!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
@@ -675,14 +680,14 @@ ldiv!(Dc::Diagonal, Da::Diagonal, Db::Diagonal) = Diagonal(ldiv!(Dc.diag, Da, Db
 @propagate_inbounds _getldiag(T::Tridiagonal, i) = T.dl[i]
 @propagate_inbounds _getldiag(S::SymTridiagonal, i) = transpose(S.ev[i])
 
-function (\)(D::Diagonal, S::SymTridiagonal)
+function matldiv_dest(D::Diagonal, S::SymTridiagonal)
     T = promote_op(\, eltype(D), eltype(S))
     du = similar(S.ev, T, max(length(S.dv)-1, 0))
     d  = similar(S.dv, T, length(S.dv))
     dl = similar(S.ev, T, max(length(S.dv)-1, 0))
-    ldiv!(Tridiagonal(dl, d, du), D, S)
+    return Tridiagonal(dl, d, du)
 end
-(\)(D::Diagonal, T::Tridiagonal) = ldiv!(similar(T, promote_op(\, eltype(D), eltype(T))), D, T)
+
 function ldiv!(T::Tridiagonal, D::Diagonal, S::Union{SymTridiagonal,Tridiagonal})
     m = size(S, 1)
     dd = D.diag
@@ -712,14 +717,15 @@ function ldiv!(T::Tridiagonal, D::Diagonal, S::Union{SymTridiagonal,Tridiagonal}
     return T
 end
 
-function (/)(S::SymTridiagonal, D::Diagonal)
+function matrdiv_dest(S::SymTridiagonal, D::Diagonal)
     T = promote_op(\, eltype(D), eltype(S))
     du = similar(S.ev, T, max(length(S.dv)-1, 0))
     d  = similar(S.dv, T, length(S.dv))
     dl = similar(S.ev, T, max(length(S.dv)-1, 0))
-    _rdiv!(Tridiagonal(dl, d, du), S, D)
+    return Tridiagonal(dl, d, du)
 end
-(/)(T::Tridiagonal, D::Diagonal) = _rdiv!(matprod_dest(T, D, promote_op(/, eltype(T), eltype(D))), T, D)
+(/)(T::Union{SymTridiagonal,Tridiagonal}, D::Diagonal) =
+    _rdiv!(matrdiv_dest(T, D), T, D)
 function _rdiv!(T::Tridiagonal, S::Union{SymTridiagonal,Tridiagonal}, D::Diagonal)
     n = size(S, 2)
     dd = D.diag

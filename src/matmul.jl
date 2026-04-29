@@ -134,6 +134,26 @@ Return an appropriate `AbstractArray` with element type `T` that may be used to 
 matprod_dest(A, B, T) = similar(B, T, (size(A, 1), size(B, 2)))
 matprod_dest(A, B::AbstractVector, T) = similar(B, T, (size(A, 1),))
 
+"""
+    matldiv_dest(A, B)
+
+Return an appropriate `AbstractArray` that may be used to store the result of `A \\ B`.
+
+!!! compat
+    This function requires at least Julia 1.14
+"""
+matldiv_dest(A, B) = similar(B, promote_op(\, eltype(A), eltype(B)), size(B))
+
+"""
+    matrdiv_dest(A, B)
+
+Return an appropriate `AbstractArray` that may be used to store the result of `A / B`.
+
+!!! compat
+    This function requires at least Julia 1.14
+"""
+matrdiv_dest(A, B) = similar(A, promote_op(/, eltype(A), eltype(B)), size(A))
+
 # optimization for dispatching to BLAS, e.g. *(::Matrix{Float32}, ::Matrix{Float64})
 # but avoiding the case *(::Matrix{<:BlasComplex}, ::Matrix{<:BlasReal})
 # which is better handled by reinterpreting rather than promotion

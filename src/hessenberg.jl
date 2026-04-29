@@ -172,22 +172,14 @@ function mul(U::UpperOrUnitUpperTriangular, H::UpperHessenberg)
 end
 
 /(H::UpperHessenberg, D::Diagonal) = UpperHessenberg(H.data / D)
-function /(H::UpperHessenberg, U::UpperTriangular)
-    HH = _rdiv!(matprod_dest(H, U, promote_op(/, eltype(H), eltype(U))), H, U)
-    UpperHessenberg(HH)
-end
-\(D::Diagonal, H::UpperHessenberg) = UpperHessenberg(D \ H.data)
-function /(H::UpperHessenberg, U::UnitUpperTriangular)
-    HH = _rdiv!(matprod_dest(H, U, promote_op(/, eltype(H), eltype(U))), H, U)
+function /(H::UpperHessenberg, U::UpperOrUnitUpperTriangular)
+    HH = _rdiv!(matrdiv_dest(H, U), H, U)
     UpperHessenberg(HH)
 end
 
-function \(U::UpperTriangular, H::UpperHessenberg)
-    HH = ldiv!(matprod_dest(U, H, promote_op(\, eltype(U), eltype(H))), U, H)
-    UpperHessenberg(HH)
-end
-function \(U::UnitUpperTriangular, H::UpperHessenberg)
-    HH = ldiv!(matprod_dest(U, H, promote_op(\, eltype(U), eltype(H))), U, H)
+\(D::Diagonal, H::UpperHessenberg) = UpperHessenberg(D \ H.data)
+function \(U::UpperOrUnitUpperTriangular, H::UpperHessenberg)
+    HH = ldiv!(matldiv_dest(U, H), U, H)
     UpperHessenberg(HH)
 end
 
