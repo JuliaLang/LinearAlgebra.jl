@@ -132,7 +132,6 @@ Return an appropriate `AbstractArray` with element type `T` that may be used to 
     This function requires at least Julia 1.11
 """
 matprod_dest(A, B, T) = similar(B, T, (size(A, 1), size(B, 2)))
-matprod_dest(A, B::AbstractVector, T) = similar(B, T, (size(A, 1),))
 
 """
     matldiv_dest(A, B)

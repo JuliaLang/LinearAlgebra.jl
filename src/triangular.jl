@@ -3056,18 +3056,15 @@ end
 factorize(A::AbstractTriangular) = A
 
 # disambiguation methods: /(Adjoint of AbsVec, <:AbstractTriangular)
-/(u::AdjointAbsVec, A::Union{LowerTriangular,UpperTriangular}) = adjoint(adjoint(A) \ u.parent)
-/(u::AdjointAbsVec, A::Union{UnitLowerTriangular,UnitUpperTriangular}) = adjoint(adjoint(A) \ u.parent)
+/(u::AdjointAbsVec, A::UpperOrLowerTriangular) = adjoint(adjoint(A) \ u.parent)
 # disambiguation methods: /(Transpose of AbsVec, <:AbstractTriangular)
-/(u::TransposeAbsVec, A::Union{LowerTriangular,UpperTriangular}) = transpose(transpose(A) \ u.parent)
-/(u::TransposeAbsVec, A::Union{UnitLowerTriangular,UnitUpperTriangular}) = transpose(transpose(A) \ u.parent)
+/(u::TransposeAbsVec, A::UpperOrLowerTriangular) = transpose(transpose(A) \ u.parent)
 # disambiguation methods: /(Transpose of AbsVec, Adj/Trans of <:AbstractTriangular)
 for (tritype, comptritype) in ((:LowerTriangular, :UpperTriangular),
                                (:UnitLowerTriangular, :UnitUpperTriangular),
                                (:UpperTriangular, :LowerTriangular),
                                (:UnitUpperTriangular, :UnitLowerTriangular))
     @eval /(u::TransposeAbsVec, A::$tritype{<:Any,<:Adjoint}) = transpose($comptritype(conj(parent(parent(A)))) \ u.parent)
-    @eval /(u::TransposeAbsVec, A::$tritype{<:Any,<:Transpose}) = transpose(transpose(A) \ u.parent)
 end
 
 # Cube root of a 2x2 real-valued matrix with complex conjugate eigenvalues and equal diagonal values.
