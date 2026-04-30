@@ -724,8 +724,7 @@ function matrdiv_dest(S::SymTridiagonal, D::Diagonal)
     dl = similar(S.ev, T, max(length(S.dv)-1, 0))
     return Tridiagonal(dl, d, du)
 end
-(/)(T::Union{SymTridiagonal,Tridiagonal}, D::Diagonal) =
-    _rdiv!(matrdiv_dest(T, D), T, D)
+
 function _rdiv!(T::Tridiagonal, S::Union{SymTridiagonal,Tridiagonal}, D::Diagonal)
     n = size(S, 2)
     dd = D.diag

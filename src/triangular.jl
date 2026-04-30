@@ -1336,16 +1336,16 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
 end
 
 # multiplication
-generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector{T}) where {T<:BlasFloat} =
+generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector) where {T<:BlasFloat} =
     BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copy!(c, b))
-function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix{T}) where {T<:BlasFloat}
+function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1
         BLAS.trmm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copy!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatmul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
-function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat}
+function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat}
     if stride(C,1) == stride(B,1) == 1
         BLAS.trmm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
@@ -1353,14 +1353,14 @@ function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function,
     end
 end
 # division
-function generic_trimatdiv!(C::StridedVecOrMat{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVecOrMat{T}) where {T<:BlasFloat}
+function generic_trimatdiv!(C::StridedVecOrMat{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVecOrMat) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1
         LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : _copy_or_copyto!(C, B))
     else # incompatible with LAPACK
         @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
     end
 end
-function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat}
+function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat}
     if stride(C,1) == stride(B,1) == 1
         BLAS.trsm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
@@ -1977,33 +1977,16 @@ matldiv_dest(A::UnitUpperOrUnitLowerTriangular, B) =
 matrdiv_dest(A, B::UnitUpperOrUnitLowerTriangular) =
     similar(A, _inner_type_promotion(/, eltype(A), eltype(B)), size(A))    
 ## The general promotion methods
-for mat in (:AbstractVector, :AbstractMatrix)
-    @eval function mul(A::UpperOrLowerTriangular, B::$mat)
-        require_one_based_indexing(B)
-        if size(A, 2) != size(B, 1)
-            throw(DimensionMismatch(lazy"second dimension of left hand side A, $(size(A, 2)), and first dimension of right hand side B, $(size(B, 1)), must be equal"))
-        end
-        T = promote_op(matprod, eltype(A), eltype(B))
-        C = matprod_dest(A, B, T)
-        Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
-        mul!(C, Ap, B)
+function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
+    require_one_based_indexing(B)
+    if size(A, 2) != size(B, 1)
+        throw(DimensionMismatch(lazy"second dimension of left hand side A, $(size(A, 2)), and first dimension of right hand side B, $(size(B, 1)), must be equal"))
     end
-    @eval function \(A::UpperOrLowerTriangular, B::$mat)
-        require_one_based_indexing(B)
-        C = matldiv_dest(A, B)
-        T = eltype(C)
-        # promote eltype of A in case BLAS becomes accessible
-        Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
-        ldiv!(C, Ap, B)
-    end
-    @eval function /(A::$mat, B::UpperOrLowerTriangular)
-        require_one_based_indexing(A)
-        C = matrdiv_dest(A, B)
-        T = eltype(C)
-        # promote eltype of B in case BLAS becomes accessible
-        Bp = (T <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{T}, B) : B
-        _rdiv!(C, A, Bp)
-    end
+    T = promote_op(matprod, eltype(A), eltype(B))
+    C = matprod_dest(A, B, T)
+    Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
+    mul!(C, Ap, B)
+    postop_proc(C, Ap, B)
 end
 function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     require_one_based_indexing(A)
@@ -2014,49 +1997,46 @@ function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     C = matprod_dest(A, B, T)
     Bp = (T <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{T}, B) : B
     mul!(C, A, Bp)
+    postop_proc(C, A, Bp)
 end
-
-## Some Triangular-Triangular cases. We might want to write tailored methods
-## for these cases, but I'm not sure it is worth it.
-# disambiguation from the above methods
 mul(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
     @invoke mul(A::typeof(A), B::AbstractMatrix)
-for f in (:mul, :\)
-    @eval begin
-        ($f)(A::LowerTriangular, B::LowerTriangular) =
-            LowerTriangular(@invoke $f(A::LowerTriangular, B::AbstractMatrix))
-        ($f)(A::LowerTriangular, B::UnitLowerTriangular) =
-            LowerTriangular(@invoke $f(A::LowerTriangular, B::AbstractMatrix))
-        ($f)(A::UnitLowerTriangular, B::LowerTriangular) =
-            LowerTriangular(@invoke $f(A::UnitLowerTriangular, B::AbstractMatrix))
-        ($f)(A::UnitLowerTriangular, B::UnitLowerTriangular) =
-            UnitLowerTriangular(@invoke $f(A::UnitLowerTriangular, B::AbstractMatrix))
-        ($f)(A::UpperTriangular, B::UpperTriangular) =
-            UpperTriangular(@invoke $f(A::UpperTriangular, B::AbstractMatrix))
-        ($f)(A::UpperTriangular, B::UnitUpperTriangular) =
-            UpperTriangular(@invoke $f(A::UpperTriangular, B::AbstractMatrix))
-        ($f)(A::UnitUpperTriangular, B::UpperTriangular) =
-            UpperTriangular(@invoke $f(A::UnitUpperTriangular, B::AbstractMatrix))
-        ($f)(A::UnitUpperTriangular, B::UnitUpperTriangular) =
-            UnitUpperTriangular(@invoke $f(A::UnitUpperTriangular, B::AbstractMatrix))
+
+for mat in (:AbstractVector, :AbstractMatrix)
+    @eval function \(A::UpperOrLowerTriangular, B::$mat)
+        require_one_based_indexing(B)
+        C = matldiv_dest(A, B)
+        T = eltype(C)
+        # promote eltype of A in case BLAS becomes accessible
+        Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
+        ldiv!(C, Ap, B)
+        postop_proc(C, Ap, B)
+    end
+    @eval function /(A::$mat, B::UpperOrLowerTriangular)
+        require_one_based_indexing(A)
+        C = matrdiv_dest(A, B)
+        T = eltype(C)
+        # promote eltype of B in case BLAS becomes accessible
+        Bp = (T <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{T}, B) : B
+        _rdiv!(C, A, Bp)
+        postop_proc(C, A, Bp)
     end
 end
-(/)(A::LowerTriangular, B::LowerTriangular) =
-    LowerTriangular(@invoke /(A::AbstractMatrix, B::LowerTriangular))
-(/)(A::LowerTriangular, B::UnitLowerTriangular) =
-    LowerTriangular(@invoke /(A::AbstractMatrix, B::UnitLowerTriangular))
-(/)(A::UnitLowerTriangular, B::LowerTriangular) =
-    LowerTriangular(@invoke /(A::AbstractMatrix, B::LowerTriangular))
-(/)(A::UnitLowerTriangular, B::UnitLowerTriangular) =
-    UnitLowerTriangular(@invoke /(A::AbstractMatrix, B::UnitLowerTriangular))
-(/)(A::UpperTriangular, B::UpperTriangular) =
-    UpperTriangular(@invoke /(A::AbstractMatrix, B::UpperTriangular))
-(/)(A::UpperTriangular, B::UnitUpperTriangular) =
-    UpperTriangular(@invoke /(A::AbstractMatrix, B::UnitUpperTriangular))
-(/)(A::UnitUpperTriangular, B::UpperTriangular) =
-    UpperTriangular(@invoke /(A::AbstractMatrix, B::UpperTriangular))
-(/)(A::UnitUpperTriangular, B::UnitUpperTriangular) =
-    UnitUpperTriangular(@invoke /(A::AbstractMatrix, B::UnitUpperTriangular))
+\(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
+    @invoke \(A::typeof(A), B::AbstractMatrix)
+/(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
+    @invoke /(A::AbstractMatrix, B::typeof(B))
+
+
+postop_proc(C, _, _) = C
+postop_proc(C, ::LowerTriangular, ::LowerTriangular) = LowerTriangular(C)
+postop_proc(C, ::LowerTriangular, ::UnitLowerTriangular) = LowerTriangular(C)
+postop_proc(C, ::UnitLowerTriangular, ::LowerTriangular) = LowerTriangular(C)
+postop_proc(C, ::UnitLowerTriangular, ::UnitLowerTriangular) = UnitLowerTriangular(C)
+postop_proc(C, ::UpperTriangular, ::UpperTriangular) = UpperTriangular(C)
+postop_proc(C, ::UpperTriangular, ::UnitUpperTriangular) = UpperTriangular(C)
+postop_proc(C, ::UnitUpperTriangular, ::UpperTriangular) = UpperTriangular(C)
+postop_proc(C, ::UnitUpperTriangular, ::UnitUpperTriangular) = UnitUpperTriangular(C)
 
 # Complex matrix power for upper triangular factor, see:
 #   Higham and Lin, "A Schur-Padé algorithm for fractional powers of a Matrix",
