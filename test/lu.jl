@@ -127,7 +127,7 @@ dimg  = randn(n)/2
                 end
 
                 # Test whether Ax_ldiv_B!(y, LU, x) indeed overwrites y
-                resultT = typeof(oneunit(eltyb) / oneunit(eltya))
+                resultT = typeof(zero(eltyb) / oneunit(eltya))
 
                 b_dest = similar(b, resultT)
                 c_dest = similar(c, resultT)
