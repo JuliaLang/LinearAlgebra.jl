@@ -1854,6 +1854,10 @@ the element type of `M`.
 The desired algorithm, `alg` is passed through to `svd`. The available algorithms will
 be the same as that of ['svd'](@ref).
 
+!!! compat "Julia 1.3"
+    The `alg` keyword argument requires Julia 1.3 or later.
+
+
 # Examples
 ```jldoctest
 julia> M = [1 0 0; 0 1 0; 0 0 0]
