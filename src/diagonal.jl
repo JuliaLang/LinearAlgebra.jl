@@ -718,7 +718,7 @@ function ldiv!(T::Tridiagonal, D::Diagonal, S::Union{SymTridiagonal,Tridiagonal}
 end
 
 function matrdiv_dest(S::SymTridiagonal, D::Diagonal)
-    T = promote_op(\, eltype(D), eltype(S))
+    T = promote_op(/, eltype(S), eltype(D))
     du = similar(S.ev, T, max(length(S.dv)-1, 0))
     d  = similar(S.dv, T, length(S.dv))
     dl = similar(S.ev, T, max(length(S.dv)-1, 0))
