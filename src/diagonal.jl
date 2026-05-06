@@ -717,13 +717,7 @@ function ldiv!(T::Tridiagonal, D::Diagonal, S::Union{SymTridiagonal,Tridiagonal}
     return T
 end
 
-function matrdiv_dest(S::SymTridiagonal, D::Diagonal)
-    T = promote_op(/, eltype(S), eltype(D))
-    du = similar(S.ev, T, max(length(S.dv)-1, 0))
-    d  = similar(S.dv, T, length(S.dv))
-    dl = similar(S.ev, T, max(length(S.dv)-1, 0))
-    return Tridiagonal(dl, d, du)
-end
+matrdiv_dest(S::SymTridiagonal, D::Diagonal) = matldiv_dest(D, S)
 
 function _rdiv!(T::Tridiagonal, S::Union{SymTridiagonal,Tridiagonal}, D::Diagonal)
     n = size(S, 2)
