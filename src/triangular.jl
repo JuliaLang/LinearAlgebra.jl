@@ -1971,10 +1971,10 @@ _inner_type_promotion(op, ::Type{TA}, ::Type{TB}) where {TA<:Integer,TB<:Integer
 _inner_type_promotion(op, ::Type{TA}, ::Type{TB}) where {TA,TB} =
     promote_op(op, TA, TB)
 
-matldiv_dest(A::UnitUpperOrUnitLowerTriangular, B) =
+matop_dest(::typeof(\), A::UnitUpperOrUnitLowerTriangular, B) =
     similar(B, _inner_type_promotion(\, eltype(A), eltype(B)), size(B))
 
-matrdiv_dest(A, B::UnitUpperOrUnitLowerTriangular) =
+matop_dest(::typeof(/), A, B::UnitUpperOrUnitLowerTriangular) =
     similar(A, _inner_type_promotion(/, eltype(A), eltype(B)), size(A))    
 ## The general promotion methods
 function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
@@ -1982,9 +1982,8 @@ function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
     if size(A, 2) != size(B, 1)
         throw(DimensionMismatch(lazy"second dimension of left hand side A, $(size(A, 2)), and first dimension of right hand side B, $(size(B, 1)), must be equal"))
     end
-    T = promote_op(matprod, eltype(A), eltype(B))
-    C = matprod_dest(A, B, T)
-    Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
+    C = matop_dest(matprod, A, B)
+    Ap = (eltype(C) <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, A) : A
     mul!(C, Ap, B)
     postop_proc(C, Ap, B)
 end
@@ -1993,9 +1992,8 @@ function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     if size(B, 1) != size(A, 2)
         throw(DimensionMismatch(lazy"right hand side B needs first dimension of size $(size(A,2)), has size $(size(B,1))"))
     end
-    T = promote_op(matprod, eltype(A), eltype(B))
-    C = matprod_dest(A, B, T)
-    Bp = (T <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{T}, B) : B
+    C = matop_dest(matprod, A, B)
+    Bp = (eltype(C) <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, B) : B
     mul!(C, A, Bp)
     postop_proc(C, A, Bp)
 end
@@ -2005,19 +2003,17 @@ mul(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
 for mat in (:AbstractVector, :AbstractMatrix)
     @eval function \(A::UpperOrLowerTriangular, B::$mat)
         require_one_based_indexing(B)
-        C = matldiv_dest(A, B)
-        T = eltype(C)
+        C = matop_dest(\, A, B)
         # promote eltype of A in case BLAS becomes accessible
-        Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
+        Ap = (eltype(C) <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, A) : A
         ldiv!(C, Ap, B)
         postop_proc(C, Ap, B)
     end
     @eval function /(A::$mat, B::UpperOrLowerTriangular)
         require_one_based_indexing(A)
-        C = matrdiv_dest(A, B)
-        T = eltype(C)
+        C = matop_dest(/, A, B)
         # promote eltype of B in case BLAS becomes accessible
-        Bp = (T <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{T}, B) : B
+        Bp = (eltype(C) <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, B) : B
         _rdiv!(C, A, Bp)
         postop_proc(C, A, Bp)
     end

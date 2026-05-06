@@ -1341,7 +1341,7 @@ end
 
 ### Generic promotion methods and fallbacks
 \(A::Bidiagonal, B::AbstractVecOrMat) =
-    postop_proc(ldiv!(matldiv_dest(A, B), A, B), A, B)
+    postop_proc(ldiv!(matop_dest(\, A, B), A, B), A, B)
 
 postop_proc(C, B::Bidiagonal, ::UpperOrUnitUpperTriangular) = B.uplo == 'U' ? UpperTriangular(C) : C
 postop_proc(C, ::UpperOrUnitUpperTriangular, B::Bidiagonal) = B.uplo == 'U' ? UpperTriangular(C) : C
@@ -1394,7 +1394,7 @@ end
 rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
 
 /(A::AbstractMatrix, B::Bidiagonal) =
-    postop_proc(_rdiv!(matrdiv_dest(A, B), A, B), A, B)
+    postop_proc(_rdiv!(matop_dest(/, A, B), A, B), A, B)
 
 # disambiguation
 /(A::AdjointAbsVec, B::Bidiagonal) = adjoint(adjoint(B) \ parent(A))

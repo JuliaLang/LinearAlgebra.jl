@@ -664,20 +664,20 @@ _zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B
 # destination type for matmul
 # diagonal is special, as it does not change the structure of the other matrix
 # we call similar without a size to preserve the type of the matrix wherever possible
-# reroute through _matprod_dest_diag to allow speicalizing on the type of the StructuredMatrix
+# reroute through _matprod_dest_diag to allow specializing on the type of the StructuredMatrix
 # without defining methods for both the orderings
-matprod_dest(A, B::Diagonal, TS) = _matprod_dest_diag(A, TS)
-matprod_dest(A::Diagonal, B, TS) = _matprod_dest_diag(B, TS)
-matprod_dest(A::Diagonal, B::AbstractVector, TS) = _matprod_dest_diag(B, TS)
-matprod_dest(A::Diagonal, B::Diagonal, TS) = _matprod_dest_diag(B, TS)
+_matprod_type(A, B) = promote_op(matprod, eltype(A), eltype(B))
+matop_dest(::typeof(matprod), A, B::Diagonal) = _matprod_dest_diag(A, _matprod_type(A, B))
+matop_dest(::typeof(matprod), A::Diagonal, B) = _matprod_dest_diag(B, _matprod_type(A, B))
+matop_dest(::typeof(matprod), A::Diagonal, B::Diagonal) = similar(B, _matprod_type(A, B))
+matop_dest(::typeof(matprod), A::Diagonal, B::AbstractVector) = similar(B, _matprod_type(A, B))
 _matprod_dest_diag(A, TS) = similar(A, TS)
-_matprod_dest_diag(A::HermOrSym, TS) = similar(A, TS, size(A))
+_matprod_dest_diag(A::HermOrSym, TS) = similar(parent(A), TS)
 _matprod_dest_diag(A::UnitUpperTriangular, TS) = UpperTriangular(similar(parent(A), TS))
 _matprod_dest_diag(A::UnitLowerTriangular, TS) = LowerTriangular(similar(parent(A), TS))
 function _matprod_dest_diag(A::SymTridiagonal, TS)
-    n = size(A, 1)
-    ev = similar(A, TS, max(0, n-1))
-    dv = similar(A, TS, n)
+    ev = similar(A.ev, TS)
+    dv = similar(A.dv, TS)
     Tridiagonal(ev, dv, similar(ev))
 end
 
