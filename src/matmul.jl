@@ -140,7 +140,7 @@ Return an appropriate `AbstractArray` that may be used to store the result of `o
 !!! compat
     This function requires at least Julia 1.14
 """
-matop_dest(::typeof(matprod), A, B) = similar(B, promote_op(matprod, eltype(A), eltype(B)), (size(A, 1), size(B, 2)))
+matop_dest(::typeof(*), A, B) = similar(B, promote_op(matprod, eltype(A), eltype(B)), (size(A, 1), size(B, 2)))
 matop_dest(::typeof(matprod), A, x::AbstractVector) = similar(x, promote_op(matprod, eltype(A), eltype(x)), axes(A, 1))
 
 matop_dest(::typeof(\), A, B) = similar(B, promote_op(\, eltype(A), eltype(B)), size(B))
