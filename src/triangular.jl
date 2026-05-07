@@ -1982,7 +1982,7 @@ function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
     if size(A, 2) != size(B, 1)
         throw(DimensionMismatch(lazy"second dimension of left hand side A, $(size(A, 2)), and first dimension of right hand side B, $(size(B, 1)), must be equal"))
     end
-    C = matop_dest(matprod, A, B)
+    C = matop_dest(*, A, B)
     Ap = (eltype(C) <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, A) : A
     mul!(C, Ap, B)
     postop_proc(C, Ap, B)
@@ -1992,7 +1992,7 @@ function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     if size(B, 1) != size(A, 2)
         throw(DimensionMismatch(lazy"right hand side B needs first dimension of size $(size(A,2)), has size $(size(B,1))"))
     end
-    C = matop_dest(matprod, A, B)
+    C = matop_dest(*, A, B)
     Bp = (eltype(C) <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, B) : B
     mul!(C, A, Bp)
     postop_proc(C, A, Bp)

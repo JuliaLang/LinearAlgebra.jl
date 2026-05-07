@@ -667,10 +667,10 @@ _zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B
 # reroute through _matprod_dest_diag to allow specializing on the type of the StructuredMatrix
 # without defining methods for both the orderings
 _matprod_type(A, B) = promote_op(matprod, eltype(A), eltype(B))
-matop_dest(::typeof(matprod), A, B::Diagonal) = _matprod_dest_diag(A, _matprod_type(A, B))
-matop_dest(::typeof(matprod), A::Diagonal, B) = _matprod_dest_diag(B, _matprod_type(A, B))
-matop_dest(::typeof(matprod), A::Diagonal, B::Diagonal) = similar(B, _matprod_type(A, B))
-matop_dest(::typeof(matprod), A::Diagonal, B::AbstractVector) = similar(B, _matprod_type(A, B))
+matop_dest(::typeof(*), A, B::Diagonal) = _matprod_dest_diag(A, _matprod_type(A, B))
+matop_dest(::typeof(*), A::Diagonal, B) = _matprod_dest_diag(B, _matprod_type(A, B))
+matop_dest(::typeof(*), A::Diagonal, B::Diagonal) = similar(B, _matprod_type(A, B))
+matop_dest(::typeof(*), A::Diagonal, B::AbstractVector) = similar(B, _matprod_type(A, B))
 _matprod_dest_diag(A, TS) = similar(A, TS)
 _matprod_dest_diag(A::HermOrSym, TS) = similar(parent(A), TS)
 _matprod_dest_diag(A::UnitUpperTriangular, TS) = UpperTriangular(similar(parent(A), TS))
