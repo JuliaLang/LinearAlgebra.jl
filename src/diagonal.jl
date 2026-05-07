@@ -332,6 +332,14 @@ Base.literal_pow(::typeof(^), D::Diagonal, valp::Val) =
     Diagonal(Base.literal_pow.(^, D.diag, valp)) # for speed
 Base.literal_pow(::typeof(^), D::Diagonal, ::Val{-1}) = inv(D) # for disambiguation
 
+postop_proc(::typeof(\), C, ::Diagonal, ::LowerOrUnitLowerTriangular) = LowerTriangular(C)
+postop_proc(::typeof(/), C, ::LowerOrUnitLowerTriangular, ::Diagonal) = LowerTriangular(C)
+postop_proc(::typeof(\), C, ::Diagonal, ::UpperOrUnitUpperTriangular) = UpperTriangular(C)
+postop_proc(::typeof(/), C, ::UpperOrUnitUpperTriangular, ::Diagonal) = UpperTriangular(C)
+
+postop_proc(::Ops, C, _, ::Diagonal) = C
+postop_proc(::Ops, C, ::Diagonal, _) = C
+
 function mul(Da::Diagonal, Db::Diagonal)
     matmul_size_check(size(Da), size(Db))
     return Diagonal(Da.diag .* Db.diag)
@@ -606,10 +614,10 @@ function (*)(Da::Diagonal, Db::Diagonal, Dc::Diagonal)
     return Diagonal(Da.diag .* Db.diag .* Dc.diag)
 end
 
-matrdiv_dest(A, D::Diagonal) = similar(A, promote_op(/, eltype(A), eltype(D)))
-matrdiv_dest(A::HermOrSym, D::Diagonal) = similar(A, promote_op(/, eltype(A), eltype(D)), size(A))
+matop_dest(::typeof(/), A, D::Diagonal) = similar(A, promote_op(/, eltype(A), eltype(D)))
+matop_dest(::typeof(/), A::HermOrSym, D::Diagonal) = similar(A, promote_op(/, eltype(A), eltype(D)), size(A))
 
-/(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matrdiv_dest(A, D), A, D)
+/(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matop_dest(/, A, D), A, D)
 
 rdiv!(A::AbstractVecOrMat, D::Diagonal) = @inline _rdiv!(A, A, D)
 # avoid copy when possible via internal 3-arg backend
@@ -630,10 +638,10 @@ function _rdiv!(B::AbstractVecOrMat, A::AbstractVecOrMat, D::Diagonal)
     B
 end
 
-matldiv_dest(D::Diagonal, B) = similar(B, promote_op(\, eltype(D), eltype(B)))
-matldiv_dest(D::Diagonal, B::HermOrSym) = similar(B, promote_op(\, eltype(D), eltype(B)), size(B))
+matop_dest(::typeof(\), D::Diagonal, B) = similar(B, promote_op(\, eltype(D), eltype(B)))
+matop_dest(::typeof(\), D::Diagonal, B::HermOrSym) = similar(B, promote_op(\, eltype(D), eltype(B)), size(B))
 
-\(D::Diagonal, B::AbstractVecOrMat) = ldiv!(matldiv_dest(D, B), D, B)
+\(D::Diagonal, B::AbstractVecOrMat) = ldiv!(matop_dest(\, D, B), D, B)
 
 ldiv!(D::Diagonal, B::AbstractVecOrMat) = @inline ldiv!(B, D, B)
 function ldiv!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
@@ -680,7 +688,7 @@ ldiv!(Dc::Diagonal, Da::Diagonal, Db::Diagonal) = Diagonal(ldiv!(Dc.diag, Da, Db
 @propagate_inbounds _getldiag(T::Tridiagonal, i) = T.dl[i]
 @propagate_inbounds _getldiag(S::SymTridiagonal, i) = transpose(S.ev[i])
 
-function matldiv_dest(D::Diagonal, S::SymTridiagonal)
+function matop_dest(::typeof(\), D::Diagonal, S::SymTridiagonal)
     T = promote_op(\, eltype(D), eltype(S))
     du = similar(S.ev, T, max(length(S.dv)-1, 0))
     d  = similar(S.dv, T, length(S.dv))
@@ -717,7 +725,7 @@ function ldiv!(T::Tridiagonal, D::Diagonal, S::Union{SymTridiagonal,Tridiagonal}
     return T
 end
 
-matrdiv_dest(S::SymTridiagonal, D::Diagonal) = matldiv_dest(D, S)
+matop_dest(::typeof(/), S::SymTridiagonal, D::Diagonal) = matop_dest(\, D, S)
 
 function _rdiv!(T::Tridiagonal, S::Union{SymTridiagonal,Tridiagonal}, D::Diagonal)
     n = size(S, 2)
@@ -760,24 +768,14 @@ end
 for Tri in (:UpperTriangular, :LowerTriangular)
     UTri = Symbol(:Unit, Tri)
     # 2 args
-    for (fun, f) in zip((:mul, :rmul!, :rdiv!, :/), (:identity, :identity, :inv, :inv))
-        g = fun == :mul ? :* : fun
-        @eval $fun(A::$Tri, D::Diagonal) = $Tri($g(A.data, D))
-        @eval $fun(A::$UTri, D::Diagonal) = $Tri(_setdiag!($g(A.data, D), $f, D.diag))
+    for (fun, f) in zip((:rmul!, :rdiv!, :/), (:identity, :identity, :inv, :inv))
+        @eval $fun(A::$Tri, D::Diagonal) = $Tri($fun(A.data, D))
+        @eval $fun(A::$UTri, D::Diagonal) = $Tri(_setdiag!($fun(A.data, D), $f, D.diag))
     end
-    @eval mul(A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
-            @invoke mul(A::AbstractMatrix, D::Diagonal)
-    @eval mul(A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
-            @invoke mul(A::AbstractMatrix, D::Diagonal)
-    for (fun, f) in zip((:mul, :lmul!, :ldiv!, :\), (:identity, :identity, :inv, :inv))
-        g = fun == :mul ? :* : fun
-        @eval $fun(D::Diagonal, A::$Tri) = $Tri($g(D, A.data))
-        @eval $fun(D::Diagonal, A::$UTri) = $Tri(_setdiag!($g(D, A.data), $f, D.diag))
+    for (fun, f) in zip((:lmul!, :ldiv!, :\), (:identity, :identity, :inv, :inv))
+        @eval $fun(D::Diagonal, A::$Tri) = $Tri($fun(D, A.data))
+        @eval $fun(D::Diagonal, A::$UTri) = $Tri(_setdiag!($fun(D, A.data), $f, D.diag))
     end
-    @eval mul(D::Diagonal, A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}) =
-            @invoke mul(D::Diagonal, A::AbstractMatrix)
-    @eval mul(D::Diagonal, A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}) =
-            @invoke mul(D::Diagonal, A::AbstractMatrix)
     # 3-arg ldiv!
     @eval ldiv!(C::$Tri, D::Diagonal, A::$Tri) = $Tri(ldiv!(C.data, D, A.data))
     @eval ldiv!(C::$Tri, D::Diagonal, A::$UTri) = $Tri(_setdiag!(ldiv!(C.data, D, A.data), inv, D.diag))

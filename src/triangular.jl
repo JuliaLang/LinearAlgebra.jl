@@ -1971,10 +1971,10 @@ _inner_type_promotion(op, ::Type{TA}, ::Type{TB}) where {TA<:Integer,TB<:Integer
 _inner_type_promotion(op, ::Type{TA}, ::Type{TB}) where {TA,TB} =
     promote_op(op, TA, TB)
 
-matldiv_dest(A::UnitUpperOrUnitLowerTriangular, B) =
+matop_dest(::typeof(\), A::UnitUpperOrUnitLowerTriangular, B) =
     similar(B, _inner_type_promotion(\, eltype(A), eltype(B)), size(B))
 
-matrdiv_dest(A, B::UnitUpperOrUnitLowerTriangular) =
+matop_dest(::typeof(/), A, B::UnitUpperOrUnitLowerTriangular) =
     similar(A, _inner_type_promotion(/, eltype(A), eltype(B)), size(A))    
 ## The general promotion methods
 function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
@@ -1982,22 +1982,22 @@ function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
     if size(A, 2) != size(B, 1)
         throw(DimensionMismatch(lazy"second dimension of left hand side A, $(size(A, 2)), and first dimension of right hand side B, $(size(B, 1)), must be equal"))
     end
-    T = promote_op(matprod, eltype(A), eltype(B))
-    C = matprod_dest(A, B, T)
+    C = matop_dest(*, A, B)
+    T = eltype(C)
     Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
     mul!(C, Ap, B)
-    postop_proc(C, Ap, B)
+    postop_proc(*, C, Ap, B)
 end
 function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     require_one_based_indexing(A)
     if size(B, 1) != size(A, 2)
         throw(DimensionMismatch(lazy"right hand side B needs first dimension of size $(size(A,2)), has size $(size(B,1))"))
     end
-    T = promote_op(matprod, eltype(A), eltype(B))
-    C = matprod_dest(A, B, T)
+    C = matop_dest(*, A, B)
+    T = eltype(C)
     Bp = (T <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{T}, B) : B
     mul!(C, A, Bp)
-    postop_proc(C, A, Bp)
+    postop_proc(*, C, A, Bp)
 end
 mul(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
     @invoke mul(A::typeof(A), B::AbstractMatrix)
@@ -2005,21 +2005,21 @@ mul(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
 for mat in (:AbstractVector, :AbstractMatrix)
     @eval function \(A::UpperOrLowerTriangular, B::$mat)
         require_one_based_indexing(B)
-        C = matldiv_dest(A, B)
+        C = matop_dest(\, A, B)
         T = eltype(C)
         # promote eltype of A in case BLAS becomes accessible
         Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
         ldiv!(C, Ap, B)
-        postop_proc(C, Ap, B)
+        postop_proc(\, C, Ap, B)
     end
     @eval function /(A::$mat, B::UpperOrLowerTriangular)
         require_one_based_indexing(A)
-        C = matrdiv_dest(A, B)
+        C = matop_dest(/, A, B)
         T = eltype(C)
         # promote eltype of B in case BLAS becomes accessible
         Bp = (T <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{T}, B) : B
         _rdiv!(C, A, Bp)
-        postop_proc(C, A, Bp)
+        postop_proc(/, C, A, Bp)
     end
 end
 \(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
@@ -2027,16 +2027,14 @@ end
 /(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
     @invoke /(A::AbstractMatrix, B::typeof(B))
 
-
-postop_proc(C, _, _) = C
-postop_proc(C, ::LowerTriangular, ::LowerTriangular) = LowerTriangular(C)
-postop_proc(C, ::LowerTriangular, ::UnitLowerTriangular) = LowerTriangular(C)
-postop_proc(C, ::UnitLowerTriangular, ::LowerTriangular) = LowerTriangular(C)
-postop_proc(C, ::UnitLowerTriangular, ::UnitLowerTriangular) = UnitLowerTriangular(C)
-postop_proc(C, ::UpperTriangular, ::UpperTriangular) = UpperTriangular(C)
-postop_proc(C, ::UpperTriangular, ::UnitUpperTriangular) = UpperTriangular(C)
-postop_proc(C, ::UnitUpperTriangular, ::UpperTriangular) = UpperTriangular(C)
-postop_proc(C, ::UnitUpperTriangular, ::UnitUpperTriangular) = UnitUpperTriangular(C)
+postop_proc(::Ops, C, ::LowerTriangular, ::LowerTriangular) = LowerTriangular(C)
+postop_proc(::Ops, C, ::LowerTriangular, ::UnitLowerTriangular) = LowerTriangular(C)
+postop_proc(::Ops, C, ::UnitLowerTriangular, ::LowerTriangular) = LowerTriangular(C)
+postop_proc(::Ops, C, ::UnitLowerTriangular, ::UnitLowerTriangular) = UnitLowerTriangular(C)
+postop_proc(::Ops, C, ::UpperTriangular, ::UpperTriangular) = UpperTriangular(C)
+postop_proc(::Ops, C, ::UpperTriangular, ::UnitUpperTriangular) = UpperTriangular(C)
+postop_proc(::Ops, C, ::UnitUpperTriangular, ::UpperTriangular) = UpperTriangular(C)
+postop_proc(::Ops, C, ::UnitUpperTriangular, ::UnitUpperTriangular) = UnitUpperTriangular(C)
 
 # Complex matrix power for upper triangular factor, see:
 #   Higham and Lin, "A Schur-Padé algorithm for fractional powers of a Matrix",

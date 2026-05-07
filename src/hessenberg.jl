@@ -163,8 +163,10 @@ end
 mul(H::UpperHessenberg, D::Diagonal) = UpperHessenberg(H.data * D)
 mul(D::Diagonal, H::UpperHessenberg) = UpperHessenberg(D * H.data)
 
-postop_proc(C, ::UpperHessenberg, ::UpperOrUnitUpperTriangular) = UpperHessenberg(C)
-postop_proc(C, ::UpperOrUnitUpperTriangular, ::UpperHessenberg) = UpperHessenberg(C)
+postop_proc(::Union{typeof(*),typeof(/)}, C, ::UpperHessenberg, ::UpperOrUnitUpperTriangular) = UpperHessenberg(C)
+postop_proc(::Union{typeof(*),typeof(/)}, C, ::UpperHessenberg, B::Bidiagonal) = B.uplo == 'U' ? UpperHessenberg(C) : C
+postop_proc(::Union{typeof(*),typeof(\)}, C, ::UpperOrUnitUpperTriangular, ::UpperHessenberg) = UpperHessenberg(C)
+postop_proc(::Union{typeof(*),typeof(\)}, C, B::Bidiagonal, ::UpperHessenberg) = B.uplo == 'U' ? UpperHessenberg(C) : C
 
 /(H::UpperHessenberg, D::Diagonal) = UpperHessenberg(H.data / D)
 

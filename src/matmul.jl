@@ -58,8 +58,7 @@ function (*)(A::StridedMaybeAdjOrTransMat{T}, x::StridedVector{S}) where {T<:Bla
 end
 function (*)(A::AbstractMatrix, x::AbstractVector)
     matmul_size_check(size(A), size(x))
-    TS = promote_op(matprod, eltype(A), eltype(x))
-    mul!(matprod_dest(A, x, TS), A, x)
+    mul!(matop_dest(*, A, x), A, x)
 end
 
 # these will throw a DimensionMismatch unless B has 1 row (or 1 col for transposed case):
@@ -119,8 +118,7 @@ julia> [1 1; 0 1] * [1 0; 1 1]
 mul(A::AbstractMatrix, B::AbstractMatrix) = _mul(A, B)
 function _mul(A::AbstractMatrix, B::AbstractMatrix)
     matmul_size_check(size(A), size(B))
-    TS = promote_op(matprod, eltype(A), eltype(B))
-    mul!(matprod_dest(A, B, TS), A, B)
+    postop_proc(*, mul!(matop_dest(*, A, B), A, B), A, B)
 end
 
 """
@@ -131,28 +129,29 @@ Return an appropriate `AbstractArray` with element type `T` that may be used to 
 !!! compat
     This function requires at least Julia 1.11
 """
-matprod_dest(A, B, T) = similar(B, T, (size(A, 1), size(B, 2)))
-matprod_dest(A, x::AbstractVector, T) = similar(x, T, axes(A,1))
+matprod_dest(A, B, _) = matop_dest(*, A, B)
 
 """
-    matldiv_dest(A, B)
+    matop_dest(op, A, B)
 
-Return an appropriate `AbstractArray` that may be used to store the result of `A \\ B`.
+Return an appropriate `AbstractArray` that may be used to store the result of `op(A, B)`.
 
 !!! compat
     This function requires at least Julia 1.14
 """
-matldiv_dest(A, B) = similar(B, promote_op(\, eltype(A), eltype(B)), size(B))
+matop_dest(::typeof(\), A, B) = similar(B, promote_op(\, eltype(A), eltype(B)), size(B))
+matop_dest(::typeof(/), A, B) = similar(A, promote_op(/, eltype(A), eltype(B)), size(A))
+matop_dest(::typeof(*), A, B) = similar(B, promote_op(matprod, eltype(A), eltype(B)), (size(A, 1), size(B, 2)))
+matop_dest(::typeof(*), A, b::AbstractVector) = similar(b, promote_op(matprod, eltype(A), eltype(b)), axes(A,1))
+
+const Ops = Union{typeof(*), typeof(\), typeof(/)}
 
 """
-    matrdiv_dest(A, B)
+    postop_proc(op, C, A, B)
 
-Return an appropriate `AbstractArray` that may be used to store the result of `A / B`.
-
-!!! compat
-    This function requires at least Julia 1.14
+Post-processing of `C`, which is assumed to be the result of `op(A, B)`.
 """
-matrdiv_dest(A, B) = similar(A, promote_op(/, eltype(A), eltype(B)), size(A))
+postop_proc(::Ops, C, _, _) = C
 
 # optimization for dispatching to BLAS, e.g. *(::Matrix{Float32}, ::Matrix{Float64})
 # but avoiding the case *(::Matrix{<:BlasComplex}, ::Matrix{<:BlasReal})
