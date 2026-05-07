@@ -1983,8 +1983,7 @@ function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
         throw(DimensionMismatch(lazy"second dimension of left hand side A, $(size(A, 2)), and first dimension of right hand side B, $(size(B, 1)), must be equal"))
     end
     C = matop_dest(*, A, B)
-    T = eltype(C)
-    Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
+    Ap = (eltype(C) <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, A) : A
     mul!(C, Ap, B)
     postop_proc(*, C, Ap, B)
 end
@@ -1994,8 +1993,7 @@ function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
         throw(DimensionMismatch(lazy"right hand side B needs first dimension of size $(size(A,2)), has size $(size(B,1))"))
     end
     C = matop_dest(*, A, B)
-    T = eltype(C)
-    Bp = (T <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{T}, B) : B
+    Bp = (eltype(C) <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, B) : B
     mul!(C, A, Bp)
     postop_proc(*, C, A, Bp)
 end
@@ -2006,18 +2004,16 @@ for mat in (:AbstractVector, :AbstractMatrix)
     @eval function \(A::UpperOrLowerTriangular, B::$mat)
         require_one_based_indexing(B)
         C = matop_dest(\, A, B)
-        T = eltype(C)
         # promote eltype of A in case BLAS becomes accessible
-        Ap = (T <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{T}, A) : A
+        Ap = (eltype(C) <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, A) : A
         ldiv!(C, Ap, B)
         postop_proc(\, C, Ap, B)
     end
     @eval function /(A::$mat, B::UpperOrLowerTriangular)
         require_one_based_indexing(A)
         C = matop_dest(/, A, B)
-        T = eltype(C)
         # promote eltype of B in case BLAS becomes accessible
-        Bp = (T <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{T}, B) : B
+        Bp = (eltype(C) <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, B) : B
         _rdiv!(C, A, Bp)
         postop_proc(/, C, A, Bp)
     end

@@ -690,10 +690,9 @@ ldiv!(Dc::Diagonal, Da::Diagonal, Db::Diagonal) = Diagonal(ldiv!(Dc.diag, Da, Db
 
 function matop_dest(::typeof(\), D::Diagonal, S::SymTridiagonal)
     T = promote_op(\, eltype(D), eltype(S))
-    du = similar(S.ev, T, max(length(S.dv)-1, 0))
-    d  = similar(S.dv, T, length(S.dv))
-    dl = similar(S.ev, T, max(length(S.dv)-1, 0))
-    return Tridiagonal(dl, d, du)
+    du = similar(S.ev, T)
+    d  = similar(S.dv, T)
+    return Tridiagonal(similar(du), d, du)
 end
 
 function ldiv!(T::Tridiagonal, D::Diagonal, S::Union{SymTridiagonal,Tridiagonal})
@@ -725,7 +724,12 @@ function ldiv!(T::Tridiagonal, D::Diagonal, S::Union{SymTridiagonal,Tridiagonal}
     return T
 end
 
-matop_dest(::typeof(/), S::SymTridiagonal, D::Diagonal) = matop_dest(\, D, S)
+function matop_dest(::typeof(/), S::SymTridiagonal, D::Diagonal)
+    T = promote_op(/, eltype(S), eltype(D))
+    du = similar(S.ev, T)
+    d  = similar(S.dv, T)
+    return Tridiagonal(similar(du), d, du)
+end
 
 function _rdiv!(T::Tridiagonal, S::Union{SymTridiagonal,Tridiagonal}, D::Diagonal)
     n = size(S, 2)

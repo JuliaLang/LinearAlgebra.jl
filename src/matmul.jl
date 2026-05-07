@@ -125,11 +125,12 @@ end
     matprod_dest(A, B, T)
 
 Return an appropriate `AbstractArray` with element type `T` that may be used to store the result of `A * B`.
+This function is only kept for backwards compatibility, use instead `matop_dest`.
 
 !!! compat
     This function requires at least Julia 1.11
 """
-matprod_dest(A, B, _) = matop_dest(*, A, B)
+matprod_dest(A, B, T) = convert(AbstractArray{T}, matop_dest(*, A, B))
 
 """
     matop_dest(op, A, B)
@@ -153,6 +154,8 @@ Post-processing of `C`, which is assumed to be the result of `op(A, B)`.
 """
 postop_proc(::Ops, C, _, _) = C
 
+matop_dest(::typeof(\), A, B) = similar(B, promote_op(\, eltype(A), eltype(B)), size(B))
+matop_dest(::typeof(/), A, B) = similar(A, promote_op(/, eltype(A), eltype(B)), size(A))
 # optimization for dispatching to BLAS, e.g. *(::Matrix{Float32}, ::Matrix{Float64})
 # but avoiding the case *(::Matrix{<:BlasComplex}, ::Matrix{<:BlasReal})
 # which is better handled by reinterpreting rather than promotion
