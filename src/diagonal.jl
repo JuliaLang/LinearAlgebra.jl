@@ -339,6 +339,7 @@ postop_proc(::typeof(/), C, ::UpperOrUnitUpperTriangular, ::Diagonal) = UpperTri
 
 postop_proc(::Ops, C, _, ::Diagonal) = C
 postop_proc(::Ops, C, ::Diagonal, _) = C
+postop_proc(::Ops, C, ::Diagonal, ::Diagonal) = C
 
 function mul(Da::Diagonal, Db::Diagonal)
     matmul_size_check(size(Da), size(Db))
@@ -772,11 +773,11 @@ end
 for Tri in (:UpperTriangular, :LowerTriangular)
     UTri = Symbol(:Unit, Tri)
     # 2 args
-    for (fun, f) in zip((:rmul!, :rdiv!, :/), (:identity, :identity, :inv, :inv))
+    for (fun, f) in zip((:rmul!, :rdiv!, :/), (:identity, :inv, :inv))
         @eval $fun(A::$Tri, D::Diagonal) = $Tri($fun(A.data, D))
         @eval $fun(A::$UTri, D::Diagonal) = $Tri(_setdiag!($fun(A.data, D), $f, D.diag))
     end
-    for (fun, f) in zip((:lmul!, :ldiv!, :\), (:identity, :identity, :inv, :inv))
+    for (fun, f) in zip((:lmul!, :ldiv!, :\), (:identity, :inv, :inv))
         @eval $fun(D::Diagonal, A::$Tri) = $Tri($fun(D, A.data))
         @eval $fun(D::Diagonal, A::$UTri) = $Tri(_setdiag!($fun(D, A.data), $f, D.diag))
     end
