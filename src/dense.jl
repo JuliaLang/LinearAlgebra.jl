@@ -1796,10 +1796,8 @@ julia> N = pinv(M)
   1.47287   -1.00775
  -0.930233   1.16279
 
-julia> M * N
-2×2 Matrix{Float64}:
- 1.0          -4.44089e-16
- 2.22045e-16   1.0
+julia> M * N ≈ I
+true
 ```
 
 [^pr1387]: PR 1387, "stable pinv least-squares", [LinearAlgebra.jl#1387](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387)
