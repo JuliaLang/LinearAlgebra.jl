@@ -2018,10 +2018,6 @@ for mat in (:AbstractVector, :AbstractMatrix)
         postop_proc(/, C, A, Bp)
     end
 end
-\(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
-    @invoke \(A::typeof(A), B::AbstractMatrix)
-/(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
-    @invoke /(A::AbstractMatrix, B::typeof(B))
 
 postop_proc(::Ops, C, ::LowerTriangular, ::LowerTriangular) = LowerTriangular(C)
 postop_proc(::Ops, C, ::LowerTriangular, ::UnitLowerTriangular) = LowerTriangular(C)
