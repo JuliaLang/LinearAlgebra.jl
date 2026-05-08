@@ -786,6 +786,9 @@ for Tri in (:UpperTriangular, :LowerTriangular)
             @invoke mul(D::Diagonal, A::AbstractMatrix)
     @eval mul(D::Diagonal, A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}) =
             @invoke mul(D::Diagonal, A::AbstractMatrix)
+    # 3-arg ldiv!
+    @eval ldiv!(C::$Tri, D::Diagonal, A::$Tri) = $Tri(ldiv!(C.data, D, A.data))
+    @eval ldiv!(C::$Tri, D::Diagonal, A::$UTri) = $Tri(_setdiag!(ldiv!(C.data, D, A.data), inv, D.diag))
 end
 
 @inline function kron!(C::AbstractMatrix, A::Diagonal, B::Diagonal)
