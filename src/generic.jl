@@ -2108,7 +2108,7 @@ NaN
 function normalize(a::AbstractArray, p::Real = 2)
     nrm = norm(a, p)
     if !isempty(a)
-        aa = copymutable_oftype(a, float(Base.promote_eltype(a, nrm)))
+        aa = copymutable_oftype(a, float(Base.promote_op(/, eltype(a), typeof(nrm))))
         return __normalize!(aa, nrm)
     else
         T = typeof(zero(eltype(a))/nrm)
