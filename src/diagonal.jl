@@ -332,11 +332,6 @@ Base.literal_pow(::typeof(^), D::Diagonal, valp::Val) =
     Diagonal(Base.literal_pow.(^, D.diag, valp)) # for speed
 Base.literal_pow(::typeof(^), D::Diagonal, ::Val{-1}) = inv(D) # for disambiguation
 
-postop_proc(::typeof(\), C, ::Diagonal, ::LowerOrUnitLowerTriangular) = LowerTriangular(C)
-postop_proc(::typeof(/), C, ::LowerOrUnitLowerTriangular, ::Diagonal) = LowerTriangular(C)
-postop_proc(::typeof(\), C, ::Diagonal, ::UpperOrUnitUpperTriangular) = UpperTriangular(C)
-postop_proc(::typeof(/), C, ::UpperOrUnitUpperTriangular, ::Diagonal) = UpperTriangular(C)
-
 postop_proc(::Ops, C, _, ::Diagonal) = C
 postop_proc(::Ops, C, ::Diagonal, _) = C
 postop_proc(::Ops, C, ::Diagonal, ::Diagonal) = C
@@ -773,17 +768,24 @@ end
 for Tri in (:UpperTriangular, :LowerTriangular)
     UTri = Symbol(:Unit, Tri)
     # 2 args
-    for (fun, f) in zip((:rmul!, :rdiv!, :/), (:identity, :inv, :inv))
-        @eval $fun(A::$Tri, D::Diagonal) = $Tri($fun(A.data, D))
-        @eval $fun(A::$UTri, D::Diagonal) = $Tri(_setdiag!($fun(A.data, D), $f, D.diag))
+    for (fun, f) in zip((:mul, :rmul!, :rdiv!, :/), (:identity, :identity, :inv, :inv))
+        g = fun == :mul ? :* : fun
+        @eval $fun(A::$Tri, D::Diagonal) = $Tri($g(A.data, D))
+        @eval $fun(A::$UTri, D::Diagonal) = $Tri(_setdiag!($g(A.data, D), $f, D.diag))
     end
-    for (fun, f) in zip((:lmul!, :ldiv!, :\), (:identity, :inv, :inv))
-        @eval $fun(D::Diagonal, A::$Tri) = $Tri($fun(D, A.data))
-        @eval $fun(D::Diagonal, A::$UTri) = $Tri(_setdiag!($fun(D, A.data), $f, D.diag))
+    @eval mul(A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
+            @invoke mul(A::AbstractMatrix, D::Diagonal)
+    @eval mul(A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
+            @invoke mul(A::AbstractMatrix, D::Diagonal)
+    for (fun, f) in zip((:mul, :lmul!, :ldiv!, :\), (:identity, :identity, :inv, :inv))
+        g = fun == :mul ? :* : fun
+        @eval $fun(D::Diagonal, A::$Tri) = $Tri($g(D, A.data))
+        @eval $fun(D::Diagonal, A::$UTri) = $Tri(_setdiag!($g(D, A.data), $f, D.diag))
     end
-    # 3-arg ldiv!
-    @eval ldiv!(C::$Tri, D::Diagonal, A::$Tri) = $Tri(ldiv!(C.data, D, A.data))
-    @eval ldiv!(C::$Tri, D::Diagonal, A::$UTri) = $Tri(_setdiag!(ldiv!(C.data, D, A.data), inv, D.diag))
+    @eval mul(D::Diagonal, A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}) =
+            @invoke mul(D::Diagonal, A::AbstractMatrix)
+    @eval mul(D::Diagonal, A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}) =
+            @invoke mul(D::Diagonal, A::AbstractMatrix)
 end
 
 @inline function kron!(C::AbstractMatrix, A::Diagonal, B::Diagonal)
