@@ -162,34 +162,13 @@ end
 
 mul(H::UpperHessenberg, D::Diagonal) = UpperHessenberg(H.data * D)
 mul(D::Diagonal, H::UpperHessenberg) = UpperHessenberg(D * H.data)
-function mul(H::UpperHessenberg, U::UpperOrUnitUpperTriangular)
-    HH = mul!(matprod_dest(H, U, promote_op(matprod, eltype(H), eltype(U))), H, U)
-    UpperHessenberg(HH)
-end
-function mul(U::UpperOrUnitUpperTriangular, H::UpperHessenberg)
-    HH = mul!(matprod_dest(U, H, promote_op(matprod, eltype(U), eltype(H))), U, H)
-    UpperHessenberg(HH)
-end
+
+postop_proc(C, ::UpperHessenberg, ::UpperOrUnitUpperTriangular) = UpperHessenberg(C)
+postop_proc(C, ::UpperOrUnitUpperTriangular, ::UpperHessenberg) = UpperHessenberg(C)
 
 /(H::UpperHessenberg, D::Diagonal) = UpperHessenberg(H.data / D)
-function /(H::UpperHessenberg, U::UpperTriangular)
-    HH = _rdiv!(matprod_dest(H, U, promote_op(/, eltype(H), eltype(U))), H, U)
-    UpperHessenberg(HH)
-end
-\(D::Diagonal, H::UpperHessenberg) = UpperHessenberg(D \ H.data)
-function /(H::UpperHessenberg, U::UnitUpperTriangular)
-    HH = _rdiv!(matprod_dest(H, U, promote_op(/, eltype(H), eltype(U))), H, U)
-    UpperHessenberg(HH)
-end
 
-function \(U::UpperTriangular, H::UpperHessenberg)
-    HH = ldiv!(matprod_dest(U, H, promote_op(\, eltype(U), eltype(H))), U, H)
-    UpperHessenberg(HH)
-end
-function \(U::UnitUpperTriangular, H::UpperHessenberg)
-    HH = ldiv!(matprod_dest(U, H, promote_op(\, eltype(U), eltype(H))), U, H)
-    UpperHessenberg(HH)
-end
+\(D::Diagonal, H::UpperHessenberg) = UpperHessenberg(D \ H.data)
 
 AdjUpperHessenberg{T,S<:UpperHessenberg{T}} = Adjoint{T, S}
 TransUpperHessenberg{T,S<:UpperHessenberg{T}} = Transpose{T, S}
