@@ -332,9 +332,9 @@ Base.literal_pow(::typeof(^), D::Diagonal, valp::Val) =
     Diagonal(Base.literal_pow.(^, D.diag, valp)) # for speed
 Base.literal_pow(::typeof(^), D::Diagonal, ::Val{-1}) = inv(D) # for disambiguation
 
-postop_proc(::Ops, C, _, ::Diagonal) = C
-postop_proc(::Ops, C, ::Diagonal, _) = C
-postop_proc(::Ops, C, ::Diagonal, ::Diagonal) = C
+postop_proc(::MulOrDiv, C, _, ::Diagonal) = C
+postop_proc(::MulOrDiv, C, ::Diagonal, _) = C
+postop_proc(::MulOrDiv, C, ::Diagonal, ::Diagonal) = C
 
 function mul(Da::Diagonal, Db::Diagonal)
     matmul_size_check(size(Da), size(Db))

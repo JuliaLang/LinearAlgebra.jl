@@ -2019,14 +2019,14 @@ for mat in (:AbstractVector, :AbstractMatrix)
     end
 end
 
-postop_proc(::Ops, C, ::LowerTriangular, ::LowerTriangular) = LowerTriangular(C)
-postop_proc(::Ops, C, ::LowerTriangular, ::UnitLowerTriangular) = LowerTriangular(C)
-postop_proc(::Ops, C, ::UnitLowerTriangular, ::LowerTriangular) = LowerTriangular(C)
-postop_proc(::Ops, C, ::UnitLowerTriangular, ::UnitLowerTriangular) = UnitLowerTriangular(C)
-postop_proc(::Ops, C, ::UpperTriangular, ::UpperTriangular) = UpperTriangular(C)
-postop_proc(::Ops, C, ::UpperTriangular, ::UnitUpperTriangular) = UpperTriangular(C)
-postop_proc(::Ops, C, ::UnitUpperTriangular, ::UpperTriangular) = UpperTriangular(C)
-postop_proc(::Ops, C, ::UnitUpperTriangular, ::UnitUpperTriangular) = UnitUpperTriangular(C)
+postop_proc(::MulOrDiv, C, ::LowerTriangular, ::LowerTriangular) = LowerTriangular(C)
+postop_proc(::MulOrDiv, C, ::LowerTriangular, ::UnitLowerTriangular) = LowerTriangular(C)
+postop_proc(::MulOrDiv, C, ::UnitLowerTriangular, ::LowerTriangular) = LowerTriangular(C)
+postop_proc(::MulOrDiv, C, ::UnitLowerTriangular, ::UnitLowerTriangular) = UnitLowerTriangular(C)
+postop_proc(::MulOrDiv, C, ::UpperTriangular, ::UpperTriangular) = UpperTriangular(C)
+postop_proc(::MulOrDiv, C, ::UpperTriangular, ::UnitUpperTriangular) = UpperTriangular(C)
+postop_proc(::MulOrDiv, C, ::UnitUpperTriangular, ::UpperTriangular) = UpperTriangular(C)
+postop_proc(::MulOrDiv, C, ::UnitUpperTriangular, ::UnitUpperTriangular) = UnitUpperTriangular(C)
 
 # Complex matrix power for upper triangular factor, see:
 #   Higham and Lin, "A Schur-Padé algorithm for fractional powers of a Matrix",

@@ -146,14 +146,14 @@ matop_dest(::typeof(/), A, B) = similar(A, promote_op(/, eltype(A), eltype(B)), 
 matop_dest(::typeof(*), A, B) = similar(B, promote_op(matprod, eltype(A), eltype(B)), (size(A, 1), size(B, 2)))
 matop_dest(::typeof(*), A, b::AbstractVector) = similar(b, promote_op(matprod, eltype(A), eltype(b)), axes(A, 1))
 
-const Ops = Union{typeof(*), typeof(\), typeof(/)}
+const MulOrDiv = Union{typeof(*), typeof(\), typeof(/)}
 
 """
     postop_proc(op, C, A, B)
 
 Post-processing of `C`, which is assumed to be the result of `op(A, B)`.
 """
-postop_proc(::Ops, C, _, _) = C
+postop_proc(::MulOrDiv, C, _, _) = C
 
 # optimization for dispatching to BLAS, e.g. *(::Matrix{Float32}, ::Matrix{Float64})
 # but avoiding the case *(::Matrix{<:BlasComplex}, ::Matrix{<:BlasReal})
