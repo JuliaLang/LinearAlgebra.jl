@@ -221,7 +221,10 @@ for (S, H) in ((:Symmetric, :Hermitian), (:Hermitian, :Symmetric))
         end
     end
 end
-
+# zero should forward to the parent array type
+for Wrapper in (:Symmetric, :Hermitian)
+    @eval Base.zero(A::$Wrapper) = $Wrapper(zero(parent(A)), A.uplo)
+end
 convert(::Type{T}, m::Union{Symmetric,Hermitian}) where {T<:Symmetric} = m isa T ? m : T(m)::T
 convert(::Type{T}, m::Union{Symmetric,Hermitian}) where {T<:Hermitian} = m isa T ? m : T(m)::T
 
