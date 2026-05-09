@@ -189,7 +189,7 @@ julia> A = SymTridiagonal([1.; 2.; 1.], [2.; 3.])
 
 julia> eigvals(A, 2:2)
 1-element Vector{Float64}:
- 0.9999999999999996
+ 1.0
 
 julia> eigvals(A)
 3-element Vector{Float64}:
@@ -228,7 +228,7 @@ julia> A = SymTridiagonal([1.; 2.; 1.], [2.; 3.])
 
 julia> eigvals(A, -1, 2)
 1-element Vector{Float64}:
- 1.0000000000000009
+ 1.0000000000000002
 
 julia> eigvals(A)
 3-element Vector{Float64}:

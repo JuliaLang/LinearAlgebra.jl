@@ -1267,9 +1267,6 @@ function _dibimul_nonzeroalpha!(C::Bidiagonal, A::Diagonal, B::Bidiagonal, _add)
     C
 end
 
-mul(A::UpperOrLowerTriangular, B::Bidiagonal) = (C = _mul(A, B); postop_proc(C, A, B))
-mul(A::Bidiagonal, B::UpperOrLowerTriangular) = (C = _mul(A, B); postop_proc(C, A, B))
-
 function dot(x::AbstractVector, B::Bidiagonal, y::AbstractVector)
     require_one_based_indexing(x, y)
     nx, ny = length(x), length(y)
@@ -1341,14 +1338,18 @@ end
 
 ### Generic promotion methods and fallbacks
 \(A::Bidiagonal, B::AbstractVecOrMat) =
-    postop_proc(ldiv!(matop_dest(\, A, B), A, B), A, B)
+    postop_proc(\, ldiv!(matop_dest(\, A, B), A, B), A, B)
 
-postop_proc(C, B::Bidiagonal, ::UpperOrUnitUpperTriangular) = B.uplo == 'U' ? UpperTriangular(C) : C
-postop_proc(C, ::UpperOrUnitUpperTriangular, B::Bidiagonal) = B.uplo == 'U' ? UpperTriangular(C) : C
-postop_proc(C, B::Bidiagonal, ::LowerOrUnitLowerTriangular) = B.uplo == 'L' ? LowerTriangular(C) : C
-postop_proc(C, ::LowerOrUnitLowerTriangular, B::Bidiagonal) = B.uplo == 'L' ? LowerTriangular(C) : C
-postop_proc(C, B::Bidiagonal, ::Diagonal) = B.uplo == 'U' ? UpperTriangular(C) : LowerTriangular(C)
-postop_proc(C, ::Diagonal, B::Bidiagonal) = B.uplo == 'U' ? UpperTriangular(C) : LowerTriangular(C)
+postop_proc(::Union{typeof(*),typeof(\)}, C, B::Bidiagonal, ::UpperOrUnitUpperTriangular) = B.uplo == 'U' ? UpperTriangular(C) : C
+postop_proc(::typeof(/), C, B::Bidiagonal, ::UpperOrUnitUpperTriangular) = B.uplo == 'U' ? UpperTriangular(C) : C
+postop_proc(::Union{typeof(*),typeof(/)}, C, ::UpperOrUnitUpperTriangular, B::Bidiagonal) = B.uplo == 'U' ? UpperTriangular(C) : C
+postop_proc(::typeof(\), C, ::UpperOrUnitUpperTriangular, B::Bidiagonal) = B.uplo == 'U' ? UpperTriangular(C) : C
+postop_proc(::Union{typeof(*),typeof(\)}, C, B::Bidiagonal, ::LowerOrUnitLowerTriangular) = B.uplo == 'L' ? LowerTriangular(C) : C
+postop_proc(::typeof(/), C, B::Bidiagonal, ::LowerOrUnitLowerTriangular) = B.uplo == 'L' ? LowerTriangular(C) : C
+postop_proc(::Union{typeof(*),typeof(/)}, C, ::LowerOrUnitLowerTriangular, B::Bidiagonal) = B.uplo == 'L' ? LowerTriangular(C) : C
+postop_proc(::typeof(\), C, ::LowerOrUnitLowerTriangular, B::Bidiagonal) = B.uplo == 'L' ? LowerTriangular(C) : C
+postop_proc(::typeof(\), C, B::Bidiagonal, ::Diagonal) = B.uplo == 'U' ? UpperTriangular(C) : LowerTriangular(C)
+postop_proc(::typeof(/), C, ::Diagonal, B::Bidiagonal) = B.uplo == 'U' ? UpperTriangular(C) : LowerTriangular(C)
 
 function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     require_one_based_indexing(C, A, B)
@@ -1394,7 +1395,7 @@ end
 rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
 
 /(A::AbstractMatrix, B::Bidiagonal) =
-    postop_proc(_rdiv!(matop_dest(/, A, B), A, B), A, B)
+    postop_proc(/, _rdiv!(matop_dest(/, A, B), A, B), A, B)
 
 # disambiguation
 /(A::AdjointAbsVec, B::Bidiagonal) = adjoint(adjoint(B) \ parent(A))

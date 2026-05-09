@@ -1985,7 +1985,7 @@ function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
     C = matop_dest(*, A, B)
     Ap = (eltype(C) <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, A) : A
     mul!(C, Ap, B)
-    postop_proc(C, Ap, B)
+    postop_proc(*, C, Ap, B)
 end
 function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     require_one_based_indexing(A)
@@ -1995,7 +1995,7 @@ function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     C = matop_dest(*, A, B)
     Bp = (eltype(C) <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, B) : B
     mul!(C, A, Bp)
-    postop_proc(C, A, Bp)
+    postop_proc(*, C, A, Bp)
 end
 mul(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
     @invoke mul(A::typeof(A), B::AbstractMatrix)
@@ -2007,7 +2007,7 @@ for mat in (:AbstractVector, :AbstractMatrix)
         # promote eltype of A in case BLAS becomes accessible
         Ap = (eltype(C) <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, A) : A
         ldiv!(C, Ap, B)
-        postop_proc(C, Ap, B)
+        postop_proc(\, C, Ap, B)
     end
     @eval function /(A::$mat, B::UpperOrLowerTriangular)
         require_one_based_indexing(A)
@@ -2015,24 +2015,18 @@ for mat in (:AbstractVector, :AbstractMatrix)
         # promote eltype of B in case BLAS becomes accessible
         Bp = (eltype(C) <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{eltype(C)}, B) : B
         _rdiv!(C, A, Bp)
-        postop_proc(C, A, Bp)
+        postop_proc(/, C, A, Bp)
     end
 end
-\(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
-    @invoke \(A::typeof(A), B::AbstractMatrix)
-/(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
-    @invoke /(A::AbstractMatrix, B::typeof(B))
 
-
-postop_proc(C, _, _) = C
-postop_proc(C, ::LowerTriangular, ::LowerTriangular) = LowerTriangular(C)
-postop_proc(C, ::LowerTriangular, ::UnitLowerTriangular) = LowerTriangular(C)
-postop_proc(C, ::UnitLowerTriangular, ::LowerTriangular) = LowerTriangular(C)
-postop_proc(C, ::UnitLowerTriangular, ::UnitLowerTriangular) = UnitLowerTriangular(C)
-postop_proc(C, ::UpperTriangular, ::UpperTriangular) = UpperTriangular(C)
-postop_proc(C, ::UpperTriangular, ::UnitUpperTriangular) = UpperTriangular(C)
-postop_proc(C, ::UnitUpperTriangular, ::UpperTriangular) = UpperTriangular(C)
-postop_proc(C, ::UnitUpperTriangular, ::UnitUpperTriangular) = UnitUpperTriangular(C)
+postop_proc(::MulOrDiv, C, ::LowerTriangular, ::LowerTriangular) = LowerTriangular(C)
+postop_proc(::MulOrDiv, C, ::LowerTriangular, ::UnitLowerTriangular) = LowerTriangular(C)
+postop_proc(::MulOrDiv, C, ::UnitLowerTriangular, ::LowerTriangular) = LowerTriangular(C)
+postop_proc(::MulOrDiv, C, ::UnitLowerTriangular, ::UnitLowerTriangular) = UnitLowerTriangular(C)
+postop_proc(::MulOrDiv, C, ::UpperTriangular, ::UpperTriangular) = UpperTriangular(C)
+postop_proc(::MulOrDiv, C, ::UpperTriangular, ::UnitUpperTriangular) = UpperTriangular(C)
+postop_proc(::MulOrDiv, C, ::UnitUpperTriangular, ::UpperTriangular) = UpperTriangular(C)
+postop_proc(::MulOrDiv, C, ::UnitUpperTriangular, ::UnitUpperTriangular) = UnitUpperTriangular(C)
 
 # Complex matrix power for upper triangular factor, see:
 #   Higham and Lin, "A Schur-Padé algorithm for fractional powers of a Matrix",
