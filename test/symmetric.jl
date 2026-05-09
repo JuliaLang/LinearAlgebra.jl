@@ -1381,4 +1381,19 @@ end
     @test LinearAlgebra.uplo(H) == :L
 end
 
+@testset "zero forwarding" begin
+    struct MyWrap{T} <: AbstractArray{T,2}
+        parent::Matrix{T}
+    end
+    Base.size(A::MyWrap) = size(A.parent)
+    Base.getindex(A::MyWrap, i, j) = A.parent[i,j]
+    Base.zero(A::MyWrap) = MyWrap(zero(A.parent))
+
+    S = Symmetric(MyWrap([1 2; 2 3]))
+    @test parent(zero(S)) isa MyWrap
+
+    H = Hermitian(MyWrap([1 2; 2 3]))
+    @test parent(zero(H)) isa MyWrap
+end
+
 end # module TestSymmetric
