@@ -1381,19 +1381,20 @@ end
     @test LinearAlgebra.uplo(H) == :L
 end
 
+# For testing zero forwarding to parent array type
+struct ZeroTestWrap{T} <: AbstractArray{T,2}
+    parent::Matrix{T}
+end
+Base.size(A::ZeroTestWrap) = size(A.parent)
+Base.getindex(A::ZeroTestWrap, i, j) = A.parent[i,j]
+Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
+
 @testset "zero forwarding" begin
-    struct MyWrap{T} <: AbstractArray{T,2}
-        parent::Matrix{T}
-    end
-    Base.size(A::MyWrap) = size(A.parent)
-    Base.getindex(A::MyWrap, i, j) = A.parent[i,j]
-    Base.zero(A::MyWrap) = MyWrap(zero(A.parent))
+    S = Symmetric(ZeroTestWrap([1 2; 2 3]))
+    @test parent(zero(S)) isa ZeroTestWrap
 
-    S = Symmetric(MyWrap([1 2; 2 3]))
-    @test parent(zero(S)) isa MyWrap
-
-    H = Hermitian(MyWrap([1 2; 2 3]))
-    @test parent(zero(H)) isa MyWrap
+    H = Hermitian(ZeroTestWrap([1 2; 2 3]))
+    @test parent(zero(H)) isa ZeroTestWrap
 end
 
 end # module TestSymmetric
