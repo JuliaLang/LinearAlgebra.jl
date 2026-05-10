@@ -123,7 +123,12 @@ Base.iterate(S::Union{Eigen,GeneralizedEigen}) = (S.values, Val(:vectors))
 Base.iterate(S::Union{Eigen,GeneralizedEigen}, ::Val{:vectors}) = (S.vectors, Val(:done))
 Base.iterate(S::Union{Eigen,GeneralizedEigen}, ::Val{:done}) = nothing
 
-isposdef(A::Union{Eigen,GeneralizedEigen}) = isreal(A.values) && all(x -> x > 0, A.values)
+function isposdef(A::Union{Eigen,GeneralizedEigen})
+    if A isa Eigen && length(A.values) != size(A.vectors, 1)
+        throw(ArgumentError("isposdef not defined for truncated eigen factorization"))
+    end
+    return isreal(A.values) && all(x -> x > 0, A.values)
+end
 
 # pick a canonical ordering to avoid returning eigenvalues in "random" order
 # as is the LAPACK default (for complex λ — LAPACK sorts by λ for the Hermitian/Symmetric case)
@@ -428,8 +433,19 @@ function eigmin(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Boo
     return minimum(v)
 end
 
-inv(A::Eigen) = A.vectors * inv(Diagonal(A.values)) / A.vectors
-det(A::Eigen) = prod(A.values)
+function inv(A::Eigen)
+    if length(A.values) != size(A.vectors, 1)
+        throw(ArgumentError("inv not defined for truncated eigen factorization"))
+    end
+    return A.vectors * inv(Diagonal(A.values)) / A.vectors
+end
+
+function det(A::Eigen)
+    if length(A.values) != size(A.vectors, 1)
+        throw(ArgumentError("det not defined for truncated eigen factorization"))
+    end
+    return prod(A.values)
+end
 
 # Generalized eigenproblem
 function eigen!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function,Nothing}=eigsortby) where T<:BlasReal
