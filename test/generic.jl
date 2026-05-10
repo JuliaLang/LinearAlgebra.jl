@@ -495,6 +495,18 @@ end
                        [0.0 + 0.0im, 0.0 - 0.0im, NaN + NaN*im]))
 end
 
+@testset "normalize array of arrays" begin
+    a = [[1,2], [3,4]]
+    for Tr in (Int32, Int64, Float32, Float64)
+        for T in (Tr, Complex{Tr})
+            b = convert(Vector{Vector{T}}, a)
+            @test normalize(b) == normalize!(copy(b))
+            @test norm(normalize(b)) == 1.0
+            @inferred normalize(b)
+        end
+    end
+end
+
 @testset "Issue 14657" begin
     @test det([true false; false true]) == det(Matrix(1I, 2, 2))
 end
