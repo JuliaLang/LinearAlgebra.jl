@@ -5,6 +5,7 @@ module TestTridiagonal
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
+import LinearAlgebra: eigsortby, sorteig!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
