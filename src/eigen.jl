@@ -184,7 +184,7 @@ end
 Compute the eigenvalue decomposition of `A`, returning an [`Eigen`](@ref) factorization object `F`
 which contains the eigenvalues in `F.values` and the normalized eigenvectors in the columns of the
 matrix `F.vectors`. This corresponds to solving an eigenvalue problem of the form
-`Ax =  λx`, where `A` is a matrix, `x` is an eigenvector, and `λ` is an eigenvalue.
+`Ax = λx`, where `A` is a matrix, `x` is an eigenvector, and `λ` is an eigenvalue.
 (The `k`th eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
@@ -198,9 +198,8 @@ make rows and columns more equal in norm. The default is `true` for both options
 
 By default, the eigenvalues and vectors are sorted lexicographically by `(real(λ),imag(λ))`.
 A different comparison function `by(λ)` can be passed to `sortby`, or you can pass
-`sortby=nothing` to leave the eigenvalues in an arbitrary order.   Some special matrix types
-(e.g. [`Diagonal`](@ref) or [`SymTridiagonal`](@ref)) may implement their own sorting convention and not
-accept a `sortby` keyword.
+`sortby=nothing` to leave the eigenvalues in an arbitrary order. Some special matrix types
+(e.g. [`Diagonal`](@ref)) may have a different default.
 
 # Examples
 ```jldoctest
@@ -476,7 +475,7 @@ Compute the generalized eigenvalue decomposition of `A` and `B`, returning a
 [`GeneralizedEigen`](@ref) factorization object `F` which contains the generalized eigenvalues in
 `F.values` and the generalized eigenvectors in the columns of the matrix `F.vectors`.
 This corresponds to solving a generalized eigenvalue problem of the form
-`Ax =  λBx`, where `A, B` are matrices, `x` is an eigenvector, and `λ` is an eigenvalue.
+`Ax = λBx`, where `A, B` are matrices, `x` is an eigenvector, and `λ` is an eigenvalue.
 (The `k`th generalized eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.

@@ -139,7 +139,7 @@ function eigvals!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}; alg::Al
 end
 
 """
-    eigvals(A::Union{Hermitian, Symmetric}; alg::Algorithm = default_eigen_alg(A))) -> values
+    eigvals(A::Union{Hermitian, Symmetric}; alg::Algorithm = default_eigen_alg(A)) -> values
 
 Return the eigenvalues of `A`.
 
