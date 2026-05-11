@@ -162,17 +162,19 @@ isposdef(J::UniformScaling) = isposdef(J.λ)
 (-)(A::AbstractMatrix, J::UniformScaling)   = A + (-J)
 
 # matrix functions
-for f in ( :exp,   :log, :cis,
-           :expm1, :log1p,
-           :sqrt,  :cbrt,
-           :sin,   :cos,   :tan,
-           :asin,  :acos,  :atan,
-           :csc,   :sec,   :cot,
-           :acsc,  :asec,  :acot,
-           :sinh,  :cosh,  :tanh,
-           :asinh, :acosh, :atanh,
-           :csch,  :sech,  :coth,
-           :acsch, :asech, :acoth )
+for f in (:exp, :log, :cis,
+          :expm1, :log1p,
+          :sqrt, :cbrt,
+          :sin, :cos, :tan,
+          :asin, :acos, :atan,
+          :csc, :sec, :cot,
+          :acsc, :asec, :acot,
+          :sinh, :cosh, :tanh,
+          :asinh, :acosh, :atanh,
+          :csch, :sech, :coth,
+          :acsch, :asech, :acoth,
+          :abs, :abs2, :log2, :log10,
+          :sinpi, :cospi )
     @eval Base.$f(J::UniformScaling) = UniformScaling($f(J.λ))
 end
 for f in (:sincos, :sincosd)
