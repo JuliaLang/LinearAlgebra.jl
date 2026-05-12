@@ -125,12 +125,11 @@ end
     matprod_dest(A, B, T)
 
 Return an appropriate `AbstractArray` with element type `T` that may be used to store the result of `A * B`.
-This function is only kept for backwards compatibility, use `matop_dest` instead.
 
 !!! compat "Julia 1.11"
     This function requires at least Julia 1.11.
 """
-matprod_dest(A, B, T) = convert(AbstractArray{T}, matop_dest(*, A, B))
+matprod_dest(A, B, T) = similar(B, T, (size(A, 1), size(B, 2)))
 
 """
     matop_dest(op, A, B)
@@ -138,12 +137,16 @@ matprod_dest(A, B, T) = convert(AbstractArray{T}, matop_dest(*, A, B))
 Return an appropriate `AbstractArray` that may be used to store the result of `op(A, B)`,
 where `op` is one of `*`, `/`, or `\\`.
 
+For `op === *`, this defaults to calling [`matprod_dest`](@ref), so packages that
+already specialize `matprod_dest` to control the destination of `A * B` continue
+to do so.
+
 !!! compat "Julia 1.14"
     This function requires at least Julia 1.14.
 """
 matop_dest(::typeof(\), A, B) = similar(B, promote_op(\, eltype(A), eltype(B)), size(B))
 matop_dest(::typeof(/), A, B) = similar(A, promote_op(/, eltype(A), eltype(B)), size(A))
-matop_dest(::typeof(*), A, B) = similar(B, promote_op(matprod, eltype(A), eltype(B)), (size(A, 1), size(B, 2)))
+matop_dest(::typeof(*), A, B::AbstractMatrix) = matprod_dest(A, B, promote_op(matprod, eltype(A), eltype(B)))
 matop_dest(::typeof(*), A, b::AbstractVector) = similar(b, promote_op(matprod, eltype(A), eltype(b)), axes(A, 1))
 
 const MulOrDiv = Union{typeof(*), typeof(\), typeof(/)}

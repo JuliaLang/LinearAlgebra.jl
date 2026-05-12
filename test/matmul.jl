@@ -333,6 +333,25 @@ end
     @test LinearAlgebra.generic_matmatmul!(zeros(2, 2), 'N', 'T', A, B, 1.0, 0.0) ≈ A * transpose(B)
 end
 
+# Ensure that an out-of-tree `matprod_dest` overload is honored by `*`.
+# This is a regression test for the SparseArrays performance regression caused by
+# routing `*` through `matop_dest` without a fallback to `matprod_dest`.
+struct MatProdDestMarker{T} <: AbstractMatrix{T}
+    data::Matrix{T}
+end
+Base.size(A::MatProdDestMarker) = size(A.data)
+Base.getindex(A::MatProdDestMarker, i::Int, j::Int) = A.data[i, j]
+const matprod_dest_called = Ref(0)
+LinearAlgebra.matprod_dest(A::MatProdDestMarker, B::AbstractMatrix, T) =
+    (matprod_dest_called[] += 1; similar(A.data, T, (size(A, 1), size(B, 2))))
+@testset "matprod_dest overrides are respected by *" begin
+    A = MatProdDestMarker(rand(2, 2))
+    B = rand(2, 2)
+    matprod_dest_called[] = 0
+    @test A * B ≈ A.data * B
+    @test matprod_dest_called[] == 1
+end
+
 @testset "fallbacks & such for BlasFloats" begin
     AA = rand(Float64, 6, 6)
     BB = rand(Float64, 6, 6)
