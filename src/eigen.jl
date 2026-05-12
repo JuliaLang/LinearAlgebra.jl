@@ -144,7 +144,8 @@ function sorteig!(λ::AbstractVector, X::AbstractMatrix, sortby::Union{Function,
 end
 sorteig!(λ::AbstractVector, sortby::Union{Function,Nothing}=eigsortby) = sortby === nothing ? λ : sort!(λ, by=sortby)
 
-# similar to geevx!, normalize eigenvectors to unit length and make largest component real and positive
+# similar to geevx! (specifically zgeevx), normalize eigenvectors to unit length
+# and make largest component real and positive
 function eigvec_normalize!(v::AbstractVector)
     normalize!(v)
     maxabs2, k = findmax(abs2, v) # largest component
