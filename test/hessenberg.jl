@@ -331,10 +331,21 @@ end
         F = eigen(H)
         @test λ ≈ eigvals(Matrix(H)) ≈ F.values
         @test H * F.vectors ≈ F.vectors * Diagonal(λ)
+        @test F.vectors ≈ eigvecs(Matrix(H)) # normalization should be same
         if T <: LinearAlgebra.BlasFloat
             λ2 = @invoke eigvals!(copy(H)::UpperHessenberg) # test fallback
             @test λ ≈ λ2
         end
+    end
+
+    # be sure to test real-H cases with both purely real and complex eigvals
+    for H in (UpperHessenberg([-1.1 -0.3 -0.0 -0.6 0.5; -0.6 -1.8 -0.3 1.5 1.1; 0.0 1.8 -0.6 1.2 0.9; 0.0 0.0 -0.1 -0.5 -0.2; 0.0 0.0 0.0 -0.5 -1.7]),
+              UpperHessenberg([-0.6 1.0 0.4 0.4 0.3; 1.2 -0.2 -1.5 0.7 0.0; 0.0 -1.3 -1.0 0.5 0.2; 0.0 0.0 0.5 -0.6 0.0; 0.0 0.0 0.0 0.7 -1.5]))
+        λ = eigvals(H)
+        F = eigen(H)
+        @test λ ≈ eigvals(Matrix(H)) ≈ F.values
+        @test H * F.vectors ≈ F.vectors * Diagonal(λ)
+        @test F.vectors ≈ eigvecs(Matrix(H)) # normalization should be same
     end
 end
 
