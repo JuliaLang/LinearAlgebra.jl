@@ -337,6 +337,7 @@ end
             F2 = @invoke eigen!(copy(H)::UpperHessenberg{T, <:StridedMatrix{T}}) # fallback
             @test λ ≈ λ2 ≈ F2.values
             @test H * F2.vectors ≈ F2.vectors * Diagonal(λ)
+            @test Diagonal(F2.vectors' * F2.vectors) ≈ I
         end
     end
 
