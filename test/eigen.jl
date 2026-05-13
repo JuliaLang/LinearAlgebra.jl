@@ -306,4 +306,12 @@ end
     @test Base.summarysize(V) == Base.summarysize(V1)
 end
 
+@testset "truncated eigen checks" begin
+    A = Symmetric([4.0 2.0; 2.0 3.0])
+    F = eigen(A, 1:1)
+    @test_throws ArgumentError det(F)
+    @test_throws ArgumentError inv(F)
+    @test_throws ArgumentError isposdef(F)
+end
+
 end # module TestEigen
