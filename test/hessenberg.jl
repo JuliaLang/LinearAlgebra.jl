@@ -334,7 +334,7 @@ end
         @test Diagonal(F.vectors' * F.vectors) ≈ I
         if T <: LinearAlgebra.BlasFloat
             λ2 = @invoke eigvals!(copy(H)::UpperHessenberg) # test fallback
-            F2 = @invoke eigen!(copy(H)::UpperHessenberg{T, <:StridedMatrix{T}}) # fallback
+            F2 = @invoke eigen!(copy(H)::UpperHessenberg) # fallback
             @test λ ≈ λ2 ≈ F2.values
             @test H * F2.vectors ≈ F2.vectors * Diagonal(λ)
             @test Diagonal(F2.vectors' * F2.vectors) ≈ I
