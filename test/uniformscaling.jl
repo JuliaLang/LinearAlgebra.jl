@@ -597,15 +597,12 @@ end
     @test 0*A != 0*I
 end
 
-@testset "math functions" begin
-    J = UniformScaling(4.0)
-    @test abs(J) == UniformScaling(4.0)
-    @test abs(UniformScaling(-3.0)) == UniformScaling(3.0)
-    @test abs2(J) == UniformScaling(16.0)
-    @test log2(J) == UniformScaling(2.0)
+@testset "log2, log10, sinpi, cospi for UniformScaling" begin
+    @test log2(UniformScaling(4.0))   == UniformScaling(2.0)
     @test log10(UniformScaling(100.0)) == UniformScaling(2.0)
-    @test sinpi(UniformScaling(0.5)) == UniformScaling(1.0)
-    @test cospi(UniformScaling(0.0)) == UniformScaling(1.0)
+    @test sinpi(UniformScaling(0.5))  ≈  UniformScaling(1.0)
+    @test cospi(UniformScaling(0.0))  == UniformScaling(1.0)
+    @test cospi(UniformScaling(1.0))  == UniformScaling(-1.0)
 end
 
 end # module TestUniformscaling

@@ -173,8 +173,8 @@ for f in (:exp, :log, :cis,
           :asinh, :acosh, :atanh,
           :csch, :sech, :coth,
           :acsch, :asech, :acoth,
-          :abs, :abs2, :log2, :log10,
-          :sinpi, :cospi )
+          :log2, :log10,
+          :sinpi, :cospi)
     @eval Base.$f(J::UniformScaling) = UniformScaling($f(J.λ))
 end
 for f in (:sincos, :sincosd)
