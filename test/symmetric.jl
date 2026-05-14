@@ -1390,11 +1390,12 @@ Base.getindex(A::ZeroTestWrap, i, j) = A.parent[i,j]
 Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
 
 @testset "zero forwarding" begin
-    S = Symmetric(ZeroTestWrap([1 2; 2 3]))
-    @test parent(zero(S)) isa ZeroTestWrap
-
-    H = Hermitian(ZeroTestWrap([1 2; 2 3]))
-    @test parent(zero(H)) isa ZeroTestWrap
+    for T in (Symmetric, Hermitian)
+        Z = zero(T(ZeroTestWrap([1 2; 2 3])))
+        @test Z isa T
+        @test parent(Z) isa ZeroTestWrap
+        @test iszero(Z)
+    end
 end
 
 end # module TestSymmetric
