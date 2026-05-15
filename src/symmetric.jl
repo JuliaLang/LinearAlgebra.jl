@@ -501,9 +501,6 @@ transpose(A::Hermitian{<:Real}) = A
 
 real(A::Symmetric{<:Real}) = A
 real(A::Hermitian{<:Real}) = A
-real(A::Symmetric) = Symmetric(parentof_applytri(real, A), _sym_uplo(A.uplo))
-real(A::Hermitian) = Hermitian(parentof_applytri(real, A), _sym_uplo(A.uplo))
-imag(A::Symmetric) = Symmetric(parentof_applytri(imag, A), _sym_uplo(A.uplo))
 
 Base.copy(A::Adjoint{<:Any,<:Symmetric}) =
     Symmetric(copy(adjoint(A.parent.data)), ifelse(A.parent.uplo == 'U', :L, :U))
@@ -512,10 +509,6 @@ Base.copy(A::Transpose{<:Any,<:Hermitian}) =
 
 tr(A::Symmetric{<:Number}) = tr(A.data) # to avoid AbstractMatrix fallback (incl. allocations)
 tr(A::Hermitian{<:Number}) = real(tr(A.data))
-
-Base.conj(A::Symmetric) = Symmetric(parentof_applytri(conj, A), _sym_uplo(A.uplo))
-Base.conj(A::Hermitian) = Hermitian(parentof_applytri(conj, A), _sym_uplo(A.uplo))
-Base.conj!(A::HermOrSym) = typeof(A)(parentof_applytri(conj!, A), A.uplo)
 
 # tril/triu
 function tril(A::Hermitian, k::Integer=0)
