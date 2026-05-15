@@ -37,6 +37,8 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Diagonal}, ::StructuredMatrix
     StructuredMatrixStyle{Symmetric}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Diagonal}, ::StructuredMatrixStyle{Hermitian{<:Real}}) =
     StructuredMatrixStyle{Symmetric}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal{<:Real}}, ::StructuredMatrixStyle{Hermitian{<:Real}}) =
+    StructuredMatrixStyle{Hermitian}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal{<:Real}}, ::StructuredMatrixStyle{<:Hermitian}) =
     StructuredMatrixStyle{Hermitian}()
 
@@ -55,6 +57,8 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:SymTridiagonal}, ::Structured
     StructuredMatrixStyle{Symmetric}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:SymTridiagonal}, ::StructuredMatrixStyle{Hermitian{<:Real}}) =
     StructuredMatrixStyle{Symmetric}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal{<:Real}}, ::StructuredMatrixStyle{Hermitian{<:Real}}) =
+    StructuredMatrixStyle{Hermitian}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal{<:Real}}, ::StructuredMatrixStyle{<:Hermitian}) =
     StructuredMatrixStyle{Hermitian}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Tridiagonal}, ::StructuredMatrixStyle{<:Union{Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal}}) =
@@ -85,10 +89,10 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLow
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular,UpperHessenberg}}, ::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}) =
     StructuredMatrixStyle{Matrix}()
 
-Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Symmetric}, ::StructuredMatrixStyle{<:Union{Diagonal,SymTridiagonal,Hermitian{<:Real}}}) =
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Symmetric}, ::StructuredMatrixStyle{<:Union{Diagonal,SymTridiagonal,Symmetric,Hermitian{<:Real}}}) =
     StructuredMatrixStyle{Symmetric}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Symmetric{<:Real}}, ::StructuredMatrixStyle{Hermitian{<:Real}}) =
-    StructuredMatrixStyle{Symmetric}()
+    StructuredMatrixStyle{Hermitian}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Symmetric{<:Real}}, ::StructuredMatrixStyle{<:Hermitian}) =
     StructuredMatrixStyle{Hermitian}()
 
@@ -96,7 +100,9 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{Hermitian{<:Real}}, ::Structure
     StructuredMatrixStyle{Hermitian}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Hermitian{<:Real}}, ::StructuredMatrixStyle{<:Union{Diagonal,SymTridiagonal,Symmetric}}) =
     StructuredMatrixStyle{Symmetric}()
-Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Hermitian}, ::StructuredMatrixStyle{<:Union{Diagonal{<:Real},SymTridiagonal{<:Real},Symmetric{<:Real},Hermitian{<:Real}}}) =
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Hermitian{<:Real}}, ::StructuredMatrixStyle{<:Union{Diagonal{<:Real},SymTridiagonal{<:Real},Symmetric{<:Real}}}) =
+    StructuredMatrixStyle{Hermitian}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Hermitian}, ::StructuredMatrixStyle{<:Union{Diagonal{<:Real},SymTridiagonal{<:Real},Symmetric{<:Real},Hermitian}}) =
     StructuredMatrixStyle{Hermitian}()
 
 # Make sure that `StructuredMatrixStyle{Matrix}` doesn't ever end up falling
@@ -228,7 +234,8 @@ end
 
 const HermitianPreservingFunction = Union{
     typeof(+),typeof(-),typeof(*),typeof(/),
-    typeof(real),typeof(conj)
+    typeof(abs),typeof(abs2),typeof(real),typeof(conj),
+    typeof(exp),typeof(sin),typeof(cos)
 }
 
 # Like sparse matrices, we assume that the zero-preservation property of a broadcasted
@@ -320,7 +327,10 @@ isvalidstructbc(dest::Bidiagonal, bc::Broadcasted{StructuredMatrixStyle{Bidiagon
     (size(dest, 1) < 2 || find_uplo(bc) == dest.uplo) &&
     (isstructurepreserving(bc) || fzeropreserving(bc))
 
-isvalidstructbc(dest::Symmetric, bc::Broadcasted{StructuredMatrixStyle{Symmetric}}) =
+isvalidstructbc(dest::Symmetric, bc::Broadcasted{StructuredMatrixStyle{T}}) where {T<:Symmetric} =
+    find_uplo(bc) == dest.uplo
+
+isvalidstructbc(dest::Hermitian, bc::Broadcasted{StructuredMatrixStyle{T}}) where {T<:Hermitian} =
     find_uplo(bc) == dest.uplo
 
 @inline function getindex(bc::Broadcasted, b::BandIndex)
@@ -491,17 +501,10 @@ end
 function copyto!(dest::Union{Symmetric,Hermitian}, bc::Broadcasted{Nothing})
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
-    if dest.uplo == 'U'
-        for j in axs[2]
-            for i in 1:j
-                @inbounds dest.data[i, j] = bc[CartesianIndex(i, j)]
-            end
-        end
-    else
-        for j in axs[2]
-            for i in j:axs[1][end]
-                @inbounds dest.data[i,j] = bc[CartesianIndex(i, j)]
-            end
+    #uplo is always :U in this case
+    for j in axs[2]
+        for i in 1:j
+            @inbounds dest.data[i, j] = bc[CartesianIndex(i, j)]
         end
     end
     return dest

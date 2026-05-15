@@ -467,4 +467,118 @@ end
     @test copy(bc2) isa Diagonal
 end
 
+@testset "Symmetric/Hermitian broadcasting scalar" begin
+    S = Symmetric(randn(ComplexF64, 3,3))
+    H = Hermitian(randn(ComplexF64, 3,3))
+    for f in (abs, abs2, real, conj, exp, sin, cos)
+        for M in (S, H)
+            fM = broadcast(f, M)
+            @test fM isa LinearAlgebra.wrappertype(M)
+            @test fM == broadcast(f, Matrix(M))
+        end
+    end
+    for f in (log, sqrt, imag)
+        for M in (S, H)
+            fM = broadcast(f, M)
+            if M isa Symmetric
+                @test fM isa Symmetric
+            end
+            @test fM == broadcast(f, Matrix(M))
+        end
+    end
+    for f in (+, -, *, /)
+        for k in (2, 2im)
+            fS = broadcast(f, S, k)
+            @test fS isa Symmetric
+            @test fS == broadcast(f, Matrix(S), k)
+        end
+        fH = broadcast(f, H, 2)
+        @test fH isa Hermitian
+        @test fH == broadcast(f, Matrix(H), 2)
+        fH = broadcast(f, H, 2im)
+        @test fH == broadcast(f, Matrix(H), 2im)
+    end
+end
+
+@testset "Symmetric/Hermitian broadcasting matrix" begin
+    Dr = Diagonal(randn(3))
+    Dc = Diagonal(randn(ComplexF64, 3))
+    Tr = SymTridiagonal(randn(3),randn(2))
+    Tc = SymTridiagonal(randn(ComplexF64, 3),randn(ComplexF64, 2))
+    Sr = Symmetric(randn(3,3))
+    Sc = Symmetric(randn(ComplexF64, 3,3))
+    Hr = Hermitian(randn(3,3))
+    Hc = Hermitian(randn(ComplexF64, 3,3))
+    # Diagonal, Symmetric
+    @test Dr .+ Sr isa Symmetric{<:Real}
+    @test Dr .+ Sr == Matrix(Dr) + Matrix(Sr)
+    @test Dr .+ Sc isa Symmetric
+    @test Dr .+ Sc == Matrix(Dr) + Matrix(Sc)
+    @test Dc .+ Sr isa Symmetric
+    @test Dc .+ Sr == Matrix(Dc) + Matrix(Sr)
+    @test Dc .+ Sc isa Symmetric
+    @test Dc .+ Sc == Matrix(Dc) + Matrix(Sc)
+    # Diagonal, Hermitian
+    @test Dr .+ Hr isa Hermitian{<:Real}
+    @test Dr .+ Hr == Matrix(Dr) + Matrix(Hr)
+    @test Dr .+ Hc isa Hermitian
+    @test Dr .+ Hc == Matrix(Dr) + Matrix(Hc)
+    @test Dc .+ Hr isa Symmetric
+    @test Dc .+ Hr == Matrix(Dc) + Matrix(Hr)
+    @test Dc .+ Hc == Matrix(Dc) + Matrix(Hc)
+    # SymTridiagonal, Symmetric
+    @test Tr .+ Sr isa Symmetric{<:Real}
+    @test Tr .+ Sr == Matrix(Tr) + Matrix(Sr)
+    @test Tr .+ Sc isa Symmetric
+    @test Tr .+ Sc == Matrix(Tr) + Matrix(Sc)
+    @test Tc .+ Sr isa Symmetric
+    @test Tc .+ Sr == Matrix(Tc) + Matrix(Sr)
+    @test Tc .+ Sc isa Symmetric
+    @test Tc .+ Sc == Matrix(Tc) + Matrix(Sc)
+    # SymTridiagonal, Hermitian
+    @test Tr .+ Hr isa Hermitian{<:Real}
+    @test Tr .+ Hr == Matrix(Tr) + Matrix(Hr)
+    @test Tr .+ Hc isa Hermitian
+    @test Tr .+ Hc == Matrix(Tr) + Matrix(Hc)
+    @test Tc .+ Hr isa Symmetric
+    @test Tc .+ Hr == Matrix(Tc) + Matrix(Hr)
+    @test Tc .+ Hc == Matrix(Tc) + Matrix(Hc)
+    for uplo1 in (:U, :L), uplo2 in (:U, :L)
+        # Symmetric, Hermitian
+        Sr = Symmetric(randn(3,3), uplo1)
+        Sc = Symmetric(randn(ComplexF64, 3,3), uplo1)
+        Hr = Hermitian(randn(3,3), uplo2)
+        Hc = Hermitian(randn(ComplexF64, 3,3), uplo2)
+        @test Sr .+ Hr isa Hermitian{<:Real}
+        @test Sr .+ Hr == Matrix(Sr) + Matrix(Hr)
+        @test Sr .+ Hc isa Hermitian
+        @test Sr .+ Hc == Matrix(Sr) + Matrix(Hc)
+        @test Sc .+ Hr isa Symmetric
+        @test Sc .+ Hr == Matrix(Sc) + Matrix(Hr)
+        @test Sc .+ Hc == Matrix(Sc) + Matrix(Hc)
+        # Symmetric, Symmetric
+        Sr1 = Symmetric(randn(3,3), uplo1)
+        Sc1 = Symmetric(randn(ComplexF64, 3,3), uplo1)
+        Sr2 = Symmetric(randn(3,3), uplo2)
+        Sc2 = Symmetric(randn(ComplexF64, 3,3), uplo2)
+        @test Sr1 .+ Sr2 isa Symmetric{<:Real}
+        @test Sr1 .+ Sr2 == Matrix(Sr1) + Matrix(Sr2)
+        @test Sr1 .+ Sc2 isa Symmetric
+        @test Sr1 .+ Sc2 == Matrix(Sr1) + Matrix(Sc2)
+        @test Sc1 .+ Sc2 isa Symmetric
+        @test Sc1 .+ Sc2 == Matrix(Sc1) + Matrix(Sc2)
+        # Hermitian, Hermitian
+        Hr1 = Hermitian(randn(3,3), uplo1)
+        Hc1 = Hermitian(randn(ComplexF64, 3,3), uplo1)
+        Hr2 = Hermitian(randn(3,3), uplo2)
+        Hc2 = Hermitian(randn(ComplexF64, 3,3), uplo2)
+        @test Hr1 .+ Hr2 isa Hermitian{<:Real}
+        @test Hr1 .+ Hr2 == Matrix(Hr1) + Matrix(Hr2)
+        @test Hr1 .+ Hc2 isa Hermitian
+        @test Hr1 .+ Hc2 == Matrix(Hr1) + Matrix(Hc2)
+        @test Hc1 .+ Hc2 isa Hermitian
+        @test Hc1 .+ Hc2 == Matrix(Hc1) + Matrix(Hc2)
+    end
+end
+
 end
