@@ -704,6 +704,7 @@ end
         V = eigvecs(U)
         λ = eigvals(U)
         @test U * V ≈ V * Diagonal(λ)
+        @test all(v -> norm(v) ≈ 1, eachcol(V))
 
         MU = MyTriangular(U)
         V = eigvecs(U)

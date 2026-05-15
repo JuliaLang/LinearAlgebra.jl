@@ -429,7 +429,7 @@ function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, 
     _, Z, vals = LAPACK.hseqr!(H.data)
     LAPACK.trevc!('R', 'B', BlasInt[], H.data, Z, Z) # set Z to right eigenvecs
     LAPACK.gebak!(scale ? 'S' : 'N', 'R', ilo, ihi, s, Z) # undo balancing
-    foreach(eigvec_normalize!, eachcol(Z)) # normalize eigenvecs
+    eigvec_normalize!(Z)
     return Eigen(sorteig!(vals, Z, sortby)...)
 end
 
@@ -439,7 +439,7 @@ function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, 
     LAPACK.trevc!('R', 'B', BlasInt[], H.data, Z, Z) # set Z to right eigenvecs (for complex, see below)
     LAPACK.gebak!(scale ? 'S' : 'N', 'R', ilo, ihi, s, Z) # undo balancing
     if isreal(vals)
-        foreach(eigvec_normalize!, eachcol(Z)) # normalize eigenvecs
+        eigvec_normalize!(Z)
         return Eigen(sorteig!(real(vals), Z, sortby)...)
     else # complex eigenvalues: real/imag eigenvec parts stored in consecutive cols of Z
         V = complex(Z)
@@ -455,7 +455,7 @@ function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, 
                 k += 2
             end
         end
-        foreach(eigvec_normalize!, eachcol(V)) # normalize eigenvecs
+        eigvec_normalize!(V)
         return Eigen(sorteig!(vals, V, sortby)...)
     end
 end

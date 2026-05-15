@@ -157,6 +157,7 @@ function eigvec_normalize!(v::AbstractVector)
     end
     return v
 end
+eigvec_normalize!(X::AbstractMatrix) = (foreach(eigvec_normalize!, eachcol(X)); X)
 
 """
     eigen!(A; permute, scale, sortby)
