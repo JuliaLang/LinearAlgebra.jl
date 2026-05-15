@@ -423,7 +423,42 @@ function eigvals!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false
     return sorteig!(isreal(vals) ? real(vals) : vals, sortby)
 end
 
-# to do: faster eigen!(::UpperHessenberg)
+
+function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasComplex}
+    ilo, ihi, s = LAPACK.gebal!(scale ? 'S' : 'N', triu!(H.data, -1)) # balance by scaling
+    _, Z, vals = LAPACK.hseqr!(H.data)
+    LAPACK.trevc!('R', 'B', BlasInt[], H.data, Z, Z) # set Z to right eigenvecs
+    LAPACK.gebak!(scale ? 'S' : 'N', 'R', ilo, ihi, s, Z) # undo balancing
+    foreach(eigvec_normalize!, eachcol(Z)) # normalize eigenvecs
+    return Eigen(sorteig!(vals, Z, sortby)...)
+end
+
+function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasReal}
+    ilo, ihi, s = LAPACK.gebal!(scale ? 'S' : 'N', triu!(H.data, -1)) # balance by scaling
+    _, Z, vals = LAPACK.hseqr!(H.data)
+    LAPACK.trevc!('R', 'B', BlasInt[], H.data, Z, Z) # set Z to right eigenvecs (for complex, see below)
+    LAPACK.gebak!(scale ? 'S' : 'N', 'R', ilo, ihi, s, Z) # undo balancing
+    if isreal(vals)
+        foreach(eigvec_normalize!, eachcol(Z)) # normalize eigenvecs
+        return Eigen(sorteig!(real(vals), Z, sortby)...)
+    else # complex eigenvalues: real/imag eigenvec parts stored in consecutive cols of Z
+        V = complex(Z)
+        k = 1
+        @inbounds while k <= length(vals)
+            if isreal(vals[k])
+                k += 1
+            else # complex-conjugate pair
+                for j = 1:size(V,1)
+                    V[j, k] = complex(Z[j,k], Z[j,k+1])
+                    V[j, k+1] = complex(Z[j,k], -Z[j,k+1])
+                end
+                k += 2
+            end
+        end
+        foreach(eigvec_normalize!, eachcol(V)) # normalize eigenvecs
+        return Eigen(sorteig!(vals, V, sortby)...)
+    end
+end
 
 # preserve the wrapper for eigensolves with UpperHessenberg
 eigencopy_oftype(H::UpperHessenberg, S) = UpperHessenberg(eigencopy_oftype(H.data, S))

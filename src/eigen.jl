@@ -144,6 +144,20 @@ function sorteig!(λ::AbstractVector, X::AbstractMatrix, sortby::Union{Function,
 end
 sorteig!(λ::AbstractVector, sortby::Union{Function,Nothing}=eigsortby) = sortby === nothing ? λ : sort!(λ, by=sortby)
 
+# similar to geevx! (specifically zgeevx), normalize eigenvectors to unit length
+# and make largest component real and positive
+function eigvec_normalize!(v::AbstractVector)
+    normalize!(v)
+    maxabs2, k = findmax(abs2, v) # largest component
+    if eltype(v) <: Real # just a sign flip
+        v[k] < 0 && (v .= .- v)
+    elseif maxabs2 > 0
+        v .*= conj(v[k]) / sqrt(maxabs2) # change phase to make v[k] real > 0
+        v[k] = real(v[k]) # imaginary part is just roundoff error
+    end
+    return v
+end
+
 """
     eigen!(A; permute, scale, sortby)
     eigen!(A, B; sortby)
