@@ -330,7 +330,8 @@ end
 @testset "nullspcae svd" begin
     # Test that we can get the nullspace
     A1 = [1.0 1.0; 2.0 0.0; -1.0 1.0] * [1.0 1.0 1.0; 1.0 -1.0 1.0]
-    @test norm(nullspace(svd(A1)) - [-1/sqrt(2); 0; 1/sqrt(2)]) < 3*eps(eltype(A1))
+    N1 = nullspace(svd(A1))
+    @test norm(A1*N1) < 3*eps(eltype(A1))
 
     A2 = [1.0 1.0; -1.0 2.0; 3.0 3.0; 2.0 4.0] * [1.0 1.0 1.0 1.0; 1.0 -1.0 1.0 -1.0]
     null2 = nullspace(svd(A2))
