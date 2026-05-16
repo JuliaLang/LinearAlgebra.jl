@@ -110,7 +110,7 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
 
         S = SymTridiagonal(rand(N), rand(max(0,N-1)))
         fS = Array(S)
-        Stri = N == 1 ? typeof(Tridiagonal(S)) : typeof(S) # 1 x 1 SymTridiagonals will always break symmetry for type stability
+        Stri = typeof(S)
 
         @test (Q = broadcast(sin, S); typeof(Q) == Stri && Q == broadcast(sin, fS))
         @test broadcast!(sin, Z, S) == broadcast(sin, fS)
@@ -120,18 +120,18 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
         @test broadcast!(*, Z, s, S) == broadcast(*, s, fS)
         @test (Q = broadcast(+, fV, fA, S); Q isa Matrix && Q == broadcast(+, fV, fA, fS))
         @test broadcast!(+, Z, fV, fA, S) == broadcast(+, fV, fA, fS)
-        @test (Q = broadcast(*, s, fV, fA, S); typeof(Q) == typeof(Tridiagonal(S)) && Q == broadcast(*, s, fV, fA, fS))
+        @test (Q = broadcast(*, s, fV, fA, S); Q isa Tridiagonal && Q == broadcast(*, s, fV, fA, fS))
         @test broadcast!(*, Z, s, fV, fA, S) == broadcast(*, s, fV, fA, fS)
 
         @test S .* 2.0 == S .* (2.0,) == fS .* 2.0
         @test S .* 2.0 isa Stri
-        @test S .* (2.0,) isa Stri
+        @test S .* (2.0,) isa Tridiagonal
         @test isequal(S .* Inf, fS .* Inf)
 
         two = 2
         @test S .^ 2 ==  S .^ (2,) == fS .^ 2 == S .^ two
         @test S .^ 2 isa Stri
-        @test S .^ (2,) isa Stri
+        @test S .^ (2,) isa Tridiagonal
         @test S .^ two isa Stri
         @test S .^ 0 == fS .^ 0
         @test S .^ -1 == fS .^ -1
@@ -470,21 +470,21 @@ end
 @testset "Symmetric/Hermitian broadcasting scalar" begin
     S = Symmetric(randn(ComplexF64, 3,3))
     H = Hermitian(randn(ComplexF64, 3,3))
-    for f in (abs, abs2, real, conj, exp, sin, cos)
-        for M in (S, H)
+    for M in (S, H)
+        for f in (abs, abs2, real, conj, exp, sin, cos)
             fM = broadcast(f, M)
             @test fM isa LinearAlgebra.wrappertype(M)
             @test fM == broadcast(f, Matrix(M))
         end
-    end
-    for f in (log, sqrt, imag)
-        for M in (S, H)
+        for f in (log, sqrt, imag)
             fM = broadcast(f, M)
             if M isa Symmetric
                 @test fM isa Symmetric
             end
             @test fM == broadcast(f, Matrix(M))
         end
+        M .^ 2 isa LinearAlgebra.wrappertype(M)
+        M .^ 2 == Matrix(M) .^ 2
     end
     for f in (+, -, *, /)
         for k in (2, 2im)

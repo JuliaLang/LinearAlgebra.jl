@@ -220,16 +220,13 @@ function fzeropreserving(bc)
     iszerodefined(typeof(v2)) ? iszero(v2) : isequal(v2, 0)
 end
 
-# broadcasts with SymTridiagonal and arrays with more than one entry will generally break symmetry.
-# A 1 x 1 SymTridiagonal will always break symmetry for type stability.
-# This is useful for knowing whether to materialize a Tridiagonal for zero-preserving functions.
-function issymmetrybreaking(bc::Broadcasted{StructuredMatrixStyle{T}}) where {T<:Union{Symmetric, SymTridiagonal}}
-    any(x -> !xor(x isa Union{Diagonal,Symmetric,SymTridiagonal,Hermitian{<:Real}}, all(isone ∘ length, axes(x))), bc.args)
+function issymmetrypreserving(bc::Broadcasted{StructuredMatrixStyle{T}}) where {T<:Union{Symmetric, SymTridiagonal}}
+    return all(x -> x isa Union{Number,Diagonal,Symmetric,SymTridiagonal,Hermitian{<:Real}}, bc.args)
 end
 
 function ishermitianpreserving(bc::Broadcasted{StructuredMatrixStyle{T}}) where {T<:Hermitian}
     bc.f isa HermitianPreservingFunction || return false
-    return all(x -> x isa Union{Diagonal{<:Real},SymTridiagonal{<:Real},Symmetric{<:Real},Hermitian} || (isreal(x) && all(isone ∘ length, axes(x))), bc.args)
+    return all(x -> x isa Union{Real,Diagonal{<:Real},SymTridiagonal{<:Real},Symmetric{<:Real},Hermitian}, bc.args)
 end
 
 const HermitianPreservingFunction = Union{
@@ -296,7 +293,7 @@ function Base.similar(bc::Broadcasted{StructuredMatrixStyle{T}}, ::Type{ElType})
     inds = axes(bc)
     fzerobc = fzeropreserving(bc)
     if isstructurepreserving(bc) || (fzerobc && !(T <: Union{UnitLowerTriangular,UnitUpperTriangular}))
-        if T <: SymTridiagonal && issymmetrybreaking(bc)
+        if T <: SymTridiagonal && !issymmetrypreserving(bc) && !isstructurepreserving(bc)
             return similar(convert(Broadcasted{StructuredMatrixStyle{Tridiagonal}}, bc), ElType)
         end
         return structured_broadcast_alloc(bc, T, ElType, map(length, inds))
@@ -310,10 +307,10 @@ end
 
 function Base.similar(bc::Broadcasted{StructuredMatrixStyle{T}}, ::Type{ElType}) where {T<:Union{Symmetric,Hermitian},ElType}
     inds = axes(bc)
-    if T <: Symmetric && !issymmetrybreaking(bc)
+    if T <: Symmetric && (issymmetrypreserving(bc) || isstructurepreserving(bc))
         return structured_broadcast_alloc(bc, T, ElType, map(length, inds))
     end
-    if T <: Hermitian && ishermitianpreserving(bc)
+    if T <: Hermitian && (ishermitianpreserving(bc) || isstructurepreserving(bc))
         return structured_broadcast_alloc(bc, T, ElType, map(length, inds))
     end
     return similar(convert(Broadcasted{DefaultArrayStyle{ndims(bc)}}, bc), ElType)
