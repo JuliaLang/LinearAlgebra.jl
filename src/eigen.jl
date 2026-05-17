@@ -217,8 +217,7 @@ make rows and columns more equal in norm. The default is `true` for both options
 
 By default, the eigenvalues and vectors are sorted lexicographically by `(real(λ),imag(λ))`.
 A different comparison function `by(λ)` can be passed to `sortby`, or you can pass
-`sortby=nothing` to leave the eigenvalues in an arbitrary order. Some special matrix types
-(e.g. [`Diagonal`](@ref)) may have a different default.
+`sortby=nothing` to leave the eigenvalues in an arbitrary order.
 
 # Examples
 ```jldoctest

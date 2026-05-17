@@ -1039,8 +1039,8 @@ _ortho_eltype(T) = Base.promote_op(/, T, T)
 _ortho_eltype(T::Type{<:Number}) = typeof(one(T)/one(T))
 
 #Eigensystem
-eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing) = sorteig!(copy(D.diag), sortby)
-eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing) =
+eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) = sorteig!(copy(D.diag), sortby)
+eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
     sorteig!(reduce(vcat, eigvals(x; sortby=nothing) for x in D.diag), sortby) #For block matrices, etc.
 function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
     facts = [eigen(x; sortby=nothing) for x in D.diag]
@@ -1064,7 +1064,7 @@ function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
     end
     return λ, vecs
 end
-function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing)
+function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
     if any(!isfinite, D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
@@ -1082,7 +1082,7 @@ function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{
     end
     Eigen(λ, evecs)
 end
-function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing)
+function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
     if any(any(!isfinite, x) for x in D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
@@ -1094,7 +1094,7 @@ function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=tr
     end
     Eigen(λ, evecs)
 end
-function eigen(Da::Diagonal, Db::Diagonal; sortby::Union{Function,Nothing}=nothing)
+function eigen(Da::Diagonal, Db::Diagonal; sortby::Union{Function,Nothing}=eigsortby)
     if any(!isfinite, Da.diag) || any(!isfinite, Db.diag)
         throw(ArgumentError("matrices contain Infs or NaNs"))
     end
@@ -1103,7 +1103,7 @@ function eigen(Da::Diagonal, Db::Diagonal; sortby::Union{Function,Nothing}=nothi
     end
     return GeneralizedEigen(eigen(Db \ Da; sortby)...)
 end
-function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=nothing)
+function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=eigsortby)
     if any(iszero, D.diag)
         throw(ArgumentError("right-hand side diagonal matrix is singular"))
     end
