@@ -4106,8 +4106,6 @@ eigenvectors are found and backtransformed using `VL` and `VR`. If
 trevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt}, T::AbstractMatrix,
         VL::AbstractMatrix = similar(T), VR::AbstractMatrix = similar(T))
 
-trix)
-
 """
     trevc3!(side, howmny, select, T, VL = similar(T), VR = similar(T))
 
