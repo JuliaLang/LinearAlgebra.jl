@@ -234,7 +234,7 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
             @test Array(D*a) ≈ DM*a
             @test Array(D/a) ≈ DM/a
             if elty <: Real
-                @test convert(Array, abs.(D)^a) ≈ abs.(DM)^a
+                @test convert(Array, abs.(D)^a) ≈ Matrix(abs.(DM))^a
             else
                 @test convert(Array, D^a) ≈ DM^a rtol=max(eps(relty), 1e-15) # TODO: improve precision
             end
