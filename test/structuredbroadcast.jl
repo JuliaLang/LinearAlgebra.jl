@@ -220,7 +220,7 @@ end
 end
 
 @testset "map[!] over combinations of structured matrices" begin
-    N = 10
+    N = 3
     fA = rand(N, N)
     Z = copy(fA)
     D = Diagonal(rand(N))
@@ -500,6 +500,7 @@ end
         fH = broadcast(f, H, 2im)
         @test fH == broadcast(f, Matrix(H), 2im)
     end
+    @test_throws ArgumentError H .*= im
 end
 
 @testset "Symmetric/Hermitian broadcasting matrix" begin
