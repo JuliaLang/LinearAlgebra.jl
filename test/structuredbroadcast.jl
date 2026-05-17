@@ -522,11 +522,8 @@ end
     @test Dc .+ Sc isa Symmetric
     @test Dc .+ Sc == Matrix(Dc) + Matrix(Sc)
     # Diagonal, Hermitian
-    @test Dr .+ Hr isa Hermitian{<:Real}
     @test Dr .+ Hr == Matrix(Dr) + Matrix(Hr)
-    @test Dr .+ Hc isa Hermitian
     @test Dr .+ Hc == Matrix(Dr) + Matrix(Hc)
-    @test Dc .+ Hr isa Symmetric
     @test Dc .+ Hr == Matrix(Dc) + Matrix(Hr)
     @test Dc .+ Hc == Matrix(Dc) + Matrix(Hc)
     # SymTridiagonal, Symmetric
@@ -539,11 +536,8 @@ end
     @test Tc .+ Sc isa Symmetric
     @test Tc .+ Sc == Matrix(Tc) + Matrix(Sc)
     # SymTridiagonal, Hermitian
-    @test Tr .+ Hr isa Hermitian{<:Real}
     @test Tr .+ Hr == Matrix(Tr) + Matrix(Hr)
-    @test Tr .+ Hc isa Hermitian
     @test Tr .+ Hc == Matrix(Tr) + Matrix(Hc)
-    @test Tc .+ Hr isa Symmetric
     @test Tc .+ Hr == Matrix(Tc) + Matrix(Hr)
     @test Tc .+ Hc == Matrix(Tc) + Matrix(Hc)
     for uplo1 in (:U, :L), uplo2 in (:U, :L)
@@ -552,11 +546,8 @@ end
         Sc = Symmetric(randn(ComplexF64, 3,3), uplo1)
         Hr = Hermitian(randn(3,3), uplo2)
         Hc = Hermitian(randn(ComplexF64, 3,3), uplo2)
-        @test Sr .+ Hr isa Hermitian{<:Real}
         @test Sr .+ Hr == Matrix(Sr) + Matrix(Hr)
-        @test Sr .+ Hc isa Hermitian
         @test Sr .+ Hc == Matrix(Sr) + Matrix(Hc)
-        @test Sc .+ Hr isa Symmetric
         @test Sc .+ Hr == Matrix(Sc) + Matrix(Hr)
         @test Sc .+ Hc == Matrix(Sc) + Matrix(Hc)
         # Symmetric, Symmetric
