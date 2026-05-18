@@ -454,8 +454,7 @@ function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, 
                 k += 2
             end
         end
-        eigvec_normalize!(V)
-        return Eigen(sorteig!(vals, V, sortby)...)
+return Eigen(sorteig!(vals, eigvec_normalize!(V), sortby)...)
     end
 end
 
