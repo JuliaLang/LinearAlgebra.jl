@@ -823,7 +823,7 @@ end
         @test LinearAlgebra.fillstored!(op(U), 2im) == op(triu(fill(f(2im), size(U))))
     end
 end
-        
+
 @testset "lmul!/rmul! by numbers" begin
     @testset "$(eltype(A))" for A in (rand(4, 4), rand(ComplexF64,4,4),
                 fill([1 2; 3 4], 4, 4),

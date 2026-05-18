@@ -1744,7 +1744,7 @@ function rotate!(x::AbstractVector, y::AbstractVector, c, s)
         @inbounds begin
             xi, yi = x[i], y[i]
             x[i] = s*yi +      c *xi
-            y[i] = c*yi - conj(s)*xi 
+            y[i] = c*yi - conj(s)*xi
         end
     end
     return x, y

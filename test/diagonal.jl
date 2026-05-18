@@ -1413,7 +1413,7 @@ end
 
     # AbstractArray out
     c = fill(0, 4, 4)
-    kron!(c, b, a) 
+    kron!(c, b, a)
     @test c == diagm([3, 6, 4, 8])
     @test c == kron!(fill(0, 4, 4), Matrix(b), Matrix(a)) # against dense kron!
     c = Matrix{Float64}(undef, 4, 4)
