@@ -373,7 +373,7 @@ function Base.strides(A::Adjoint{<:Real, <:AbstractVector})
     isnothing(st) && return nothing
     (st[1]*Int(length(A.parent)), st[1])
 end
-function Base.strides(A::Transpose{<:Any, <:AbstractVector})
+function Base.strides(A::Transpose{<:Number, <:AbstractVector})
     st = strides(A.parent)
     isnothing(st) && return nothing
     (st[1]*Int(length(A.parent)), st[1])
@@ -384,7 +384,7 @@ function Base.strides(A::Adjoint{<:Real, <:AbstractMatrix})
     isnothing(st) && return nothing
     reverse(st)
 end
-function Base.strides(A::Transpose{<:Any, <:AbstractMatrix})
+function Base.strides(A::Transpose{<:Number, <:AbstractMatrix})
     st = strides(A.parent)
     isnothing(st) && return nothing
     reverse(st)
