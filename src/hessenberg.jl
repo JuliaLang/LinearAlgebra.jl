@@ -176,8 +176,9 @@ AdjUpperHessenberg{T,S<:UpperHessenberg{T}} = Adjoint{T, S}
 TransUpperHessenberg{T,S<:UpperHessenberg{T}} = Transpose{T, S}
 AdjOrTransUpperHessenberg{T,S<:UpperHessenberg{T}} = AdjOrTrans{T, S}
 
-(/)(B::AbstractMatrix, H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}) =
-    rdiv!(copyto!(matop_dest(/, B, H), B), H)
+(/)(B::AbstractMatrix, H::UpperHessenberg) = rdiv!(copyto!(matop_dest(/, B, H), B), H)
+(/)(B::AbstractMatrix, H::AdjUpperHessenberg) = rdiv!(copyto!(matop_dest(/, B, H), B), H)
+(/)(B::AbstractMatrix, H::TransUpperHessenberg) = rdiv!(copyto!(matop_dest(/, B, H), B), H)
 
 # this is called from generic `\`
 ldiv!(Y::AbstractVecOrMat, H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat) =
