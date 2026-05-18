@@ -733,27 +733,25 @@ end
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         T = triu(rand(elty,10,10))
         v = eigvecs(T, sortby=nothing)[:,1]
-        for trevc! in (LAPACK.trevc!, LAPACK.trevc3!)
-            select = zeros(LinearAlgebra.BlasInt,10)
-            select[1] = 1
-            select,Vr = trevc!('R','S',select,copy(T))
-            @test Vr ≈ v
-            select = zeros(LinearAlgebra.BlasInt,10)
-            select[1] = 1
-            select,Vl = trevc!('L','S',select,copy(T))
-            select = zeros(LinearAlgebra.BlasInt,10)
-            select[1] = 1
-            select,Vln,Vrn = trevc!('B','S',select,copy(T))
-            @test Vrn ≈ v
-            @test Vln ≈ Vl
-            Vl = trevc!('L','A',select,copy(T))
-            Vr = trevc!('R','A',select,copy(T))
-            Vla, Vra = trevc!('B','A',select,copy(T))
-            @test Vr ≈ Vra
-            @test Vl ≈ Vla
-            @test_throws ArgumentError trevc!('V','S',select,T)
-            @test_throws ArgumentError trevc!('R','X',select,T)
-        end
+        select = zeros(LinearAlgebra.BlasInt,10)
+        select[1] = 1
+        select,Vr = LAPACK.trevc!('R','S',select,copy(T))
+        @test Vr ≈ v
+        select = zeros(LinearAlgebra.BlasInt,10)
+        select[1] = 1
+        select,Vl = LAPACK.trevc!('L','S',select,copy(T))
+        select = zeros(LinearAlgebra.BlasInt,10)
+        select[1] = 1
+        select,Vln,Vrn = LAPACK.trevc!('B','S',select,copy(T))
+        @test Vrn ≈ v
+        @test Vln ≈ Vl
+        Vl = LAPACK.trevc!('L','A',select,copy(T))
+        Vr = LAPACK.trevc!('R','A',select,copy(T))
+        Vla, Vra = LAPACK.trevc!('B','A',select,copy(T))
+        @test Vr ≈ Vra
+        @test Vl ≈ Vla
+        @test_throws ArgumentError LAPACK.trevc!('V','S',select,T)
+        @test_throws ArgumentError LAPACK.trevc!('R','X',select,T)
         temp1010 = rand(elty,10,10)
         temp1011 = rand(elty,10,11)
         @test_throws DimensionMismatch LAPACK.trrfs!('U','N','N',T,temp1010,temp1011)

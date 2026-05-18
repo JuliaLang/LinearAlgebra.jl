@@ -3659,9 +3659,9 @@ with the solution `X`.
 trtrs!(uplo::AbstractChar, trans::AbstractChar, diag::AbstractChar, A::AbstractMatrix, B::AbstractVecOrMat)
 
 #Eigenvector computation and condition number estimation
-for (trcon, trevc, trevc3, trrfs, elty) in
-    ((:dtrcon_,:dtrevc_,:dtrevc3_,:dtrrfs_,:Float64),
-     (:strcon_,:strevc_,:strevc3_,:strrfs_,:Float32))
+for (trcon, trevc, trrfs, elty) in
+    ((:dtrcon_,:dtrevc3_,:dtrrfs_,:Float64),
+     (:strcon_,:strevc3_,:strrfs_,:Float32))
     @eval begin
         # SUBROUTINE DTRCON( NORM, UPLO, DIAG, N, A, LDA, RCOND, WORK,
         #                  IWORK, INFO )
@@ -3694,70 +3694,6 @@ for (trcon, trevc, trevc3, trrfs, elty) in
             rcond[]
         end
 
-        # SUBROUTINE DTREVC( SIDE, HOWMNY, SELECT, N, T, LDT, VL, LDVL, VR,
-        #                    LDVR, MM, M, WORK, INFO )
-        #
-        # .. Scalar Arguments ..
-        # CHARACTER          HOWMNY, SIDE
-        # INTEGER            INFO, LDT, LDVL, LDVR, M, MM, N
-        # ..
-        # .. Array Arguments ..
-        # LOGICAL            SELECT( * )
-        # DOUBLE PRECISION   T( LDT, * ), VL( LDVL, * ), VR( LDVR, * ),
-        #$                   WORK( * )
-        Base.@constprop :aggressive function trevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt}, T::AbstractMatrix{$elty},
-                        VL::AbstractMatrix{$elty} = similar(T),
-                        VR::AbstractMatrix{$elty} = similar(T))
-            require_one_based_indexing(select, T, VL, VR)
-            # Extract
-            if side ∉ ('L','R','B')
-                throw(ArgumentError(lazy"side argument must be 'L' (left eigenvectors), 'R' (right eigenvectors), or 'B' (both), got $side"))
-            end
-            @chkvalidparam 2 howmny ('A', 'B', 'S')
-            n, mm = checksquare(T), size(VL, 2)
-            ldt, ldvl, ldvr = stride(T, 2), stride(VL, 2), stride(VR, 2)
-
-            # Check
-            chkstride1(T, select, VL, VR)
-
-            # Allocate
-            m = Ref{BlasInt}()
-            work = Vector{$elty}(undef, 3n)
-            info = Ref{BlasInt}()
-
-            ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Clong, Clong),
-                side, howmny, select, n,
-                T, ldt, VL, ldvl,
-                VR, ldvr, mm, m,
-                work, info, 1, 1)
-            chklapackerror(info[])
-
-            VLn = size(VL, 1)
-            VRn = size(VR, 1)
-            #Decide what exactly to return
-            if howmny == 'S' #compute selected eigenvectors
-                if side == 'L' #left eigenvectors only
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
-                elseif side == 'R' #right eigenvectors only
-                    return select, reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
-                else #side == 'B' #both eigenvectors
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
-                end
-            else #compute all eigenvectors
-                if side == 'L' #left eigenvectors only
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
-                elseif side == 'R' #right eigenvectors only
-                    return reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
-                else #side == 'B' #both eigenvectors
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
-                end
-            end
-        end
-
         # SUBROUTINE DTREVC3( SIDE, HOWMNY, SELECT, N, T, LDT, VL, LDVL, VR,
         #                    LDVR, MM, M, WORK, LWORK, INFO )
         #
@@ -3769,7 +3705,7 @@ for (trcon, trevc, trevc3, trrfs, elty) in
         # LOGICAL            SELECT( * )
         # DOUBLE PRECISION   T( LDT, * ), VL( LDVL, * ), VR( LDVR, * ),
         #$                   WORK( * )
-        Base.@constprop :aggressive function trevc3!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt}, T::AbstractMatrix{$elty},
+        Base.@constprop :aggressive function trevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt}, T::AbstractMatrix{$elty},
                         VL::AbstractMatrix{$elty} = similar(T),
                         VR::AbstractMatrix{$elty} = similar(T))
             require_one_based_indexing(select, T, VL, VR)
@@ -3867,9 +3803,9 @@ for (trcon, trevc, trevc3, trrfs, elty) in
     end
 end
 
-for (trcon, trevc, trevc3, trrfs, elty, relty) in
-    ((:ztrcon_,:ztrevc_,:ztrevc3_,:ztrrfs_,:ComplexF64,:Float64),
-     (:ctrcon_,:ctrevc_,:ctrevc3_,:ctrrfs_,:ComplexF32, :Float32))
+for (trcon, trevc, trrfs, elty, relty) in
+    ((:ztrcon_,:ztrevc3_,:ztrrfs_,:ComplexF64,:Float64),
+     (:ctrcon_,:ctrevc3_,:ctrrfs_,:ComplexF32, :Float32))
     @eval begin
         # SUBROUTINE ZTRCON( NORM, UPLO, DIAG, N, A, LDA, RCOND, WORK,
         #                   RWORK, INFO )
@@ -3902,71 +3838,6 @@ for (trcon, trevc, trevc3, trrfs, elty, relty) in
             rcond[]
         end
 
-        # SUBROUTINE ZTREVC( SIDE, HOWMNY, SELECT, N, T, LDT, VL, LDVL, VR,
-        #                    LDVR, MM, M, WORK, RWORK, INFO )
-        #
-        # .. Scalar Arguments ..
-        # CHARACTER          HOWMNY, SIDE
-        # INTEGER            INFO, LDT, LDVL, LDVR, M, MM, N
-        # ..
-        # .. Array Arguments ..
-        # LOGICAL            SELECT( * )
-        # DOUBLE PRECISION   RWORK( * )
-        # COMPLEX*16         T( LDT, * ), VL( LDVL, * ), VR( LDVR, * ),
-        #$                   WORK( * )
-        function trevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt}, T::AbstractMatrix{$elty},
-                        VL::AbstractMatrix{$elty} = similar(T),
-                        VR::AbstractMatrix{$elty} = similar(T))
-            require_one_based_indexing(select, T, VL, VR)
-            # Extract
-            n, mm = checksquare(T), size(VL, 2)
-            ldt, ldvl, ldvr = stride(T, 2), stride(VL, 2), stride(VR, 2)
-
-            # Check
-            chkstride1(T, select, VL, VR)
-            if side ∉ ('L','R','B')
-                throw(ArgumentError(lazy"side argument must be 'L' (left eigenvectors), 'R' (right eigenvectors), or 'B' (both), got $side"))
-            end
-            @chkvalidparam 2 howmny ('A', 'B', 'S')
-
-            # Allocate
-            m = Ref{BlasInt}()
-            work = Vector{$elty}(undef, 2n)
-            rwork = Vector{$relty}(undef, n)
-            info = Ref{BlasInt}()
-            ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                 Ptr{$elty}, Ptr{$relty}, Ref{BlasInt}, Clong, Clong),
-                side, howmny, select, n,
-                T, ldt, VL, ldvl,
-                VR, ldvr, mm, m,
-                work, rwork, info, 1, 1)
-            chklapackerror(info[])
-
-            VLn = size(VL, 1)
-            VRn = size(VR, 1)
-            #Decide what exactly to return
-            if howmny == 'S' #compute selected eigenvectors
-                if side == 'L' #left eigenvectors only
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
-                elseif side == 'R' #right eigenvectors only
-                    return select, reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
-                else #side == 'B' #both eigenvectors
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
-                end
-            else #compute all eigenvectors
-                if side == 'L' #left eigenvectors only
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
-                elseif side == 'R' #right eigenvectors only
-                    return reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
-                else #side == 'B' #both eigenvectors
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
-                end
-            end
-        end
-
         # SUBROUTINE ZTREVC3( SIDE, HOWMNY, SELECT, N, T, LDT, VL, LDVL, VR,
         #                    LDVR, MM, M, WORK, LWORK, RWORK, LRWORK, INFO )
         #
@@ -3979,7 +3850,7 @@ for (trcon, trevc, trevc3, trrfs, elty, relty) in
         # DOUBLE PRECISION   RWORK( * )
         # COMPLEX*16         T( LDT, * ), VL( LDVL, * ), VR( LDVR, * ),
         #$                   WORK( * )
-        function trevc3!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt}, T::AbstractMatrix{$elty},
+        function trevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt}, T::AbstractMatrix{$elty},
                         VL::AbstractMatrix{$elty} = similar(T),
                         VR::AbstractMatrix{$elty} = similar(T))
             require_one_based_indexing(select, T, VL, VR)
@@ -4104,15 +3975,6 @@ eigenvectors are found and backtransformed using `VL` and `VR`. If
 `select` are computed.
 """
 trevc!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt}, T::AbstractMatrix,
-        VL::AbstractMatrix = similar(T), VR::AbstractMatrix = similar(T))
-
-"""
-    trevc3!(side, howmny, select, T, VL = similar(T), VR = similar(T))
-
-Finds the eigensystem of an upper triangular matrix `T`; identical to [`trevc!`](@ref)
-except that it calls a newer LAPACK routine that may be faster.
-"""
-trevc3!(side::AbstractChar, howmny::AbstractChar, select::AbstractVector{BlasInt}, T::AbstractMatrix,
         VL::AbstractMatrix = similar(T), VR::AbstractMatrix = similar(T))
 
 """
