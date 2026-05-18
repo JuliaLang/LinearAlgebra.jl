@@ -5,6 +5,7 @@ module TestTridiagonal
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
+import LinearAlgebra: eigsortby, sorteig!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
@@ -1242,6 +1243,30 @@ end
     Fdense = eigen(densemat)
     @test λ ≈ eigvals(mat) ≈ eigvals(densemat) ≈ F.values ≈ Fdense.values
     @test F.vectors ≈ Fdense.vectors
+end
+
+@testset "eigen sorting" begin
+    B = SymTridiagonal([3, 4, 1, 2],[1, 0, 2]) #block diagonal matrix to hit 'B' ordering of stebz!
+    fB = Float64.(B)
+    @test eigmin(fB) ≈ minimum(eigvals(fB))
+    @test eigmax(fB) ≈ maximum(eigvals(fB))
+    for A in (B, fB)
+        vals = eigvals(A; sortby = eigsortby)
+        @test vals == sort(vals) == eigvals!(fB; sortby = eigsortby)
+        vals = eigvals(A, 1:2; sortby = eigsortby)
+        @test vals == sort(vals) == eigvals!(fB, 1:2; sortby = eigsortby)
+        vals = eigvals(A, 2, 4; sortby = eigsortby)
+        @test vals == sort(vals) == eigvals!(fB, 2, 4; sortby = eigsortby)
+        fact = eigen(A; sortby = eigsortby)
+        @test fact == eigen!(fB; sortby = eigsortby)
+        @test fact == Eigen(sorteig!(fact.values, fact.vectors)...)
+        fact = eigen(A, 1:2; sortby = eigsortby)
+        @test fact == eigen!(fB, 1:2; sortby = eigsortby)
+        @test fact == Eigen(sorteig!(fact.values, fact.vectors)...)
+        fact = eigen(A, 2, 4; sortby = eigsortby)
+        @test fact == eigen!(fB, 2, 4; sortby = eigsortby)
+        @test fact == Eigen(sorteig!(fact.values, fact.vectors)...)
+    end
 end
 
 end # module TestTridiagonal

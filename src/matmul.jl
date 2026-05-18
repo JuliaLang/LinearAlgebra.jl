@@ -122,17 +122,6 @@ function _mul(A::AbstractMatrix, B::AbstractMatrix)
 end
 
 """
-    matprod_dest(A, B, T)
-
-Return an appropriate `AbstractArray` with element type `T` that may be used to store the result of `A * B`.
-This function is only kept for backwards compatibility, use `matop_dest` instead.
-
-!!! compat "Julia 1.11"
-    This function requires at least Julia 1.11.
-"""
-matprod_dest(A, B, T) = convert(AbstractArray{T}, matop_dest(*, A, B))
-
-"""
     matop_dest(op, A, B)
 
 Return an appropriate `AbstractArray` that may be used to store the result of `op(A, B)`,
