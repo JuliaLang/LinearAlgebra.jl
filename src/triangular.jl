@@ -1377,7 +1377,6 @@ end
 
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
-
 function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix})
     eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
 end
