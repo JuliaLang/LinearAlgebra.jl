@@ -1899,7 +1899,7 @@ for mat in (:AbstractVector, :AbstractMatrix)
     @eval function mul(A::UpperOrLowerTriangular, B::$mat)
         require_one_based_indexing(B)
         TAB = promote_op(matprod, eltype(A), eltype(B))
-        if TAB <: BlasFloat
+        if TAB <: BlasFloat && parent(A) isa StridedMatrix
             lmul!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
         else
             mul!(matprod_dest(A, B, TAB), A, B)
@@ -1949,7 +1949,7 @@ end
 function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     require_one_based_indexing(A)
     TAB = promote_op(matprod, eltype(A), eltype(B))
-    if TAB <: BlasFloat
+    if TAB <: BlasFloat && parent(B) isa StridedMatrix
         rmul!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
     else
         mul!(matprod_dest(A, B, TAB), A, B)
