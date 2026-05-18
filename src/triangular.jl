@@ -1238,7 +1238,7 @@ for (TA, TB) in ((:AbstractTriangular, :AbstractMatrix),
 end
 
 generic_matmatmul_NN!(C, A, B, alpha, beta) = generic_matmatmul!(C, 'N', 'N', A, B, alpha, beta)
-# Optimization for strided matrices, where we know that _generic_matmatmul! will be taken 
+# Optimization for strided matrices, where we know that _generic_matmatmul! will be taken
 for (TA, TB) in ((:UpperOrLowerTriangularStrided, :StridedMatrix),
                     (:StridedMatrix, :UpperOrLowerTriangularStrided),
                     (:UpperOrLowerTriangularStrided, :UpperOrLowerTriangularStrided)
@@ -1975,7 +1975,7 @@ matop_dest(::typeof(\), A::UnitUpperOrUnitLowerTriangular, B) =
     similar(B, _inner_type_promotion(\, eltype(A), eltype(B)), size(B))
 
 matop_dest(::typeof(/), A, B::UnitUpperOrUnitLowerTriangular) =
-    similar(A, _inner_type_promotion(/, eltype(A), eltype(B)), size(A))    
+    similar(A, _inner_type_promotion(/, eltype(A), eltype(B)), size(A))
 ## The general promotion methods
 function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
     require_one_based_indexing(B)
@@ -2643,7 +2643,7 @@ end
 
 sqrt(A::UpperTriangular; check::Bool=true) = sqrt_quasitriu(A, diagview(A); check) # matrix is upper triangular, so eigenvalues are just the diagonals
 # shouldn't need to do a check for UnitUpperTriangular because the eigenvalues are all 1, flag included so the function call lines up
-function sqrt(A::UnitUpperTriangular{T}; check=true) where T 
+function sqrt(A::UnitUpperTriangular{T}; check=true) where T
     B = A.data
     t = typeof(sqrt(zero(T)))
     R = Matrix{t}(I, size(A))
@@ -2669,7 +2669,7 @@ sqrt(A::UnitLowerTriangular; check::Bool=true) = copy(transpose(sqrt(copy(transp
 # A0 is triangular or quasitriangular matrix, evals is the eigenvalues
 function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Complex ? 512 : 256, check::Bool=true)
     n = checksquare(A0)
-    
+
     T = eltype(A0)
     Tr = typeof(sqrt(real(zero(T))))
     Tc = typeof(sqrt(complex(zero(T))))

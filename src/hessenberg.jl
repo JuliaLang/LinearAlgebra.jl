@@ -176,18 +176,14 @@ AdjUpperHessenberg{T,S<:UpperHessenberg{T}} = Adjoint{T, S}
 TransUpperHessenberg{T,S<:UpperHessenberg{T}} = Transpose{T, S}
 AdjOrTransUpperHessenberg{T,S<:UpperHessenberg{T}} = AdjOrTrans{T, S}
 
-function (\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat)
-    TFB = typeof(oneunit(eltype(H)) \ oneunit(eltype(B)))
-    return ldiv!(H, copy_similar(B, TFB))
-end
+(\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat) =
+    ldiv!(H, copyto!(matop_dest(\, H, B), B))
 
 (/)(B::AbstractMatrix, H::UpperHessenberg) = _rdiv(B, H)
 (/)(B::AbstractMatrix, H::AdjUpperHessenberg) = _rdiv(B, H)
 (/)(B::AbstractMatrix, H::TransUpperHessenberg) = _rdiv(B, H)
-function _rdiv(B, H)
-    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(H)))
-    return rdiv!(copy_similar(B, TFB), H)
-end
+
+_rdiv(B, H) = rdiv!(copyto!(matop_dest(/, B, H), B), H)
 
 ldiv!(H::AdjOrTransUpperHessenberg, B::AbstractVecOrMat) =
     (rdiv!(wrapperop(H)(B), parent(H)); B)

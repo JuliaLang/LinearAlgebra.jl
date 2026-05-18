@@ -21,7 +21,7 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
         D = Diagonal(rand(N))
         B = Bidiagonal(rand(N), rand(max(0,N-1)), :U)
         T = Tridiagonal(rand(max(0,N-1)), rand(N), rand(max(0,N-1)))
-        
+
         U = UpperTriangular(rand(N,N))
         L = LowerTriangular(rand(N,N))
         UH = UpperHessenberg(rand(N,N))
@@ -161,7 +161,7 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
             if N > 0
                 a = copy(fV)
                 a[1] = 0
-                @test (Q = broadcast(/, D, a); Q isa Matrix 
+                @test (Q = broadcast(/, D, a); Q isa Matrix
                     && Q[2:end, :] == broadcast(/, fD, a)[2:end, :]
                     && Q[1, 1] == Inf
                     && all(isnan, Q[1, 2:end]))

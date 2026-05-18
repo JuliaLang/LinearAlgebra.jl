@@ -221,7 +221,8 @@ for (S, H) in ((:Symmetric, :Hermitian), (:Hermitian, :Symmetric))
         end
     end
 end
-
+# zero should forward to the parent array type
+zero(A::Union{Symmetric,Hermitian}) = wrappertype(A)(zero(parent(A)), _sym_uplo(A.uplo))
 convert(::Type{T}, m::Union{Symmetric,Hermitian}) where {T<:Symmetric} = m isa T ? m : T(m)::T
 convert(::Type{T}, m::Union{Symmetric,Hermitian}) where {T<:Hermitian} = m isa T ? m : T(m)::T
 

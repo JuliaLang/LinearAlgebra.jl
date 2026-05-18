@@ -212,7 +212,7 @@ const LeftAbsorbingFuncs = Union{
 fzero(::ZeroAbsorbingFuncs, ::AbstractArray{T}) where {T<:Number} = Some(haszero(T) ? zero(T) : nothing)
 fzero(::ZeroAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
 fzero(::ZeroAbsorbingFuncs, x) = fzero(x)
-# Each function in LeftAbsorbingFuncs returns NaN/Inf/error when zero is on the right. 
+# Each function in LeftAbsorbingFuncs returns NaN/Inf/error when zero is on the right.
 # We check for any zeros and return nothing if true. This falls back to a dense matrix
 # as with the scalar case.
 fzero(::LeftAbsorbingFuncs, a::AbstractArray{T}) where {T<:Number} = any(iszero, a) ? nothing : Some(one(T))
