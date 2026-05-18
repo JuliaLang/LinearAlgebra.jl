@@ -368,11 +368,27 @@ convert(::Type{Adjoint{T,S}}, A::Adjoint) where {T,S} = Adjoint{T,S}(convert(S, 
 convert(::Type{Transpose{T,S}}, A::Transpose) where {T,S} = Transpose{T,S}(convert(S, A.parent))::Transpose{T,S}
 
 # Strides and pointer for transposed strided arrays — but only if the elements are actually stored in memory
-Base.strides(A::Adjoint{<:Real, <:AbstractVector}) = (stride(A.parent, 2), stride(A.parent, 1))
-Base.strides(A::Transpose{<:Any, <:AbstractVector}) = (stride(A.parent, 2), stride(A.parent, 1))
+function Base.strides(A::Adjoint{<:Real, <:AbstractVector})
+    st = strides(A.parent)
+    isnothing(st) && return nothing
+    (st[1]*Int(length(A.parent)), st[1])
+end
+function Base.strides(A::Transpose{<:Any, <:AbstractVector})
+    st = strides(A.parent)
+    isnothing(st) && return nothing
+    (st[1]*Int(length(A.parent)), st[1])
+end
 # For matrices it's slightly faster to use reverse and avoid calling stride twice
-Base.strides(A::Adjoint{<:Real, <:AbstractMatrix}) = reverse(strides(A.parent))
-Base.strides(A::Transpose{<:Any, <:AbstractMatrix}) = reverse(strides(A.parent))
+function Base.strides(A::Adjoint{<:Real, <:AbstractMatrix})
+    st = strides(A.parent)
+    isnothing(st) && return nothing
+    reverse(st)
+end
+function Base.strides(A::Transpose{<:Any, <:AbstractMatrix})
+    st = strides(A.parent)
+    isnothing(st) && return nothing
+    reverse(st)
+end
 
 Base.cconvert(::Type{Ptr{T}}, A::Adjoint{<:Real, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
 Base.cconvert(::Type{Ptr{T}}, A::Transpose{<:Any, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)

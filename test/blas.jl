@@ -598,6 +598,14 @@ Base.cconvert(::Type{Ptr{T}}, A::WrappedArray{T}) where T = Base.cconvert(Ptr{T}
 Base.strides(A::WrappedArray) = strides(A.A)
 Base.elsize(::Type{WrappedArray{T,N}}) where {T,N} = Base.elsize(Array{T,N})
 
+function test_no_strides(x)
+    @test try
+        strides(x)
+    catch e
+        e
+    end isa Union{MethodError, Nothing}
+end
+
 @testset "strided interface adjtrans" begin
     x = WrappedArray([1, 2, 3, 4])
     @test stride(x,1) == 1
@@ -617,20 +625,18 @@ Base.elsize(::Type{WrappedArray{T,N}}) where {T,N} = Base.elsize(Array{T,N})
     y = WrappedArray([1+im, 2, 3, 4])
     @test strides(transpose(y)) == (4,1)
     @test pointer(transpose(y)) == pointer(y)
-    @test_throws MethodError strides(y')
+    test_no_strides(y')
     @test_throws ErrorException pointer(y')
 
     B = WrappedArray([1+im 2; 3 4; 5 6])
     @test strides(transpose(B)) == (3,1)
     @test pointer(transpose(B)) == pointer(B)
-    @test_throws MethodError strides(B')
+    test_no_strides(B')
     @test_throws ErrorException pointer(B')
 
-    @test_throws MethodError stride(1:5,0)
-    @test_throws MethodError stride(1:5,1)
-    @test_throws MethodError stride(1:5,2)
-    @test_throws MethodError strides(transpose(1:5))
-    @test_throws MethodError strides((1:5)')
+    test_no_strides(1:5)
+    test_no_strides(transpose(1:5))
+    test_no_strides((1:5)')
     @test_throws ErrorException pointer(transpose(1:5))
     @test_throws ErrorException pointer((1:5)')
 end
