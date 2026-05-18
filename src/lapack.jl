@@ -3726,7 +3726,7 @@ for (trcon, trevc, trrfs, elty) in
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($trevc3), libblastrampoline), Cvoid,
+                ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
                     (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
                     Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
                     Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
@@ -3873,7 +3873,7 @@ for (trcon, trevc, trrfs, elty, relty) in
             lrwork = BlasInt(-1)
             info = Ref{BlasInt}()
             for i = 1:2  # first call returns lwork as work[1] and lrwork as rwork[1]
-                ccall((@blasfunc($trevc3), libblastrampoline), Cvoid,
+                ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
                     (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
                     Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
                     Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
