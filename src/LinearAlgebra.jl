@@ -184,7 +184,6 @@ public AbstractTriangular,
         symmetric,
         symmetric_type,
         zeroslike,
-        matprod_dest,
         fillstored!,
         fillband!,
         uplo
