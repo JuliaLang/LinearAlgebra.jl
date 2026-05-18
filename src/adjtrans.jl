@@ -373,6 +373,32 @@ Base.strides(A::Transpose{<:Any, <:AbstractVector}) = (stride(A.parent, 2), stri
 # For matrices it's slightly faster to use reverse and avoid calling stride twice
 Base.strides(A::Adjoint{<:Real, <:AbstractMatrix}) = reverse(strides(A.parent))
 Base.strides(A::Transpose{<:Any, <:AbstractMatrix}) = reverse(strides(A.parent))
+@static if isdefined(Base, :try_strides) && isdefined(Base, :can_ptr_load) && isdefined(Base, :can_ptr_store)
+    function Base.try_strides(A::Adjoint{<:Real, <:AbstractVector})
+        st = Base.try_strides(A.parent)
+        isnothing(st) && return nothing
+        (st[1]*Int(length(A.parent)), st[1])
+    end
+    function Base.try_strides(A::Transpose{<:Number, <:AbstractVector})
+        st = Base.try_strides(A.parent)
+        isnothing(st) && return nothing
+        (st[1]*Int(length(A.parent)), st[1])
+    end
+    function Base.try_strides(A::Adjoint{<:Real, <:AbstractMatrix})
+        st = Base.try_strides(A.parent)
+        isnothing(st) && return nothing
+        reverse(st)
+    end
+    function Base.try_strides(A::Transpose{<:Number, <:AbstractMatrix})
+        st = Base.try_strides(A.parent)
+        isnothing(st) && return nothing
+        reverse(st)
+    end
+    Base.can_ptr_load(A::Adjoint{<:Real, <:AbstractVecOrMat}) = Base.can_ptr_load(A.parent)
+    Base.can_ptr_store(A::Adjoint{<:Real, <:AbstractVecOrMat}) = Base.can_ptr_store(A.parent)
+    Base.can_ptr_load(A::Transpose{<:Number, <:AbstractVecOrMat}) = Base.can_ptr_load(A.parent)
+    Base.can_ptr_store(A::Transpose{<:Number, <:AbstractVecOrMat}) = Base.can_ptr_store(A.parent)
+end
 
 Base.cconvert(::Type{Ptr{T}}, A::Adjoint{<:Real, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
 Base.cconvert(::Type{Ptr{T}}, A::Transpose{<:Any, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
