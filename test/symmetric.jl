@@ -1396,6 +1396,11 @@ Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
         @test parent(Z) isa ZeroTestWrap
         @test iszero(Z)
     end
+    # strided case uses fill!
+    @test iszero(zero(Symmetric(rand(4, 4))))
+    @test zero(Symmetric(rand(4, 4))) isa Symmetric
+    @test iszero(zero(Hermitian(rand(ComplexF64, 4, 4))))
+    @test zero(Hermitian(rand(ComplexF64, 4, 4))) isa Hermitian
 end
 
 end # module TestSymmetric
