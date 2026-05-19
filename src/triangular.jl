@@ -1251,16 +1251,16 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
 end
 
 # multiplication
-generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector{T}) where {T<:BlasFloat} =
+generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector) where {T<:BlasFloat} =
     BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copyto!(c, b))
-function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix{T}) where {T<:BlasFloat}
+function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1
         BLAS.trmm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copyto!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatmul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
-function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat}
+function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat}
     if stride(C,1) == stride(B,1) == 1
         BLAS.trmm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copyto!(C, A))
     else # incompatible with BLAS
@@ -1899,11 +1899,9 @@ for mat in (:AbstractVector, :AbstractMatrix)
     @eval function mul(A::UpperOrLowerTriangular, B::$mat)
         require_one_based_indexing(B)
         TAB = promote_op(matprod, eltype(A), eltype(B))
-        if TAB <: BlasFloat && parent(A) isa StridedMatrix
-            lmul!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
-        else
-            mul!(matprod_dest(A, B, TAB), A, B)
-        end
+        C = matprod_dest(A, B, TAB)
+        Ap = (TAB <: BlasFloat && parent(A) isa StridedMatrix) ? convert(AbstractArray{TAB}, A) : A
+        mul!(C, Ap, B)
     end
     ### Left division with triangle to the left hence rhs cannot be transposed. No quotients.
     @eval function \(A::Union{UnitUpperTriangular,UnitLowerTriangular}, B::$mat)
@@ -1949,11 +1947,9 @@ end
 function mul(A::AbstractMatrix, B::UpperOrLowerTriangular)
     require_one_based_indexing(A)
     TAB = promote_op(matprod, eltype(A), eltype(B))
-    if TAB <: BlasFloat && parent(B) isa StridedMatrix
-        rmul!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
-    else
-        mul!(matprod_dest(A, B, TAB), A, B)
-    end
+    C = matprod_dest(A, B, TAB)
+    Bp = (TAB <: BlasFloat && parent(B) isa StridedMatrix) ? convert(AbstractArray{TAB}, B) : B
+    mul!(C, A, Bp)
 end
 
 ## Some Triangular-Triangular cases. We might want to write tailored methods
