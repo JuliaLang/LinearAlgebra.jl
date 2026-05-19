@@ -1046,8 +1046,8 @@ end
 
 zero(A::UpperTriangular) = UpperTriangular(zero(parent(A)))
 zero(A::LowerTriangular) = LowerTriangular(zero(parent(A)))
-zero(A::UpperTriangular{T,<:StridedMatrix}) where {T<:Number} = fill!(similar(A, T), zero(T))
-zero(A::LowerTriangular{T,<:StridedMatrix}) where {T<:Number} = fill!(similar(A, T), zero(T))
+zero(A::UpperTriangular{T,<:StridedMatrix}) where {T<:Number} = fill!(similar(A, typeof(zero(T))), zero(T))
+zero(A::LowerTriangular{T,<:StridedMatrix}) where {T<:Number} = fill!(similar(A, typeof(zero(T)))), zero(T))
 zero(A::UnitUpperTriangular) = zero(UpperTriangular(parent(A)))
 zero(A::UnitLowerTriangular) = zero(LowerTriangular(parent(A)))
 
