@@ -1044,8 +1044,8 @@ end
 +(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) = full(A) + full(B)
 +(A::AbstractTriangular, B::AbstractTriangular) = copyto!(similar(parent(A), size(A)), A) + copyto!(similar(parent(B), size(B)), B)
 
-zero(A::UpperTriangular{T,<:StridedMatrix}) where {T} = fill!(similar(A, T), zero(T)))
-zero(A::LowerTriangular{T,<:StridedMatrix}) where {T} = fill!(similar(A, T), zero(T)))
+zero(A::UpperTriangular{T,<:StridedMatrix}) where {T} = fill!(similar(A, T), zero(T))
+zero(A::LowerTriangular{T,<:StridedMatrix}) where {T} = fill!(similar(A, T), zero(T))
 zero(A::UnitUpperTriangular) = zero(UpperTriangular(parent(A)))
 zero(A::UnitLowerTriangular) = zero(LowerTriangular(parent(A)))
 
