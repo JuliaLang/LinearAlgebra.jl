@@ -224,11 +224,11 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     n = size(B,2)
     H = F.data
     μ = shift
-    u = Vector{typeof(zero(eltype(H))+μ)}(undef, m) # for last rotated col of H-μI
+    u = Vector{typeof(zero(float(eltype(H)))+μ)}(undef, m) # for last rotated col of H-μI
     copyto!(u, 1, H, m*(m-1)+1, m) # u .= H[:,m]
     u[m] += μ
     X = B # not a copy, just rename to match paper
-    cs = Vector{Tuple{real(eltype(u)),eltype(u)}}(undef, length(u)) # store Givens rotations
+    cs = Vector{Tuple{real(float(eltype(u))),float(eltype(u))}}(undef, length(u)) # store Givens rotations
     @inbounds for k = m:-1:2
         c, s, ρ = givensAlgorithm(u[k], H[k,k-1])
         cs[k] = (c, s)
@@ -274,11 +274,11 @@ function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
     n = size(B,1)
     H = F.data
     μ = shift
-    u = Vector{typeof(zero(eltype(H))+μ)}(undef, m) # for last rotated row of H-μI
+    u = Vector{typeof(zero(float(eltype(H)))+μ)}(undef, m) # for last rotated row of H-μI
     u .= @view H[1,:]
     u[1] += μ
     X = B # not a copy, just rename to match paper
-    cs = Vector{Tuple{real(eltype(u)),eltype(u)}}(undef, length(u)) # store Givens rotations
+    cs = Vector{Tuple{real(float(eltype(u))),float(eltype(u))}}(undef, length(u)) # store Givens rotations
     @inbounds for k = 1:m-1
         c, s, ρ = givensAlgorithm(u[k], H[k+1,k])
         cs[k] = (c, s)
@@ -425,8 +425,7 @@ function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, 
     _, Z, vals = LAPACK.hseqr!(H.data)
     LAPACK.trevc!('R', 'B', BlasInt[], H.data, Z, Z) # set Z to right eigenvecs
     LAPACK.gebak!(scale ? 'S' : 'N', 'R', ilo, ihi, s, Z) # undo balancing
-    foreach(eigvec_normalize!, eachcol(Z)) # normalize eigenvecs
-    return Eigen(sorteig!(vals, Z, sortby)...)
+    return Eigen(sorteig!(vals, eigvec_normalize!(Z), sortby)...)
 end
 
 function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasReal}
@@ -435,8 +434,7 @@ function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, 
     LAPACK.trevc!('R', 'B', BlasInt[], H.data, Z, Z) # set Z to right eigenvecs (for complex, see below)
     LAPACK.gebak!(scale ? 'S' : 'N', 'R', ilo, ihi, s, Z) # undo balancing
     if isreal(vals)
-        foreach(eigvec_normalize!, eachcol(Z)) # normalize eigenvecs
-        return Eigen(sorteig!(real(vals), Z, sortby)...)
+        return Eigen(sorteig!(real(vals), eigvec_normalize!(Z), sortby)...)
     else # complex eigenvalues: real/imag eigenvec parts stored in consecutive cols of Z
         V = complex(Z)
         k = 1
@@ -451,8 +449,7 @@ function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, 
                 k += 2
             end
         end
-        foreach(eigvec_normalize!, eachcol(V)) # normalize eigenvecs
-        return Eigen(sorteig!(vals, V, sortby)...)
+        return Eigen(sorteig!(vals, eigvec_normalize!(V), sortby)...)
     end
 end
 

@@ -69,8 +69,9 @@ let n = 10
         H = UpperHessenberg(Areal)
         @test Array(Hc + H) == Array(Hc) + Array(H)
         @test Array(Hc - H) == Array(Hc) - Array(H)
+        Hi = UpperHessenberg(Int.(Areal .÷ (1/8)))
         @testset "ldiv and rdiv" begin
-            for b in (b_, B_), H in (H, Hc, H', Hc', transpose(Hc))
+            for b in (b_, B_), H in (H, Hc, H', Hc', transpose(Hc), Hi)
                 @test H * (H \ b) ≈ b
                 @test (b' / H) * H ≈ (Matrix(b') / H) * H ≈ b'
                 @test (transpose(b) / H) * H ≈ (Matrix(transpose(b)) / H) * H ≈ transpose(b)
