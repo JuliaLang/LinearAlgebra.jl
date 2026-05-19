@@ -1124,6 +1124,21 @@ end
     @test iszero(zero(UnitLowerTriangular(A)))
     @test iszero(diag(zero(UnitUpperTriangular(A))))
     @test iszero(diag(zero(UnitLowerTriangular(A))))
+
+        # non-strided case: zero forwards to parent
+    struct ZeroTestWrapTri{T} <: AbstractArray{T,2}
+        parent::Matrix{T}
+    end
+    Base.size(A::ZeroTestWrapTri) = size(A.parent)
+    Base.getindex(A::ZeroTestWrapTri, i, j) = A.parent[i,j]
+    Base.zero(A::ZeroTestWrapTri) = ZeroTestWrapTri(zero(A.parent))
+
+    for T in (UpperTriangular, LowerTriangular)
+        Z = zero(T(ZeroTestWrapTri([1.0 2.0; 3.0 4.0])))
+        @test Z isa T
+        @test parent(Z) isa ZeroTestWrapTri
+        @test iszero(Z)
+    end
 end
 
 end # module TestTriangular
