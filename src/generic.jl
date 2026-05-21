@@ -2014,6 +2014,7 @@ function isapprox(x::AbstractArray, y::AbstractArray;
         return mapreduce((a, b) -> isapprox(a, b; rtol=rtol, atol=atol, nans=nans), &, x, y)
     end
 end
+_nested_axes(arr::AbstractArray{<:Number}) = axes(arr)
 function _nested_axes(arr::AbstractArray)
     any(x -> x isa AbstractArray, arr) || return axes(arr)
     return map(x -> x isa AbstractArray ? _nested_axes(x) : axes(x), arr)
