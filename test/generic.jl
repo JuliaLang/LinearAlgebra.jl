@@ -956,6 +956,13 @@ end
     n = @allocated isapprox(A, A)
     @test n == 0
     @test Int[] ≈ Int[]
+    # arrays with different size
+    @test !isapprox(rand(2, 3), rand(2, 2))
+    # nested arrays
+    a = [[1, 2, [3, 4]], 5.0, [6im, [7.0, 8.0]]]
+    b = [[1, 2, [3, 4, 5]], 5.0, [6im, [7.0, 8.0]]]
+    @test a ≈ a
+    @test !isapprox(a, b)
 end
 
 @testset "issue 930" begin
