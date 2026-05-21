@@ -2004,7 +2004,7 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     atol::Real=0,
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
-    _nested_axes(A) == _nested_axes(B) || return false
+    _nested_axes(x) == _nested_axes(y) || return false
     d = norm_x_minus_y(x, y)
     if isfinite(d)
         return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
