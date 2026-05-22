@@ -327,12 +327,12 @@ julia> A
 ```
 """
 function eigvals!(A::StridedMatrix{<:BlasReal}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
-    issymmetric(A) && return sorteig!(eigvals!(Symmetric(A)), sortby)
+    issymmetric(A) && return eigvals!(Symmetric(A); sortby)
     _, valsre, valsim, _ = LAPACK.geevx!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), 'N', 'N', 'N', A)
     return sorteig!(iszero(valsim) ? valsre : complex.(valsre, valsim), sortby)
 end
 function eigvals!(A::StridedMatrix{<:BlasComplex}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
-    ishermitian(A) && return sorteig!(eigvals(Hermitian(A)), sortby)
+    ishermitian(A) && return eigvals!(Hermitian(A); sortby)
     return sorteig!(LAPACK.geevx!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), 'N', 'N', 'N', A)[2], sortby)
 end
 
