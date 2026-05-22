@@ -20,7 +20,7 @@ default_eigen_alg(@nospecialize(A)) = RobustRepresentations()
 
 # Eigensolvers for symmetric and Hermitian matrices
 function eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=eigsortby)
-    sortby2 = sortby == eigsortby ? nothing : sortby
+    sortby2 = sortby == eigsortby ? nothing : sortby # eigsortby is done by LAPACK.syev*
     if alg === DivideAndConquer()
         Eigen(sorteig!(LAPACK.syevd!('V', A.uplo, A.data)..., sortby2)...)
     elseif alg === QRIteration()
