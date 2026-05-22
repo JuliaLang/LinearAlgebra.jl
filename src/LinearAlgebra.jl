@@ -555,7 +555,6 @@ include("exceptions.jl")
 include("generic.jl")
 
 include("blas.jl")
-include("sparse_interface.jl")
 include("matmul.jl")
 include("lapack.jl")
 
@@ -584,6 +583,7 @@ include("bitarray.jl")
 include("ldlt.jl")
 include("schur.jl")
 include("structuredbroadcast.jl")
+include("sparse_interface.jl")
 include("deprecated.jl")
 
 const ⋅ = dot
