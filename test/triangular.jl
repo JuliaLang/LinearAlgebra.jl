@@ -1118,8 +1118,9 @@ end
         A = randn(T, 4, 4)
         for wrapper in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
             B = wrapper(A)
-            @test eigvals(B) == diag(B) #don't sort by default
-            F = eigen(B; sortby = LinearAlgebra.eigsortby)
+            @test eigvals(B; sortby=nothing) == diag(B)
+            F = eigen(B)
+            @test issorted(F.values, by=LinearAlgebra.eigsortby) #sort by default
             @test B * F.vectors ≈ F.vectors * Diagonal(F.values)
             @test F.values ≈ eigvals(B; sortby = LinearAlgebra.eigsortby)
             @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
