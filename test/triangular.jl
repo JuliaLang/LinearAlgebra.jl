@@ -704,6 +704,7 @@ end
         V = eigvecs(U)
         λ = eigvals(U)
         @test U * V ≈ V * Diagonal(λ)
+        @test all(v -> norm(v) ≈ 1, eachcol(V))
 
         MU = MyTriangular(U)
         V = eigvecs(U)
@@ -1109,6 +1110,20 @@ end
         @test L == L2
         LinearAlgebra.fillband!(L, -10, -10, -10)
         @test L == L2
+    end
+end
+
+@testset "eigenvalue sorting" begin
+    for T in (Float64, ComplexF64, Float16, ComplexF16)
+        A = randn(T, 4, 4)
+        for wrapper in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+            B = wrapper(A)
+            @test eigvals(B) == diag(B) #don't sort by default
+            F = eigen(B; sortby = LinearAlgebra.eigsortby)
+            @test B * F.vectors ≈ F.vectors * Diagonal(F.values)
+            @test F.values ≈ eigvals(B; sortby = LinearAlgebra.eigsortby)
+            @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
+        end
     end
 end
 
