@@ -1140,7 +1140,9 @@ end
         @test Z isa T
         @test parent(Z) isa ZeroTestWrapTri
         @test iszero(Z)
-=======
+    end
+end
+
 @testset "eigenvalue sorting" begin
     for T in (Float64, ComplexF64, Float16, ComplexF16)
         A = randn(T, 4, 4)
@@ -1153,7 +1155,6 @@ end
             @test F.values ≈ eigvals(B; sortby = LinearAlgebra.eigsortby)
             @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
         end
->>>>>>> master
     end
 end
 
