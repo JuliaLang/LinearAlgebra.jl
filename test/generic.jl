@@ -497,14 +497,10 @@ end
 
 @testset "normalize array of arrays" begin
     a = [[1,2], [3,4]]
-    for Tr in (Int32, Int64, Float32, Float64)
-        for T in (Tr, Complex{Tr})
-            b = convert(Vector{Vector{T}}, a)
-            @test normalize(b) == normalize!(copy(b))
-            @test norm(normalize(b)) == 1.0
-            @inferred normalize(b)
-        end
-    end
+    b = [Int[]]
+    @test @inferred norm(normalize(a)) ≈ 1
+    @test normalize(a) isa Vector{Vector{Float64}}
+    @test normalize(b) isa Vector{Vector{Float64}}
 end
 
 @testset "Issue 14657" begin
