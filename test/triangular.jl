@@ -1113,7 +1113,6 @@ end
     end
 end
 
-<<<<<<< fix/zero-unit-triangular
 @testset "zero for triangular matrices" begin
     A = rand(4, 4)
     @test zero(UpperTriangular(A)) isa UpperTriangular
