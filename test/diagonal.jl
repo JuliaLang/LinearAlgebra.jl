@@ -1068,7 +1068,8 @@ end
 
 @testset "eigenvalue sorting" begin
     D = Diagonal([0.4, 0.2, -1.3])
-    @test eigvals(D) == eigen(D).values == [0.4, 0.2, -1.3] # not sorted by default
+    @test eigvals(D) == eigen(D).values == [-1.3, 0.2, 0.4] #sorted by default
+    @test eigvals(D; sortby=nothing) == eigen(D; sortby=nothing).values == [0.4, 0.2, -1.3]
     @test eigvals(D; sortby=LinearAlgebra.eigsortby) == [-1.3, 0.2, 0.4] # sortby keyword supported for eigvals(::Diagonal)
     @test eigvals(Matrix(D)) == eigen(Matrix(D)).values == [-1.3, 0.2, 0.4] # sorted even if diagonal special case is detected
     E = eigen(D; sortby=abs) # sortby keyword supported for eigen(::Diagonal)

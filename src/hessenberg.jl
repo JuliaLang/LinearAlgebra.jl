@@ -456,15 +456,7 @@ end
 # preserve the wrapper for eigensolves with UpperHessenberg
 eigencopy_oftype(H::UpperHessenberg, S) = UpperHessenberg(eigencopy_oftype(H.data, S))
 
-# fallback to dense algorithms
-eigvals!(H::UpperHessenberg; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
-    eigvals!(triu!(H.data,-1); permute, scale, sortby)
-eigen!(H::UpperHessenberg; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
-    eigen!(triu!(H.data,-1); permute, scale, sortby)
-
-
 schur!(H::UpperHessenberg{T}) where {T<:BlasFloat} = Schur(LinearAlgebra.LAPACK.hseqr!(H.data)...)
-schur!(H::UpperHessenberg) = schur!(triu!(H.data, -1)) # fallback to dense algorithm
 
 ######################################################################################
 # Hessenberg factorizations Q(H+μI)Q' of A+μI:

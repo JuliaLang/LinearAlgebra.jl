@@ -333,13 +333,6 @@ end
         @test λ ≈ eigvals(Matrix(H)) ≈ F.values
         @test H * F.vectors ≈ F.vectors * Diagonal(λ)
         @test Diagonal(F.vectors' * F.vectors) ≈ I
-        if T <: LinearAlgebra.BlasFloat
-            λ2 = @invoke eigvals!(copy(H)::UpperHessenberg) # test fallback
-            F2 = @invoke eigen!(copy(H)::UpperHessenberg) # fallback
-            @test λ ≈ λ2 ≈ F2.values
-            @test H * F2.vectors ≈ F2.vectors * Diagonal(λ)
-            @test Diagonal(F2.vectors' * F2.vectors) ≈ I
-        end
     end
 
     # be sure to test real-H cases with both purely real and complex eigvals

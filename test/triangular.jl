@@ -1113,6 +1113,7 @@ end
     end
 end
 
+<<<<<<< fix/zero-unit-triangular
 @testset "zero for triangular matrices" begin
     A = rand(4, 4)
     @test zero(UpperTriangular(A)) isa UpperTriangular
@@ -1139,6 +1140,20 @@ end
         @test Z isa T
         @test parent(Z) isa ZeroTestWrapTri
         @test iszero(Z)
+=======
+@testset "eigenvalue sorting" begin
+    for T in (Float64, ComplexF64, Float16, ComplexF16)
+        A = randn(T, 4, 4)
+        for wrapper in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+            B = wrapper(A)
+            @test eigvals(B; sortby=nothing) == diag(B)
+            F = eigen(B)
+            @test issorted(F.values, by=LinearAlgebra.eigsortby) #sort by default
+            @test B * F.vectors ≈ F.vectors * Diagonal(F.values)
+            @test F.values ≈ eigvals(B; sortby = LinearAlgebra.eigsortby)
+            @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
+        end
+>>>>>>> master
     end
 end
 

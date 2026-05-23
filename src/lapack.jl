@@ -3660,8 +3660,8 @@ trtrs!(uplo::AbstractChar, trans::AbstractChar, diag::AbstractChar, A::AbstractM
 
 #Eigenvector computation and condition number estimation
 for (trcon, trevc, trrfs, elty) in
-    ((:dtrcon_,:dtrevc_,:dtrrfs_,:Float64),
-     (:strcon_,:strevc_,:strrfs_,:Float32))
+    ((:dtrcon_,:dtrevc3_,:dtrrfs_,:Float64),
+     (:strcon_,:strevc3_,:strrfs_,:Float32))
     @eval begin
         # SUBROUTINE DTRCON( NORM, UPLO, DIAG, N, A, LDA, RCOND, WORK,
         #                  IWORK, INFO )
@@ -3694,12 +3694,12 @@ for (trcon, trevc, trrfs, elty) in
             rcond[]
         end
 
-        # SUBROUTINE DTREVC( SIDE, HOWMNY, SELECT, N, T, LDT, VL, LDVL, VR,
-        #                    LDVR, MM, M, WORK, INFO )
+        # SUBROUTINE DTREVC3( SIDE, HOWMNY, SELECT, N, T, LDT, VL, LDVL, VR,
+        #                    LDVR, MM, M, WORK, LWORK, INFO )
         #
         # .. Scalar Arguments ..
         # CHARACTER          HOWMNY, SIDE
-        # INTEGER            INFO, LDT, LDVL, LDVR, M, MM, N
+        # INTEGER            LWORK, INFO, LDT, LDVL, LDVR, M, MM, N
         # ..
         # .. Array Arguments ..
         # LOGICAL            SELECT( * )
@@ -3722,19 +3722,25 @@ for (trcon, trevc, trrfs, elty) in
 
             # Allocate
             m = Ref{BlasInt}()
-            work = Vector{$elty}(undef, 3n)
+            work = Vector{$elty}(undef, 1)
+            lwork = BlasInt(-1)
             info = Ref{BlasInt}()
-
-            ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Clong, Clong),
-                side, howmny, select, n,
-                T, ldt, VL, ldvl,
-                VR, ldvr, mm, m,
-                work, info, 1, 1)
-            chklapackerror(info[])
+            for i = 1:2  # first call returns lwork as work[1]
+                ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
+                    (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
+                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                    Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
+                    Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
+                    side, howmny, select, n,
+                    T, ldt, VL, ldvl,
+                    VR, ldvr, mm, m,
+                    work, lwork, info, 1, 1)
+                chklapackerror(info[])
+                if i == 1
+                    lwork = BlasInt(work[1])
+                    resize!(work, lwork)
+                end
+            end
 
             VLn = size(VL, 1)
             VRn = size(VR, 1)
@@ -3798,8 +3804,8 @@ for (trcon, trevc, trrfs, elty) in
 end
 
 for (trcon, trevc, trrfs, elty, relty) in
-    ((:ztrcon_,:ztrevc_,:ztrrfs_,:ComplexF64,:Float64),
-     (:ctrcon_,:ctrevc_,:ctrrfs_,:ComplexF32, :Float32))
+    ((:ztrcon_,:ztrevc3_,:ztrrfs_,:ComplexF64,:Float64),
+     (:ctrcon_,:ctrevc3_,:ctrrfs_,:ComplexF32, :Float32))
     @eval begin
         # SUBROUTINE ZTRCON( NORM, UPLO, DIAG, N, A, LDA, RCOND, WORK,
         #                   RWORK, INFO )
@@ -3832,12 +3838,12 @@ for (trcon, trevc, trrfs, elty, relty) in
             rcond[]
         end
 
-        # SUBROUTINE ZTREVC( SIDE, HOWMNY, SELECT, N, T, LDT, VL, LDVL, VR,
-        #                    LDVR, MM, M, WORK, RWORK, INFO )
+        # SUBROUTINE ZTREVC3( SIDE, HOWMNY, SELECT, N, T, LDT, VL, LDVL, VR,
+        #                    LDVR, MM, M, WORK, LWORK, RWORK, LRWORK, INFO )
         #
         # .. Scalar Arguments ..
         # CHARACTER          HOWMNY, SIDE
-        # INTEGER            INFO, LDT, LDVL, LDVR, M, MM, N
+        # INTEGER            LWORK, LRWORK, INFO, LDT, LDVL, LDVR, M, MM, N
         # ..
         # .. Array Arguments ..
         # LOGICAL            SELECT( * )
@@ -3861,19 +3867,29 @@ for (trcon, trevc, trrfs, elty, relty) in
 
             # Allocate
             m = Ref{BlasInt}()
-            work = Vector{$elty}(undef, 2n)
-            rwork = Vector{$relty}(undef, n)
+            work = Vector{$elty}(undef, 1)
+            lwork = BlasInt(-1)
+            rwork = Vector{$relty}(undef, 1)
+            lrwork = BlasInt(-1)
             info = Ref{BlasInt}()
-            ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
-                (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                 Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
-                 Ptr{$elty}, Ptr{$relty}, Ref{BlasInt}, Clong, Clong),
-                side, howmny, select, n,
-                T, ldt, VL, ldvl,
-                VR, ldvr, mm, m,
-                work, rwork, info, 1, 1)
-            chklapackerror(info[])
+            for i = 1:2  # first call returns lwork as work[1] and lrwork as rwork[1]
+                ccall((@blasfunc($trevc), libblastrampoline), Cvoid,
+                    (Ref{UInt8}, Ref{UInt8}, Ptr{BlasInt}, Ref{BlasInt},
+                    Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                    Ptr{$elty}, Ref{BlasInt}, Ref{BlasInt}, Ptr{BlasInt},
+                    Ptr{$elty}, Ref{BlasInt}, Ptr{$relty}, Ref{BlasInt}, Ref{BlasInt}, Clong, Clong),
+                    side, howmny, select, n,
+                    T, ldt, VL, ldvl,
+                    VR, ldvr, mm, m,
+                    work, lwork, rwork, lrwork, info, 1, 1)
+                chklapackerror(info[])
+                if i == 1
+                    lwork = BlasInt(work[1])
+                    resize!(work, lwork)
+                    lrwork = BlasInt(rwork[1])
+                    resize!(rwork, lrwork)
+                end
+            end
 
             VLn = size(VL, 1)
             VRn = size(VR, 1)

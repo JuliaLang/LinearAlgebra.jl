@@ -1382,19 +1382,21 @@ end
 
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
-function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix})
-    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+    return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix})
+function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
     for i in axes(A, 1)
         A.data[i,i] = 1
     end
     eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
 end
-function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix})
-    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+    return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix})
+function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
     for i in axes(A, 1)
         A.data[i,i] = 1
     end
@@ -2160,7 +2162,7 @@ function _log_quasitriu!(A0, A)
         R[i,i+1] = i / sqrt((2 * i)^2 - 1)
         R[i+1,i] = R[i,i+1]
     end
-    x,V = eigen(R)
+    x,V = eigen(R; sortby=nothing)
     w = Vector{Float64}(undef, m)
     for i in 1:m
         x[i] = (x[i] + 1) / 2
@@ -2983,19 +2985,19 @@ end
 # End of auxiliary functions for matrix square root
 
 # Generic eigensystems
-eigvals(A::AbstractTriangular) = diag(A)
+eigvals(A::AbstractTriangular; sortby = eigsortby) = sorteig!(diag(A), sortby)
 # fallback for unknown types
-function eigvecs(A::AbstractTriangular{<:BlasFloat})
+function eigvecs(A::AbstractTriangular{<:BlasFloat}; sortby = eigsortby)
     if istriu(A)
-        eigvecs(UpperTriangular(Matrix(A)))
+        eigvecs(UpperTriangular(Matrix(A)); sortby)
     else # istril(A)
-        eigvecs(LowerTriangular(Matrix(A)))
+        eigvecs(LowerTriangular(Matrix(A)); sortby)
     end
 end
-function eigvecs(A::AbstractTriangular{T}) where T
+function eigvecs(A::AbstractTriangular{T}; sortby = eigsortby) where T
     TT = promote_type(T, Float32)
     if TT <: BlasFloat
-        return eigvecs(convert(AbstractMatrix{TT}, A))
+        return eigvecs(convert(AbstractMatrix{TT}, A); sortby)
     else
         throw(ArgumentError(lazy"eigvecs type $(typeof(A)) not supported. Please submit a pull request."))
     end
@@ -3019,7 +3021,7 @@ function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     return abs_det, sgn
 end
 
-eigen(A::AbstractTriangular) = Eigen(eigvals(A), eigvecs(A))
+eigen(A::AbstractTriangular; sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
 
 # Generic singular systems
 for func in (:svd, :svd!, :svdvals)

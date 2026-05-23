@@ -218,8 +218,7 @@ make rows and columns more equal in norm. The default is `true` for both options
 
 By default, the eigenvalues and vectors are sorted lexicographically by `(real(λ),imag(λ))`.
 A different comparison function `by(λ)` can be passed to `sortby`, or you can pass
-`sortby=nothing` to leave the eigenvalues in an arbitrary order. Some special matrix types
-(e.g. [`Diagonal`](@ref)) may have a different default.
+`sortby=nothing` to leave the eigenvalues in an arbitrary order.
 
 # Examples
 ```jldoctest
@@ -327,12 +326,12 @@ julia> A
 ```
 """
 function eigvals!(A::StridedMatrix{<:BlasReal}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
-    issymmetric(A) && return sorteig!(eigvals!(Symmetric(A)), sortby)
+    issymmetric(A) && return eigvals!(Symmetric(A); sortby)
     _, valsre, valsim, _ = LAPACK.geevx!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), 'N', 'N', 'N', A)
     return sorteig!(iszero(valsim) ? valsre : complex.(valsre, valsim), sortby)
 end
 function eigvals!(A::StridedMatrix{<:BlasComplex}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
-    ishermitian(A) && return sorteig!(eigvals(Hermitian(A)), sortby)
+    ishermitian(A) && return eigvals!(Hermitian(A); sortby)
     return sorteig!(LAPACK.geevx!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), 'N', 'N', 'N', A)[2], sortby)
 end
 
@@ -404,8 +403,8 @@ Stacktrace:
 ```
 """
 function eigmax(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
-    v = eigvals(A; permute, scale)
-    if eltype(v)<:Complex
+    v = eigvals(A; permute, scale, sortby=nothing)
+    if eltype(v) <: Complex
         throw(DomainError(A, "`A` cannot have complex eigenvalues."))
     end
     return maximum(v)
@@ -440,8 +439,8 @@ Stacktrace:
 ```
 """
 function eigmin(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
-    v = eigvals(A; permute, scale)
-    if eltype(v)<:Complex
+    v = eigvals(A; permute, scale, sortby=nothing)
+    if eltype(v) <: Complex
         throw(DomainError(A, "`A` cannot have complex eigenvalues."))
     end
     return minimum(v)
