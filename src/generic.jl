@@ -2111,7 +2111,6 @@ function normalize(a::AbstractArray, p::Real = 2)
         aa = copymutable_oftype(a, promote_op(/, eltype(a), typeof(nrm)))
         return __normalize!(aa, nrm)
     else
-        T = typeof(zero(eltype(a))/nrm)
         return T[]
     end
 end
