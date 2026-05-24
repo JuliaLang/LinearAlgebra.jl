@@ -2033,21 +2033,12 @@ Normalize the array `a` in-place so that its `p`-norm equals unity,
 i.e. `norm(a, p) == 1`.
 See also [`normalize`](@ref) and [`norm`](@ref).
 """
-function normalize!(a::AbstractArray, p::Real=2)
+function normalize!(a::AbstractArray, p::Real=2) #logic equal to normalize, should be kept in sync
     nrm = norm(a, p)
-    __normalize!(a, nrm)
-end
-
-@inline function __normalize!(a::AbstractArray, nrm)
-    # The largest positive floating point number whose inverse is less than infinity
-    δ = inv(prevfloat(typemax(nrm)))
-    if nrm ≥ δ # Safe to multiply with inverse
-        invnrm = inv(nrm)
-        rmul!(a, invnrm)
-    else # scale elements to avoid overflow
-        εδ = eps(one(nrm))/δ
-        rmul!(a, εδ)
-        rmul!(a, inv(nrm*εδ))
+    if !issubnormal(nrm) # nrm is accurate and inverting won't overflow
+        rmul!(a, inv(nrm))
+    else # scale elements to be non-subnormal and re-normalize
+        normalize!(rmul!(a, inv(floatmin(nrm))), p)
     end
     return a
 end
@@ -2105,14 +2096,12 @@ julia> normalize(0, 1)
 NaN
 ```
 """
-function normalize(a::AbstractArray, p::Real = 2)
+function normalize(a::AbstractArray, p::Real = 2) #logic equal to normalize!, should be kept in sync
     nrm = norm(a, p)
-    if !isempty(a)
-        aa = copymutable_oftype(a, typeof(first(a)/nrm))
-        return __normalize!(aa, nrm)
+    if !issubnormal(nrm)
+        return a * inv(nrm)
     else
-        T = typeof(zero(eltype(a))/nrm)
-        return T[]
+        return normalize(a * inv(floatmin(nrm)), p)
     end
 end
 
