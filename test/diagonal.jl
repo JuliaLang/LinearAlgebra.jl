@@ -259,6 +259,9 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
         @test D*transpose(D2) ≈ M*transpose(DM2)
         @test D2*transpose(D) ≈ DM2*transpose(M)
         @test D2*D' ≈ DM2*M'
+        v = randn(5)
+        @test v / Diagonal(fill(2, 1)) ≈ v / 2
+        @test_throws DimensionMismatch ones(2) / Diagonal(ones(2))
 
         #division of two Diagonals
         @test D/D2 ≈ Diagonal(D.diag./D2.diag)
@@ -552,12 +555,10 @@ Base.size(x::SimpleVector) = size(x.vec)
     BL = Bidiagonal(repr(randn(10)), repr(randn(9)), :L)
     BU = Bidiagonal(repr(randn(10)), repr(randn(9)), :U)
     C = SymTridiagonal(repr(randn(10)), repr(randn(9)))
-    Cl = SymTridiagonal(repr(randn(10)), repr(randn(10)))
     D = Tridiagonal(repr(randn(9)), repr(randn(10)), repr(randn(9)))
     @test kron(A, BL)::Bidiagonal == kron(M, Array(BL))
     @test kron(A, BU)::Bidiagonal == kron(M, Array(BU))
     @test kron(A, C)::SymTridiagonal == kron(M, Array(C))
-    @test kron(A, Cl)::SymTridiagonal == kron(M, Array(Cl))
     @test kron(A, D)::Tridiagonal == kron(M, Array(D))
 end
 
@@ -1009,8 +1010,8 @@ end
 end
 
 @testset "(Sym)Tridiagonal division by Diagonal" begin
-    for K in (5, 1), elty in (Float64, ComplexF32), overlength in (1, 0)
-        S = SymTridiagonal(randn(elty, K), randn(elty, K-overlength))
+    for K in (5, 1), elty in (Float64, ComplexF32)
+        S = SymTridiagonal(randn(elty, K), randn(elty, K-1))
         T = Tridiagonal(randn(elty, K-1), randn(elty, K), randn(elty, K-1))
         D = Diagonal(randn(elty, K))
         D0 = Diagonal(zeros(elty, K))
@@ -1033,8 +1034,8 @@ end
     @test (T / D)::Tridiagonal{Float64} == T
     # matrix eltype case
     K = 5
-    for elty in (Float64, ComplexF32), overlength in (1, 0)
-        S = SymTridiagonal([rand(elty, 2, 2) for _ in 1:K], [rand(elty, 2, 2) for _ in 1:K-overlength])
+    for elty in (Float64, ComplexF32)
+        S = SymTridiagonal([rand(elty, 2, 2) for _ in 1:K], [rand(elty, 2, 2) for _ in 1:K-1])
         T = Tridiagonal([rand(elty, 2, 2) for _ in 1:K-1], [rand(elty, 2, 2) for _ in 1:K], [rand(elty, 2, 2) for _ in 1:K-1])
         D = Diagonal(randn(elty, K))
         SM = fill(zeros(elty, 2, 2), K, K)
@@ -1067,7 +1068,8 @@ end
 
 @testset "eigenvalue sorting" begin
     D = Diagonal([0.4, 0.2, -1.3])
-    @test eigvals(D) == eigen(D).values == [0.4, 0.2, -1.3] # not sorted by default
+    @test eigvals(D) == eigen(D).values == [-1.3, 0.2, 0.4] #sorted by default
+    @test eigvals(D; sortby=nothing) == eigen(D; sortby=nothing).values == [0.4, 0.2, -1.3]
     @test eigvals(D; sortby=LinearAlgebra.eigsortby) == [-1.3, 0.2, 0.4] # sortby keyword supported for eigvals(::Diagonal)
     @test eigvals(Matrix(D)) == eigen(Matrix(D)).values == [-1.3, 0.2, 0.4] # sorted even if diagonal special case is detected
     E = eigen(D; sortby=abs) # sortby keyword supported for eigen(::Diagonal)
@@ -1412,7 +1414,7 @@ end
 
     # AbstractArray out
     c = fill(0, 4, 4)
-    kron!(c, b, a) 
+    kron!(c, b, a)
     @test c == diagm([3, 6, 4, 8])
     @test c == kron!(fill(0, 4, 4), Matrix(b), Matrix(a)) # against dense kron!
     c = Matrix{Float64}(undef, 4, 4)

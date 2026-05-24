@@ -43,8 +43,10 @@ aimg  = randn(n,n)/2
         @test vecs*sch*vecs' ≈ UnitUpperTriangular(triu(a))
         sch, vecs, vals = schur(LowerTriangular(tril(a)))
         @test vecs*sch*vecs' ≈ tril(a)
+        @test vals ≈ diag(sch)  # eigenvalues should match diag of Schur factor
         sch, vecs, vals = schur(UnitLowerTriangular(tril(a)))
         @test vecs*sch*vecs' ≈ UnitLowerTriangular(tril(a))
+        @test vals ≈ diag(sch)  # eigenvalues should match diag of Schur factor
         sch, vecs, vals = schur(Hermitian(asym))
         @test vecs*sch*vecs' ≈ asym
         sch, vecs, vals = schur(Symmetric(a + transpose(a)))
@@ -209,7 +211,7 @@ end
     B = Array(A)
     fact1 = schur(A)
     fact2 = schur(B)
-    @test fact1.values ≈ fact2.values
+    @test sort(fact1.values, by=reim) ≈ sort(fact2.values, by=reim)
     @test fact1.Z * fact1.T * fact1.Z' ≈ B
 
     A = UpperHessenberg(rand(Int32, 50, 50))

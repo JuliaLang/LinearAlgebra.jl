@@ -8,8 +8,8 @@ struct SymTridiagonal{T, V<:AbstractVector{T}} <: AbstractMatrix{T}
     ev::V                        # superdiagonal
     function SymTridiagonal{T, V}(dv, ev) where {T, V<:AbstractVector{T}}
         require_one_based_indexing(dv, ev)
-        if !(length(dv) - 1 <= length(ev) <= length(dv))
-            throw(DimensionMismatch(lazy"subdiagonal has wrong length. Has length $(length(ev)), but should be either $(length(dv) - 1) or $(length(dv))."))
+        if length(ev) != length(dv)-1 && !(length(dv) == 0 && length(ev) == 0)
+            throw(DimensionMismatch(lazy"subdiagonal has wrong length. Has length $(length(ev)), but should be $(length(dv) - 1)."))
         end
         new{T, V}(dv, ev)
     end
@@ -166,7 +166,7 @@ similar(S::SymTridiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = 
 
 # copyto! for matching axes
 _copyto_banded!(dest::SymTridiagonal, src::SymTridiagonal) =
-    (copyto!(dest.dv, src.dv); copyto!(dest.ev, _evview(src)); dest)
+    (copyto!(dest.dv, src.dv); copyto!(dest.ev, src.ev); dest)
 
 #Elementary operations
 for func in (:conj, :copy, :real, :imag)
@@ -186,15 +186,15 @@ function permutedims(S::SymTridiagonal, perm)
 end
 Base.copy(S::Adjoint{<:Any,<:SymTridiagonal}) = SymTridiagonal(map(x -> copy.(adjoint.(x)), (S.parent.dv, S.parent.ev))...)
 
-ishermitian(S::SymTridiagonal) = isreal(S.dv) && isreal(_evview(S))
+ishermitian(S::SymTridiagonal) = isreal(S.dv) && isreal(S.ev)
 issymmetric(S::SymTridiagonal) = true
 
 tr(S::SymTridiagonal) = sum(symmetric, S.dv)
 
 _diagiter(M::SymTridiagonal{<:Number}) = M.dv
 _diagiter(M::SymTridiagonal) = (symmetric(x, :U) for x in M.dv)
-_eviter_transposed(M::SymTridiagonal{<:Number}) = _evview(M)
-_eviter_transposed(M::SymTridiagonal) = (transpose(x) for x in _evview(M))
+_eviter_transposed(M::SymTridiagonal{<:Number}) = M.ev
+_eviter_transposed(M::SymTridiagonal) = (transpose(x) for x in M.ev)
 
 function diag(M::SymTridiagonal, n::Integer=0)
     # every branch call similar(..., ::Int) to make sure the
@@ -204,7 +204,7 @@ function diag(M::SymTridiagonal, n::Integer=0)
     if n == 0
         return copyto!(v, _diagiter(M))
     elseif n == 1
-        return copyto!(v, _evview(M))
+        return copyto!(v, M.ev)
     elseif n == -1
         return copyto!(v, _eviter_transposed(M))
     else
@@ -215,8 +215,8 @@ function diag(M::SymTridiagonal, n::Integer=0)
     return v
 end
 
-+(A::SymTridiagonal, B::SymTridiagonal) = SymTridiagonal(A.dv+B.dv, _evview(A)+_evview(B))
--(A::SymTridiagonal, B::SymTridiagonal) = SymTridiagonal(A.dv-B.dv, _evview(A)-_evview(B))
++(A::SymTridiagonal, B::SymTridiagonal) = SymTridiagonal(A.dv+B.dv, A.ev+B.ev)
+-(A::SymTridiagonal, B::SymTridiagonal) = SymTridiagonal(A.dv-B.dv, A.ev-B.ev)
 -(A::SymTridiagonal) = SymTridiagonal(-A.dv, -A.ev)
 *(A::SymTridiagonal, B::Number) = SymTridiagonal(A.dv*B, A.ev*B)
 *(B::Number, A::SymTridiagonal) = SymTridiagonal(B*A.dv, B*A.ev)
@@ -228,7 +228,7 @@ function rmul!(A::SymTridiagonal, x::Number)
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
     rmul!(A.dv, x)
-    rmul!(_evview(A), x)
+    rmul!(A.ev, x)
     return A
 end
 function lmul!(x::Number, B::SymTridiagonal)
@@ -239,15 +239,15 @@ function lmul!(x::Number, B::SymTridiagonal)
             lazy"the tridiagonal band to a nonzero value ($y)")))
     end
     lmul!(x, B.dv)
-    lmul!(x, _evview(B))
+    lmul!(x, B.ev)
     return B
 end
 /(A::SymTridiagonal, B::Number) = SymTridiagonal(A.dv/B, A.ev/B)
 \(B::Number, A::SymTridiagonal) = SymTridiagonal(B\A.dv, B\A.ev)
 ==(A::SymTridiagonal{<:Number}, B::SymTridiagonal{<:Number}) =
-    (A.dv == B.dv) && (_evview(A) == _evview(B))
+    (A.dv == B.dv) && (A.ev == B.ev)
 ==(A::SymTridiagonal, B::SymTridiagonal) =
-    size(A) == size(B) && all(i -> A[i,i] == B[i,i], axes(A, 1)) && (_evview(A) == _evview(B))
+    size(A) == size(B) && all(i -> A[i,i] == B[i,i], axes(A, 1)) && (A.ev == B.ev)
 
 function dot(x::AbstractVector, S::SymTridiagonal, y::AbstractVector)
     require_one_based_indexing(x, y)
@@ -279,35 +279,82 @@ end
 ldiv!(A::SymTridiagonal, B::AbstractVecOrMat; shift::Number=false) = ldiv!(ldlt(A, shift=shift), B)
 rdiv!(B::AbstractVecOrMat, A::SymTridiagonal; shift::Number=false) = rdiv!(B, ldlt(A, shift=shift))
 
-eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = Eigen(LAPACK.stegr!('V', A.dv, A.ev)...)
-eigen(A::SymTridiagonal{T}) where T = eigen!(copymutable_oftype(A, eigtype(T)))
+# tridiagonal eigensolver meta-algorithm from LAPACK.syevr! for alg==RobustRepresentations()
+#   - if all eigenvalues are desired, call stev == sterf (eigvals) or stegr == stemr (eigen)
+#   - otherwise, and also if an error occurs, fall back to stebz and (if eigvecs wanted) stein
+function syevr_tri_eigen(range::AbstractChar, dv::AbstractVector{T}, ev::AbstractVector{T}, vl::Real, vu::Real, il::Integer, iu::Integer; sortby = eigsortby) where {T<:BlasReal}
+    if range == 'A' || (range == 'I' && il == 1 && iu == length(dv))
+        try
+            # need to copy dv, ev so that they are available for fallbacks, below
+            values, vectors = LAPACK.stegr!('V', range, copymutable(dv), copymutable(ev), vl, vu, il, iu)
+            return Eigen(sorteig!(values, vectors, sortby == eigsortby ? nothing : sortby)...)
+        catch ex
+            ex isa LAPACKException || rethrow()
+        end
+    end
+    # note that these functions do not actually modify dv, ev, despite the !
+    values, iblock, isplit = LAPACK.stebz!(range, 'B', T(vl), T(vu), il, iu, -1.0, dv, ev)
+    vectors = LAPACK.stein!(dv, ev, values, iblock, isplit)
+    return Eigen(sorteig!(values, vectors, sortby)...)
+end
+function syevr_tri_eigvals(range::AbstractChar, dv::AbstractVector{T}, ev::AbstractVector{T}, vl::Real, vu::Real, il::Integer, iu::Integer) where {T<:BlasReal}
+    if range == 'A' || (range == 'I' && il == 1 && iu == length(dv))
+        try
+            # need to copy dv, ev so that they are available for fallbacks, below
+            return LAPACK.stev!('N', copymutable(dv), copymutable(ev))[1]
+        catch ex
+            ex isa LAPACKException || rethrow()
+        end
+    end
+    # note that this function does not actually modify dv, ev, despite the !
+    return LAPACK.stebz!(range, 'E', T(vl), T(vu), il, iu, -1.0, dv, ev)[1]
+end
 
-eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange) =
-    Eigen(LAPACK.stegr!('V', 'I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)...)
-eigen(A::SymTridiagonal{T}, irange::UnitRange) where T =
-    eigen!(copymutable_oftype(A, eigtype(T)), irange)
+eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}; kws...) =
+    syevr_tri_eigen('A', A.dv, A.ev, 0.0, 0.0, 0, 0; kws...)
+eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}; kws...) = eigen!(A; kws...)
+eigen(A::SymTridiagonal{T}; kws...) where T = eigen!(copymutable_oftype(A, eigtype(T)); kws...)
 
-eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real) =
-    Eigen(LAPACK.stegr!('V', 'V', A.dv, A.ev, vl, vu, 0, 0)...)
-eigen(A::SymTridiagonal{T}, vl::Real, vu::Real) where T =
-    eigen!(copymutable_oftype(A, eigtype(T)), vl, vu)
+eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; kws...) =
+    syevr_tri_eigen('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop; kws...)
+eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; kws...) =
+    eigen!(A, irange; kws...)
+eigen(A::SymTridiagonal{T}, irange::UnitRange; kws...) where T =
+    eigen!(copymutable_oftype(A, eigtype(T)), irange; kws...)
 
-eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = LAPACK.stev!('N', A.dv, A.ev)[1]
-eigvals(A::SymTridiagonal{T}) where T = eigvals!(copymutable_oftype(A, eigtype(T)))
+eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; kws...) =
+    syevr_tri_eigen('V', A.dv, A.ev, vl, vu, 0, 0; kws...)
+eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; kws...) =
+    eigen!(A, vl, vu; kws...)
+eigen(A::SymTridiagonal{T}, vl::Real, vu::Real; kws...) where T =
+    eigen!(copymutable_oftype(A, eigtype(T)), vl, vu; kws...)
 
-eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange) =
-    LAPACK.stegr!('N', 'I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)[1]
-eigvals(A::SymTridiagonal{T}, irange::UnitRange) where T =
-    eigvals!(copymutable_oftype(A, eigtype(T)), irange)
+function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}; sortby = eigsortby)
+    vals = syevr_tri_eigvals('A', A.dv, A.ev, 0.0, 0.0, 0, 0)
+    return sorteig!(vals, sortby == eigsortby ? nothing : sortby)
+end
+eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}; kws...) = eigvals!(A; kws...)
+eigvals(A::SymTridiagonal{T}; kws...) where T = eigvals!(copymutable_oftype(A, eigtype(T)); kws...)
 
-eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real) =
-    LAPACK.stegr!('N', 'V', A.dv, A.ev, vl, vu, 0, 0)[1]
-eigvals(A::SymTridiagonal{T}, vl::Real, vu::Real) where T =
-    eigvals!(copymutable_oftype(A, eigtype(T)), vl, vu)
+function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; sortby = eigsortby)
+    vals = syevr_tri_eigvals('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)
+    return sorteig!(vals, sortby == eigsortby ? nothing : sortby)
+end
+eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; kws...) = eigvals!(A, irange; kws...)
+eigvals(A::SymTridiagonal{T}, irange::UnitRange; kws...) where T =
+    eigvals!(copymutable_oftype(A, eigtype(T)), irange; kws...)
+
+function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; sortby = eigsortby)
+    vals = syevr_tri_eigvals('V', A.dv, A.ev, vl, vu, 0, 0)
+    return sorteig!(vals, sortby == eigsortby ? nothing : sortby)
+end
+eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; kws...) = eigvals!(A, vl, vu; kws...)
+eigvals(A::SymTridiagonal{T}, vl::Real, vu::Real; kws...) where T =
+    eigvals!(copymutable_oftype(A, eigtype(T)), vl, vu; kws...)
 
 #Computes largest and smallest eigenvalue
-eigmax(A::SymTridiagonal) = eigvals(A, size(A, 1):size(A, 1))[1]
-eigmin(A::SymTridiagonal) = eigvals(A, 1:1)[1]
+eigmax(A::SymTridiagonal) = eigvals(A, size(A, 1):size(A, 1); sortby = eigsortby)[1]
+eigmin(A::SymTridiagonal) = eigvals(A, 1:1; sortby = eigsortby)[1]
 
 #Compute selected eigenvectors only corresponding to particular eigenvalues
 """
@@ -359,15 +406,15 @@ Base.@constprop :aggressive function istriu(M::SymTridiagonal, k::Integer=0)
     if k <= -1
         return true
     elseif k == 0
-        return iszero(_evview(M))
+        return iszero(M.ev)
     else # k >= 1
-        return iszero(_evview(M)) && iszero(M.dv)
+        return iszero(M.ev) && iszero(M.dv)
     end
 end
 Base.@constprop :aggressive istril(M::SymTridiagonal, k::Integer) = istriu(M, -k)
-iszero(M::SymTridiagonal) =  iszero(_evview(M)) && iszero(M.dv)
-isone(M::SymTridiagonal) =  iszero(_evview(M)) && all(isone, M.dv)
-isdiag(M::SymTridiagonal) =  iszero(_evview(M))
+iszero(M::SymTridiagonal) =  iszero(M.ev) && iszero(M.dv)
+isone(M::SymTridiagonal) =  iszero(M.ev) && all(isone, M.dv)
+isdiag(M::SymTridiagonal) =  iszero(M.ev)
 
 
 function tril!(M::SymTridiagonal{T}, k::Integer=0) where T
@@ -927,7 +974,7 @@ end
 ==(A::Tridiagonal, B::Tridiagonal) = (A.dl==B.dl) && (A.d==B.d) && (A.du==B.du)
 function ==(A::Tridiagonal, B::SymTridiagonal)
     iseq = all(Iterators.map((x, y) -> x == transpose(y), A.du, A.dl))
-    iseq = iseq && A.du == _evview(B)
+    iseq = iseq && A.du == B.ev
     iseq && all(Iterators.map((x, y) -> x == symmetric(y, :U), A.d, B.dv))
 end
 ==(A::SymTridiagonal, B::Tridiagonal) = B == A
@@ -947,7 +994,7 @@ end
 
 Base._sum(A::Tridiagonal, ::Colon) = sum(A.d) + sum(A.dl) + sum(A.du)
 function Base._sum(A::SymTridiagonal, ::Colon)
-    se = sum(_evview(A))
+    se = sum(A.ev)
     symmetric(sum(A.dv), :U) + se + transpose(se)
 end
 
@@ -1124,7 +1171,7 @@ end
 # combinations of Tridiagonal and Symtridiagonal
 # copyto! for matching axes
 function _copyto_banded!(A::Tridiagonal, B::SymTridiagonal)
-    Bev = _evview(B)
+    Bev = B.ev
     A.du .= Bev
     # Broadcast identity for numbers to access the faster copyto! path
     # This uses the fact that transpose(x::Number) = x and symmetric(x::Number) = x
@@ -1135,7 +1182,7 @@ end
 function _copyto_banded!(A::SymTridiagonal, B::Tridiagonal)
     issymmetric(B) || throw(ArgumentError("cannot copy an asymmetric Tridiagonal matrix to a SymTridiagonal"))
     A.dv .= B.d
-    _evview(A) .= B.du
+    A.ev .= B.du
     return A
 end
 

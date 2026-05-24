@@ -27,8 +27,6 @@ _diagview(S::SymTridiagonal) = diagview(S)
 # conversions from SymTridiagonal to other special matrix types
 Diagonal(A::SymTridiagonal) = Diagonal(_diagview(A))
 
-# These can fail when ev has the same length as dv
-# TODO: Revisit when a good solution for #42477 is found
 Bidiagonal(A::SymTridiagonal{<:Number}) =
     iszero(A.ev) ? Bidiagonal(A.dv, A.ev, :U) :
         throw(ArgumentError("matrix cannot be represented as Bidiagonal"))
@@ -51,7 +49,7 @@ Bidiagonal(A::AbstractTriangular) =
 _lucopy(A::Bidiagonal, T) = copymutable_oftype(Tridiagonal(A), T)
 _lucopy(A::Diagonal, T)   = copymutable_oftype(Tridiagonal(A), T)
 function _lucopy(A::SymTridiagonal, T)
-    du = copy_similar(_evview(A), T)
+    du = copy_similar(A.ev, T)
     dl = copy.(transpose.(du))
     d  = copy_similar(A.dv, T)
     return Tridiagonal(dl, d, du)
@@ -120,29 +118,6 @@ _mul!(C::AbstractMatrix, A::AbstractTriangular, B::BandedMatrix, alpha::Number, 
 _mul!(C::AbstractMatrix, A::BandedMatrix, B::AbstractTriangular, alpha::Number, beta::Number) =
     @stable_muladdmul _mul!(C, A, B, MulAddMul(alpha, beta))
 
-function mul(H::UpperHessenberg, B::Bidiagonal)
-    T = promote_op(matprod, eltype(H), eltype(B))
-    A = mul!(similar(H, T, size(H)), H, B)
-    return B.uplo == 'U' ? UpperHessenberg(A) : A
-end
-function mul(B::Bidiagonal, H::UpperHessenberg)
-    T = promote_op(matprod, eltype(B), eltype(H))
-    A = mul!(similar(H, T, size(H)), B, H)
-    return B.uplo == 'U' ? UpperHessenberg(A) : A
-end
-
-function /(H::UpperHessenberg, B::Bidiagonal)
-    T = typeof(oneunit(eltype(H))/oneunit(eltype(B)))
-    A = _rdiv!(similar(H, T, size(H)), H, B)
-    return B.uplo == 'U' ? UpperHessenberg(A) : A
-end
-
-function \(B::Bidiagonal, H::UpperHessenberg)
-    T = typeof(oneunit(eltype(B))\oneunit(eltype(H)))
-    A = ldiv!(similar(H, T, size(H)), B, H)
-    return B.uplo == 'U' ? UpperHessenberg(A) : A
-end
-
 # specialized +/- for structured matrices. If these are removed, it falls
 # back to broadcasting which has ~2-10x speed regressions.
 # For the other structure matrix pairs, broadcasting works well.
@@ -182,30 +157,30 @@ end
 
 @commutative function (+)(A::Diagonal, B::SymTridiagonal)
     newdv = A.diag + _diagview(B)
-    _symtri_or_tri(_evview_transposed(B), newdv, _evview(B))
+    _symtri_or_tri(_evview_transposed(B), newdv, B.ev)
 end
 
 function (-)(A::Diagonal, B::SymTridiagonal)
     newdv = A.diag - _diagview(B)
-    _symtri_or_tri(-_evview_transposed(B), newdv, -_evview(B))
+    _symtri_or_tri(-_evview_transposed(B), newdv, -B.ev)
 end
 
 function (-)(A::SymTridiagonal, B::Diagonal)
     newdv = _diagview(A) - B.diag
-    _symtri_or_tri(_evview_transposed(A), newdv, _evview(A))
+    _symtri_or_tri(_evview_transposed(A), newdv, A.ev)
 end
 
 # this set doesn't have the aforementioned problem
-_evview_transposed(S::SymTridiagonal{<:Number}) = _evview(S)
-_evview_transposed(S::SymTridiagonal) = transpose.(_evview(S))
+_evview_transposed(S::SymTridiagonal{<:Number}) = S.ev
+_evview_transposed(S::SymTridiagonal) = transpose.(S.ev)
 @commutative function (+)(A::Tridiagonal, B::SymTridiagonal)
-    Tridiagonal(A.dl+_evview_transposed(B), A.d+_diagview(B), A.du+_evview(B))
+    Tridiagonal(A.dl+_evview_transposed(B), A.d+_diagview(B), A.du+B.ev)
 end
 function -(A::Tridiagonal, B::SymTridiagonal)
-    Tridiagonal(A.dl-_evview_transposed(B), A.d-_diagview(B), A.du-_evview(B))
+    Tridiagonal(A.dl-_evview_transposed(B), A.d-_diagview(B), A.du-B.ev)
 end
 function -(A::SymTridiagonal, B::Tridiagonal)
-    Tridiagonal(_evview_transposed(A)-B.dl, _diagview(A)-B.d, _evview(A)-B.du)
+    Tridiagonal(_evview_transposed(A)-B.dl, _diagview(A)-B.d, A.ev-B.du)
 end
 
 @commutative function (+)(A::Diagonal, B::Tridiagonal)
@@ -240,17 +215,17 @@ end
 
 @commutative function (+)(A::Bidiagonal, B::SymTridiagonal)
     newdv = A.dv + _diagview(B)
-    Tridiagonal((A.uplo == 'U' ? (typeof(newdv)(_evview_transposed(B)), newdv, A.ev+_evview(B)) : (A.ev+_evview_transposed(B), newdv, typeof(newdv)(_evview(B))))...)
+    Tridiagonal((A.uplo == 'U' ? (typeof(newdv)(_evview_transposed(B)), newdv, A.ev+B.ev) : (A.ev+_evview_transposed(B), newdv, typeof(newdv)(B.ev)))...)
 end
 
 function (-)(A::Bidiagonal, B::SymTridiagonal)
     newdv = A.dv - _diagview(B)
-    Tridiagonal((A.uplo == 'U' ? (typeof(newdv)(-_evview_transposed(B)), newdv, A.ev-_evview(B)) : (A.ev-_evview_transposed(B), newdv, typeof(newdv)(-_evview(B))))...)
+    Tridiagonal((A.uplo == 'U' ? (typeof(newdv)(-_evview_transposed(B)), newdv, A.ev-B.ev) : (A.ev-_evview_transposed(B), newdv, typeof(newdv)(-B.ev)))...)
 end
 
 function (-)(A::SymTridiagonal, B::Bidiagonal)
     newdv = _diagview(A) - B.dv
-    Tridiagonal((B.uplo == 'U' ? (typeof(newdv)(_evview_transposed(A)), newdv, _evview(A)-B.ev) : (_evview_transposed(A)-B.ev, newdv, typeof(newdv)(_evview(A))))...)
+    Tridiagonal((B.uplo == 'U' ? (typeof(newdv)(_evview_transposed(A)), newdv, A.ev-B.ev) : (_evview_transposed(A)-B.ev, newdv, typeof(newdv)(A.ev)))...)
 end
 
 @commutative function (+)(A::Tridiagonal, B::UniformScaling)
@@ -280,7 +255,7 @@ function (-)(A::UniformScaling, B::Tridiagonal)
 end
 function (-)(A::UniformScaling, B::SymTridiagonal)
     dv = Ref(A) .- B.dv
-    SymTridiagonal(dv, convert(typeof(dv), -_evview(B)))
+    SymTridiagonal(dv, convert(typeof(dv), -B.ev))
 end
 function (-)(A::UniformScaling, B::Bidiagonal)
     dv = Ref(A) .- B.dv
@@ -400,7 +375,7 @@ end
 function _copyto_banded!(SymT::SymTridiagonal, D::Diagonal)
     issymmetric(D) || throw(ArgumentError("cannot copy a non-symmetric Diagonal matrix to a SymTridiagonal"))
     SymT.dv .= D.diag
-    _ev = _evview(SymT)
+    _ev = SymT.ev
     _ev .= diagview(D,  1)
     return SymT
 end
@@ -444,7 +419,7 @@ end
 function _copyto_banded!(SymT::SymTridiagonal, B::Bidiagonal)
     issymmetric(B) || throw(ArgumentError("cannot copy a non-symmetric Bidiagonal matrix to a SymTridiagonal"))
     SymT.dv .= B.dv
-    _ev = _evview(SymT)
+    _ev = SymT.ev
     _ev .= B.ev
     return SymT
 end
@@ -472,7 +447,7 @@ end
 # SymTridiagonal == Tridiagonal is already defined in tridiag.jl
 
 ==(A::Diagonal, B::Bidiagonal) = iszero(B.ev) && A.diag == B.dv
-==(A::Diagonal, B::SymTridiagonal) = iszero(_evview(B)) && A.diag == _diagview(B)
+==(A::Diagonal, B::SymTridiagonal) = iszero(B.ev) && A.diag == _diagview(B)
 ==(B::Bidiagonal, A::Diagonal) = A == B
 ==(A::Diagonal, B::Tridiagonal) = iszero(B.dl) && iszero(B.du) && A.diag == B.d
 ==(B::Tridiagonal, A::Diagonal) = A == B
@@ -486,7 +461,7 @@ function ==(A::Bidiagonal, B::Tridiagonal)
 end
 ==(B::Tridiagonal, A::Bidiagonal) = A == B
 
-==(A::Bidiagonal, B::SymTridiagonal) = iszero(_evview(B)) && iszero(A.ev) && A.dv == _diagview(B)
+==(A::Bidiagonal, B::SymTridiagonal) = iszero(B.ev) && iszero(A.ev) && A.dv == _diagview(B)
 ==(B::SymTridiagonal, A::Bidiagonal) = A == B
 
 # TODO: remove these deprecations (used by SparseArrays in the past)
