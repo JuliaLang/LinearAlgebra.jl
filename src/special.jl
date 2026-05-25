@@ -265,25 +265,6 @@ function (-)(A::UniformScaling, B::Diagonal)
     Diagonal(Ref(A) .- B.diag)
 end
 
-for f in (:+, :-)
-    @eval function $f(D::Diagonal{<:Number}, S::Symmetric)
-        uplo = _sym_uplo(S.uplo)
-        return Symmetric(parentof_applytri($f, Symmetric(D, uplo), S), uplo)
-    end
-    @eval function $f(S::Symmetric, D::Diagonal{<:Number})
-        uplo = _sym_uplo(S.uplo)
-        return Symmetric(parentof_applytri($f, S, Symmetric(D, uplo)), uplo)
-    end
-    @eval function $f(D::Diagonal{<:Real}, H::Hermitian)
-        uplo = _sym_uplo(H.uplo)
-        return Hermitian(parentof_applytri($f, Hermitian(D, uplo), H), uplo)
-    end
-    @eval function $f(H::Hermitian, D::Diagonal{<:Real})
-        uplo = _sym_uplo(H.uplo)
-        return Hermitian(parentof_applytri($f, H, Hermitian(D, uplo)), uplo)
-    end
-end
-
 ## Diagonal construction from UniformScaling
 Diagonal{T}(s::UniformScaling, m::Integer) where {T} = Diagonal{T}(fill(T(s.λ), m))
 Diagonal(s::UniformScaling, m::Integer) = Diagonal{eltype(s)}(s, m)

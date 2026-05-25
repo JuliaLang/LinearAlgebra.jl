@@ -25,7 +25,9 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixSt
     StructuredMatrixStyle{Diagonal}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{Bidiagonal}) =
     StructuredMatrixStyle{Bidiagonal}()
-Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{<:Union{SymTridiagonal,Tridiagonal}}) =
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{SymTridiagonal}) =
+    StructuredMatrixStyle{SymTridiagonal}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{Tridiagonal}) =
     StructuredMatrixStyle{Tridiagonal}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}) =
     StructuredMatrixStyle{LowerTriangular}()
@@ -35,6 +37,8 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixSt
     StructuredMatrixStyle{UpperHessenberg}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{Symmetric}) =
     StructuredMatrixStyle{Symmetric}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{Hermitian}) =
+    StructuredMatrixStyle{Hermitian}()
 
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Bidiagonal}, ::StructuredMatrixStyle{Diagonal}) =
     StructuredMatrixStyle{Bidiagonal}()
@@ -43,12 +47,17 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{Bidiagonal}, ::StructuredMatrix
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Bidiagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
     StructuredMatrixStyle{UpperHessenberg}()
 
-Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{<:Union{Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal}}) =
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{Diagonal}) =
+    StructuredMatrixStyle{SymTridiagonal}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{<:Union{Bidiagonal,Tridiagonal}}) =
     StructuredMatrixStyle{Tridiagonal}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
     StructuredMatrixStyle{UpperHessenberg}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{Symmetric}) =
     StructuredMatrixStyle{Symmetric}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{Hermitian}) =
+    StructuredMatrixStyle{Hermitian}()
+
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Tridiagonal}, ::StructuredMatrixStyle{<:Union{Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal}}) =
     StructuredMatrixStyle{Tridiagonal}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Tridiagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
@@ -79,6 +88,11 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpp
 
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Symmetric}, ::StructuredMatrixStyle{<:Union{Diagonal,SymTridiagonal}}) =
     StructuredMatrixStyle{Symmetric}()
+    Broadcast.BroadcastStyle(::StructuredMatrixStyle{Symmetric}, ::StructuredMatrixStyle{Hermitian}) =
+    StructuredMatrixStyle{Hermitian}()
+
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Hermitian}, ::StructuredMatrixStyle{<:Union{Diagonal,SymTridiagonal,Symmetric}}) =
+    StructuredMatrixStyle{Hermitian}()
 
 # Make sure that `StructuredMatrixStyle{Matrix}` doesn't ever end up falling
 # through and give back `DefaultArrayStyle{2}`
@@ -198,7 +212,7 @@ end
 
 function ishermitianpreserving(bc::Broadcasted{StructuredMatrixStyle{Hermitian}})
     bc.f isa HermitianPreservingFunction || return false
-    return all(x -> x isa Union{Real,Hermitian}, bc.args)
+    return all(x -> x isa Union{Real,Diagonal{<:Real},SymTridiagonal{<:Real},Symmetric{<:Real},Hermitian}, bc.args)
 end
 
 const HermitianPreservingFunction = Union{

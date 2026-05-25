@@ -512,6 +512,15 @@ end
     Sc = Symmetric(randn(ComplexF64, 3,3))
     Hr = Hermitian(randn(3,3))
     Hc = Hermitian(randn(ComplexF64, 3,3))
+    # Diagonal, SymTridiagonal
+    @test Dr .+ Tr isa SymTridiagonal{<:Real}
+    @test Dr .+ Tr == Matrix(Dr) + Matrix(Tr)
+    @test Dr .+ Tc isa SymTridiagonal
+    @test Dr .+ Tc == Matrix(Dr) + Matrix(Tc)
+    @test Dc .+ Tr isa SymTridiagonal
+    @test Dc .+ Tr == Matrix(Dc) + Matrix(Tr)
+    @test Dc .+ Tc isa SymTridiagonal
+    @test Dc .+ Tc == Matrix(Dc) + Matrix(Tc)
     # Diagonal, Symmetric
     @test Dr .+ Sr isa Symmetric{<:Real}
     @test Dr .+ Sr == Matrix(Dr) + Matrix(Sr)
@@ -522,10 +531,14 @@ end
     @test Dc .+ Sc isa Symmetric
     @test Dc .+ Sc == Matrix(Dc) + Matrix(Sc)
     # Diagonal, Hermitian
+    @test Dr .+ Hr isa Hermitian{<:Real}
     @test Dr .+ Hr == Matrix(Dr) + Matrix(Hr)
+    @test Dr .+ Hc isa Hermitian
     @test Dr .+ Hc == Matrix(Dr) + Matrix(Hc)
     @test Dc .+ Hr == Matrix(Dc) + Matrix(Hr)
+    @test_throws ArgumentError Hr .+= Dc
     @test Dc .+ Hc == Matrix(Dc) + Matrix(Hc)
+    @test_throws ArgumentError Hc .+= Dc
     # SymTridiagonal, Symmetric
     @test Tr .+ Sr isa Symmetric{<:Real}
     @test Tr .+ Sr == Matrix(Tr) + Matrix(Sr)
@@ -536,20 +549,28 @@ end
     @test Tc .+ Sc isa Symmetric
     @test Tc .+ Sc == Matrix(Tc) + Matrix(Sc)
     # SymTridiagonal, Hermitian
+    @test Tr .+ Hr isa Hermitian{<:Real}
     @test Tr .+ Hr == Matrix(Tr) + Matrix(Hr)
     @test Tr .+ Hc == Matrix(Tr) + Matrix(Hc)
+    @test Tr .+ Hc isa Hermitian
     @test Tc .+ Hr == Matrix(Tc) + Matrix(Hr)
+    @test_throws ArgumentError Hr .+= Tc
     @test Tc .+ Hc == Matrix(Tc) + Matrix(Hc)
+    @test_throws ArgumentError Hc .+= Tc
     for uplo1 in (:U, :L), uplo2 in (:U, :L)
         # Symmetric, Hermitian
         Sr = Symmetric(randn(3,3), uplo1)
         Sc = Symmetric(randn(ComplexF64, 3,3), uplo1)
         Hr = Hermitian(randn(3,3), uplo2)
         Hc = Hermitian(randn(ComplexF64, 3,3), uplo2)
+        @test Sr .+ Hr isa Hermitian{<:Real}
         @test Sr .+ Hr == Matrix(Sr) + Matrix(Hr)
+        @test Sr .+ Hc isa Hermitian
         @test Sr .+ Hc == Matrix(Sr) + Matrix(Hc)
         @test Sc .+ Hr == Matrix(Sc) + Matrix(Hr)
+        @test_throws ArgumentError Hr .+= Sc
         @test Sc .+ Hc == Matrix(Sc) + Matrix(Hc)
+        @test_throws ArgumentError Hc .+= Sc
         # Symmetric, Symmetric
         Sr1 = Symmetric(randn(3,3), uplo1)
         Sc1 = Symmetric(randn(ComplexF64, 3,3), uplo1)
