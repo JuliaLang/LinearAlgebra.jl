@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.StridedArrays
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
@@ -580,9 +581,13 @@ Base.size(::SVector4) = (4,)
 @testset "strided transposes" begin
     for t in (Adjoint, Transpose)
         @test strides(t(rand(3))) == (3, 1)
+        check_strided_get(t(rand(3)))
         @test strides(t(rand(3,2))) == (3, 1)
+        check_strided_get(t(rand(3,2)))
         @test strides(t(view(rand(3, 2), :))) == (6, 1)
+        check_strided_get(t(view(rand(3, 2), :)))
         @test strides(t(view(rand(3, 2), :, 1:2))) == (3, 1)
+        check_strided_get(t(view(rand(3, 2), :, 1:2)))
 
         A = rand(3)
         @test pointer(t(A)) === pointer(A)
