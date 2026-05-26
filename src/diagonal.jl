@@ -297,12 +297,7 @@ function tril!(D::Diagonal{T}, k::Integer=0) where T
 end
 
 (==)(Da::Diagonal, Db::Diagonal) = Da.diag == Db.diag
-(-)(A::Diagonal) = Diagonal(-A.diag)
-(+)(Da::Diagonal, Db::Diagonal) = Diagonal(Da.diag + Db.diag)
-(-)(Da::Diagonal, Db::Diagonal) = Diagonal(Da.diag - Db.diag)
 
-(*)(x::Number, D::Diagonal) = Diagonal(x * D.diag)
-(*)(D::Diagonal, x::Number) = Diagonal(D.diag * x)
 function lmul!(x::Number, D::Diagonal)
     if size(D,1) > 1
         # ensure that zeros are preserved on scaling
@@ -323,8 +318,6 @@ function rmul!(D::Diagonal, x::Number)
     rmul!(D.diag, x)
     return D
 end
-(/)(D::Diagonal, x::Number) = Diagonal(D.diag / x)
-(\)(x::Number, D::Diagonal) = Diagonal(x \ D.diag)
 (^)(D::Diagonal, a::Number) = Diagonal(D.diag .^ a)
 (^)(D::Diagonal, a::Real) = Diagonal(D.diag .^ a) # for disambiguation
 (^)(D::Diagonal, a::Integer) = Diagonal(D.diag .^ a) # for disambiguation
