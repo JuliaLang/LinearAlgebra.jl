@@ -1202,6 +1202,7 @@ end
             @test sT ≈ sMT
             @test cT ≈ cMT
         end
+    end
 end
 
 @testset "fillband!" begin
