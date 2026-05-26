@@ -192,32 +192,9 @@ function Base.show(io::IO, mime::MIME{Symbol("text/plain")}, lbt::LBTConfig)
     end
 end
 
-mutable struct ConfigCache
-    @atomic config::Union{Nothing,LBTConfig}
-    lock::ReentrantLock
-end
-
-# In the event that users want to call `lbt_get_config()` multiple times (e.g. for
-# runtime checks of which BLAS vendor is providing a symbol), let's cache the value
-# and clear it only when someone calls something that would cause it to change.
-const _CACHED_CONFIG = ConfigCache(nothing, ReentrantLock())
-
 function lbt_get_config()
-    config = @atomic :acquire _CACHED_CONFIG.config
-    config === nothing || return config
-    return lock(_CACHED_CONFIG.lock) do
-        local config = @atomic :monotonic _CACHED_CONFIG.config
-        config === nothing || return config
-        config_ptr = ccall((:lbt_get_config, libblastrampoline), Ptr{lbt_config_t}, ())
-        @atomic :release _CACHED_CONFIG.config = LBTConfig(unsafe_load(config_ptr))
-    end
-end
-
-function _clear_config_with(f)
-    lock(_CACHED_CONFIG.lock) do
-        @atomic :release _CACHED_CONFIG.config = nothing
-        f()
-    end
+    config_ptr = ccall((:lbt_get_config, libblastrampoline), Ptr{lbt_config_t}, ())
+    return LBTConfig(unsafe_load(config_ptr))
 end
 
 function lbt_get_num_threads()
@@ -234,15 +211,11 @@ function lbt_forward_ccall(path::AbstractString; clear::Bool = false, verbose::B
 end
 
 function lbt_forward(path::AbstractString; clear::Bool = false, verbose::Bool = false, suffix_hint::Union{String,Nothing} = nothing)
-    _clear_config_with() do
-        lbt_forward_ccall(path; clear, verbose, suffix_hint)
-    end
+    lbt_forward_ccall(path; clear, verbose, suffix_hint)
 end
 
 function lbt_set_default_func(addr)
-    _clear_config_with() do
-        return ccall((:lbt_set_default_func, libblastrampoline), Cvoid, (Ptr{Cvoid},), addr)
-    end
+    return ccall((:lbt_set_default_func, libblastrampoline), Cvoid, (Ptr{Cvoid},), addr)
 end
 
 function lbt_get_default_func()
@@ -313,19 +286,17 @@ end
 function lbt_set_forward(symbol_name, addr, interface,
                          complex_retstyle = LBT_COMPLEX_RETSTYLE_NORMAL,
                          f2c = LBT_F2C_PLAIN; verbose::Bool = false)
-    _clear_config_with() do
-        return ccall(
-            (:lbt_set_forward, libblastrampoline),
-            Int32,
-            (Cstring, Ptr{Cvoid}, Int32, Int32, Int32, Int32),
-            string(symbol_name),
-            addr,
-            Int32(interface),
-            Int32(complex_retstyle),
-            Int32(f2c),
-            verbose ? Int32(1) : Int32(0),
-        )
-    end
+    return ccall(
+        (:lbt_set_forward, libblastrampoline),
+        Int32,
+        (Cstring, Ptr{Cvoid}, Int32, Int32, Int32, Int32),
+        string(symbol_name),
+        addr,
+        Int32(interface),
+        Int32(complex_retstyle),
+        Int32(f2c),
+        verbose ? Int32(1) : Int32(0),
+    )
 end
 function lbt_set_forward(symbol_name, addr, interface::Symbol,
                          complex_retstyle::Symbol = :normal,

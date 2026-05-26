@@ -89,7 +89,7 @@ function *(S1::SizedMatrixLike, S2::SizedMatrixLike)
     SizedArray{SZ}(data)
 end
 
-# deliberately wide method definitions to test for method ambiguties in LinearAlgebra
+# deliberately wide method definitions to test for method ambiguities in LinearAlgebra
 *(S1::SizedMatrixLike, M::AbstractMatrix) = _data(S1) * M
 mul!(dest::AbstractMatrix, S1::SizedMatrix, M::AbstractMatrix, α::Number, β::Number) =
     mul!(dest, _data(S1), M, α, β)

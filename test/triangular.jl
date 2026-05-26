@@ -66,14 +66,16 @@ end
 
 @testset "matrix square root quasi-triangular blockwise" begin
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
-        A = schur(rand(T, 100, 100)^2).T
-        @test LinearAlgebra.sqrt_quasitriu(A; blockwidth=16)^2 ≈ A
+        schurA = schur(rand(T, 100, 100)^2)
+        A = schurA.T
+        @test LinearAlgebra.sqrt_quasitriu(A, schurA.values; blockwidth=16)^2 ≈ A
     end
     n = 256
     A = rand(ComplexF64, n, n)
-    U = schur(A).T
+    schurA = schur(A)
+    U = schurA.T
     Ubig = Complex{BigFloat}.(U)
-    @test LinearAlgebra.sqrt_quasitriu(U; blockwidth=64) ≈ LinearAlgebra.sqrt_quasitriu(Ubig; blockwidth=64)
+    @test LinearAlgebra.sqrt_quasitriu(U, schurA.values; blockwidth=64) ≈ LinearAlgebra.sqrt_quasitriu(Ubig, schurA.values; blockwidth=64)
 end
 
 @testset "sylvester quasi-triangular blockwise" begin
@@ -260,7 +262,7 @@ const TESTDIR = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
     end
 end
 
-@testset "inplace mul of appropriate types should preserve triagular structure" begin
+@testset "inplace mul of appropriate types should preserve triangular structure" begin
     for elty1 in (Float64, ComplexF32), elty2 in (Float64, ComplexF32)
         T = promote_type(elty1, elty2)
         M1 = rand(elty1, 5, 5)
@@ -641,11 +643,11 @@ end
         @testset "error message" begin
             A = UpperTriangular(Ap)
             B = UpperTriangular(Bp)
-            @test_throws "cannot set index in the lower triangular part" copyto!(A, B)
+            @test_throws "cannot set index (3, 1) in the lower triangular part" copyto!(A, B)
 
             A = LowerTriangular(Ap)
             B = LowerTriangular(Bp)
-            @test_throws "cannot set index in the upper triangular part" copyto!(A, B)
+            @test_throws "cannot set index (1, 2) in the upper triangular part" copyto!(A, B)
         end
     end
 
@@ -702,6 +704,7 @@ end
         V = eigvecs(U)
         λ = eigvals(U)
         @test U * V ≈ V * Diagonal(λ)
+        @test all(v -> norm(v) ≈ 1, eachcol(V))
 
         MU = MyTriangular(U)
         V = eigvecs(U)
@@ -950,6 +953,10 @@ end
     @test 2\U == 2\M
     @test U*2 == M*2
     @test 2*U == 2*M
+
+    U2 = copy(U)
+    @test rmul!(U, 1) == U2
+    @test lmul!(1, U) == U2
 end
 
 @testset "scaling partly initialized unit triangular" begin
@@ -963,6 +970,190 @@ end
         @test 2 * U == 2 * C
         @test U / 2 == C / 2
         @test 2 \ U == 2 \ C
+    end
+end
+
+@testset "indexing checks" begin
+    P = [1 2; 3 4]
+    @testset "getindex" begin
+        U = UnitUpperTriangular(P)
+        @test_throws BoundsError U[0,0]
+        @test_throws BoundsError U[1,0]
+        @test_throws BoundsError U[BandIndex(0,0)]
+        @test_throws BoundsError U[BandIndex(-1,0)]
+
+        U = UpperTriangular(P)
+        @test_throws BoundsError U[1,0]
+        @test_throws BoundsError U[BandIndex(-1,0)]
+
+        L = UnitLowerTriangular(P)
+        @test_throws BoundsError L[0,0]
+        @test_throws BoundsError L[0,1]
+        @test_throws BoundsError U[BandIndex(0,0)]
+        @test_throws BoundsError U[BandIndex(1,0)]
+
+        L = LowerTriangular(P)
+        @test_throws BoundsError L[0,1]
+        @test_throws BoundsError L[BandIndex(1,0)]
+    end
+    @testset "setindex!" begin
+        A = SizedArrays.SizedArray{(2,2)}(P)
+        M = fill(A, 2, 2)
+        U = UnitUpperTriangular(M)
+        @test_throws "Cannot `convert` an object of type $Int" U[1,1] = 1
+        non_unit_msg = "cannot set index $((1,1)) on the diagonal of a UnitUpperTriangular matrix to a non-unit value"
+        @test_throws non_unit_msg U[1,1] = A
+        L = UnitLowerTriangular(M)
+        @test_throws "Cannot `convert` an object of type $Int" L[1,1] = 1
+        non_unit_msg = "cannot set index $((1,1)) on the diagonal of a UnitLowerTriangular matrix to a non-unit value"
+        @test_throws non_unit_msg L[1,1] = A
+
+        for UT in (UnitUpperTriangular, UpperTriangular)
+            U = UT(M)
+            @test_throws "Cannot `convert` an object of type $Int" U[2,1] = 0
+        end
+        for LT in (UnitLowerTriangular, LowerTriangular)
+            L = LT(M)
+            @test_throws "Cannot `convert` an object of type $Int" L[1,2] = 0
+        end
+
+        U = UnitUpperTriangular(P)
+        @test_throws BoundsError U[0,0] = 1
+        @test_throws BoundsError U[1,0] = 0
+
+        U = UpperTriangular(P)
+        @test_throws BoundsError U[1,0] = 0
+
+        L = UnitLowerTriangular(P)
+        @test_throws BoundsError L[0,0] = 1
+        @test_throws BoundsError L[0,1] = 0
+
+        L = LowerTriangular(P)
+        @test_throws BoundsError L[0,1] = 0
+    end
+end
+
+@testset "unit triangular l/rdiv!" begin
+    A = rand(3,3)
+    @testset for (UT,T) in ((UnitUpperTriangular, UpperTriangular),
+                            (UnitLowerTriangular, LowerTriangular))
+        UnitTri = UT(A)
+        Tri = T(LinearAlgebra.full(UnitTri))
+        @test 2 \ UnitTri ≈ 2 \ Tri
+        @test UnitTri / 2 ≈ Tri / 2
+    end
+end
+
+@testset "fillband!" begin
+    @testset for TT in (UpperTriangular, UnitUpperTriangular)
+        U = TT(zeros(4,4))
+        @test_throws ArgumentError LinearAlgebra.fillband!(U, 1, -1, 1)
+        if U isa UnitUpperTriangular
+            @test_throws ArgumentError LinearAlgebra.fillband!(U, 2, 0, 1)
+        end
+        # check that the error paths do not mutate the array
+        if U isa UpperTriangular
+            @test iszero(U)
+        end
+
+        LinearAlgebra.fillband!(U, 1, 0, 1)
+        @test all(==(1), diagview(U,0))
+        @test all(==(1), diagview(U,1))
+        @test all(==(0), diagview(U,2))
+
+        LinearAlgebra.fillband!(U, 10, 1, 2)
+        @test all(==(10), diagview(U,1))
+        @test all(==(10), diagview(U,2))
+        @test all(==(1), diagview(U,0))
+        @test all(==(0), diagview(U,3))
+
+        if U isa UpperTriangular
+            LinearAlgebra.fillband!(U, 0, -5, 5)
+            @test iszero(U)
+        end
+
+        U2 = copy(U)
+        LinearAlgebra.fillband!(U, -10, 1, -2)
+        @test U == U2
+        LinearAlgebra.fillband!(U, -10, 10, 10)
+        @test U == U2
+    end
+    @testset for TT in (LowerTriangular, UnitLowerTriangular)
+        L = TT(zeros(4,4))
+        @test_throws ArgumentError LinearAlgebra.fillband!(L, 1, -1, 1)
+        if L isa UnitLowerTriangular
+            @test_throws ArgumentError LinearAlgebra.fillband!(L, 2, -1, 0)
+        end
+        # check that the error paths do not mutate the array
+        if L isa LowerTriangular
+            @test iszero(L)
+        end
+
+        LinearAlgebra.fillband!(L, 1, -1, 0)
+        @test all(==(1), diagview(L,0))
+        @test all(==(1), diagview(L,-1))
+        @test all(==(0), diagview(L,-2))
+
+        LinearAlgebra.fillband!(L, 10, -2, -1)
+        @test all(==(10), diagview(L,-1))
+        @test all(==(10), diagview(L,-2))
+        @test all(==(1), diagview(L,0))
+        @test all(==(0), diagview(L,-3))
+
+        if L isa LowerTriangular
+            LinearAlgebra.fillband!(L, 0, -5, 5)
+            @test iszero(L)
+        end
+
+        L2 = copy(L)
+        LinearAlgebra.fillband!(L, -10, -1, -2)
+        @test L == L2
+        LinearAlgebra.fillband!(L, -10, -10, -10)
+        @test L == L2
+    end
+end
+
+@testset "zero for triangular matrices" begin
+    A = rand(4, 4)
+    @test zero(UpperTriangular(A)) isa UpperTriangular
+    @test zero(LowerTriangular(A)) isa LowerTriangular
+    @test iszero(zero(UpperTriangular(A)))
+    @test iszero(zero(LowerTriangular(A)))
+    @test zero(UnitUpperTriangular(A)) isa UpperTriangular
+    @test zero(UnitLowerTriangular(A)) isa LowerTriangular
+    @test iszero(zero(UnitUpperTriangular(A)))
+    @test iszero(zero(UnitLowerTriangular(A)))
+    @test iszero(diag(zero(UnitUpperTriangular(A))))
+    @test iszero(diag(zero(UnitLowerTriangular(A))))
+
+        # non-strided case: zero forwards to parent
+    struct ZeroTestWrapTri{T} <: AbstractArray{T,2}
+        parent::Matrix{T}
+    end
+    Base.size(A::ZeroTestWrapTri) = size(A.parent)
+    Base.getindex(A::ZeroTestWrapTri, i, j) = A.parent[i,j]
+    Base.zero(A::ZeroTestWrapTri) = ZeroTestWrapTri(zero(A.parent))
+
+    for T in (UpperTriangular, LowerTriangular)
+        Z = zero(T(ZeroTestWrapTri([1.0 2.0; 3.0 4.0])))
+        @test Z isa T
+        @test parent(Z) isa ZeroTestWrapTri
+        @test iszero(Z)
+    end
+end
+
+@testset "eigenvalue sorting" begin
+    for T in (Float64, ComplexF64, Float16, ComplexF16)
+        A = randn(T, 4, 4)
+        for wrapper in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+            B = wrapper(A)
+            @test eigvals(B; sortby=nothing) == diag(B)
+            F = eigen(B)
+            @test issorted(F.values, by=LinearAlgebra.eigsortby) #sort by default
+            @test B * F.vectors ≈ F.vectors * Diagonal(F.values)
+            @test F.values ≈ eigvals(B; sortby = LinearAlgebra.eigsortby)
+            @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
+        end
     end
 end
 

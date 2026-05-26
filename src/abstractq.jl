@@ -42,14 +42,17 @@ convert(::Type{AbstractQ{T}}, adjQ::AdjointQ) where {T} = convert(AbstractQ{T}, 
 
 # ... to matrix
 Matrix{T}(Q::AbstractQ) where {T} = convert(Matrix{T}, Q*I) # generic fallback, yields square matrix
-Matrix{T}(adjQ::AdjointQ{S}) where {T,S} = convert(Matrix{T}, lmul!(adjQ, Matrix{S}(I, size(adjQ))))
 Matrix(Q::AbstractQ{T}) where {T} = Matrix{T}(Q)
 Array{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
 Array(Q::AbstractQ) = Matrix(Q)
+AbstractMatrix(Q::AbstractQ) = Q*I
+AbstractArray(Q::AbstractQ) = AbstractMatrix(Q)
+AbstractMatrix{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
+AbstractArray{T}(Q::AbstractQ) where {T} = AbstractMatrix{T}(Q)
 convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray} = T(Q)
 # legacy
 @deprecate(convert(::Type{AbstractMatrix{T}}, Q::AbstractQ) where {T},
-    convert(LinearAlgebra.AbstractQ{T}, Q))
+    convert(LinearAlgebra.AbstractQ{T}, Q), false)
 
 function size(Q::AbstractQ, dim::Integer)
     if dim < 1
@@ -143,15 +146,13 @@ function copyto!(dest::PermutedDimsArray{T,2,perm}, src::AbstractQ) where {T,per
     return dest
 end
 # used in concatenations: Base.__cat_offset1!
-Base._copy_or_fill!(A, inds, Q::AbstractQ) = (A[inds...] = collect(Q))
+Base._copy_or_fill!(A, inds, Q::AbstractQ) = copyto!(view(A, inds...), Q)
 # overloads of helper functions
 Base.cat_size(A::AbstractQ) = size(A)
 Base.cat_size(A::AbstractQ, d) = size(A, d)
 Base.cat_length(a::AbstractQ) = prod(size(a))
 Base.cat_ndims(a::AbstractQ) = ndims(a)
 Base.cat_indices(A::AbstractQ, d) = axes(A, d)
-Base.cat_similar(A::AbstractQ, T::Type, shape::Tuple) = Array{T}(undef, shape)
-Base.cat_similar(A::AbstractQ, T::Type, shape::Vector) = Array{T}(undef, shape...)
 
 function show(io::IO, ::MIME{Symbol("text/plain")}, Q::AbstractQ)
     print(io, Base.dims2string(size(Q)), ' ', summary(Q))
@@ -172,10 +173,10 @@ qsize_check(Q::AbstractQ, P::AbstractQ) =
 # mimic the AbstractArray fallback
 *(Q::AbstractQ{<:Number}) = Q
 
-(*)(Q::AbstractQ, J::UniformScaling) = Q*J.λ
-function (*)(Q::AbstractQ, b::Number)
-    T = promote_type(eltype(Q), typeof(b))
-    lmul!(convert(AbstractQ{T}, Q), Matrix{T}(b*I, size(Q)))
+(*)(Q::AbstractQ, b::Number) = Q*(b*I)
+function (*)(Q::AbstractQ, J::UniformScaling)
+    T = promote_type(eltype(Q), eltype(J))
+    lmul!(convert(AbstractQ{T}, Q), Matrix{T}(J, size(Q)))
 end
 function (*)(Q::AbstractQ, B::AbstractVector)
     T = promote_type(eltype(Q), eltype(B))
@@ -188,10 +189,10 @@ function (*)(Q::AbstractQ, B::AbstractMatrix)
     mul!(similar(B, T, (size(Q, 1), size(B, 2))), convert(AbstractQ{T}, Q), B)
 end
 
-(*)(J::UniformScaling, Q::AbstractQ) = J.λ*Q
-function (*)(a::Number, Q::AbstractQ)
-    T = promote_type(typeof(a), eltype(Q))
-    rmul!(Matrix{T}(a*I, size(Q)), convert(AbstractQ{T}, Q))
+(*)(a::Number, Q::AbstractQ) = (a*I)*Q
+function (*)(J::UniformScaling, Q::AbstractQ)
+    T = promote_type(eltype(J), eltype(Q))
+    rmul!(Matrix{T}(J, size(Q)), convert(AbstractQ{T}, Q))
 end
 function (*)(A::AbstractVector, Q::AbstractQ)
     T = promote_type(eltype(A), eltype(Q))

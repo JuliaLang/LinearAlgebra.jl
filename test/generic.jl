@@ -17,6 +17,7 @@ using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.Furlongs
 
 Random.seed!(123)
 
@@ -95,6 +96,18 @@ n = 5 # should be odd
 
     @testset "det with nonstandard Number type" begin
         elty <: Real && @test det(Dual.(triu(A), zero(A))) isa Dual
+    end
+    if elty <: Int
+        @testset "det no overflow - triangular" begin
+            A = diagm([typemax(elty), typemax(elty)])
+            @test det(A) == det(float(A))
+        end
+    end
+    @testset "det with units - triangular" begin
+        for dim in 0:4
+            A = diagm(Furlong.(ones(elty, dim)))
+            @test det(A) == Furlong{dim}(one(elty))
+        end
     end
 end
 
@@ -430,6 +443,11 @@ end
             @test isempty(normalize!(T[]))
         end
     end
+    a = [[1,2], [3,4]]
+    na = @inferred normalize(a)
+    @test norm(na) ≈ 1
+    @test na isa Vector{Vector{Float64}}
+    @test normalize!(convert(Vector{Vector{Float64}}, a)) ≈ na
 end
 
 @testset "normalize for multidimensional arrays" begin
@@ -465,21 +483,22 @@ end
 end
 
 @testset "potential overflow in normalize!" begin
-    δ = inv(prevfloat(typemax(Float64)))
+    δ = nextfloat(0.0)
     v = [δ, -δ]
 
-    @test norm(v) === 7.866824069956793e-309
+    @test norm(v) === 5.0e-324
     w = normalize(v)
     @test w ≈ [1/√2, -1/√2]
-    @test norm(w) === 1.0
     @test norm(normalize!(v) - w, Inf) < eps()
 end
 
 @testset "normalize with Infs. Issue 29681." begin
-    @test all(isequal.(normalize([1, -1, Inf]),
-                       [0.0, -0.0, NaN]))
-    @test all(isequal.(normalize([complex(1), complex(0, -1), complex(Inf, -Inf)]),
-                       [0.0 + 0.0im, 0.0 - 0.0im, NaN + NaN*im]))
+    for f in (normalize, normalize!)
+        @test all(isequal.(f([1, -1, Inf]),
+                           [0.0, -0.0, NaN]))
+        @test all(isequal.(f([complex(1), complex(0, -1), complex(Inf, -Inf)]),
+                           [0.0 + 0.0im, 0.0 - 0.0im, NaN + NaN*im]))
+    end
 end
 
 @testset "Issue 14657" begin
@@ -742,12 +761,16 @@ end
 end
 
 @testset "generalized dot #32739" begin
-    for elty in (Int, Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
+    for elty in (Bool, Int, Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat})
         n = 10
         if elty <: Int
             A = rand(-n:n, n, n)
             x = rand(-n:n, n)
             y = rand(-n:n, n)
+        elseif elty <: Bool
+            A = rand(elty, n, n)
+            x = rand(elty, n)
+            y = rand(elty, n)
         elseif elty <: Real
             A = convert(Matrix{elty}, randn(n,n))
             x = rand(elty, n)
@@ -757,7 +780,7 @@ end
             x = rand(elty, n)
             y = rand(elty, n)
         end
-        @test dot(x, A, y) ≈ dot(A'x, y) ≈ *(x', A, y) ≈ (x'A)*y
+        @test (@inferred dot(x, A, y)) ≈ dot(A'x, y) ≈ *(x', A, y) ≈ (x'A)*y
         @test dot(x, A', y) ≈ dot(A*x, y) ≈ *(x', A', y) ≈ (x'A')*y
         elty <: Real && @test dot(x, transpose(A), y) ≈ dot(x, transpose(A)*y) ≈ *(x', transpose(A), y) ≈ (x'*transpose(A))*y
         B = reshape([A], 1, 1)
@@ -766,6 +789,10 @@ end
         @test dot(x, B, y) ≈ dot(B'x, y)
         @test dot(x, B', y) ≈ dot(B*x, y)
         elty <: Real && @test dot(x, transpose(B), y) ≈ dot(x, transpose(B)*y)
+    end
+    for (m, n) in ((0, 0), (1, 0), (0, 1))
+        v = zeros(ComplexF64, m); a = zeros(ComplexF64, m, n); w = zeros(Float64, n)
+        @test dot(v, a, w) === zero(ComplexF64)
     end
 end
 
@@ -928,6 +955,34 @@ end
     B = view(M, 2:4, 1:1)
     copytrito!(B, A, 'L')
     @test B == A2
+end
+
+@testset "isapprox for Arrays" begin
+    A = rand(3,3)
+    n = @allocated isapprox(A, A)
+    @test n == 0
+    @test Int[] ≈ Int[]
+end
+
+@testset "issue 930" begin
+    A = rand(Int, 2, 2)
+    B = rand(Int, 2, 3)
+    C = rand(Int, 2)
+    for T ∈ (Float32, BigFloat)
+        v = randn(T, 2)
+        x = @inferred C \ v
+        @test eltype(x) <: T
+        x = @inferred zero(C) \ v
+        @test eltype(x) <: T
+        x = @inferred T(1) / C
+        @test eltype(x) <: T
+        x = @inferred T(1) / zero(C)
+        @test eltype(x) <: T
+        for M ∈ (A, B)
+            x = @inferred M \ v
+            @test eltype(x) <: T
+        end
+    end
 end
 
 end # module TestGeneric

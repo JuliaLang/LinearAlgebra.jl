@@ -59,6 +59,9 @@ size(H::UpperHessenberg) = size(H.data)
 axes(H::UpperHessenberg) = axes(H.data)
 parent(H::UpperHessenberg) = H.data
 
+upperhessenbergdata(H::UpperHessenberg) = H.data
+upperhessenbergdata(A) = A
+
 # similar behaves like UpperTriangular
 similar(H::UpperHessenberg, ::Type{T}) where {T} = UpperHessenberg(similar(H.data, T))
 similar(H::UpperHessenberg, ::Type{T}, dims::Dims{N}) where {T,N} = similar(H.data, T, dims)
@@ -124,6 +127,17 @@ lmul!(x::Number, H::UpperHessenberg) = (lmul!(x, H.data); H)
 
 fillstored!(H::UpperHessenberg, x) = (fillband!(H.data, x, -1, size(H,2)-1); H)
 
+function fillband!(H::UpperHessenberg, x, l, u)
+    if l > u
+        return H
+    end
+    if l < -1 && !iszero(x)
+        throw_fillband_error(l, u, x)
+    end
+    fillband!(H.data, x, l, u)
+    return H
+end
+
 +(A::UpperHessenberg, B::UpperHessenberg) = UpperHessenberg(A.data+B.data)
 -(A::UpperHessenberg, B::UpperHessenberg) = UpperHessenberg(A.data-B.data)
 
@@ -148,51 +162,28 @@ end
 
 mul(H::UpperHessenberg, D::Diagonal) = UpperHessenberg(H.data * D)
 mul(D::Diagonal, H::UpperHessenberg) = UpperHessenberg(D * H.data)
-function mul(H::UpperHessenberg, U::UpperOrUnitUpperTriangular)
-    HH = mul!(matprod_dest(H, U, promote_op(matprod, eltype(H), eltype(U))), H, U)
-    UpperHessenberg(HH)
-end
-function mul(U::UpperOrUnitUpperTriangular, H::UpperHessenberg)
-    HH = mul!(matprod_dest(U, H, promote_op(matprod, eltype(U), eltype(H))), U, H)
-    UpperHessenberg(HH)
-end
+
+postop_proc(::Union{typeof(*),typeof(/)}, C, ::UpperHessenberg, ::UpperOrUnitUpperTriangular) = UpperHessenberg(C)
+postop_proc(::Union{typeof(*),typeof(/)}, C, ::UpperHessenberg, B::Bidiagonal) = B.uplo == 'U' ? UpperHessenberg(C) : C
+postop_proc(::Union{typeof(*),typeof(\)}, C, ::UpperOrUnitUpperTriangular, ::UpperHessenberg) = UpperHessenberg(C)
+postop_proc(::Union{typeof(*),typeof(\)}, C, B::Bidiagonal, ::UpperHessenberg) = B.uplo == 'U' ? UpperHessenberg(C) : C
 
 /(H::UpperHessenberg, D::Diagonal) = UpperHessenberg(H.data / D)
-function /(H::UpperHessenberg, U::UpperTriangular)
-    HH = _rdiv!(matprod_dest(H, U, promote_op(/, eltype(H), eltype(U))), H, U)
-    UpperHessenberg(HH)
-end
-\(D::Diagonal, H::UpperHessenberg) = UpperHessenberg(D \ H.data)
-function /(H::UpperHessenberg, U::UnitUpperTriangular)
-    HH = _rdiv!(matprod_dest(H, U, promote_op(/, eltype(H), eltype(U))), H, U)
-    UpperHessenberg(HH)
-end
 
-function \(U::UpperTriangular, H::UpperHessenberg)
-    HH = ldiv!(matprod_dest(U, H, promote_op(\, eltype(U), eltype(H))), U, H)
-    UpperHessenberg(HH)
-end
-function \(U::UnitUpperTriangular, H::UpperHessenberg)
-    HH = ldiv!(matprod_dest(U, H, promote_op(\, eltype(U), eltype(H))), U, H)
-    UpperHessenberg(HH)
-end
+\(D::Diagonal, H::UpperHessenberg) = UpperHessenberg(D \ H.data)
 
 AdjUpperHessenberg{T,S<:UpperHessenberg{T}} = Adjoint{T, S}
 TransUpperHessenberg{T,S<:UpperHessenberg{T}} = Transpose{T, S}
 AdjOrTransUpperHessenberg{T,S<:UpperHessenberg{T}} = AdjOrTrans{T, S}
 
-function (\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat)
-    TFB = typeof(oneunit(eltype(H)) \ oneunit(eltype(B)))
-    return ldiv!(H, copy_similar(B, TFB))
-end
+(\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat) =
+    ldiv!(H, copyto!(matop_dest(\, H, B), B))
 
 (/)(B::AbstractMatrix, H::UpperHessenberg) = _rdiv(B, H)
 (/)(B::AbstractMatrix, H::AdjUpperHessenberg) = _rdiv(B, H)
 (/)(B::AbstractMatrix, H::TransUpperHessenberg) = _rdiv(B, H)
-function _rdiv(B, H)
-    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(H)))
-    return rdiv!(copy_similar(B, TFB), H)
-end
+
+_rdiv(B, H) = rdiv!(copyto!(matop_dest(/, B, H), B), H)
 
 ldiv!(H::AdjOrTransUpperHessenberg, B::AbstractVecOrMat) =
     (rdiv!(wrapperop(H)(B), parent(H)); B)
@@ -233,11 +224,11 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     n = size(B,2)
     H = F.data
     μ = shift
-    u = Vector{typeof(zero(eltype(H))+μ)}(undef, m) # for last rotated col of H-μI
+    u = Vector{typeof(zero(float(eltype(H)))+μ)}(undef, m) # for last rotated col of H-μI
     copyto!(u, 1, H, m*(m-1)+1, m) # u .= H[:,m]
     u[m] += μ
     X = B # not a copy, just rename to match paper
-    cs = Vector{Tuple{real(eltype(u)),eltype(u)}}(undef, length(u)) # store Givens rotations
+    cs = Vector{Tuple{real(float(eltype(u))),float(eltype(u))}}(undef, length(u)) # store Givens rotations
     @inbounds for k = m:-1:2
         c, s, ρ = givensAlgorithm(u[k], H[k,k-1])
         cs[k] = (c, s)
@@ -283,11 +274,11 @@ function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
     n = size(B,1)
     H = F.data
     μ = shift
-    u = Vector{typeof(zero(eltype(H))+μ)}(undef, m) # for last rotated row of H-μI
+    u = Vector{typeof(zero(float(eltype(H)))+μ)}(undef, m) # for last rotated row of H-μI
     u .= @view H[1,:]
     u[1] += μ
     X = B # not a copy, just rename to match paper
-    cs = Vector{Tuple{real(eltype(u)),eltype(u)}}(undef, length(u)) # store Givens rotations
+    cs = Vector{Tuple{real(float(eltype(u))),float(eltype(u))}}(undef, length(u)) # store Givens rotations
     @inbounds for k = 1:m-1
         c, s, ρ = givensAlgorithm(u[k], H[k+1,k])
         cs[k] = (c, s)
@@ -390,7 +381,7 @@ function dot(x::AbstractVector, H::UpperHessenberg, y::AbstractVector)
     m = size(H, 1)
     (length(x) == m == length(y)) || throw(DimensionMismatch())
     if iszero(m)
-        return dot(zero(eltype(x)), zero(eltype(H)), zero(eltype(y)))
+        return zero(dot(zero(eltype(x)), zero(eltype(H)), zero(eltype(y))))
     end
     x₁ = x[1]
     r = dot(x₁, H[1,1], y[1])
@@ -415,6 +406,57 @@ function dot(x::AbstractVector, H::UpperHessenberg, y::AbstractVector)
     end
     return r
 end
+
+# faster eigenvalues, since we can skip the intermediate step of Hessenberg factorization.
+# note: permute==true is ignored, since that could spoil the upper-Hessenberg structure
+function eigvals!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasComplex}
+    LAPACK.gebal!(scale ? 'S' : 'N', triu!(H.data, -1))
+    return sorteig!(LAPACK.hseqr!('E', 'N', 1, size(H,1), H.data, H.data)[3], sortby)
+end
+function eigvals!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasReal}
+    LAPACK.gebal!(scale ? 'S' : 'N', triu!(H.data, -1))
+    _, _, vals = LAPACK.hseqr!('E', 'N', 1, size(H,1), H.data, H.data)
+    return sorteig!(isreal(vals) ? real(vals) : vals, sortby)
+end
+
+
+function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasComplex}
+    ilo, ihi, s = LAPACK.gebal!(scale ? 'S' : 'N', triu!(H.data, -1)) # balance by scaling
+    _, Z, vals = LAPACK.hseqr!(H.data)
+    LAPACK.trevc!('R', 'B', BlasInt[], H.data, Z, Z) # set Z to right eigenvecs
+    LAPACK.gebak!(scale ? 'S' : 'N', 'R', ilo, ihi, s, Z) # undo balancing
+    return Eigen(sorteig!(vals, eigvec_normalize!(Z), sortby)...)
+end
+
+function eigen!(H::UpperHessenberg{T, <:StridedMatrix{T}}; permute::Bool=false, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:BlasReal}
+    ilo, ihi, s = LAPACK.gebal!(scale ? 'S' : 'N', triu!(H.data, -1)) # balance by scaling
+    _, Z, vals = LAPACK.hseqr!(H.data)
+    LAPACK.trevc!('R', 'B', BlasInt[], H.data, Z, Z) # set Z to right eigenvecs (for complex, see below)
+    LAPACK.gebak!(scale ? 'S' : 'N', 'R', ilo, ihi, s, Z) # undo balancing
+    if isreal(vals)
+        return Eigen(sorteig!(real(vals), eigvec_normalize!(Z), sortby)...)
+    else # complex eigenvalues: real/imag eigenvec parts stored in consecutive cols of Z
+        V = complex(Z)
+        k = 1
+        @inbounds while k <= length(vals)
+            if isreal(vals[k])
+                k += 1
+            else # complex-conjugate pair
+                for j = 1:size(V,1)
+                    V[j, k] = complex(Z[j,k], Z[j,k+1])
+                    V[j, k+1] = complex(Z[j,k], -Z[j,k+1])
+                end
+                k += 2
+            end
+        end
+        return Eigen(sorteig!(vals, eigvec_normalize!(V), sortby)...)
+    end
+end
+
+# preserve the wrapper for eigensolves with UpperHessenberg
+eigencopy_oftype(H::UpperHessenberg, S) = UpperHessenberg(eigencopy_oftype(H.data, S))
+
+schur!(H::UpperHessenberg{T}) where {T<:BlasFloat} = Schur(LinearAlgebra.LAPACK.hseqr!(H.data)...)
 
 ######################################################################################
 # Hessenberg factorizations Q(H+μI)Q' of A+μI:

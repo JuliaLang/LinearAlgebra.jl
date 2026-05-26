@@ -8,8 +8,12 @@ struct StructuredMatrixStyle{T} <: Broadcast.AbstractArrayStyle{2} end
 StructuredMatrixStyle{T}(::Val{2}) where {T} = StructuredMatrixStyle{T}()
 StructuredMatrixStyle{T}(::Val{N}) where {T,N} = Broadcast.DefaultArrayStyle{N}()
 
-const StructuredMatrix{T} = Union{Diagonal{T},Bidiagonal{T},SymTridiagonal{T},Tridiagonal{T},LowerTriangular{T},UnitLowerTriangular{T},UpperTriangular{T},UnitUpperTriangular{T}}
-for ST in (Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal,LowerTriangular,UnitLowerTriangular,UpperTriangular,UnitUpperTriangular)
+const StructuredMatrix{T} = Union{Diagonal{T},Bidiagonal{T},SymTridiagonal{T},Tridiagonal{T},
+            LowerTriangular{T},UnitLowerTriangular{T},UpperTriangular{T},UnitUpperTriangular{T},
+            UpperHessenberg{T},Symmetric{T},Hermitian{T}}
+for ST in (Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal,
+            LowerTriangular,UnitLowerTriangular,UpperTriangular,UnitUpperTriangular,
+            UpperHessenberg,Symmetric,Hermitian)
     @eval Broadcast.BroadcastStyle(::Type{<:$ST}) = $(StructuredMatrixStyle{ST}())
 end
 
@@ -27,29 +31,54 @@ Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixSt
     StructuredMatrixStyle{LowerTriangular}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular}}) =
     StructuredMatrixStyle{UpperTriangular}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Diagonal}, ::StructuredMatrixStyle{Symmetric}) =
+    StructuredMatrixStyle{Symmetric}()
 
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Bidiagonal}, ::StructuredMatrixStyle{Diagonal}) =
     StructuredMatrixStyle{Bidiagonal}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Bidiagonal}, ::StructuredMatrixStyle{<:Union{Bidiagonal,SymTridiagonal,Tridiagonal}}) =
     StructuredMatrixStyle{Tridiagonal}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Bidiagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
+
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{<:Union{Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal}}) =
     StructuredMatrixStyle{Tridiagonal}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{SymTridiagonal}, ::StructuredMatrixStyle{Symmetric}) =
+    StructuredMatrixStyle{Symmetric}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{Tridiagonal}, ::StructuredMatrixStyle{<:Union{Diagonal,Bidiagonal,SymTridiagonal,Tridiagonal}}) =
     StructuredMatrixStyle{Tridiagonal}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Tridiagonal}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
 
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{LowerTriangular}, ::StructuredMatrixStyle{<:Union{Diagonal,LowerTriangular,UnitLowerTriangular}}) =
     StructuredMatrixStyle{LowerTriangular}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{UpperTriangular}, ::StructuredMatrixStyle{<:Union{Diagonal,UpperTriangular,UnitUpperTriangular}}) =
     StructuredMatrixStyle{UpperTriangular}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{UpperTriangular}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{UnitLowerTriangular}, ::StructuredMatrixStyle{<:Union{Diagonal,LowerTriangular,UnitLowerTriangular}}) =
     StructuredMatrixStyle{LowerTriangular}()
 Broadcast.BroadcastStyle(::StructuredMatrixStyle{UnitUpperTriangular}, ::StructuredMatrixStyle{<:Union{Diagonal,UpperTriangular,UnitUpperTriangular}}) =
     StructuredMatrixStyle{UpperTriangular}()
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{UnitUpperTriangular}, ::StructuredMatrixStyle{UpperHessenberg}) =
+    StructuredMatrixStyle{UpperHessenberg}()
 
-Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}, ::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular}}) =
+function Broadcast.BroadcastStyle(::StructuredMatrixStyle{UpperHessenberg},
+        ::StructuredMatrixStyle{<:Union{Diagonal,Bidiagonal,Tridiagonal,SymTridiagonal,UnitUpperTriangular,UpperTriangular}})
+    StructuredMatrixStyle{UpperHessenberg}()
+end
+
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}, ::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular,UpperHessenberg}}) =
     StructuredMatrixStyle{Matrix}()
-Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular}}, ::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}) =
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{<:Union{UpperTriangular,UnitUpperTriangular,UpperHessenberg}}, ::StructuredMatrixStyle{<:Union{LowerTriangular,UnitLowerTriangular}}) =
     StructuredMatrixStyle{Matrix}()
+
+Broadcast.BroadcastStyle(::StructuredMatrixStyle{Symmetric}, ::StructuredMatrixStyle{<:Union{Diagonal,SymTridiagonal}}) =
+    StructuredMatrixStyle{Symmetric}()
 
 # Make sure that `StructuredMatrixStyle{Matrix}` doesn't ever end up falling
 # through and give back `DefaultArrayStyle{2}`
@@ -71,7 +100,7 @@ merge_uplos(a, ::Nothing) = a
 merge_uplos(::Nothing, b) = b
 merge_uplos(a, b) = a == b ? a : 'T'
 
-find_uplo(a::Bidiagonal) = a.uplo
+find_uplo(a::Union{Bidiagonal, Symmetric, Hermitian}) = a.uplo
 find_uplo(a) = nothing
 find_uplo(bc::Broadcasted) = mapfoldl(find_uplo, merge_uplos, Broadcast.cat_nested(bc), init=nothing)
 
@@ -97,8 +126,14 @@ function structured_broadcast_alloc(bc, ::Type{Tridiagonal},
     Tridiagonal(Array{ElType}(undef, n1),Array{ElType}(undef, n),Array{ElType}(undef, n1))
 end
 function structured_broadcast_alloc(bc, ::Type{T}, ::Type{ElType},
-        sz::NTuple{2,Integer}) where {ElType,T<:UpperOrLowerTriangular}
+        sz::NTuple{2,Integer}) where {ElType,T<:Union{UpperOrLowerTriangular, UpperHessenberg}}
     T(Array{ElType}(undef, sz))
+end
+function structured_broadcast_alloc(bc, ::Type{T}, ::Type{ElType},
+        sz::NTuple{2,Integer}) where {ElType, T<:Union{Symmetric,Hermitian}}
+    raw_uplo = find_uplo(bc)
+    uplo = sym_uplo(raw_uplo == 'T' ? 'U' : raw_uplo)
+    T(Array{ElType}(undef, sz), uplo)
 end
 structured_broadcast_alloc(bc, ::Type{Matrix}, ::Type{ElType}, sz::NTuple{2,Integer}) where {ElType} =
     Array{ElType}(undef, sz)
@@ -157,6 +192,21 @@ function fzeropreserving(bc)
     iszerodefined(typeof(v2)) ? iszero(v2) : isequal(v2, 0)
 end
 
+function issymmetrypreserving(bc::Broadcasted{StructuredMatrixStyle{T}}) where {T<:Union{Symmetric, SymTridiagonal}}
+    return all(x -> x isa Union{Number,Diagonal,Symmetric,SymTridiagonal}, bc.args)
+end
+
+function ishermitianpreserving(bc::Broadcasted{StructuredMatrixStyle{Hermitian}})
+    bc.f isa HermitianPreservingFunction || return false
+    return all(x -> x isa Union{Real,Hermitian}, bc.args)
+end
+
+const HermitianPreservingFunction = Union{
+    typeof(+),typeof(-),typeof(*),typeof(/),
+    typeof(abs),typeof(abs2),typeof(real),typeof(conj),
+    typeof(exp),typeof(sin),typeof(cos)
+}
+
 # Like sparse matrices, we assume that the zero-preservation property of a broadcasted
 # expression is stable.  We can test the zero-preservability by applying the function
 # in cases where all other arguments are known scalars against a zero from the structured
@@ -168,8 +218,46 @@ fzero(t::Tuple{Any}) = Some(only(t))
 fzero(S::StructuredMatrix) = Some(zero(eltype(S)))
 fzero(::StructuredMatrix{<:AbstractMatrix{T}}) where {T<:Number} = Some(haszero(T) ? zero(T)*I : nothing)
 fzero(x) = nothing
+
+# There exist known functions where zeros of structured matrices are preserved under
+# broadcasting regardless of other arguments. Some of these require the zeros to be on
+# the left and all other arguments entirely nonzero, namely division.
+const ZeroAbsorbingFuncs = Union{
+    typeof(*), typeof(dot), typeof(&), typeof(lcm)
+}
+const LeftAbsorbingFuncs = Union{
+    typeof(/), typeof(div), typeof(mod), typeof(rem)
+}
+
+# For such functions, we add cases not covered above, and fallback otherwise
+fzero(::ZeroAbsorbingFuncs, ::AbstractArray{T}) where {T<:Number} = Some(haszero(T) ? zero(T) : nothing)
+fzero(::ZeroAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
+fzero(::ZeroAbsorbingFuncs, x) = fzero(x)
+# Each function in LeftAbsorbingFuncs returns NaN/Inf/error when zero is on the right.
+# We check for any zeros and return nothing if true. This falls back to a dense matrix
+# as with the scalar case.
+fzero(::LeftAbsorbingFuncs, a::AbstractArray{T}) where {T<:Number} = any(iszero, a) ? nothing : Some(one(T))
+fzero(::LeftAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
+fzero(::LeftAbsorbingFuncs, x) = fzero(x)
+
+function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:LeftAbsorbingFuncs, <:Tuple{StructuredMatrix, Vararg{Any}}})
+    args = map(x -> fzero(bc.f, x), bc.args)
+    return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
+end
+
+function fzero(bc::Broadcast.Broadcasted{<:Union{Nothing, Broadcast.BroadcastStyle}, <:Any, <:ZeroAbsorbingFuncs})
+    args = map(x -> fzero(bc.f, x), bc.args)
+    return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
+end
+
 function fzero(bc::Broadcast.Broadcasted)
-    args = map(fzero, bc.args)
+    # Type-assert to prevent inference from widening the result type to AbstractArray.
+    # Broadcasted.args is always <: Tuple by construction, but when the Broadcasted type
+    # parameter is not fully known (e.g., Broadcasted{StructuredMatrixStyle{T} where T}),
+    # inference may widen args, causing any(isnothing, args) to create a cached
+    # MethodInstance any(::typeof(isnothing), ::AbstractArray) that is invalidated by
+    # any package defining any(f, ::AbstractArraySubtype).
+    args = map(fzero, bc.args)::Tuple
     return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
 end
 
@@ -177,11 +265,25 @@ function Base.similar(bc::Broadcasted{StructuredMatrixStyle{T}}, ::Type{ElType})
     inds = axes(bc)
     fzerobc = fzeropreserving(bc)
     if isstructurepreserving(bc) || (fzerobc && !(T <: Union{UnitLowerTriangular,UnitUpperTriangular}))
+        if T <: SymTridiagonal && !issymmetrypreserving(bc) && !isstructurepreserving(bc)
+            return similar(convert(Broadcasted{StructuredMatrixStyle{Tridiagonal}}, bc), ElType)
+        end
         return structured_broadcast_alloc(bc, T, ElType, map(length, inds))
     elseif fzerobc && T <: UnitLowerTriangular
         return similar(convert(Broadcasted{StructuredMatrixStyle{LowerTriangular}}, bc), ElType)
     elseif fzerobc && T <: UnitUpperTriangular
         return similar(convert(Broadcasted{StructuredMatrixStyle{UpperTriangular}}, bc), ElType)
+    end
+    return similar(convert(Broadcasted{DefaultArrayStyle{ndims(bc)}}, bc), ElType)
+end
+
+function Base.similar(bc::Broadcasted{StructuredMatrixStyle{T}}, ::Type{ElType}) where {T<:Union{Symmetric,Hermitian},ElType}
+    inds = axes(bc)
+    if T <: Symmetric && (issymmetrypreserving(bc) || isstructurepreserving(bc))
+        return structured_broadcast_alloc(bc, T, ElType, map(length, inds))
+    end
+    if T <: Hermitian && (ishermitianpreserving(bc) || isstructurepreserving(bc))
+        return structured_broadcast_alloc(bc, T, ElType, map(length, inds))
     end
     return similar(convert(Broadcasted{DefaultArrayStyle{ndims(bc)}}, bc), ElType)
 end
@@ -193,6 +295,14 @@ isvalidstructbc(dest, bc::Broadcasted{T}) where {T<:StructuredMatrixStyle} =
 isvalidstructbc(dest::Bidiagonal, bc::Broadcasted{StructuredMatrixStyle{Bidiagonal}}) =
     (size(dest, 1) < 2 || find_uplo(bc) == dest.uplo) &&
     (isstructurepreserving(bc) || fzeropreserving(bc))
+
+isvalidstructbc(dest::Symmetric, bc::Broadcasted{StructuredMatrixStyle{T}}) where {T<:Symmetric} =
+    Broadcast.combine_styles(dest, bc) === Broadcast.combine_styles(dest) &&
+    (isstructurepreserving(bc) || issymmetrypreserving(bc))
+
+isvalidstructbc(dest::Hermitian, bc::Broadcasted{StructuredMatrixStyle{T}}) where {T<:Hermitian} =
+    Broadcast.combine_styles(dest, bc) === Broadcast.combine_styles(dest) &&
+    (isstructurepreserving(bc) || ishermitianpreserving(bc))
 
 @inline function getindex(bc::Broadcasted, b::BandIndex)
     @boundscheck checkbounds(bc, b)
@@ -207,6 +317,36 @@ function Broadcast.newindex(A::StructuredMatrix, b::BandIndex)
 end
 # All structured matrices are square, and therefore they only broadcast out if they are size (1, 1)
 Broadcast.newindex(D::StructuredMatrix, I::CartesianIndex{2}) = size(D) == (1,1) ? CartesianIndex(1,1) : I
+
+# Recursively replace wrapped matrices by their parents to improve broadcasting performance
+# We may do this because the indexing within `copyto!` is restricted to the stored indices
+preprocess_broadcasted(::Type{T}, A) where {T} = _preprocess_broadcasted(T, A)
+function preprocess_broadcasted(::Type{T}, bc::Broadcasted) where {T}
+    args = map(x -> preprocess_broadcasted(T, x), bc.args)
+    Broadcast.broadcasted(bc.f, args...)
+end
+# fallback case that doesn't unwrap at all
+_preprocess_broadcasted(::Type, x) = x
+
+_preprocess_broadcasted(::Type{Diagonal}, d::Diagonal) = d.diag
+# fallback for types that might opt into Diagonal-like structured broadcasting, e.g. wrappers
+_preprocess_broadcasted(::Type{Diagonal}, d::AbstractMatrix) = diagview(d)
+
+_preprocess_broadcasted(::Type{LowerTriangular}, A) = lowertridata(A)
+_preprocess_broadcasted(::Type{UpperTriangular}, A) = uppertridata(A)
+_preprocess_broadcasted(::Type{UpperHessenberg}, A) = upperhessenbergdata(A)
+
+_preprocess_broadcasted(::Type{Symmetric}, A::Symmetric) = parent(A)
+
+function copy(bc::Broadcasted{StructuredMatrixStyle{Diagonal}})
+    if isstructurepreserving(bc) || fzeropreserving(bc)
+        # forward the broadcasting operation to the diagonal
+        bc2 = preprocess_broadcasted(Diagonal, bc)
+        return Diagonal(copy(bc2))
+    else
+        @invoke copy(bc::Broadcasted)
+    end
+end
 
 function copyto!(dest::Diagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
@@ -269,16 +409,6 @@ function copyto!(dest::Tridiagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     return dest
 end
 
-# Recursively replace wrapped matrices by their parents to improve broadcasting performance
-# We may do this because the indexing within `copyto!` is restricted to the stored indices
-preprocess_broadcasted(::Type{T}, A) where {T} = _preprocess_broadcasted(T, A)
-function preprocess_broadcasted(::Type{T}, bc::Broadcasted) where {T}
-    args = map(x -> preprocess_broadcasted(T, x), bc.args)
-    Broadcast.Broadcasted(bc.f, args, bc.axes)
-end
-_preprocess_broadcasted(::Type{LowerTriangular}, A) = lowertridata(A)
-_preprocess_broadcasted(::Type{UpperTriangular}, A) = uppertridata(A)
-
 function copyto!(dest::LowerTriangular, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
@@ -300,6 +430,48 @@ function copyto!(dest::UpperTriangular, bc::Broadcasted{<:StructuredMatrixStyle}
     for j in axs[2]
         for i in 1:j
             @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
+        end
+    end
+    return dest
+end
+
+function copyto!(dest::UpperHessenberg, bc::Broadcasted{<:StructuredMatrixStyle})
+    isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
+    axs = axes(dest)
+    axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
+    bc_unwrapped = preprocess_broadcasted(UpperHessenberg, bc)
+    for j in axs[2]
+        for i in 1:min(size(dest.data,1), j+1)
+            @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
+        end
+    end
+    return dest
+end
+
+function copyto!(dest::Union{Symmetric,Hermitian}, bc::Broadcasted{<:StructuredMatrixStyle})
+    isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
+    axs = axes(dest)
+    axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
+    if find_uplo(bc) == dest.uplo
+        bc_unwrapped = preprocess_broadcasted(Symmetric, bc)
+        if dest.uplo == 'U'
+            for j in axs[2]
+                for i in 1:j
+                    @inbounds dest.data[i, j] = bc_unwrapped[CartesianIndex(i, j)]
+                end
+            end
+        else
+            for j in axs[2]
+                for i in j:axs[1][end]
+                    @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
+                end
+            end
+        end
+    else #uplo is always :U in this case
+        for j in axs[2]
+            for i in 1:j
+                @inbounds dest.data[i, j] = bc[CartesianIndex(i, j)]
+            end
         end
     end
     return dest

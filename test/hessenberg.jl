@@ -69,8 +69,9 @@ let n = 10
         H = UpperHessenberg(Areal)
         @test Array(Hc + H) == Array(Hc) + Array(H)
         @test Array(Hc - H) == Array(Hc) - Array(H)
+        Hi = UpperHessenberg(Int.(Areal .÷ (1/8)))
         @testset "ldiv and rdiv" begin
-            for b in (b_, B_), H in (H, Hc, H', Hc', transpose(Hc))
+            for b in (b_, B_), H in (H, Hc, H', Hc', transpose(Hc), Hi)
                 @test H * (H \ b) ≈ b
                 @test (b' / H) * H ≈ (Matrix(b') / H) * H ≈ b'
                 @test (transpose(b) / H) * H ≈ (Matrix(transpose(b)) / H) * H ≈ transpose(b)
@@ -294,10 +295,55 @@ end
 end
 
 @testset "multiplication with empty HessenbergQ" begin
-    @test ones(2, 0)*hessenberg(zeros(0,0)).Q == zeros(2,0)
-    @test_throws DimensionMismatch ones(2, 1)*hessenberg(zeros(0,0)).Q
-    @test hessenberg(zeros(0,0)).Q * ones(0, 2) == zeros(0,2)
-    @test_throws DimensionMismatch hessenberg(zeros(0,0)).Q * ones(1, 2)
+    for A in (zeros(0,0), Symmetric(zeros(0,0)))
+        Q = hessenberg(A).Q
+        @test Matrix(Q) == zeros(0, 0)
+        @test ones(2, 0) * Q == zeros(2,0)
+        @test_throws DimensionMismatch ones(2, 1) * Q
+        @test Q * ones(0, 2) == zeros(0,2)
+        @test_throws DimensionMismatch Q * ones(1, 2)
+    end
+end
+
+@testset "fillband" begin
+    U = UpperHessenberg(zeros(4,4))
+    @test_throws ArgumentError LinearAlgebra.fillband!(U, 1, -2, 1)
+    @test iszero(U)
+
+    LinearAlgebra.fillband!(U, 10, -1, 2)
+    @test all(==(10), diagview(U,-1))
+    @test all(==(10), diagview(U,2))
+    @test all(==(0), diagview(U,3))
+
+    LinearAlgebra.fillband!(U, 0, -5, 5)
+    @test iszero(U)
+
+    U2 = copy(U)
+    LinearAlgebra.fillband!(U, -10, 1, -2)
+    @test U == U2
+    LinearAlgebra.fillband!(U, -10, 10, 10)
+    @test U == U2
+end
+
+@testset "eigensolvers" begin
+    for T in (Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64)
+        H = UpperHessenberg(randn(T, 5,5))
+        λ = eigvals(H)
+        F = eigen(H)
+        @test λ ≈ eigvals(Matrix(H)) ≈ F.values
+        @test H * F.vectors ≈ F.vectors * Diagonal(λ)
+        @test Diagonal(F.vectors' * F.vectors) ≈ I
+    end
+
+    # be sure to test real-H cases with both purely real and complex eigvals
+    for H in (UpperHessenberg([-1.1 -0.3 -0.0 -0.6 0.5; -0.6 -1.8 -0.3 1.5 1.1; 0.0 1.8 -0.6 1.2 0.9; 0.0 0.0 -0.1 -0.5 -0.2; 0.0 0.0 0.0 -0.5 -1.7]),
+              UpperHessenberg([-0.6 1.0 0.4 0.4 0.3; 1.2 -0.2 -1.5 0.7 0.0; 0.0 -1.3 -1.0 0.5 0.2; 0.0 0.0 0.5 -0.6 0.0; 0.0 0.0 0.0 0.7 -1.5]))
+        λ = eigvals(H)
+        F = eigen(H)
+        @test λ ≈ eigvals(Matrix(H)) ≈ F.values
+        @test H * F.vectors ≈ F.vectors * Diagonal(λ)
+        @test Diagonal(F.vectors' * F.vectors) ≈ I
+    end
 end
 
 end # module TestHessenberg

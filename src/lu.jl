@@ -110,8 +110,8 @@ end
 `lu!` is the same as [`lu`](@ref), but saves space by overwriting the
 input `F`, instead of creating a copy.
 
-!!! compat "Julia 1.12"
-    Reusing dense `LU` factorizations in `lu!` require Julia 1.12 or later.
+!!! compat "Julia 1.13"
+    Reusing dense `LU` factorizations in `lu!` require Julia 1.13 or later.
 
 # Examples
 ```jldoctest

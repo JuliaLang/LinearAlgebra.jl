@@ -185,7 +185,7 @@ function istril(A::BitMatrix)
     return true
 end
 
-# fast 8x8 bit transpose from Henry S. Warrens's "Hacker's Delight"
+# fast 8x8 bit transpose from Henry S. Warren's "Hacker's Delight"
 # https://www.hackersdelight.org/hdcodetxt/transpose8.c.txt
 function transpose8x8(x::UInt64)
     y = x

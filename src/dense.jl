@@ -205,6 +205,23 @@ tril(M::Matrix, k::Integer) = tril!(copy(M), k)
     fillband!(A::AbstractMatrix, x, l, u)
 
 Fill the band between diagonals `l` and `u` with the value `x`.
+
+# Examples
+```jldoctest
+julia> A = zeros(4,4)
+4×4 Matrix{Float64}:
+ 0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0
+ 0.0  0.0  0.0  0.0
+
+julia> LinearAlgebra.fillband!(A, 2, 0, 1)
+4×4 Matrix{Float64}:
+ 2.0  2.0  0.0  0.0
+ 0.0  2.0  2.0  0.0
+ 0.0  0.0  2.0  2.0
+ 0.0  0.0  0.0  2.0
+```
 """
 function fillband!(A::AbstractMatrix{T}, x, l, u) where T
     require_one_based_indexing(A)
@@ -218,22 +235,16 @@ function fillband!(A::AbstractMatrix{T}, x, l, u) where T
     return A
 end
 
-diagind(m::Integer, n::Integer, k::Integer=0) = diagind(IndexLinear(), m, n, k)
-diagind(::IndexLinear, m::Integer, n::Integer, k::Integer=0) =
-    k <= 0 ? range(1-k, step=m+1, length=min(m+k, n)) : range(k*m+1, step=m+1, length=min(m, n-k))
-
-function diagind(::IndexCartesian, m::Integer, n::Integer, k::Integer=0)
-    Cstart = CartesianIndex(1 + max(0,-k), 1 + max(0,k))
-    Cstep = CartesianIndex(1, 1)
-    length = max(0, k <= 0 ? min(m+k, n) : min(m, n-k))
-    StepRangeLen(Cstart, Cstep, length)
-end
+fillstored!(A::AbstractMatrix, v) = fill!(A, v)
 
 """
     diagind(M::AbstractMatrix, k::Integer = 0, indstyle::IndexStyle = IndexLinear())
     diagind(M::AbstractMatrix, indstyle::IndexStyle = IndexLinear())
+    diagind(::IndexStyle, m::Integer, n::Integer, k::Integer = 0)
+    diagind(m::Integer, n::Integer, k::Integer = 0)
 
-An `AbstractRange` giving the indices of the `k`th diagonal of the matrix `M`.
+An `AbstractRange` giving the indices of the `k`th diagonal of a matrix,
+specified either by the matrix `M` itself or by its dimensions `m` and `n`.
 Optionally, an index style may be specified which determines the type of the range returned.
 If `indstyle isa IndexLinear` (default), this returns an `AbstractRange{Integer}`.
 On the other hand, if `indstyle isa IndexCartesian`, this returns an `AbstractRange{CartesianIndex{2}}`.
@@ -243,6 +254,7 @@ If `k` is not provided, it is assumed to be `0` (corresponding to the main diago
 See also: [`diag`](@ref), [`diagm`](@ref), [`Diagonal`](@ref).
 
 # Examples
+The matrix itself may be passed to `diagind`:
 ```jldoctest
 julia> A = [1 2 3; 4 5 6; 7 8 9]
 3×3 Matrix{Int64}:
@@ -257,6 +269,18 @@ julia> diagind(A, IndexCartesian())
 StepRangeLen(CartesianIndex(1, 1), CartesianIndex(1, 1), 3)
 ```
 
+Alternatively, dimensions `m` and `n` may be passed to get the diagonal of an `m×n` matrix:
+```jldoctest
+julia> m, n = 5, 7
+(5, 7)
+
+julia> diagind(m, n, 2)
+11:6:35
+
+julia> diagind(IndexCartesian(), m, n)
+StepRangeLen(CartesianIndex(1, 1), CartesianIndex(1, 1), 5)
+```
+
 !!! compat "Julia 1.11"
      Specifying an `IndexStyle` requires at least Julia 1.11.
 """
@@ -266,6 +290,17 @@ function diagind(A::AbstractMatrix, k::Integer=0, indexstyle::IndexStyle = Index
 end
 
 diagind(A::AbstractMatrix, indexstyle::IndexStyle) = diagind(A, 0, indexstyle)
+
+function diagind(::IndexCartesian, m::Integer, n::Integer, k::Integer=0)
+    Cstart = CartesianIndex(1 + max(0,-k), 1 + max(0,k))
+    Cstep = CartesianIndex(1, 1)
+    length = max(0, k <= 0 ? min(m+k, n) : min(m, n-k))
+    StepRangeLen(Cstart, Cstep, length)
+end
+
+diagind(::IndexLinear, m::Integer, n::Integer, k::Integer=0) =
+    k <= 0 ? range(1-k, step=m+1, length=min(m+k, n)) : range(k*m+1, step=m+1, length=min(m, n-k))
+diagind(m::Integer, n::Integer, k::Integer=0) = diagind(IndexLinear(), m, n, k)
 
 """
     diag(M, k::Integer=0)
@@ -961,7 +996,7 @@ log(A::AdjointAbsMat) = adjoint(log(parent(A)))
 log(A::TransposeAbsMat) = transpose(log(parent(A)))
 
 """
-    sqrt(A::AbstractMatrix)
+    sqrt(A::AbstractMatrix; check=true)
 
 If `A` has no negative real eigenvalues, compute the principal matrix square root of `A`,
 that is the unique matrix ``X`` with eigenvalues having positive real part such that
@@ -980,6 +1015,8 @@ Björck-Hammarling method [^BH83], which computes the complex Schur form ([`schu
 and then the complex square root of the triangular factor.
 If a real square root exists, then an extension of this method [^H87] that computes the real
 Schur form and then the real square root of the quasi-triangular factor is instead used.
+
+When a non-Hermitian matrix has two or more null eigenvalues, the square root may not exist. In this case, and when the `check` flag is true, the algorithm will verify `X^2≈A` and throw an error if not.
 
 [^BH83]:
 
@@ -1008,7 +1045,7 @@ julia> sqrt(A)
 """
 sqrt(::AbstractMatrix)
 
-function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
+function sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Real,Complex}}
     if checksquare(A) == 0
         return copy(float(A))
     elseif isdiag(A)
@@ -1018,33 +1055,33 @@ function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
             return applydiagonal(sqrt, A)
         end
     elseif ishermitian(A)
-        return _safe_parent(sqrt(Hermitian(A)))
+        return _safe_parent(sqrt(Hermitian(A); check))
     elseif istriu(A)
-        return triu!(parent(sqrt(UpperTriangular(A))))
+        return triu!(parent(sqrt(UpperTriangular(A); check)))
     elseif isreal(A)
         SchurF = schur(real(A))
         if istriu(SchurF.T)
-            sqrtA = SchurF.Z * sqrt(UpperTriangular(SchurF.T)) * SchurF.Z'
+            sqrtA = SchurF.Z * sqrt(UpperTriangular(SchurF.T); check) * SchurF.Z'
         else
             # real sqrt exists whenever no eigenvalues are negative
             is_sqrt_real = !any(x -> isreal(x) && real(x) < 0, SchurF.values)
             # sqrt_quasitriu uses LAPACK functions for non-triu inputs
             if typeof(sqrt(zero(T))) <: BlasFloat && is_sqrt_real
-                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T) * SchurF.Z'
+                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T, SchurF.values; check) * SchurF.Z'
             else
                 SchurS = Schur{Complex}(SchurF)
-                sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T)) * SchurS.Z'
+                sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T); check) * SchurS.Z'
             end
         end
         return eltype(A) <: Complex ? complex(sqrtA) : sqrtA
     else
         SchurF = schur(A)
-        return SchurF.vectors * sqrt(UpperTriangular(SchurF.T)) * SchurF.vectors'
+        return SchurF.vectors * sqrt(UpperTriangular(SchurF.T); check) * SchurF.vectors'
     end
 end
 
-sqrt(A::AdjointAbsMat) = adjoint(sqrt(parent(A)))
-sqrt(A::TransposeAbsMat) = transpose(sqrt(parent(A)))
+sqrt(A::AdjointAbsMat; check::Bool=true) = adjoint(sqrt(parent(A); check))
+sqrt(A::TransposeAbsMat; check::Bool=true) = transpose(sqrt(parent(A); check))
 
 """
     cbrt(A::AbstractMatrix{<:Real})
@@ -1731,10 +1768,21 @@ both with the value of `M` and the intended application of the pseudoinverse.
 The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest
 dimension of `M`, and `ϵ` is the [`eps`](@ref) of the element type of `M`.
 
-For inverting dense ill-conditioned matrices in a least-squares sense,
-`rtol = sqrt(eps(real(float(oneunit(eltype(M))))))` is recommended.
+For solving dense, ill-conditioned equations in a least-square sense, it
+is better to *not* explicitly form the pseudoinverse matrix, since this
+can lead to numerical instability at low tolerances.  The default `M \\ b`
+algorithm instead uses pivoted QR factorization ([`qr`](@ref)).  To use an
+SVD-based algorithm, it is better to employ the SVD directly via `svd(M; rtol, atol) \\ b`
+or `ldiv!(svd(M), b; rtol, atol)`.
 
-For more information, see [^issue8859], [^B96], [^S84], [^KY88].
+One can also pass `M = svd(A)` as the argument to `pinv` in order to re-use
+an existing [`SVD`](@ref) factorization.  In this case, `pinv` will return
+the SVD of the pseudo-inverse, which can be applied accurately, instead of an explicit matrix.
+
+!!! compat "Julia 1.13"
+    Passing an `SVD` object to `pinv` requires Julia 1.13 or later.
+
+For more information, see [^pr1387], [^B96], [^S84], [^KY88].
 
 # Examples
 ```jldoctest
@@ -1748,13 +1796,11 @@ julia> N = pinv(M)
   1.47287   -1.00775
  -0.930233   1.16279
 
-julia> M * N
-2×2 Matrix{Float64}:
- 1.0          -2.22045e-16
- 4.44089e-16   1.0
+julia> M * N ≈ I
+true
 ```
 
-[^issue8859]: Issue 8859, "Fix least squares", [https://github.com/JuliaLang/julia/pull/8859](https://github.com/JuliaLang/julia/pull/8859)
+[^pr1387]: PR 1387, "stable pinv least-squares", [LinearAlgebra.jl#1387](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387)
 
 [^B96]: Åke Björck, "Numerical Methods for Least Squares Problems",  SIAM Press, Philadelphia, 1996, "Other Titles in Applied Mathematics", Vol. 51. [doi:10.1137/1.9781611971484](http://epubs.siam.org/doi/book/10.1137/1.9781611971484)
 
@@ -1762,7 +1808,7 @@ julia> M * N
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real = 0.0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
     Tout = typeof(zero(T)/sqrt(oneunit(T) + oneunit(T)))
     if m == 0 || n == 0
@@ -1830,7 +1876,7 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real = 0.0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)

@@ -35,7 +35,7 @@ struct TransposeFactorization{T,S<:Factorization} <: Factorization{T}
     parent::S
 end
 TransposeFactorization(F::Factorization) =
-    TransposeFactorization{Base.promote_op(adjoint,eltype(F)),typeof(F)}(F)
+    TransposeFactorization{Base.promote_op(transpose,eltype(F)),typeof(F)}(F)
 
 eltype(::Type{<:Factorization{T}}) where {T} = T
 size(F::AdjointFactorization) = reverse(size(parent(F)))
@@ -110,7 +110,7 @@ Factorization{T}(A::AdjointFactorization) where {T} =
     adjoint(Factorization{T}(parent(A)))
 Factorization{T}(A::TransposeFactorization) where {T} =
     transpose(Factorization{T}(parent(A)))
-inv(F::Factorization{T}) where {T} = (n = size(F, 1); ldiv!(F, Matrix{T}(I, n, n)))
+inv(F::Factorization{T}) where {T} = (n = checksquare(F); ldiv!(F, Matrix{T}(I, n, n)))
 
 Base.hash(F::Factorization, h::UInt) = mapreduce(f -> hash(getfield(F, f)), hash, 1:nfields(F); init=h)
 Base.:(==)(  F::T, G::T) where {T<:Factorization} = all(f -> getfield(F, f) == getfield(G, f), 1:nfields(F))
@@ -135,8 +135,7 @@ end
 
 function (\)(F::Factorization, B::AbstractVecOrMat)
     require_one_based_indexing(B)
-    TFB = typeof(oneunit(eltype(F)) \ oneunit(eltype(B)))
-    ldiv!(F, copy_similar(B, TFB))
+    ldiv!(F, copyto!(matop_dest(\, F, B), B))
 end
 (\)(F::TransposeFactorization, B::AbstractVecOrMat) = conj!(adjoint(F.parent) \ conj.(B))
 # With a real lhs and complex rhs with the same precision, we can reinterpret
@@ -179,8 +178,7 @@ end
 
 function (/)(B::AbstractMatrix, F::Factorization)
     require_one_based_indexing(B)
-    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(F)))
-    rdiv!(copy_similar(B, TFB), F)
+    rdiv!(copyto!(matop_dest(/, B, F), B), F)
 end
 # reinterpretation trick for complex lhs and real factorization
 function (/)(B::Union{Matrix{Complex{T}},AdjOrTrans{Complex{T},Vector{Complex{T}}}}, F::Factorization{T}) where {T<:BlasReal}

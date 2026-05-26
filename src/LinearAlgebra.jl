@@ -70,7 +70,7 @@ export
 
 # Functions
     adjoint!,
-    adjoint,
+    # adjoint, # exported by Base
     axpby!,
     axpy!,
     bunchkaufman!,
@@ -81,7 +81,7 @@ export
     condskeel,
     copy_adjoint!,
     copy_transpose!,
-    copyto!,
+    # copyto!, # exported by Base
     copytrito!,
     cross,
     det,
@@ -111,8 +111,8 @@ export
     issymmetric,
     istril,
     istriu,
-    kron!,
-    kron,
+    # kron!, # exported by Base
+    # kron, # exported by Base
     ldiv!,
     ldlt!,
     ldlt,
@@ -153,7 +153,7 @@ export
     sylvester,
     tr,
     transpose!,
-    transpose,
+    # transpose, # exported by Base
     tril!,
     tril,
     triu!,
@@ -161,8 +161,8 @@ export
 
 
 # Operators
-    \,
-    /,
+    # \, # exported by Base
+    # /, # exported by Base
 
 # Constants
     I
@@ -171,16 +171,22 @@ export
 public AbstractTriangular,
         Givens,
         checksquare,
+        generic_matmatmul!,
+        generic_matvecmul!,
         haszero,
         hermitian,
         hermitian_type,
         isbanded,
+        nonzeroinds,
+        nzcols,
+        nzrows,
         peakflops,
         symmetric,
         symmetric_type,
         zeroslike,
-        matprod_dest,
-        fillstored!
+        fillstored!,
+        fillband!,
+        uplo
 
 const BlasFloat = Union{Float64,Float32,ComplexF64,ComplexF32}
 const BlasReal = Union{Float64,Float32}
@@ -324,7 +330,7 @@ StridedMatrixStride1{T} = StridedArrayStride1{T,2}
 """
     LinearAlgebra.checksquare(A)
 
-Check that a matrix is square, then return its common dimension.
+Checks whether a matrix is square, returning its common dimension if it is the case, or throwing a DimensionMismatch error otherwise.
 For multiple arguments, return a vector.
 
 # Examples
@@ -338,19 +344,13 @@ julia> LinearAlgebra.checksquare(A, B)
 ```
 """
 function checksquare(A)
-    m,n = size(A)
-    m == n || throw(DimensionMismatch(lazy"matrix is not square: dimensions are $(size(A))"))
-    m
+    sizeA = size(A)
+    length(sizeA) == 2 || throw(DimensionMismatch(lazy"input is not a matrix: dimensions are $sizeA"))
+    sizeA[1] == sizeA[2] || throw(DimensionMismatch(lazy"matrix is not square: dimensions are $sizeA"))
+    return sizeA[1]
 end
 
-function checksquare(A...)
-    sizes = Int[]
-    for a in A
-        size(a,1)==size(a,2) || throw(DimensionMismatch(lazy"matrix is not square: dimensions are $(size(a))"))
-        push!(sizes, size(a,1))
-    end
-    return sizes
-end
+checksquare(A...) = [checksquare(a) for a in A]
 
 function char_uplo(uplo::Symbol)
     if uplo === :U
@@ -362,7 +362,14 @@ function char_uplo(uplo::Symbol)
     end
 end
 
+"""
+    sym_uplo(uplo::Char)
+
+Return the `Symbol` corresponding the `uplo` by checking for validity.
+"""
 function sym_uplo(uplo::Char)
+    # This method is called by other packages, and isn't used within LinearAlgebra
+    # It's retained here for backward compatibility.
     if uplo == 'U'
         return :U
     elseif uplo == 'L'
@@ -371,6 +378,13 @@ function sym_uplo(uplo::Char)
         throw_uplo()
     end
 end
+"""
+    _sym_uplo(uplo::Char)
+
+Return the `Symbol` corresponding to `uplo` without checking for validity.
+See also `sym_uplo`, which checks for validity.
+"""
+_sym_uplo(uplo::Char) = uplo == 'U' ? (:U) : (:L)
 
 @noinline throw_uplo() = throw(ArgumentError("uplo argument must be either :U (upper) or :L (lower)"))
 
@@ -541,6 +555,7 @@ include("exceptions.jl")
 include("generic.jl")
 
 include("blas.jl")
+include("sparse_interface.jl")
 include("matmul.jl")
 include("lapack.jl")
 
@@ -641,43 +656,29 @@ _unwrap(A::AbstractVecOrMat) = A
 _cut_B(x::AbstractVector, r::UnitRange) = length(x)  > length(r) ? x[r]   : x
 _cut_B(X::AbstractMatrix, r::UnitRange) = size(X, 1) > length(r) ? X[r,:] : X
 
-# SymTridiagonal ev can be the same length as dv, but the last element is
-# ignored. However, some methods can fail if they read the entire ev
-# rather than just the meaningful elements. This is a helper function
-# for getting only the meaningful elements of ev. See #41089
-_evview(S::SymTridiagonal) = @view S.ev[begin:begin + length(S.dv) - 2]
-
 ## append right hand side with zeros if necessary
 _zeros(::Type{T}, b::AbstractVector, n::Integer) where {T} = zeros(T, max(length(b), n))
 _zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B, 1), n), size(B, 2))
 
-# append a zero element / drop the last element
-_pushzero(A) = (B = similar(A, length(A)+1); @inbounds B[begin:end-1] .= A; @inbounds B[end] = zero(eltype(B)); B)
-_droplast!(A) = deleteat!(A, lastindex(A))
-
 # destination type for matmul
-matprod_dest(A::StructuredMatrix, B::StructuredMatrix, TS) = similar(B, TS, size(B))
-matprod_dest(A, B::StructuredMatrix, TS) = similar(A, TS, size(A))
-matprod_dest(A::StructuredMatrix, B, TS) = similar(B, TS, size(B))
 # diagonal is special, as it does not change the structure of the other matrix
 # we call similar without a size to preserve the type of the matrix wherever possible
-# reroute through _matprod_dest_diag to allow speicalizing on the type of the StructuredMatrix
+# reroute through _matprod_dest_diag to allow specializing on the type of the StructuredMatrix
 # without defining methods for both the orderings
-matprod_dest(A::StructuredMatrix, B::Diagonal, TS) = _matprod_dest_diag(A, TS)
-matprod_dest(A::Diagonal, B::StructuredMatrix, TS) = _matprod_dest_diag(B, TS)
-matprod_dest(A::Diagonal, B::Diagonal, TS) = _matprod_dest_diag(B, TS)
+_matprod_type(A, B) = promote_op(matprod, eltype(A), eltype(B))
+matop_dest(::typeof(*), A, B::Diagonal) = _matprod_dest_diag(A, _matprod_type(A, B))
+matop_dest(::typeof(*), A::Diagonal, B) = _matprod_dest_diag(B, _matprod_type(A, B))
+matop_dest(::typeof(*), A::Diagonal, B::Diagonal) = similar(B, _matprod_type(A, B))
+matop_dest(::typeof(*), A::Diagonal, B::AbstractVector) = similar(B, _matprod_type(A, B))
 _matprod_dest_diag(A, TS) = similar(A, TS)
-_matprod_dest_diag(A::UnitUpperTriangular, TS) = UpperTriangular(similar(parent(A), TS))
-_matprod_dest_diag(A::UnitLowerTriangular, TS) = LowerTriangular(similar(parent(A), TS))
+_matprod_dest_diag(A::HermOrSym, TS) = similar(parent(A), TS)
+_matprod_dest_diag(A::UpperOrUnitUpperTriangular, TS) = UpperTriangular(similar(parent(A), TS))
+_matprod_dest_diag(A::LowerOrUnitLowerTriangular, TS) = LowerTriangular(similar(parent(A), TS))
 function _matprod_dest_diag(A::SymTridiagonal, TS)
-    n = size(A, 1)
-    ev = similar(A, TS, max(0, n-1))
-    dv = similar(A, TS, n)
+    ev = similar(A.ev, TS)
+    dv = similar(A.dv, TS)
     Tridiagonal(ev, dv, similar(ev))
 end
-
-# Special handling for adj/trans vec
-matprod_dest(A::Diagonal, B::AdjOrTransAbsVec, TS) = similar(B, TS)
 
 # General fallback definition for handling under- and overdetermined system as well as square problems
 # While this definition is pretty general, it does e.g. promote to common element type of lhs and rhs

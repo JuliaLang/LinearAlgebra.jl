@@ -115,6 +115,13 @@ Bidiagonal(A::Bidiagonal) = A
 Bidiagonal{T}(A::Bidiagonal{T}) where {T} = A
 Bidiagonal{T}(A::Bidiagonal) where {T} = Bidiagonal{T}(A.dv, A.ev, A.uplo)
 
+"""
+    LinearAlgebra.uplo(S::Bidiagonal)::Symbol
+
+Return a `Symbol` corresponding to whether the upper (`:U`) or lower (`:L`) off-diagonal band is stored.
+"""
+uplo(B::Bidiagonal) = sym_uplo(B.uplo)
+
 _offdiagind(uplo) = uplo == 'U' ? 1 : -1
 
 @inline function Base.isassigned(A::Bidiagonal, i::Int, j::Int)
@@ -242,6 +249,7 @@ AbstractMatrix{T}(A::Bidiagonal{T}) where {T} = copy(A)
 
 function convert(::Type{T}, A::AbstractMatrix) where T<:Bidiagonal
     checksquare(A)
+    A isa T && return A
     isbanded(A, -1, 1) || throw(InexactError(:convert, T, A))
     iszero(diagview(A, 1)) ? T(A, :L) :
         iszero(diagview(A, -1)) ? T(A, :U) : throw(InexactError(:convert, T, A))
@@ -253,9 +261,8 @@ similar(B::Bidiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = simi
 tr(B::Bidiagonal) = sum(B.dv)
 
 function kron(A::Diagonal, B::Bidiagonal)
-    # `_droplast!` is only guaranteed to work with `Vector`
-    kdv = convert(Vector, kron(diag(A), B.dv))
-    kev = _droplast!(convert(Vector, kron(diag(A), _pushzero(B.ev))))
+    kdv = kron(A.diag, B.dv)
+    kev = _diagonal_kron!(similar(kdv, length(kdv) - 1), A.diag, B.ev)
     Bidiagonal(kdv, kev, B.uplo)
 end
 
@@ -282,7 +289,7 @@ function _opnorm1Inf(B::Bidiagonal, p)
     case = xor(p == 1, istriu(B))
     normd1, normdend = norm(first(B.dv)), norm(last(B.dv))
     normd1, normdend = case ? (zero(normd1), normdend) : (normd1, zero(normdend))
-    return max(mapreduce(t -> sum(norm, t), max, zip(view(B.dv, (1:length(B.ev)) .+ !case), B.ev)), normdend)
+    return max(mapreduce(t -> sum(norm, t), max, zip(view(B.dv, (1:length(B.ev)) .+ !case), B.ev)), normd1, normdend)
 end
 
 ####################
@@ -295,7 +302,7 @@ function show(io::IO, M::Bidiagonal)
     print(io, ", ")
     show(io, M.ev)
     print(io, ", ")
-    show(io, sym_uplo(M.uplo))
+    show(io, _sym_uplo(M.uplo))
     print(io, ")")
 end
 
@@ -910,12 +917,12 @@ function _bidimul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
     @inbounds begin
         # first row of C
         for j in 1:min(2, n)
-            C[1,j] += _add(A[1,j]*B[j,j])
+            C[1,j] += _add(A[1,j]*Bd[j])
         end
         # second row of C
         if n > 1
             for j in 1:min(3, n)
-                C[2,j] += _add(A[2,j]*B[j,j])
+                C[2,j] += _add(A[2,j]*Bd[j])
             end
         end
         for j in 3:n-2
@@ -926,13 +933,13 @@ function _bidimul!(C::AbstractMatrix, A::BiTriSym, B::Diagonal, _add::MulAddMul)
         if n > 3
             # row before last of C
             for j in n-2:n
-                C[n-1,j] += _add(A[n-1,j]*B[j,j])
+                C[n-1,j] += _add(A[n-1,j]*Bd[j])
             end
         end
         # last row of C
         if n > 2
             for j in n-1:n
-                C[n,j] += _add(A[n,j]*B[j,j])
+                C[n,j] += _add(A[n,j]*Bd[j])
             end
         end
     end # inbounds
@@ -1260,32 +1267,12 @@ function _dibimul_nonzeroalpha!(C::Bidiagonal, A::Diagonal, B::Bidiagonal, _add)
     C
 end
 
-function mul(A::UpperOrUnitUpperTriangular, B::Bidiagonal)
-    C = _mul(A, B)
-    return B.uplo == 'U' ? UpperTriangular(C) : C
-end
-
-function mul(A::LowerOrUnitLowerTriangular, B::Bidiagonal)
-    C = _mul(A, B)
-    return B.uplo == 'L' ? LowerTriangular(C) : C
-end
-
-function mul(A::Bidiagonal, B::UpperOrUnitUpperTriangular)
-    C = _mul(A, B)
-    return A.uplo == 'U' ? UpperTriangular(C) : C
-end
-
-function mul(A::Bidiagonal, B::LowerOrUnitLowerTriangular)
-    C = _mul(A, B)
-    return A.uplo == 'L' ? LowerTriangular(C) : C
-end
-
 function dot(x::AbstractVector, B::Bidiagonal, y::AbstractVector)
     require_one_based_indexing(x, y)
     nx, ny = length(x), length(y)
     (nx == size(B, 1) == ny) || throw(DimensionMismatch())
     if nx ≤ 1
-        nx == 0 && return dot(zero(eltype(x)), zero(eltype(B)), zero(eltype(y)))
+        nx == 0 && return zero(dot(zero(eltype(x)), zero(eltype(B)), zero(eltype(y))))
         return dot(x[1], B.dv[1], y[1])
     end
     ev, dv = B.ev, B.dv
@@ -1351,35 +1338,18 @@ end
 
 ### Generic promotion methods and fallbacks
 \(A::Bidiagonal, B::AbstractVecOrMat) =
-    ldiv!(matprod_dest(A, B, promote_op(\, eltype(A), eltype(B))), A, B)
+    postop_proc(\, ldiv!(matop_dest(\, A, B), A, B), A, B)
 
-### Triangular specializations
-for tri in (:UpperTriangular, :UnitUpperTriangular)
-    @eval function \(B::Bidiagonal, U::$tri)
-        A = ldiv!(matprod_dest(B, U, promote_op(\, eltype(B), eltype(U))), B, U)
-        return B.uplo == 'U' ? UpperTriangular(A) : A
-    end
-    @eval function \(U::$tri, B::Bidiagonal)
-        A = ldiv!(matprod_dest(U, B, promote_op(\, eltype(U), eltype(B))), U, B)
-        return B.uplo == 'U' ? UpperTriangular(A) : A
-    end
-end
-for tri in (:LowerTriangular, :UnitLowerTriangular)
-    @eval function \(B::Bidiagonal, L::$tri)
-        A = ldiv!(matprod_dest(B, L, promote_op(\, eltype(B), eltype(L))), B, L)
-        return B.uplo == 'L' ? LowerTriangular(A) : A
-    end
-    @eval function \(L::$tri, B::Bidiagonal)
-        A = ldiv!(matprod_dest(L, B, promote_op(\, eltype(L), eltype(B))), L, B)
-        return B.uplo == 'L' ? LowerTriangular(A) : A
-    end
-end
-
-### Diagonal specialization
-function \(B::Bidiagonal, D::Diagonal)
-    A = ldiv!(similar(D, promote_op(\, eltype(B), eltype(D)), size(D)), B, D)
-    return B.uplo == 'U' ? UpperTriangular(A) : LowerTriangular(A)
-end
+postop_proc(::Union{typeof(*),typeof(\)}, C, B::Bidiagonal, ::UpperOrUnitUpperTriangular) = B.uplo == 'U' ? UpperTriangular(C) : C
+postop_proc(::typeof(/), C, B::Bidiagonal, ::UpperOrUnitUpperTriangular) = B.uplo == 'U' ? UpperTriangular(C) : C
+postop_proc(::Union{typeof(*),typeof(/)}, C, ::UpperOrUnitUpperTriangular, B::Bidiagonal) = B.uplo == 'U' ? UpperTriangular(C) : C
+postop_proc(::typeof(\), C, ::UpperOrUnitUpperTriangular, B::Bidiagonal) = B.uplo == 'U' ? UpperTriangular(C) : C
+postop_proc(::Union{typeof(*),typeof(\)}, C, B::Bidiagonal, ::LowerOrUnitLowerTriangular) = B.uplo == 'L' ? LowerTriangular(C) : C
+postop_proc(::typeof(/), C, B::Bidiagonal, ::LowerOrUnitLowerTriangular) = B.uplo == 'L' ? LowerTriangular(C) : C
+postop_proc(::Union{typeof(*),typeof(/)}, C, ::LowerOrUnitLowerTriangular, B::Bidiagonal) = B.uplo == 'L' ? LowerTriangular(C) : C
+postop_proc(::typeof(\), C, ::LowerOrUnitLowerTriangular, B::Bidiagonal) = B.uplo == 'L' ? LowerTriangular(C) : C
+postop_proc(::typeof(\), C, B::Bidiagonal, ::Diagonal) = B.uplo == 'U' ? UpperTriangular(C) : LowerTriangular(C)
+postop_proc(::typeof(/), C, ::Diagonal, B::Bidiagonal) = B.uplo == 'U' ? UpperTriangular(C) : LowerTriangular(C)
 
 function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     require_one_based_indexing(C, A, B)
@@ -1425,35 +1395,7 @@ end
 rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
 
 /(A::AbstractMatrix, B::Bidiagonal) =
-    _rdiv!(similar(A, promote_op(/, eltype(A), eltype(B)), size(A)), A, B)
-
-### Triangular specializations
-for tri in (:UpperTriangular, :UnitUpperTriangular)
-    @eval function /(U::$tri, B::Bidiagonal)
-        A = _rdiv!(matprod_dest(U, B, promote_op(/, eltype(U), eltype(B))), U, B)
-        return B.uplo == 'U' ? UpperTriangular(A) : A
-    end
-    @eval function /(B::Bidiagonal, U::$tri)
-        A = _rdiv!(matprod_dest(B, U, promote_op(/, eltype(B), eltype(U))), B, U)
-        return B.uplo == 'U' ? UpperTriangular(A) : A
-    end
-end
-for tri in (:LowerTriangular, :UnitLowerTriangular)
-    @eval function /(L::$tri, B::Bidiagonal)
-        A = _rdiv!(matprod_dest(L, B, promote_op(/, eltype(L), eltype(B))), L, B)
-        return B.uplo == 'L' ? LowerTriangular(A) : A
-    end
-    @eval function /(B::Bidiagonal, L::$tri)
-        A = _rdiv!(matprod_dest(B, L, promote_op(/, eltype(B), eltype(L))), B, L)
-        return B.uplo == 'L' ? LowerTriangular(A) : A
-    end
-end
-
-### Diagonal specialization
-function /(D::Diagonal, B::Bidiagonal)
-    A = _rdiv!(similar(D, promote_op(/, eltype(D), eltype(B)), size(D)), D, B)
-    return B.uplo == 'U' ? UpperTriangular(A) : LowerTriangular(A)
-end
+    postop_proc(/, _rdiv!(matop_dest(/, A, B), A, B), A, B)
 
 # disambiguation
 /(A::AdjointAbsVec, B::Bidiagonal) = adjoint(adjoint(B) \ parent(A))
@@ -1465,6 +1407,35 @@ function inv(B::Bidiagonal{T}) where T
     dest = zeros(typeof(inv(oneunit(T))), (n, n))
     ldiv!(dest, B, Diagonal{typeof(one(T)/one(T))}(I, n))
     return B.uplo == 'U' ? UpperTriangular(dest) : LowerTriangular(dest)
+end
+
+# cholesky-version for (sym)tridiagonal matrices
+for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
+    @eval function _chol!(A::Bidiagonal, ::Type{$T})
+        dv = real(A.dv)
+        ev = A.ev
+        n = length(dv)
+        @inbounds for i in 1:n-1
+            iszero(dv[i]) && throw(ZeroPivotException(i))
+            ev[i] /= dv[i]
+            dv[i+1] -= abs2(ev[i])*dv[i]
+            Akk = dv[i]
+            Akk, info = _chol!(Akk, UpperTriangular)
+            if info != 0
+                return $T(A), convert(BlasInt, i)
+            end
+            dv[i] = Akk
+            ev[i] *= dv[i]
+        end
+        Akk = dv[n]
+        Akk, info = _chol!(Akk, $T)
+        if info != 0
+            return $T(A), convert(BlasInt, n)
+        end
+        dv[n] = Akk
+        B = Bidiagonal(dv, ev, $uplo)
+        return $T(B), convert(BlasInt, 0)
+    end
 end
 
 # Eigensystems
@@ -1542,4 +1513,31 @@ function Base._sum(A::Bidiagonal, dims::Integer)
         end
     end
     res
+end
+
+function fillband!(B::Bidiagonal, x, l, u)
+    if l > u
+        return B
+    end
+    if ((B.uplo == 'U' && (l < 0 || u > 1)) ||
+            (B.uplo == 'L' && (l < -1 || u > 0))) && !iszero(x)
+        throw_fillband_error(l, u, x)
+    else
+        if B.uplo == 'U'
+            if l <= 1 <= u
+                fill!(B.ev, x)
+            end
+            if l <= 0 <= u
+                fill!(B.dv, x)
+            end
+        else # B.uplo == 'L'
+            if l <= 0 <= u
+                fill!(B.dv, x)
+            end
+            if l <= -1 <= u
+                fill!(B.ev, x)
+            end
+        end
+    end
+    return B
 end

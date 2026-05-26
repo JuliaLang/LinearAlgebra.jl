@@ -470,6 +470,10 @@ end
                 @test dot(symblockmu, symblockml) ≈ dot(msymblockmu, msymblockml)
                 @test dot(symblockml, symblockmu) ≈ dot(msymblockml, msymblockmu)
                 @test dot(symblockml, symblockml) ≈ dot(msymblockml, msymblockml)
+
+                # empty matrices
+                @test dot(mtype(ComplexF64[;;], :U), mtype(Float64[;;], :U)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
+                @test dot(mtype(ComplexF64[;;], :L), mtype(Float64[;;], :L)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
             end
         end
 
@@ -582,13 +586,21 @@ end
 
 # bug identified in PR #52318: dot products of quaternionic Hermitian matrices,
 # or any number type where conj(a)*conj(b) ≠ conj(a*b):
-@testset "dot Hermitian quaternion #52318" begin
-    A, B = [Quaternion.(randn(3,3), randn(3, 3), randn(3, 3), randn(3,3)) |> t -> t + t' for i in 1:2]
+@testset "dot Hermitian quaternion" begin
+    A, B = [(randn(Quaternion{Float64},4,4)) |> t -> t + t' for i in 1:2]
     @test A == Hermitian(A) && B == Hermitian(B)
     @test dot(A, B) ≈ dot(Hermitian(A), Hermitian(B))
-    A, B = [Quaternion.(randn(3,3), randn(3, 3), randn(3, 3), randn(3,3)) |> t -> t + transpose(t) for i in 1:2]
+    A, B = [(randn(Quaternion{Float64},4,4)) |> t -> t + transpose(t) for i in 1:2]
     @test A == Symmetric(A) && B == Symmetric(B)
     @test dot(A, B) ≈ dot(Symmetric(A), Symmetric(B))
+    A = randn(Quaternion{Float64}, 4, 4)
+    x = randn(Quaternion{Float64}, 4)
+    y = randn(Quaternion{Float64}, 4)
+    for t in (Symmetric, Hermitian), uplo in (:U, :L)
+        M = t(A, uplo)
+        N = Matrix(M)
+        @test dot(x, M, y) ≈ dot(x, M*y) ≈ dot(x, N, y)
+    end
 end
 
 # let's make sure the analogous bug will not show up with kronecker products
@@ -607,6 +619,18 @@ end
         for (t1, t2) in ((W(M, :U), W(M, :U)), (W(M, :U), W(M, :L)), (W(M, :L), W(M, :L)))
             @test kron(t1, t2) ≈ kron(Matrix(t1), Matrix(t2))
         end
+    end
+end
+
+@testset "3-arg dot with Symmetric/Hermitian matrix of matrices" begin
+    for m in (Symmetric([randn(ComplexF64, 2, 2) for i in 1:2, j in 1:2]),
+                Symmetric([randn(ComplexF64, 2, 2) for i in 1:2, j in 1:2], :L),
+                Hermitian([randn(ComplexF64, 2, 2) for i in 1:2, j in 1:2]),
+                Hermitian([randn(ComplexF64, 2, 2) for i in 1:2, j in 1:2], :L)
+            )
+        x = [randn(ComplexF64, 2) for i in 1:2]
+        y = [randn(ComplexF64, 2) for i in 1:2]
+        @test dot(x, m, y) ≈ dot(x, m*y) ≈ dot(x, Matrix(m), y)
     end
 end
 
@@ -854,6 +878,21 @@ end
     @test det(Hermitian(A))::Float64 == det(A) == 0.0
 end
 
+@testset "issue #1437: inverse of Symmetric|Hermitian{<:Any,<:Diagonal} returns of Symmetric|Hermitian{<:Any,<:Diagonal}" begin
+    Dreal    = Diagonal(randn(3))
+    Dcomplex = Diagonal(randn(ComplexF64, 3))
+    # without wrapper
+    invDreal = inv(Dreal)
+    invDcomplex = inv(real(Dcomplex)) # because Hermitian implies a real diagonal
+    # with wrapper
+    SDreal = Symmetric(Dreal)
+    HDcomplex = Hermitian(Dcomplex)
+    @test inv(SDreal)::Symmetric{Float64,typeof(Dreal)} ≈ invDreal
+    @test inv(HDcomplex)::Hermitian{Float64,typeof(Dreal)} ≈ invDcomplex
+    Dcomplex[2,2] = 0
+    @test_throws SingularException inv(HDcomplex)
+end
+
 @testset "symmetric()/hermitian() for Numbers" begin
     @test LinearAlgebra.symmetric(1) == LinearAlgebra.symmetric(1, :U) == 1
     @test LinearAlgebra.symmetric_type(Int) == Int
@@ -876,21 +915,67 @@ end
     end
 end
 
-@testset "Multiplications symmetric/hermitian for $T and $S" for T in
-        (Float16, Float32, Float64, BigFloat), S in (ComplexF16, ComplexF32, ComplexF64)
-    let A = transpose(Symmetric(rand(S, 3, 3))), Bv = Vector(rand(T, 3)), Bm = Matrix(rand(T, 3,3))
+@testset "Multiplications symmetric/hermitian for T=$T and S=$S for size n=$n" for T in
+        (Float16, Float32, Float64, BigFloat, Quaternion{Float64}),
+        S in (T <: Quaternion ? (Quaternion{Float64},) : (ComplexF16, ComplexF32, ComplexF64, Quaternion{Float64})),
+        n in (2, 3, 4)
+    let A = transpose(Symmetric(rand(S, n, n))), Bv = Vector(rand(T, n)), Bm = Matrix(rand(T, n,n))
         @test A * Bv ≈ Matrix(A) * Bv
         @test A * Bm ≈ Matrix(A) * Bm
+        @test A * transpose(Bm) ≈ Matrix(A) * transpose(Bm)
+        @test A * adjoint(Bm) ≈ Matrix(A) * adjoint(Bm)
         @test Bm * A ≈ Bm * Matrix(A)
+        @test transpose(Bm) * A ≈ transpose(Bm) * Matrix(A)
+        @test adjoint(Bm) * A ≈ adjoint(Bm) * Matrix(A)
+        C = similar(Bm, promote_type(T, S))
+        @test mul!(C, A, Bm) ≈ A * Bm
+        @test mul!(adjoint(C), A, adjoint(Bm)) ≈ A * adjoint(Bm)
+        @test mul!(transpose(C), A, transpose(Bm)) ≈ A * transpose(Bm)
+        rand!(C)
+        @test mul!(copy(C), A, Bm, 2, 3) ≈ A * Bm * 2 + C * 3
+        @test mul!(copy(C), Bm, A, 2, 3) ≈ Bm * A * 2 + C * 3
+        @test mul!(adjoint(copy(C)), A, adjoint(Bm), 2, 3) ≈ A * adjoint(Bm) * 2 + adjoint(C) * 3
+        @test mul!(adjoint(copy(C)), adjoint(Bm), A, 2, 3) ≈ adjoint(Bm) * A * 2 + adjoint(C) * 3
+        @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
+        @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
+        if eltype(C) <: Complex
+            alpha, beta  = 4+2im, 3+im
+            @test mul!(adjoint(copy(C)), A, adjoint(Bm), alpha, beta) ≈ A * adjoint(Bm) * alpha + adjoint(C) * beta
+            @test mul!(adjoint(copy(C)), adjoint(Bm), A, alpha, beta) ≈ adjoint(Bm) * A * alpha + adjoint(C) * beta
+            @test mul!(transpose(copy(C)), A, transpose(Bm), alpha, beta) ≈ A * transpose(Bm) * alpha + transpose(C) * beta
+            @test mul!(transpose(copy(C)), transpose(Bm), A, alpha, beta) ≈ transpose(Bm) * A * alpha + transpose(C) * beta
+        end
     end
-    let A = adjoint(Hermitian(rand(S, 3,3))), Bv = Vector(rand(T, 3)), Bm = Matrix(rand(T, 3,3))
+    let A = adjoint(Hermitian(rand(S, n,n))), Bv = Vector(rand(T, n)), Bm = Matrix(rand(T, n,n))
         @test A * Bv ≈ Matrix(A) * Bv
         @test A * Bm ≈ Matrix(A) * Bm
+        @test A * transpose(Bm) ≈ Matrix(A) * transpose(Bm)
+        @test A * adjoint(Bm) ≈ Matrix(A) * adjoint(Bm)
         @test Bm * A ≈ Bm * Matrix(A)
+        @test transpose(Bm) * A ≈ transpose(Bm) * Matrix(A)
+        @test adjoint(Bm) * A ≈ adjoint(Bm) * Matrix(A)
+        C = similar(Bm, promote_type(T, S))
+        @test mul!(C, A, Bm) ≈ A * Bm
+        @test mul!(adjoint(C), A, adjoint(Bm)) ≈ A * adjoint(Bm)
+        @test mul!(transpose(C), A, transpose(Bm)) ≈ A * transpose(Bm)
+        rand!(C)
+        @test mul!(copy(C), A, Bm, 2, 3) ≈ A * Bm * 2 + C * 3
+        @test mul!(copy(C), Bm, A, 2, 3) ≈ Bm * A * 2 + C * 3
+        @test mul!(adjoint(copy(C)), A, adjoint(Bm), 2, 3) ≈ A * adjoint(Bm) * 2 + adjoint(C) * 3
+        @test mul!(adjoint(copy(C)), adjoint(Bm), A, 2, 3) ≈ adjoint(Bm) * A * 2 + adjoint(C) * 3
+        @test mul!(transpose(copy(C)), A, transpose(Bm), 2, 3) ≈ A * transpose(Bm) * 2 + transpose(C) * 3
+        @test mul!(transpose(copy(C)), transpose(Bm), A, 2, 3) ≈ transpose(Bm) * A * 2 + transpose(C) * 3
+        if eltype(C) <: Complex
+            alpha, beta  = 4+2im, 3+im
+            @test mul!(adjoint(copy(C)), A, adjoint(Bm), alpha, beta) ≈ A * adjoint(Bm) * alpha + adjoint(C) * beta
+            @test mul!(adjoint(copy(C)), adjoint(Bm), A, alpha, beta) ≈ adjoint(Bm) * A * alpha + adjoint(C) * beta
+            @test mul!(transpose(copy(C)), A, transpose(Bm), alpha, beta) ≈ A * transpose(Bm) * alpha + transpose(C) * beta
+            @test mul!(transpose(copy(C)), transpose(Bm), A, alpha, beta) ≈ transpose(Bm) * A * alpha + transpose(C) * beta
+        end
     end
-    let Ahrs = transpose(Hermitian(Symmetric(rand(T, 3, 3)))),
-        Acs = transpose(Symmetric(rand(S, 3, 3))),
-        Ahcs = transpose(Hermitian(Symmetric(rand(S, 3, 3))))
+    let Ahrs = transpose(Hermitian(Symmetric(rand(T, n, n)))),
+        Acs = transpose(Symmetric(rand(S, n, n))),
+        Ahcs = transpose(Hermitian(Symmetric(rand(S, n, n))))
 
         @test Ahrs * Ahrs ≈ Ahrs * Matrix(Ahrs)
         @test Ahrs * Acs ≈ Ahrs * Matrix(Acs)
@@ -899,9 +984,9 @@ end
         @test Ahrs * Ahcs ≈ Matrix(Ahrs) * Ahcs
         @test Ahcs * Ahrs ≈ Ahcs * Matrix(Ahrs)
     end
-    let Ahrs = adjoint(Hermitian(Symmetric(rand(T, 3, 3)))),
-        Acs = adjoint(Symmetric(rand(S, 3, 3))),
-        Ahcs = adjoint(Hermitian(Symmetric(rand(S, 3, 3))))
+    let Ahrs = adjoint(Hermitian(Symmetric(rand(T, n, n)))),
+        Acs = adjoint(Symmetric(rand(S, n, n))),
+        Ahcs = adjoint(Hermitian(Symmetric(rand(S, n, n))))
 
         @test Ahrs * Ahrs ≈ Ahrs * Matrix(Ahrs)
         @test Ahcs * Ahcs ≈ Matrix(Ahcs) * Matrix(Ahcs)
@@ -968,6 +1053,12 @@ end
         @test Aherm == Aherm.data == (A + A')/2
         @test Aherm isa Hermitian
         @test Aherm.uplo == LinearAlgebra.char_uplo(uplo)
+    end
+    @testset "hermitianpart for numbers" begin
+        @test hermitianpart(3 + 4im) == 3
+        @test hermitianpart(5) == 5.0
+        @test hermitianpart(2.5 + 4.3im) == 2.5
+        @test hermitianpart(-1 + 0im) == -1
     end
 end
 
@@ -1118,7 +1209,7 @@ end
     end
 end
 
-@testset "partly iniitalized matrices" begin
+@testset "partly initialized matrices" begin
     a = Matrix{BigFloat}(undef, 2,2)
     a[1] = 1; a[3] = 1; a[4] = 1
     h = Hermitian(a)
@@ -1255,6 +1346,61 @@ end
         @test @inferred(sincos(a)) isa Tuple{Matrix{T}, Matrix{T}}
         @test @inferred(sincos(herma)) isa Tuple{Hermitian{T}, Hermitian{T}}
     end
+end
+
+@testset "fillband!" begin
+    A = zeros(4,4)
+    @testset for T in (Symmetric, Hermitian), uplo in (:U, :L)
+        A .= 0
+        S = T(A, uplo)
+        LinearAlgebra.fillband!(S, 2, -2, 2)
+        @test all(all(==(2), diagview(S, k)) for k in -2:2)
+        @test iszero(diagview(S, -3))
+        @test iszero(diagview(S, 3))
+        LinearAlgebra.fillband!(S, 4, -1, 1)
+        @test all(all(==(4), diagview(S, k)) for k in -1:1)
+        @test all(==(2), diagview(S, -2))
+        @test all(==(2), diagview(S, 2))
+    end
+    msg = "cannot fill Hermitian matrix with a non-hermitian value"
+    @test_throws msg LinearAlgebra.fillband!(Hermitian(A), 2im, -3, 3)
+    msg = "lower and upper bands must be equal in magnitude and opposite in sign, got l=0, u=1"
+    @test_throws msg LinearAlgebra.fillband!(Symmetric(A), 2, 0, 1)
+end
+
+@testset "sym_uplo" begin
+    @test LinearAlgebra.sym_uplo('U') == :U
+    @test LinearAlgebra.sym_uplo('L') == :L
+    @test_throws ArgumentError LinearAlgebra.sym_uplo('N')
+end
+
+@testset "uplo" begin
+    S = Symmetric([1 2; 3 4], :U)
+    @test LinearAlgebra.uplo(S) == :U
+    H = Hermitian([1 2; 3 4], :L)
+    @test LinearAlgebra.uplo(H) == :L
+end
+
+# For testing zero forwarding to parent array type
+struct ZeroTestWrap{T} <: AbstractArray{T,2}
+    parent::Matrix{T}
+end
+Base.size(A::ZeroTestWrap) = size(A.parent)
+Base.getindex(A::ZeroTestWrap, i, j) = A.parent[i,j]
+Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
+
+@testset "zero forwarding" begin
+    for T in (Symmetric, Hermitian)
+        Z = zero(T(ZeroTestWrap([1 2; 2 3])))
+        @test Z isa T
+        @test parent(Z) isa ZeroTestWrap
+        @test iszero(Z)
+    end
+    # strided case uses fill!
+    @test iszero(zero(Symmetric(rand(4, 4))))
+    @test zero(Symmetric(rand(4, 4))) isa Symmetric
+    @test iszero(zero(Hermitian(rand(ComplexF64, 4, 4))))
+    @test zero(Hermitian(rand(ComplexF64, 4, 4))) isa Hermitian
 end
 
 end # module TestSymmetric

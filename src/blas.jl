@@ -84,6 +84,8 @@ export
     trsm!,
     trsm
 
+public set_num_threads, get_num_threads
+
 using ..LinearAlgebra: libblastrampoline, BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, chkstride1
 
 include("lbt.jl")
@@ -793,7 +795,7 @@ for (fname, elty, lib) in ((:dsymv_,:Float64,libblastrampoline),
                            (:ssymv_,:Float32,libblastrampoline),
                            (:zsymv_,:ComplexF64,libblastrampoline),
                            (:csymv_,:ComplexF32,libblastrampoline))
-    # Note that the complex symv are not BLAS but auiliary functions in LAPACK
+    # Note that the complex symv are not BLAS but auxiliary functions in LAPACK
     @eval begin
              #      SUBROUTINE DSYMV(UPLO,N,ALPHA,A,LDA,X,INCX,BETA,Y,INCY)
              #     .. Scalar Arguments ..
@@ -2102,7 +2104,7 @@ end
     her2k!(uplo, trans, alpha, A, B, beta, C)
 
 Rank-2k update of the Hermitian matrix `C` as
-`alpha*A*B' + alpha*B*A' + beta*C` or `alpha*A'*B + alpha*B'*A + beta*C`
+`alpha*A*B' + alpha'*B*A' + beta*C` or `alpha*A'*B + alpha'*B'*A + beta*C`
 according to [`trans`](@ref stdlib-blas-trans). The scalar `beta` has to be real.
 Only the [`uplo`](@ref stdlib-blas-uplo) triangle of `C` is used. Return `C`.
 """
@@ -2111,8 +2113,8 @@ function her2k! end
 """
     her2k(uplo, trans, alpha, A, B)
 
-Return the [`uplo`](@ref stdlib-blas-uplo) triangle of `alpha*A*B' + alpha*B*A'`
-or `alpha*A'*B + alpha*B'*A`, according to [`trans`](@ref stdlib-blas-trans).
+Return the [`uplo`](@ref stdlib-blas-uplo) triangle of `alpha*A*B' + alpha'*B*A'`
+or `alpha*A'*B + alpha'*B'*A`, according to [`trans`](@ref stdlib-blas-trans).
 """
 her2k(uplo, trans, alpha, A, B)
 

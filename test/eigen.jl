@@ -44,6 +44,15 @@ aimg  = randn(n,n)/2
             @test inv(a) ≈ inv(f)
             @test isposdef(a) == isposdef(f)
             @test eigvals(f) === f.values
+
+            if all(isreal, eigvals(f))
+                @test eigmin(f) == minimum(eigvals(f))
+                @test eigmax(f) == maximum(eigvals(f))
+            else
+                @test_throws MethodError eigmin(f)
+                @test_throws MethodError eigmax(f)
+            end
+
             @test eigvecs(f) === f.vectors
             @test Array(f) ≈ a
 
@@ -81,6 +90,15 @@ aimg  = randn(n,n)/2
             @test prod(f.values) ≈ prod(eigvals(asym_sg/(ASG2))) atol=200ε
             @test eigvecs(asym_sg, ASG2) == f.vectors
             @test eigvals(f) === f.values
+
+            if all(isreal, eigvals(f))
+                @test eigmin(f) == minimum(eigvals(f))
+                @test eigmax(f) == maximum(eigvals(f))
+            else
+                @test_throws MethodError eigmin(f)
+                @test_throws MethodError eigmax(f)
+            end
+
             @test eigvecs(f) === f.vectors
             @test_throws FieldError f.Z
 
@@ -279,6 +297,21 @@ end
     TR = Eigen{ComplexF64, Float64, Matrix{ComplexF64}, Vector{Float64}}
     λ, v = @inferred Union{TR,TC} eigen(A)
     @test λ == [1.0, 8.0]
+end
+
+@testset "memory allocation with range given (#1425)" begin
+    A = Hermitian(Float64[1 2 3; 2 4 5; 3 5 1])
+    e, V = eigen(A, -5, 1) # should only get 2 eigenvalues/ eigenvectors
+    V1 = copy(V)
+    @test Base.summarysize(V) == Base.summarysize(V1)
+end
+
+@testset "truncated eigen checks" begin
+    A = Symmetric([4.0 2.0; 2.0 3.0])
+    F = eigen(A, 1:1)
+    @test_throws ArgumentError det(F)
+    @test_throws ArgumentError inv(F)
+    @test_throws ArgumentError isposdef(F)
 end
 
 end # module TestEigen
