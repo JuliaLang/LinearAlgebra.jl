@@ -1245,6 +1245,10 @@ end
         @test fun(D, copy(TriA))::Tri == fun(D, Matrix(TriA))
         @test_throws ArgumentError fun(D, copy(UTriA)) # issue #1600
     end
+    @views TriA2 = Tri(copy(A)[[1, 2, 3, 4], [1, 2, 3, 4]]) #non-strided matrix
+    @test rmul!(TriA2, D) == rmul!(Matrix(TriA), D)
+    @views TriA2 = Tri(copy(A)[[1, 2, 3, 4], [1, 2, 3, 4]])
+    @test lmul!(D, TriA2) == lmul!(D, Matrix(TriA))
     # 3 args
     @test outTri === ldiv!(outTri, D, TriA)::Tri == ldiv!(out, D, Matrix(TriA))
     @test outTri === ldiv!(outTri, D, UTriA)::Tri == ldiv!(out, D, Matrix(UTriA))
