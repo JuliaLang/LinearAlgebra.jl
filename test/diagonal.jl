@@ -1229,13 +1229,21 @@ end
     outTri = similar(TriA)
     out = similar(A)
     # 2 args
-    @testset for fun in (*, rmul!, rdiv!, /)
+    @testset for fun in (*, /)
         @test fun(copy(TriA), D)::Tri == fun(Matrix(TriA), D)
         @test fun(copy(UTriA), D)::Tri == fun(Matrix(UTriA), D)
     end
-    @testset for fun in (*, lmul!, ldiv!, \)
+    @testset for fun in (rmul!, rdiv!)
+        @test fun(copy(TriA), D)::Tri == fun(Matrix(TriA), D)
+        @test_throws ArgumentError fun(copy(UTriA), D) # issue #1600
+    end
+    @testset for fun in (*, \)
         @test fun(D, copy(TriA))::Tri == fun(D, Matrix(TriA))
         @test fun(D, copy(UTriA))::Tri == fun(D, Matrix(UTriA))
+    end
+    @testset for fun in (lmul!, ldiv!)
+        @test fun(D, copy(TriA))::Tri == fun(D, Matrix(TriA))
+        @test_throws ArgumentError fun(D, copy(UTriA)) # issue #1600
     end
     # 3 args
     @test outTri === ldiv!(outTri, D, TriA)::Tri == ldiv!(out, D, Matrix(TriA))
