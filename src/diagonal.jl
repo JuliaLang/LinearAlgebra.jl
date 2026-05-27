@@ -263,9 +263,6 @@ isposdef(D::Diagonal) = all(isposdef, D.diag)
 
 factorize(D::Diagonal) = D
 
-real(D::Diagonal) = Diagonal(real(D.diag))
-imag(D::Diagonal) = Diagonal(imag(D.diag))
-
 isreal(D::Diagonal) = isreal(D.diag)
 
 iszero(D::Diagonal) = all(iszero, D.diag)
@@ -939,7 +936,6 @@ end
     return C
 end
 
-conj(D::Diagonal) = Diagonal(conj(D.diag))
 transpose(D::Diagonal) = Diagonal(_vectranspose(D.diag))
 adjoint(D::Diagonal) = Diagonal(_vecadjoint(D.diag))
 permutedims(D::Diagonal) = D
