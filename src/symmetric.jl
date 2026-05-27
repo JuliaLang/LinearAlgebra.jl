@@ -359,6 +359,9 @@ function applytri(f, A::HermOrSym, B::HermOrSym)
         f(uppertriangular(_conjugation(A)(A.data)), uppertriangular(B.data))
     end
 end
+_parent_tri(U::UpperOrLowerTriangular) = parent(U)
+_parent_tri(U) = U
+parentof_applytri(f, args...) = applytri(_parent_tri∘f, args...)
 
 isdiag(A::HermOrSym) = applytri(isdiag, A)
 
@@ -379,6 +382,9 @@ Hermitian{T,S}(A::Hermitian{T,S}) where {T,S<:AbstractMatrix{T}} = A
 Hermitian{T,S}(A::Hermitian) where {T,S<:AbstractMatrix{T}} = Hermitian{T,S}(convert(S,A.data),A.uplo)
 AbstractMatrix{T}(A::Hermitian) where {T} = Hermitian(convert(AbstractMatrix{T}, A.data), _sym_uplo(A.uplo))
 AbstractMatrix{T}(A::Hermitian{T}) where {T} = copy(A)
+
+copy(A::Symmetric) = (Symmetric(parentof_applytri(copy, A), _sym_uplo(A.uplo)))
+copy(A::Hermitian) = (Hermitian(parentof_applytri(copy, A), _sym_uplo(A.uplo)))
 
 function copyto!(dest::Symmetric, src::Symmetric)
     if axes(dest) != axes(src)
@@ -497,6 +503,9 @@ transpose(A::Hermitian{<:Real}) = A
 
 real(A::Symmetric{<:Real}) = A
 real(A::Hermitian{<:Real}) = A
+real(A::Symmetric) = Symmetric(parentof_applytri(real, A), _sym_uplo(A.uplo))
+real(A::Hermitian) = Hermitian(parentof_applytri(real, A), _sym_uplo(A.uplo))
+imag(A::Symmetric) = Symmetric(parentof_applytri(imag, A), _sym_uplo(A.uplo))
 
 Base.copy(A::Adjoint{<:Any,<:Symmetric}) =
     Symmetric(copy(adjoint(A.parent.data)), ifelse(A.parent.uplo == 'U', :L, :U))
@@ -505,6 +514,10 @@ Base.copy(A::Transpose{<:Any,<:Hermitian}) =
 
 tr(A::Symmetric{<:Number}) = tr(A.data) # to avoid AbstractMatrix fallback (incl. allocations)
 tr(A::Hermitian{<:Number}) = real(tr(A.data))
+
+Base.conj(A::Symmetric) = Symmetric(parentof_applytri(conj, A), _sym_uplo(A.uplo))
+Base.conj(A::Hermitian) = Hermitian(parentof_applytri(conj, A), _sym_uplo(A.uplo))
+Base.conj!(A::HermOrSym) = typeof(A)(parentof_applytri(conj!, A), A.uplo)
 
 # tril/triu
 function tril(A::Hermitian, k::Integer=0)
@@ -720,6 +733,28 @@ function _hermkron!(C, A, B, conj, real, Auplo, Buplo)
     end
 end
 
+(-)(A::Symmetric) = Symmetric(parentof_applytri(-, A), _sym_uplo(A.uplo))
+(-)(A::Hermitian) = Hermitian(parentof_applytri(-, A), _sym_uplo(A.uplo))
+
+## Addition/subtraction
+for f ∈ (:+, :-), Wrapper ∈ (:Hermitian, :Symmetric)
+    @eval function $f(A::$Wrapper, B::$Wrapper)
+        uplo = A.uplo == B.uplo ? _sym_uplo(A.uplo) : (:U)
+        $Wrapper(parentof_applytri($f, A, B), uplo)
+    end
+end
+
+for f in (:+, :-)
+    @eval begin
+        $f(A::Hermitian, B::Symmetric{<:Real}) = $f(A, Hermitian(parent(B), _sym_uplo(B.uplo)))
+        $f(A::Symmetric{<:Real}, B::Hermitian) = $f(Hermitian(parent(A), _sym_uplo(A.uplo)), B)
+        $f(A::SymTridiagonal, B::Symmetric) = $f(Symmetric(A, _sym_uplo(B.uplo)), B)
+        $f(A::Symmetric, B::SymTridiagonal) = $f(A, Symmetric(B, _sym_uplo(A.uplo)))
+        $f(A::SymTridiagonal{<:Real}, B::Hermitian) = $f(Hermitian(A, _sym_uplo(B.uplo)), B)
+        $f(A::Hermitian, B::SymTridiagonal{<:Real}) = $f(A, Hermitian(B, _sym_uplo(A.uplo)))
+    end
+end
+
 mul(A::HermOrSym, B::HermOrSym) = A * copyto!(similar(parent(B)), B)
 # catch a few potential BLAS-cases
 function mul(A::HermOrSym{<:BlasFloat,<:StridedMatrix}, B::AdjOrTrans{<:BlasFloat,<:StridedMatrix})
@@ -765,6 +800,14 @@ function dot(x::AbstractVector, A::HermOrSym, y::AbstractVector)
     end
     return r
 end
+
+# Scaling with Number
+*(A::Symmetric, x::Number) = Symmetric(parentof_applytri(y -> y * x, A), _sym_uplo(A.uplo))
+*(x::Number, A::Symmetric) = Symmetric(parentof_applytri(y -> x * y, A), _sym_uplo(A.uplo))
+*(A::Hermitian, x::Real) = Hermitian(parentof_applytri(y -> y * x, A), _sym_uplo(A.uplo))
+*(x::Real, A::Hermitian) = Hermitian(parentof_applytri(y -> x * y, A), _sym_uplo(A.uplo))
+/(A::Symmetric, x::Number) = Symmetric(parentof_applytri(y -> y/x, A), _sym_uplo(A.uplo))
+/(A::Hermitian, x::Real) = Hermitian(parentof_applytri(y -> y/x, A), _sym_uplo(A.uplo))
 
 factorize(A::HermOrSym) = _factorize(A)
 function _factorize(A::HermOrSym{T}; check::Bool=true) where T
