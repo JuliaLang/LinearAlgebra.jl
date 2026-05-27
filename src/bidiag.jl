@@ -1439,8 +1439,8 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
 end
 
 # Eigensystems
-eigvals(M::Bidiagonal) = copy(M.dv)
-function eigvecs(M::Bidiagonal{T}) where T
+eigvals(M::Bidiagonal; sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
+function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
     n = length(M.dv)
     Q = Matrix{T}(undef, n,n)
     blks = [0; findall(iszero, M.ev); n]
@@ -1470,9 +1470,9 @@ function eigvecs(M::Bidiagonal{T}) where T
             end
         end
     end
-    Q #Actually Triangular
+    return sorteig!(copy(M.dv), Q, sortby)[2]
 end
-eigen(M::Bidiagonal) = Eigen(eigvals(M), eigvecs(M))
+eigen(M::Bidiagonal; sortby=eigsortby) = Eigen(sorteig!(eigvals(M; sortby=nothing), eigvecs(M; sortby=nothing), sortby)...)
 
 Base._sum(A::Bidiagonal, ::Colon) = sum(A.dv) + sum(A.ev)
 function Base._sum(A::Bidiagonal, dims::Integer)
