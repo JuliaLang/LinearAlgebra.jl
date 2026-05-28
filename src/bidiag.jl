@@ -1470,7 +1470,7 @@ function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
             end
         end
     end
-    return sorteig!(copy(M.dv), Q, sortby)[2]
+    return isnothing(sortby) ? Q : sorteig!(copy(M.dv), Q, sortby)[2]
 end
 eigen(M::Bidiagonal; sortby=eigsortby) = Eigen(sorteig!(eigvals(M; sortby=nothing), eigvecs(M; sortby=nothing), sortby)...)
 
