@@ -1303,7 +1303,7 @@ end
         F = eigen(B)
         @test issorted(F.values, by=LinearAlgebra.eigsortby) #sort by default
         @test B * F.vectors ≈ F.vectors * Diagonal(F.values)
-        @test F.values ≈ eigvals(B; sortby = LinearAlgebra.eigsortby)
+        @test F.values == sort!(diag(B), by=LinearAlgebra.eigsortby) == eigvals(B; sortby = LinearAlgebra.eigsortby)
         @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
     end
 end
