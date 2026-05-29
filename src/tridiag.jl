@@ -73,9 +73,6 @@ function SymTridiagonal{T}(dv::AbstractVector, ev::AbstractVector) where {T}
     d = convert(AbstractVector{T}, dv)::AbstractVector{T}
     e = convert(typeof(d), ev)::AbstractVector{T}
     return SymTridiagonal{T}(d, e)
-        throw(ArgumentError(
-            lazy"""The diagonal and the off-diagonal bands must be convertible to a common type.
-            The diagonal band has type $(typeof(d)), but the off-diagonal band has type $(typeof(e))."""))
 end
 SymTridiagonal(d::AbstractVector{T}, e::AbstractVector{S}) where {T,S} =
     SymTridiagonal{promote_type(T, S)}(d, e)
