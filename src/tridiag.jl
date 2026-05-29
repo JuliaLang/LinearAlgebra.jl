@@ -75,7 +75,7 @@ function SymTridiagonal{T}(dv::AbstractVector, ev::AbstractVector) where {T}
     typeof(d) == typeof(e) ?
         SymTridiagonal{T}(d, e) :
         throw(ArgumentError(
-            lazy"""the diagonal and the off-diagonal bands must have the same type.
+            lazy"""The diagonal and the off-diagonal bands must be convertible to a common type.
             The diagonal band has type $(typeof(d)), but the off-diagonal band has type $(typeof(e))."""))
 end
 SymTridiagonal(d::AbstractVector{T}, e::AbstractVector{S}) where {T,S} =
