@@ -1452,10 +1452,7 @@ function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
             for j = blks[idx_block] + 1:i - 1 #Starting from j=i, eigenvector elements will be 0
                 v[j+1] = (M.dv[i] - M.dv[j])/M.ev[j] * v[j]
             end
-            c = norm(v)
-            for j = 1:n
-                Q[j, i] = v[j] / c
-            end
+            Q[:, i] = normalize!(v)
         end
     else
         for idx_block = 1:length(blks) - 1, i = blks[idx_block + 1]:-1:blks[idx_block] + 1 #index of eigenvector
@@ -1464,10 +1461,7 @@ function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
             for j = (blks[idx_block+1] - 1):-1:max(1, (i - 1)) #Starting from j=i, eigenvector elements will be 0
                 v[j] = (M.dv[i] - M.dv[j+1])/M.ev[j] * v[j+1]
             end
-            c = norm(v)
-            for j = 1:n
-                Q[j, i] = v[j] / c
-            end
+            Q[:, i] = normalize!(v)
         end
     end
     return isnothing(sortby) ? Q : sorteig!(copy(M.dv), Q, sortby)[2]
