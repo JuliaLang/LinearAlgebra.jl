@@ -45,7 +45,7 @@ LinearAlgebra v1.8 Release Notes
 
 - The `BLAS` submodule now supports the level-2 BLAS subroutine `spr!` ([#42830](https://github.com/JuliaLang/julia/pull/42830)).
 - `cholesky[!]` now supports `LinearAlgebra.PivotingStrategy` (singleton type) values as its optional pivot argument. The default remains `cholesky(A, NoPivot())` instead of `cholesky(A, RowMaximum())`; the previous `Val{true/false}`-based calls are now deprecated ([#41640](https://github.com/JuliaLang/julia/pull/41640)).
-- `LinearAlgebra.jl` is now completely independent of `SparseArrays.jl`, both in source code and unit testing ([#43127](https://github.com/JuliaLang/julia/pull/43127)).  
+- `LinearAlgebra.jl` is now completely independent of `SparseArrays.jl`, both in source code and unit testing ([#43127](https://github.com/JuliaLang/julia/pull/43127)).
   As a result, sparse arrays are no longer silently returned by LinearAlgebra methods applied to Base or LinearAlgebra objects. Specifically, this introduces the following breaking changes:
   - Concatenations involving special "sparse" matrices (e.g., `*diagonal`) now return dense matrices. Consequently, the `D1` and `D2` fields of `SVD` objects constructed via `getproperty` are now dense matrices.
   - `3-arg similar(::SpecialSparseMatrix, ::Type, ::Dims)` now returns a dense zero matrix. As a consequence, products of bi-, tri-, and symmetric tridiagonal matrices with each other produce dense output. Constructing 3-arg similar matrices for special "sparse" (nonstatic) matrices now fails due to the lack of `zero(::Type{Matrix{T}})`.

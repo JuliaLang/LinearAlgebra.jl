@@ -403,8 +403,8 @@ Random.seed!(1)
 
         @testset "Eigensystems" begin
             if relty <: AbstractFloat
-                d1, v1 = eigen(T)
-                d2, v2 = eigen(map(elty<:Complex ? ComplexF64 : Float64,Tfull), sortby=nothing)
+                d1, v1 = eigen(T; sortby=nothing)
+                d2, v2 = eigen(map(elty<:Complex ? ComplexF64 : Float64,Tfull); sortby=nothing)
                 @test (uplo === :U ? d1 : reverse(d1)) ≈ d2
                 if elty <: Real
                     test_approx_eq_modphase(v1, uplo === :U ? v2 : v2[:,n:-1:1])
@@ -1293,6 +1293,18 @@ end
         @test B == B2
         LinearAlgebra.fillband!(B, 0, 10, 10)
         @test B == B2
+    end
+end
+
+@testset "eigenvalue sorting" begin
+    for T in (Float64, ComplexF64, Float16, ComplexF16)
+        B = Bidiagonal(randn(T, 4), randn(T, 3), :U)
+        @test eigvals(B; sortby=nothing) == diag(B)
+        F = eigen(B)
+        @test issorted(F.values, by=LinearAlgebra.eigsortby) #sort by default
+        @test B * F.vectors ≈ F.vectors * Diagonal(F.values)
+        @test F.values == sort!(diag(B), by=LinearAlgebra.eigsortby) == eigvals(B; sortby = LinearAlgebra.eigsortby)
+        @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
     end
 end
 

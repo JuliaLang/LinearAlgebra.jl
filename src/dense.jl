@@ -1016,7 +1016,7 @@ and then the complex square root of the triangular factor.
 If a real square root exists, then an extension of this method [^H87] that computes the real
 Schur form and then the real square root of the quasi-triangular factor is instead used.
 
-When a non-Hermitian matrix has two or more null eigenvalues, the square root may not exist. In this case, and when the `check` flag is true, the algorithm will verify `X^2≈A` and throw an error if not. 
+When a non-Hermitian matrix has two or more null eigenvalues, the square root may not exist. In this case, and when the `check` flag is true, the algorithm will verify `X^2≈A` and throw an error if not.
 
 [^BH83]:
 
@@ -1796,10 +1796,8 @@ julia> N = pinv(M)
   1.47287   -1.00775
  -0.930233   1.16279
 
-julia> M * N
-2×2 Matrix{Float64}:
- 1.0          -2.22045e-16
- 4.44089e-16   1.0
+julia> M * N ≈ I
+true
 ```
 
 [^pr1387]: PR 1387, "stable pinv least-squares", [LinearAlgebra.jl#1387](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387)
