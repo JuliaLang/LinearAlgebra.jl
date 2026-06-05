@@ -106,11 +106,11 @@ julia> Bidiagonal(A, :L) # contains the main diagonal and first subdiagonal of A
  ⋅  ⋅  4  4
 ```
 """
+Bidiagonal(A::AbstractMatrix, uplo::Symbol)
+
 function (::Type{Bi})(A::AbstractMatrix, uplo::Symbol) where {Bi<:Bidiagonal}
     Bi(diag(A, 0), diag(A, uplo === :U ? 1 : -1), uplo)
 end
-
-
 Bidiagonal(A::Bidiagonal) = A
 Bidiagonal{T}(A::Bidiagonal{T}) where {T} = A
 Bidiagonal{T}(A::Bidiagonal) where {T} = Bidiagonal{T}(A.dv, A.ev, A.uplo)
