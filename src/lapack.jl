@@ -4152,7 +4152,7 @@ for (stev, stebz, stegr, stein, elty) in
                 n, dv, ev, m, w, iblock, isplit, z, ldz, work, iwork, ifail, info)
             chkargsok(info[])
             if info[] > 0
-                throw(ArgumentError(lazy"failed to converge eigenvectors: $(findall(!iszero, ifail))"))
+                throw(ArgumentError(lazy"failed to converge eigenvectors: $(findall(!iszero, ifail))"c))
             end
             z
         end
