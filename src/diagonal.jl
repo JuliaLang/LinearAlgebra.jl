@@ -985,6 +985,9 @@ end
 # Cube root of a real-valued diagonal matrix
 cbrt(A::Diagonal{<:Real}) = Diagonal(cbrt.(A.diag))
 
+# Matrix absolute value of a diagonal matrix: sqrt(D'D) = Diagonal(|dᵢ|)
+abs(D::Diagonal) = Diagonal(abs.(D.diag))
+
 function inv(D::Diagonal{T}) where T
     Di = similar(D.diag, typeof(inv(oneunit(T))))
     for i = 1:length(D.diag)

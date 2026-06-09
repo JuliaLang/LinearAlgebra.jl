@@ -1,6 +1,7 @@
 LinearAlgebra v1.12 Release Notes
 =======================
 
+- `abs(::AbstractMatrix)` is now defined and returns the matrix absolute value, i.e. the Hermitian positive-semidefinite polar factor `sqrt(A'A)`, computed via the SVD (or the eigendecomposition for `Hermitian`/real-symmetric matrices) ([#1648](https://github.com/JuliaLang/LinearAlgebra.jl/issues/1648))
 - `rank` can now take a `QRPivoted` matrix to allow rank estimation via QR factorization ([#54283](https://github.com/JuliaLang/julia/issues/54283))
 - Added keyword argument `alg` to `eigen`, `eigen!`, `eigvals` and `eigvals!` for self-adjoint matrix types (`RealHermSymComplexHerm`) to switch between different eigendecomposition algorithms ([#49355](https://github.com/JuliaLang/julia/pull/49355))
 - Added a generic version of the (unblocked) pivoted Cholesky decomposition (callable via `cholesky[!](A, RowMaximum())`) ([#54619](https://github.com/JuliaLang/julia/pull/54619))

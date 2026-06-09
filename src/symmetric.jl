@@ -1006,6 +1006,15 @@ function sqrt(A::SelfAdjoint; check::Bool=true, rtol = eps(real(float(eltype(A))
     end
 end
 
+function abs(A::SelfAdjoint)
+    F = eigen(A)
+    # |λ| ≥ 0, so the result is always Hermitian positive-semidefinite; building it via
+    # _psd_spectral_product (V*Diagonal(√|λ|))*(…)' reconstructs V*Diagonal(|λ|)*V' and
+    # lets BLAS.herk preserve exact symmetry.
+    retmat = _psd_spectral_product(sqrt.(abs.(F.values)), F.vectors)
+    return wrappertype(A)(retmat)
+end
+
 """
     hermitianpart(A::AbstractMatrix, uplo::Symbol=:U) -> Hermitian
     hermitianpart(x::Number) -> Number

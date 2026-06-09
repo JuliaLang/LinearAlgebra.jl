@@ -1133,6 +1133,59 @@ end
 cbrt(A::AdjointAbsMat) = adjoint(cbrt(parent(A)))
 cbrt(A::TransposeAbsMat) = transpose(cbrt(parent(A)))
 
+"""
+    abs(A::AbstractMatrix)
+
+Compute the matrix absolute value of `A`, that is the unique Hermitian positive-semidefinite
+matrix `P` such that `A = U*P` for some matrix `U` with orthonormal columns (the Hermitian
+factor of the [polar decomposition](https://en.wikipedia.org/wiki/Polar_decomposition)).
+Equivalently, `P = sqrt(A'A)`.
+
+If `A` is real-symmetric or Hermitian, its eigendecomposition ([`eigen`](@ref)) is used,
+`abs(A) = Q * Diagonal(abs.(λ)) * Q'`. Otherwise the singular value decomposition
+([`svd`](@ref)) is used: if `A = U*Diagonal(s)*V'`, then `abs(A) = V*Diagonal(s)*V'`. This
+is numerically more accurate than forming `sqrt(A'A)` directly, which squares the condition
+number of `A`.
+
+`A` need not be square; for an `m×n` matrix `A` the result is the `n×n` matrix `sqrt(A'A)`.
+
+!!! note
+    This is the *matrix* absolute value, which is distinct from the elementwise absolute
+    value `abs.(A)`.
+
+# Examples
+```jldoctest
+julia> A = [1.0 0.0; 0.0 -2.0];
+
+julia> abs(A)
+2×2 Matrix{Float64}:
+ 1.0  0.0
+ 0.0  2.0
+
+julia> abs(A) ≈ sqrt(A'A)
+true
+```
+"""
+function abs(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
+    if size(A, 1) == size(A, 2)
+        if checksquare(A) == 0
+            return copy(float(A))
+        elseif isdiag(A)
+            return applydiagonal(abs, A)
+        elseif ishermitian(A)
+            return _safe_parent(abs(Hermitian(A)))
+        end
+    end
+    F = svd(A)
+    P = F.V * Diagonal(F.S) * F.Vt
+    # abs(A) is exactly Hermitian positive-semidefinite; the product above is Hermitian only
+    # up to roundoff, so enforce the structure (real diagonal + mirrored upper triangle).
+    for i in axes(P, 1)
+        P[i, i] = real(P[i, i])
+    end
+    return copytri!(P, 'U', true)
+end
+
 function applydiagonal(f, A)
     dinv = f(Diagonal(A))
     copyto!(similar(A, eltype(dinv)), dinv)

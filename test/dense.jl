@@ -1357,6 +1357,61 @@ end
     end
 end
 
+@testset "abs(A::AbstractMatrix)" begin
+    n = 8
+    @testset "general $elty" for elty in (Float64, ComplexF64)
+        A = randn(elty, n, n)
+        P = abs(A)
+        # definition: the Hermitian positive-semidefinite polar factor sqrt(A'A)
+        @test P ≈ sqrt(A'A)
+        @test ishermitian(P)
+        @test isposdef(P + sqrt(eps(real(elty)))*I)        # positive-semidefinite
+        @test all(≥(-1e-8), eigvals(Hermitian(P)))
+        @test abs(A) ≈ svd(A).V * Diagonal(svd(A).S) * svd(A).Vt
+        # abs(A') = sqrt(A A'), which is NOT adjoint(abs(A)) in general
+        @test abs(A') ≈ sqrt(A*A')
+        @test abs(transpose(A)) ≈ sqrt(conj(A)*transpose(A))
+
+        # non-square: m×n -> n×n
+        B = randn(elty, n+3, n)
+        @test abs(B) ≈ sqrt(B'B)
+        @test size(abs(B)) == (n, n)
+        C = randn(elty, n, n+3)
+        @test abs(C) ≈ sqrt(C'C)
+        @test size(abs(C)) == (n+3, n+3)
+    end
+
+    @testset "Hermitian/symmetric fast path $elty" for elty in (Float64, ComplexF64)
+        M = randn(elty, n, n)
+        for wrapper in (Symmetric, Hermitian), uplo in (:U, :L)
+            elty <: Complex && wrapper === Symmetric && continue  # complex Symmetric: not self-adjoint
+            H = wrapper(M + M', uplo)
+            @test abs(H) isa wrapper
+            @test abs(H) ≈ sqrt(H*H)
+            @test abs(H) ≈ abs(Array(H))                  # fast path agrees with generic
+            @test ishermitian(abs(H))
+        end
+        # indefinite real-symmetric: exact known answer
+        @test abs([1.0 0.0; 0.0 -2.0]) ≈ [1.0 0.0; 0.0 2.0]
+    end
+
+    @testset "diagonal" begin
+        D = Diagonal([1.0, -2.0, 3.0, -4.0])
+        @test abs(D) == Diagonal([1.0, 2.0, 3.0, 4.0])
+        @test abs(D) isa Diagonal
+        Dc = Diagonal(ComplexF64[3im, -4, 1+1im])
+        @test abs(Dc) ≈ Diagonal(abs.(Dc.diag))
+        # a Matrix that happens to be diagonal goes through applydiagonal without recursing
+        Am = diagm(0 => [1.0, -2.0, 3.0])
+        @test abs(Am) ≈ [1.0 0 0; 0 2.0 0; 0 0 3.0]
+    end
+
+    @testset "empty" begin
+        @test abs(Matrix{Float64}(undef, 0, 0)) == Matrix{Float64}(undef, 0, 0)
+        @test abs(Matrix{Int}(undef, 0, 0)) isa Matrix{Float64}
+    end
+end
+
 @testset "tr" begin
     @testset "block matrices" begin
         S = [1 2; 3 4]
