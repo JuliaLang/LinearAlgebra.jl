@@ -105,6 +105,8 @@ julia> SymTridiagonal(B)
  [1 2; 3 4]  [1 2; 2 3]
 ```
 """
+SymTridiagonal(A::AbstractMatrix)
+
 function (::Type{SymTri})(A::AbstractMatrix) where {SymTri <: SymTridiagonal}
     checksquare(A)
     du = diag(A, 1)
@@ -660,8 +662,9 @@ julia> Tridiagonal(A)
  ⋅  ⋅  3  4
 ```
 """
-(::Type{Tri})(A::AbstractMatrix) where {Tri<:Tridiagonal} = Tri(diag(A,-1), diag(A,0), diag(A,1))
+Tridiagonal(A::AbstractMatrix)
 
+(::Type{Tri})(A::AbstractMatrix) where {Tri<:Tridiagonal} = Tri(diag(A,-1), diag(A,0), diag(A,1))
 Tridiagonal(A::Tridiagonal) = A
 Tridiagonal{T}(A::Tridiagonal{T}) where {T} = A
 function Tridiagonal{T}(A::Tridiagonal) where {T}
