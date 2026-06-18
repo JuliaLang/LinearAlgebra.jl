@@ -3008,8 +3008,14 @@ logdet(A::UnitUpperTriangular{T}) where {T} = zero(T)
 logdet(A::UnitLowerTriangular{T}) where {T} = zero(T)
 logabsdet(A::UnitUpperTriangular{T}) where {T} = zero(T), one(T)
 logabsdet(A::UnitLowerTriangular{T}) where {T} = zero(T), one(T)
-det(A::UpperTriangular) = prod(diag(A.data))
-det(A::LowerTriangular) = prod(diag(A.data))
+function det(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
+    S = promote_type(T, typeof((one(T) * zero(T) + zero(T)) / one(T)))
+    v = one(S)
+    @inbounds for i in axes(A.data, 1)
+        v *= convert(S, A.data[i,i])
+    end
+    return v
+end
 function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     sgn = one(T)
     abs_det = zero(real(T))
