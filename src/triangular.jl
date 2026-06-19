@@ -3010,11 +3010,7 @@ logabsdet(A::UnitUpperTriangular{T}) where {T} = zero(T), one(T)
 logabsdet(A::UnitLowerTriangular{T}) where {T} = zero(T), one(T)
 function det(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     S = promote_type(T, typeof((one(T) * zero(T) + zero(T)) / one(T)))
-    v = one(S)
-    @inbounds for i in axes(A.data, 1)
-        v *= convert(S, A.data[i,i])
-    end
-    return v
+    return prod(Base.Fix1(convert, S), diagview(A.data); init=one(S))
 end
 function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     sgn = one(T)
