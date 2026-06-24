@@ -1065,9 +1065,10 @@ function __generic_matvecmul!(f::F, C::AbstractVector, A::AbstractVecOrMat, B::A
             for k = eachindex(C)
                 aoffs = (k-1)*Astride
                 firstterm = f(A[aoffs + 1]) * B[1]
-                s = zero(firstterm + firstterm)
+                z = zero(firstterm + firstterm)
+                s = convert(promote_type(eltype(C), typeof(z)), z)
                 for i in nonzeroinds(B)
-                    s += f(A[aoffs+i]) * B[i]
+                    s = muladd(f(A[aoffs+i]), B[i], s)
                 end
                 @stable_muladdmul _modify!(MulAddMul(alpha,beta), s, C, k)
             end
@@ -1093,7 +1094,7 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
                 aoffs = (k-1)*Astride
                 b = @stable_muladdmul MulAddMul(alpha,false)(B[k])
                 for i = eachindex(C)
-                    C[i] += A[aoffs + i] * b
+                    C[i] = muladd(A[aoffs + i], b, C[i])
                 end
             end
         end
