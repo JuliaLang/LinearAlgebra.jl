@@ -4150,10 +4150,9 @@ for (stev, stebz, stegr, stein, elty) in
                 Ref{BlasInt}, Ptr{$elty}, Ptr{BlasInt}, Ptr{BlasInt},
                 Ptr{BlasInt}),
                 n, dv, ev, m, w, iblock, isplit, z, ldz, work, iwork, ifail, info)
-            chklapackerror(info[])
-            if any(ifail .!= 0)
-                # TODO: better error message / type
-                error("failed to converge eigenvectors:\n$(findall(!iszero, ifail))")
+            chkargsok(info[])
+            if info[] > 0
+                throw(ArgumentError(lazy"failed to converge eigenvectors: $(findall(!iszero, ifail))"c))
             end
             z
         end

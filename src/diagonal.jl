@@ -390,23 +390,20 @@ function rmul!(T::Tridiagonal, D::Diagonal)
     end
     return T
 end
-for T in [:UpperTriangular, :UnitUpperTriangular,
-        :LowerTriangular, :UnitLowerTriangular]
+for T in (:UpperTriangular, :LowerTriangular)
     @eval rmul!(A::$T{<:Any, <:StridedMatrix}, D::Diagonal) = _rmul!(A, D)
     @eval lmul!(D::Diagonal, A::$T{<:Any, <:StridedMatrix}) = _lmul!(D, A)
 end
 function _rmul!(A::UpperOrLowerTriangular, D::Diagonal)
     P = parent(A)
-    isunit = A isa UnitUpperOrUnitLowerTriangular
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
-        rowstart = isupper ? firstindex(A,1) : col+isunit
-        rowstop = isupper ? col-isunit : lastindex(A,1)
+        rowstart = isupper ? firstindex(A,1) : col
+        rowstop = isupper ? col : lastindex(A,1)
         for row in rowstart:rowstop
             P[row, col] *= D.diag[col]
         end
     end
-    isunit && _setdiag!(P, identity, D.diag)
     TriWrapper = isupper ? UpperTriangular : LowerTriangular
     return TriWrapper(P)
 end
@@ -444,16 +441,14 @@ function lmul!(D::Diagonal, T::Tridiagonal)
 end
 function _lmul!(D::Diagonal, A::UpperOrLowerTriangular)
     P = parent(A)
-    isunit = A isa UnitUpperOrUnitLowerTriangular
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
-        rowstart = isupper ? firstindex(A,1) : col+isunit
-        rowstop = isupper ? col-isunit : lastindex(A,1)
+        rowstart = isupper ? firstindex(A,1) : col
+        rowstop = isupper ? col : lastindex(A,1)
         for row in rowstart:rowstop
             P[row, col] = D.diag[row] * P[row, col]
         end
     end
-    isunit && _setdiag!(P, identity, D.diag)
     TriWrapper = isupper ? UpperTriangular : LowerTriangular
     return TriWrapper(P)
 end
@@ -768,20 +763,24 @@ end
 for Tri in (:UpperTriangular, :LowerTriangular)
     UTri = Symbol(:Unit, Tri)
     # 2 args
-    for (fun, f) in zip((:mul, :rmul!, :rdiv!, :/), (:identity, :identity, :inv, :inv))
+    for (fun, f) in zip((:mul, :/), (:identity, :inv))
         g = fun == :mul ? :* : fun
         @eval $fun(A::$Tri, D::Diagonal) = $Tri($g(A.data, D))
         @eval $fun(A::$UTri, D::Diagonal) = $Tri(_setdiag!($g(A.data, D), $f, D.diag))
     end
+    @eval rmul!(A::$Tri, D::Diagonal) = $Tri(rmul!(A.data, D))
+    @eval rdiv!(A::$Tri, D::Diagonal) = $Tri(rdiv!(A.data, D))
     @eval mul(A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
             @invoke mul(A::AbstractMatrix, D::Diagonal)
     @eval mul(A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
             @invoke mul(A::AbstractMatrix, D::Diagonal)
-    for (fun, f) in zip((:mul, :lmul!, :ldiv!, :\), (:identity, :identity, :inv, :inv))
+    for (fun, f) in zip((:mul, :\), (:identity, :inv))
         g = fun == :mul ? :* : fun
         @eval $fun(D::Diagonal, A::$Tri) = $Tri($g(D, A.data))
         @eval $fun(D::Diagonal, A::$UTri) = $Tri(_setdiag!($g(D, A.data), $f, D.diag))
     end
+    @eval lmul!(D::Diagonal, A::$Tri) = $Tri(lmul!(D, A.data))
+    @eval ldiv!(D::Diagonal, A::$Tri) = $Tri(ldiv!(D, A.data))
     @eval mul(D::Diagonal, A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}) =
             @invoke mul(D::Diagonal, A::AbstractMatrix)
     @eval mul(D::Diagonal, A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}) =

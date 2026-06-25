@@ -99,11 +99,11 @@ end
         @test isa(ST, SymTridiagonal{elty,Vector{elty}})
         TT = Tridiagonal{elty,Vector{elty}}(GenericArray(dl), d, GenericArray(dl))
         @test isa(TT, Tridiagonal{elty,Vector{elty}})
-        @test_throws ArgumentError SymTridiagonal(d, GenericArray(dl))
-        @test_throws ArgumentError SymTridiagonal(GenericArray(d), dl)
+        @test ST == SymTridiagonal(d, GenericArray(dl))
+        @test_throws MethodError SymTridiagonal(GenericArray(d), dl)
         @test_throws ArgumentError Tridiagonal(GenericArray(dl), d, GenericArray(dl))
         @test_throws ArgumentError Tridiagonal(dl, GenericArray(d), dl)
-        @test_throws ArgumentError SymTridiagonal{elty}(d, GenericArray(dl))
+        @test ST == SymTridiagonal{elty}(d, GenericArray(dl))
         @test_throws ArgumentError Tridiagonal{elty}(GenericArray(dl), d,GenericArray(dl))
         STI = SymTridiagonal([1,2,3,4], [1,2,3])
         TTI = Tridiagonal([1,2,3], [1,2,3,4], [1,2,3])
@@ -1175,6 +1175,34 @@ end
     @test_throws "cannot set off-diagonal entry $((1,3))" S[LinearAlgebra.BandIndex(2,1)] = 1
     @test_throws BoundsError S[LinearAlgebra.BandIndex(size(S,1),1)]
     @test_throws BoundsError S[LinearAlgebra.BandIndex(0,size(S,1)+1)]
+end
+
+@testset "special functions" begin
+    _dv = Float64[1,-2,3,-4]
+    _ev = Float64[1,2,3]
+    @testset "$(typeof(dv))" for (dv, ev) in ((_dv, _ev), ImmutableArray.((_dv, _ev)))
+        dl = -ev
+        T = Tridiagonal(dl, dv, ev)
+        MT = Matrix(T)
+        S = SymTridiagonal(dv, ev)
+        MS = Matrix(S)
+
+        @testset for f in Any[sin, cos, tan,
+                    asin, acos, atan,
+                    sinh, cosh, tanh,
+                    asinh, acosh, atanh,
+                    exp, log, sqrt, cbrt,
+                    ]
+            @test f(T) ≈ f(MT)
+            @test f(S) ≈ f(MS)
+        end
+        for (ST, MST) in ((S, MS), (T, MT))
+            sT, cT = sincos(ST)
+            sMT, cMT = sincos(MST)
+            @test sT ≈ sMT
+            @test cT ≈ cMT
+        end
+    end
 end
 
 @testset "fillband!" begin

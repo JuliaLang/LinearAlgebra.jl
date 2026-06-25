@@ -71,10 +71,8 @@ SymTridiagonal(dv::V, ev::V) where {T,V<:AbstractVector{T}} = SymTridiagonal{T}(
 SymTridiagonal{T}(dv::V, ev::V) where {T,V<:AbstractVector{T}} = SymTridiagonal{T,V}(dv, ev)
 function SymTridiagonal{T}(dv::AbstractVector, ev::AbstractVector) where {T}
     d = convert(AbstractVector{T}, dv)::AbstractVector{T}
-    e = convert(AbstractVector{T}, ev)::AbstractVector{T}
-    typeof(d) == typeof(e) ?
-        SymTridiagonal{T}(d, e) :
-        throw(ArgumentError("diagonal vectors needed to be convertible to same type"))
+    e = convert(typeof(d), ev)::AbstractVector{T}
+    return SymTridiagonal{T}(d, e)
 end
 SymTridiagonal(d::AbstractVector{T}, e::AbstractVector{S}) where {T,S} =
     SymTridiagonal{promote_type(T, S)}(d, e)
@@ -107,6 +105,8 @@ julia> SymTridiagonal(B)
  [1 2; 3 4]  [1 2; 2 3]
 ```
 """
+SymTridiagonal(A::AbstractMatrix)
+
 function (::Type{SymTri})(A::AbstractMatrix) where {SymTri <: SymTridiagonal}
     checksquare(A)
     du = diag(A, 1)
@@ -662,8 +662,9 @@ julia> Tridiagonal(A)
  ⋅  ⋅  3  4
 ```
 """
-(::Type{Tri})(A::AbstractMatrix) where {Tri<:Tridiagonal} = Tri(diag(A,-1), diag(A,0), diag(A,1))
+Tridiagonal(A::AbstractMatrix)
 
+(::Type{Tri})(A::AbstractMatrix) where {Tri<:Tridiagonal} = Tri(diag(A,-1), diag(A,0), diag(A,1))
 Tridiagonal(A::Tridiagonal) = A
 Tridiagonal{T}(A::Tridiagonal{T}) where {T} = A
 function Tridiagonal{T}(A::Tridiagonal) where {T}

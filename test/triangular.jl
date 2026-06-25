@@ -1113,6 +1113,35 @@ end
     end
 end
 
+@testset "zero for triangular matrices" begin
+    A = rand(4, 4)
+    @test zero(UpperTriangular(A)) isa UpperTriangular
+    @test zero(LowerTriangular(A)) isa LowerTriangular
+    @test iszero(zero(UpperTriangular(A)))
+    @test iszero(zero(LowerTriangular(A)))
+    @test zero(UnitUpperTriangular(A)) isa UpperTriangular
+    @test zero(UnitLowerTriangular(A)) isa LowerTriangular
+    @test iszero(zero(UnitUpperTriangular(A)))
+    @test iszero(zero(UnitLowerTriangular(A)))
+    @test iszero(diag(zero(UnitUpperTriangular(A))))
+    @test iszero(diag(zero(UnitLowerTriangular(A))))
+
+        # non-strided case: zero forwards to parent
+    struct ZeroTestWrapTri{T} <: AbstractArray{T,2}
+        parent::Matrix{T}
+    end
+    Base.size(A::ZeroTestWrapTri) = size(A.parent)
+    Base.getindex(A::ZeroTestWrapTri, i, j) = A.parent[i,j]
+    Base.zero(A::ZeroTestWrapTri) = ZeroTestWrapTri(zero(A.parent))
+
+    for T in (UpperTriangular, LowerTriangular)
+        Z = zero(T(ZeroTestWrapTri([1.0 2.0; 3.0 4.0])))
+        @test Z isa T
+        @test parent(Z) isa ZeroTestWrapTri
+        @test iszero(Z)
+    end
+end
+
 @testset "eigenvalue sorting" begin
     for T in (Float64, ComplexF64, Float16, ComplexF16)
         A = randn(T, 4, 4)
