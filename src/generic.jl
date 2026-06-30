@@ -1681,7 +1681,7 @@ end
     axpby!(α, x::AbstractArray, β, y::AbstractArray)
 
 Overwrite `y` with `x * α + y * β` and return `y`.
-If `x` and `y` have the same axes, it's equivalent with `y .= x .* a .+ y .* β`.
+If `x` and `y` have the same axes, it's equivalent with `y .= x .* α .+ y .* β`.
 
 # Examples
 ```jldoctest
