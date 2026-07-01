@@ -2,6 +2,13 @@
 steps:
   # Linux x86
   - label: ":linux: linux-i686"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+        - signal_reason: agent_stop
+          limit: 1
     plugins:
       # Julia installation outside the sandbox
       - JuliaCI/julia#v1:
@@ -24,6 +31,13 @@ steps:
       cpuset_limited: "true"
   # Linux x86_64
   - label: ":linux: linux-x86_64"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+        - signal_reason: agent_stop
+          limit: 1
     plugins:
       # Julia installation outside the sandbox
       - JuliaCI/julia#v1:
@@ -47,6 +61,13 @@ steps:
       cpuset_limited: "true"
   # macOS aarch64
   - label: ":macos: macos-aarch64"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+        - signal_reason: agent_stop
+          limit: 1
     plugins:
       - JuliaCI/julia#v1:
           version: "nightly"
@@ -60,6 +81,13 @@ steps:
       arch: "aarch64"
   # windows x86_64
   - label: ":windows: windows-x86_64"
+    timeout_in_minutes: 90
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 1
+        - signal_reason: agent_stop
+          limit: 1
     plugins:
       - JuliaCI/julia#v1:
           version: "nightly"
