@@ -111,27 +111,28 @@ Return an object representing the current `libblastrampoline` configuration.
 get_config() = lbt_get_config()
 
 # ── Cancellable BLAS calls ───────────────────────────────────────────────────
-# If the loaded BLAS provides the (staged) OpenBLAS cancellation extension and
-# the runtime provides per-task asynchronous cancellation hooks (see
-# JuliaLang/julia#60281), long-running level-3 calls are made interruptible.
+# If the loaded BLAS provides the (staged) OpenBLAS cancellation extension,
+# long-running level-3 calls are made interruptible by giving them a
+# foreign-call cancellation handler (the `cancel_handler` option of `@ccall`;
+# see "Long-Running Foreign Calls: GC and Cancellation" in the Julia manual).
 #
 # Protocol: every OS thread owns a pointer-sized generation slot inside
 # OpenBLAS (`openblas_cancel_token()` returns its stable address). The
 # instrumented drivers advance the slot to a fresh even generation at
 # operation entry on the issuing thread and poll it during the computation.
-# `Base.cancel!` of the calling task (e.g. from ^C handling) runs our hook
-# handler on the cancelling thread, which loads the slot's current value,
-# re-checks that the protected call is still in flight, and calls
-# `openblas_cancel(slot, loaded)` - which sets the cancel bit iff the slot
-# still holds the loaded generation. Stale or racing requests therefore
-# either miss (the generation moved on) or dirty an already-dead generation;
-# both are harmless, so no token lifecycle management is needed at all. A
-# genuinely cancelled call leaves garbage in the output, which is discarded
-# because the caller unwinds with the task's cancellation request (thrown by
-# the exit cancellation point of `Base.with_cancellation_hook`).
+# Cancelling the calling task (e.g. from ^C handling) runs `_cancel_handler`
+# like a signal handler *on the thread blocked in the annotated call*, so
+# `openblas_cancel_token()` there returns exactly the slot the in-flight
+# operation polls - no cross-thread slot handshake is needed. A genuinely
+# cancelled call leaves garbage in the output, which is discarded because
+# the annotated call re-checks for cancellation after it returns and unwinds
+# with the task's cancellation request before the result can escape.
 
-# openblas_cancel_token, openblas_cancel
-const _cancel_syms = Ref{NTuple{2, Ptr{Cvoid}}}((C_NULL, C_NULL))
+# openblas_cancel_token and openblas_cancel, resolved by `_cancel_detect`.
+# The handler reads them without synchronization (it must not take locks),
+# so they live in separate Refs and the handler requires both to be set.
+const _cancel_tok_f = Ref(C_NULL)
+const _cancel_cancel_f = Ref(C_NULL)
 const _cancel_state = Threads.Atomic{Int}(0) # 0 = unknown, 1 = unavailable, 2 = available
 const _cancel_lock = ReentrantLock()
 
@@ -139,80 +140,49 @@ function _cancel_detect()
     lock(_cancel_lock) do
         _cancel_state[] == 0 || return
         state = 1
-        if isdefined(Base, :with_cancellation_hook)
-            for lib in get_config().loaded_libs
-                h = Libdl.dlopen_e(lib.libname)
-                h == C_NULL && continue
-                ptok = Libdl.dlsym_e(h, :openblas_cancel_token)
-                ptok == C_NULL && continue
-                _cancel_syms[] = (ptok, Libdl.dlsym(h, :openblas_cancel))
-                state = 2
-                break
-            end
+        for lib in get_config().loaded_libs
+            h = Libdl.dlopen_e(lib.libname)
+            h == C_NULL && continue
+            ptok = Libdl.dlsym_e(h, :openblas_cancel_token)
+            ptok == C_NULL && continue
+            _cancel_cancel_f[] = Libdl.dlsym(h, :openblas_cancel)
+            _cancel_tok_f[] = ptok
+            state = 2
+            break
         end
         _cancel_state[] = state
     end
     nothing
 end
 
-@inline function _cancellation_available()
-    st = _cancel_state[]
-    if st == 0
-        _cancel_detect()
-        st = _cancel_state[]
-    end
-    return st == 2
-end
-
-# The hook state: the issuing thread's slot address while the protected call
-# is in flight, C_NULL otherwise.
-mutable struct _CancelScope
-    @atomic slot::Ptr{Csize_t}
-end
-
-# Runs on the *cancelling* thread.
-function _cancel_handler(scope::_CancelScope, @nospecialize(_task))
-    slot = @atomic :acquire scope.slot
-    slot == C_NULL && return
-    loaded = unsafe_load(slot)
-    # Re-check that the call is still in flight after loading the generation
-    # (the handler may fire arbitrarily late); a race beyond this point is
-    # neutralized by the generation compare-exchange in openblas_cancel.
-    (@atomic :acquire scope.slot) == slot || return
-    ccall(_cancel_syms[][2], Cvoid, (Ptr{Csize_t}, Csize_t), slot, loaded)
-    nothing
+# The C-ABI cancellation handler, passed to the `cancel_handler` annotation
+# via `@cfunction` at each call site. It runs like a signal handler on the
+# thread executing the annotated call: integer-only code with no allocation,
+# locks, or I/O, satisfying the handler contract (including the preserve_all
+# register convention) trivially. While the extension is unresolved it does
+# nothing; the operation then runs to completion and the annotation's exit
+# check still unwinds, only the library-side early-out is lost.
+function _cancel_handler(::Ptr{Cvoid}, ::UInt8)
+    tok = _cancel_tok_f[]
+    cancel = _cancel_cancel_f[]
+    (tok == C_NULL || cancel == C_NULL) && return nothing
+    slot = ccall(tok, Ptr{Csize_t}, ())
+    ccall(cancel, Cvoid, (Ptr{Csize_t}, Csize_t), slot, unsafe_load(slot))
+    return nothing
 end
 
 # Operations below this size (in scalar fused multiply-adds) are not worth
 # instrumenting: they complete in less than the cancellation latency anyway.
+# The `cancel_handler` annotation itself is unconditional (it costs a
+# handful of stores around the call); the threshold only bounds when symbol
+# detection is worth attempting.
 const _CANCELLABLE_FLOP_MIN = 1 << 24
 
-@noinline function _cancellable_blas_call(f::F) where {F}
-    scope = _CancelScope(C_NULL)
-    return Base.with_cancellation_hook(_cancel_handler, scope) do
-        # Fetch this thread's slot right before the call: no task switch can
-        # occur between here and the ccall, so the slot is the one the BLAS
-        # driver's generation bump will target. (A handler firing in the tiny
-        # window before the driver advances the generation can trip the
-        # previous, dead generation and miss the fresh one; the exit
-        # cancellation point of with_cancellation_hook still unwinds promptly
-        # with the task's pending request, only the library-side early-out is
-        # lost.)
-        slot = ccall(_cancel_syms[][1], Ptr{Csize_t}, ())
-        @atomic :release scope.slot = slot
-        try
-            f()
-        finally
-            @atomic :release scope.slot = C_NULL
-        end
+@inline function _cancel_prepare(flops::Float64)
+    if flops >= _CANCELLABLE_FLOP_MIN && _cancel_state[] == 0
+        _cancel_detect()
     end
-end
-
-@inline function _maybe_cancellable(f::F, flops::Float64) where {F}
-    if flops >= _CANCELLABLE_FLOP_MIN && _cancellation_available()
-        return _cancellable_blas_call(f)
-    end
-    return f()
+    return nothing
 end
 
 if USE_BLAS64
@@ -224,6 +194,10 @@ else
         return Expr(:quote, x)
     end
 end
+
+# The function form of `@blasfunc`, for `@eval`-time name construction (an
+# `@ccall`'s `library.name` cannot carry a nested macro call).
+blasfunc_name(x::Symbol) = USE_BLAS64 ? Symbol(x, "64_") : x
 
 _tryparse_env_int(key) = tryparse(Int, get(ENV, key, ""))
 
@@ -1730,6 +1704,7 @@ for (gemm, elty) in
          (:sgemm_,:Float32),
          (:zgemm_,:ComplexF64),
          (:cgemm_,:ComplexF32))
+    fname = blasfunc_name(gemm)
     @eval begin
              # SUBROUTINE DGEMM(TRANSA,TRANSB,M,N,K,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
              # *     .. Scalar Arguments ..
@@ -1757,17 +1732,13 @@ for (gemm, elty) in
             chkstride1(A)
             chkstride1(B)
             chkstride1(C)
-            _maybe_cancellable(Float64(m) * Float64(n) * Float64(ka)) do
-                ccall((@blasfunc($gemm), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                     Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$elty}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},
-                     Ref{BlasInt}, Clong, Clong),
-                     transA, transB, m, n,
-                     ka, alpha, A, max(1,stride(A,2)),
-                     B, max(1,stride(B,2)), beta, C,
-                     max(1,stride(C,2)), 1, 1)
-            end
+            _cancel_prepare(Float64(m) * Float64(n) * Float64(ka))
+            @ccall(cancel_handler=(@cfunction(_cancel_handler, Cvoid, (Ptr{Cvoid}, UInt8)), C_NULL),
+                libblastrampoline.$fname(
+                    transA::Ref{UInt8}, transB::Ref{UInt8}, m::Ref{BlasInt}, n::Ref{BlasInt},
+                    ka::Ref{BlasInt}, alpha::Ref{$elty}, A::Ptr{$elty}, max(1,stride(A,2))::Ref{BlasInt},
+                    B::Ptr{$elty}, max(1,stride(B,2))::Ref{BlasInt}, beta::Ref{$elty}, C::Ptr{$elty},
+                    max(1,stride(C,2))::Ref{BlasInt}, 1::Clong, 1::Clong)::Cvoid)
             C
         end
         function gemm(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
@@ -1799,6 +1770,7 @@ for (mfname, elty) in ((:dsymm_,:Float64),
                        (:ssymm_,:Float32),
                        (:zsymm_,:ComplexF64),
                        (:csymm_,:ComplexF32))
+    fname = blasfunc_name(mfname)
     @eval begin
              #     SUBROUTINE DSYMM(SIDE,UPLO,M,N,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
              #     .. Scalar Arguments ..
@@ -1839,17 +1811,13 @@ for (mfname, elty) in ((:dsymm_,:Float64),
             chkstride1(A)
             chkstride1(B)
             chkstride1(C)
-            _maybe_cancellable(Float64(m) * Float64(n) * Float64(j)) do
-                ccall((@blasfunc($mfname), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                     Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
-                     Clong, Clong),
-                     side, uplo, m, n,
-                     alpha, A, max(1,stride(A,2)), B,
-                     max(1,stride(B,2)), beta, C, max(1,stride(C,2)),
-                     1, 1)
-            end
+            _cancel_prepare(Float64(m) * Float64(n) * Float64(j))
+            @ccall(cancel_handler=(@cfunction(_cancel_handler, Cvoid, (Ptr{Cvoid}, UInt8)), C_NULL),
+                libblastrampoline.$fname(
+                    side::Ref{UInt8}, uplo::Ref{UInt8}, m::Ref{BlasInt}, n::Ref{BlasInt},
+                    alpha::Ref{$elty}, A::Ptr{$elty}, max(1,stride(A,2))::Ref{BlasInt}, B::Ptr{$elty},
+                    max(1,stride(B,2))::Ref{BlasInt}, beta::Ref{$elty}, C::Ptr{$elty}, max(1,stride(C,2))::Ref{BlasInt},
+                    1::Clong, 1::Clong)::Cvoid)
             C
         end
         function symm(side::AbstractChar, uplo::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
@@ -1891,6 +1859,7 @@ symm!
 ## (HE) Hermitian matrix-matrix and matrix-vector multiplication
 for (mfname, elty) in ((:zhemm_,:ComplexF64),
                        (:chemm_,:ComplexF32))
+    fname = blasfunc_name(mfname)
     @eval begin
              #     SUBROUTINE DHEMM(SIDE,UPLO,M,N,ALPHA,A,LDA,B,LDB,BETA,C,LDC)
              #     .. Scalar Arguments ..
@@ -1931,17 +1900,13 @@ for (mfname, elty) in ((:zhemm_,:ComplexF64),
             chkstride1(A)
             chkstride1(B)
             chkstride1(C)
-            _maybe_cancellable(Float64(m) * Float64(n) * Float64(j)) do
-                ccall((@blasfunc($mfname), libblastrampoline), Cvoid,
-                    (Ref{UInt8}, Ref{UInt8}, Ref{BlasInt}, Ref{BlasInt},
-                     Ref{$elty}, Ptr{$elty}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ref{$elty}, Ptr{$elty}, Ref{BlasInt},
-                     Clong, Clong),
-                     side, uplo, m, n,
-                     alpha, A, max(1,stride(A,2)), B,
-                     max(1,stride(B,2)), beta, C, max(1,stride(C,2)),
-                     1, 1)
-            end
+            _cancel_prepare(Float64(m) * Float64(n) * Float64(j))
+            @ccall(cancel_handler=(@cfunction(_cancel_handler, Cvoid, (Ptr{Cvoid}, UInt8)), C_NULL),
+                libblastrampoline.$fname(
+                    side::Ref{UInt8}, uplo::Ref{UInt8}, m::Ref{BlasInt}, n::Ref{BlasInt},
+                    alpha::Ref{$elty}, A::Ptr{$elty}, max(1,stride(A,2))::Ref{BlasInt}, B::Ptr{$elty},
+                    max(1,stride(B,2))::Ref{BlasInt}, beta::Ref{$elty}, C::Ptr{$elty}, max(1,stride(C,2))::Ref{BlasInt},
+                    1::Clong, 1::Clong)::Cvoid)
             C
         end
         function hemm(side::AbstractChar, uplo::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
