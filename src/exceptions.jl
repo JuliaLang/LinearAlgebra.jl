@@ -45,11 +45,10 @@ end
 function Base.showerror(io::IO, ex::PosDefException)
     print(io, "PosDefException: matrix is not ")
     if ex.info == -1
-        print(io, "Hermitian")
+        print(io, "Hermitian; factorization failed. Try wrapping it with Symmetric or Hermitian.")
     else
-        print(io, "positive definite")
+        print(io, "positive definite; factorization failed.")
     end
-    print(io, "; Factorization failed.")
 end
 
 """

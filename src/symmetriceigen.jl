@@ -19,13 +19,14 @@ Defaults to `LinearAlegbra.RobustRepresentations()`, which corresponds to the LA
 default_eigen_alg(@nospecialize(A)) = RobustRepresentations()
 
 # Eigensolvers for symmetric and Hermitian matrices
-function eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=nothing)
+function eigen!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=eigsortby)
+    sortby2 = sortby == eigsortby ? nothing : sortby # eigsortby is done by LAPACK.syev*
     if alg === DivideAndConquer()
-        Eigen(sorteig!(LAPACK.syevd!('V', A.uplo, A.data)..., sortby)...)
+        Eigen(sorteig!(LAPACK.syevd!('V', A.uplo, A.data)..., sortby2)...)
     elseif alg === QRIteration()
-        Eigen(sorteig!(LAPACK.syev!('V', A.uplo, A.data)..., sortby)...)
+        Eigen(sorteig!(LAPACK.syev!('V', A.uplo, A.data)..., sortby2)...)
     elseif alg === RobustRepresentations()
-        Eigen(sorteig!(LAPACK.syevr!('V', 'A', A.uplo, A.data, 0.0, 0.0, 0, 0, -1.0)..., sortby)...)
+        Eigen(sorteig!(LAPACK.syevr!('V', 'A', A.uplo, A.data, 0.0, 0.0, 0, 0, -1.0)..., sortby2)...)
     else
         throw(ArgumentError("Unsupported value for `alg` keyword."))
     end
@@ -55,7 +56,7 @@ The default `alg` used may change in the future.
 
 The following functions are available for `Eigen` objects: [`inv`](@ref), [`det`](@ref), and [`isposdef`](@ref).
 """
-function eigen(A::RealHermSymComplexHerm; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=nothing)
+function eigen(A::RealHermSymComplexHerm; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=eigsortby)
     _eigen(A; alg, sortby)
 end
 
@@ -65,7 +66,7 @@ function _eigen(A::RealHermSymComplexHerm; alg::Algorithm, sortby)
     eigen!(eigencopy_oftype(A, S); alg, sortby)
 end
 
-function _eigen(A::RealHermSymComplexHerm{Float16}; alg::Algorithm, sortby::Union{Function,Nothing}=nothing)
+function _eigen(A::RealHermSymComplexHerm{Float16}; alg::Algorithm, sortby::Union{Function,Nothing}=eigsortby)
     S = eigtype(eltype(A))
     E = eigen!(eigencopy_oftype(A, S); alg, sortby)
     values = convert(AbstractVector{Float16}, E.values)
@@ -124,7 +125,7 @@ function eigen(A::RealHermSymComplexHerm, vl::Real, vh::Real)
 end
 
 
-function eigvals!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=nothing)
+function eigvals!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=eigsortby)
     vals::Vector{real(eltype(A))} = if alg === DivideAndConquer()
         LAPACK.syevd!('N', A.uplo, A.data)
     elseif alg === QRIteration()
@@ -134,7 +135,7 @@ function eigvals!(A::RealHermSymComplexHerm{<:BlasReal,<:StridedMatrix}; alg::Al
     else
         throw(ArgumentError("Unsupported value for `alg` keyword."))
     end
-    !isnothing(sortby) && sort!(vals, by=sortby)
+    sorteig!(vals, sortby == eigsortby ? nothing : sortby)
     return vals
 end
 
@@ -157,7 +158,7 @@ The default `alg` used may change in the future.
     The `alg` keyword argument requires Julia 1.12 or later.
 
 """
-function eigvals(A::RealHermSymComplexHerm; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=nothing)
+function eigvals(A::RealHermSymComplexHerm; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=eigsortby)
     S = eigtype(eltype(A))
     eigvals!(eigencopy_oftype(A, S); alg, sortby)
 end

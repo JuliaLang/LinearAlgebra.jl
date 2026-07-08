@@ -8,9 +8,9 @@
 # Generic real type. Any real number type should able to approximate
 # real numbers, and thus be closed under arithmetic operations.
 # Therefore so Int, Complex{Int}, etc. are excluded.
-ClosedReal = T where T <: Union{AbstractFloat, Rational}
+const ClosedReal = T where T <: Union{AbstractFloat, Rational}
 # Similarly, we also use a closed scalar type
-ClosedScalar = Union{T, Complex{T}} where T <: ClosedReal
+const ClosedScalar = Union{T, Complex{T}} where T <: ClosedReal
 ##--------------------------------------------------------------------------------
 
 """
