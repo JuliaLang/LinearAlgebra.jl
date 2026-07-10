@@ -140,15 +140,29 @@ function _cancel_detect()
     lock(_cancel_lock) do
         _cancel_state[] == 0 || return
         state = 1
-        for lib in get_config().loaded_libs
-            h = Libdl.dlopen_e(lib.libname)
-            h == C_NULL && continue
-            ptok = Libdl.dlsym_e(h, :openblas_cancel_token)
-            ptok == C_NULL && continue
-            _cancel_cancel_f[] = Libdl.dlsym(h, :openblas_cancel)
-            _cancel_tok_f[] = ptok
-            state = 2
-            break
+        # The token slot the instrumented drivers poll lives inside the
+        # library that actually services the call, so the extension must be
+        # resolved from the library *backing* the forwarded level-3 symbols,
+        # not from just any loaded library: with several libraries loaded
+        # (e.g. after `lbt_forward(...; clear=false)`), cancelling through a
+        # dormant library's `openblas_cancel` would mutate that library's
+        # token while the active GEMM keeps polling its own. Use
+        # libblastrampoline's forwarding provenance for `dgemm_` of our
+        # interface; if the active target does not export the extension (or
+        # provenance is unknown, e.g. after `lbt_set_forward`), leave
+        # cancellation disabled even if a dormant library exports it.
+        config = get_config()
+        interface = USE_BLAS64 ? :ilp64 : :lp64
+        lib = "dgemm_" in config.exported_symbols ?
+            lbt_find_backing_library("dgemm_", interface; config) : nothing
+        if lib !== nothing && lib.handle != C_NULL
+            ptok = Libdl.dlsym_e(lib.handle, :openblas_cancel_token)
+            pcancel = Libdl.dlsym_e(lib.handle, :openblas_cancel)
+            if ptok != C_NULL && pcancel != C_NULL
+                _cancel_cancel_f[] = pcancel
+                _cancel_tok_f[] = ptok
+                state = 2
+            end
         end
         _cancel_state[] = state
     end
