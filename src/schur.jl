@@ -288,7 +288,7 @@ ordschur(schur::Schur, select::Union{Vector{Bool},BitVector}) =
     Schur(_ordschur(schur.T, schur.Z, select)...)
 
 """
-    ordschur!(S::LinearAlgebra.Schur, p::AbstractVector{<:Integer}) -> F::GeneralizedSchur
+    ordschur!(S::Schur, p::AbstractVector{<:Integer}) -> F::Schur
 
 Reorders the Schur factorization `F` of a matrix `A = Z*T*Z'` according to the integer array
 `p` returning the reordered factorization `F` object using the algorithm in [^BD93], see also
