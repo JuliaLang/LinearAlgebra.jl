@@ -396,46 +396,13 @@ a complex conjugate pair of eigenvalues must be either both included in `p` succ
         curpos = pos_of[want]
 
         while curpos > pos
-            i = blocks[curpos-1]
-            j = blocks[curpos]
-            s1, s2 = sizes[i], sizes[j]
-            i1, i2 = i, i+s1-1
-            j1, j2 = j, j+s2-1
-            rind = i1:j2
-            m = s1 + s2
+            i1 = blocks[curpos-1]
+            j1 = blocks[curpos]
+            s1, s2 = sizes[i1], sizes[j1]
+            i2, j2 = i1+s1-1, j1+s2-1
 
-            K0  = M_K0[1:s1*s2, 1:s1*s2]
-            K1  = M_K1[1:s1*s2, 1:s1*s2]
-            rhs = M_rhs[1:s1*s2]
-            X   = M_X[1:s1, 1:s2]
-            Q   = M_Q[1:m, 1:m]
-
-            # Solve A*X - X*B = -C
-            kron!(K0, Δ[1:s2,1:s2], T[i1:i2,i1:i2])
-            K0 .-= kron!(K1, transpose(T[j1:j2,j1:j2]), Δ[1:s1,1:s1])
-            rhs .= -vec(T[i1:i2,j1:j2])
-            ldiv!(lu!(K0), rhs)
-            X .= reshape(rhs, s1, s2)
-
-            # Build orthogonal/unitary similarity
-            fill!(Q, zero(eltype(T)))
-            Q[1:s1, 1:s2] .= X
-            Q[s1+1:m, 1:s2] .= Δ[1:s2,1:s2]
-            Q[1:s1, s2+1:m] .= Δ[1:s1,1:s1]
-            F = qr!(Q)
-
-            lmul!(adjoint(F.Q), T[rind,i1:n])
-            rmul!(T[1:n,rind], F.Q)
-            rmul!(Z[:,rind], F.Q)
-
-            # Restore Schur structure
-            for k in 1:m-2
-                T[rind[k+2:end], rind[k]] .= zero(eltype(T))
-            end
-            T[i1+s2:j2, i1:i1+s2-1] .= zero(eltype(T))
-            if !(eltype(T) <: Real)
-                T[rind[2:end], rind[1:end-1]] .= zero(eltype(T))
-            end
+            # Swap blocks: Calls LAPACK or pure Julia version based on eltype(S.T)
+            _swap_adj_schur_blocks!(T, Z, i1, i2, j1, j2, s1, s2, n, Δ, M_K0, M_K1, M_rhs, M_X, M_Q)
 
             # Update bookkeeping after swapping adjacent blocks of sizes s1 and s2
             sizes[i1:j2] .= 0
@@ -457,6 +424,46 @@ a complex conjugate pair of eigenvalues must be either both included in `p` succ
 
     permute!(vals, p)
     return S
+end
+
+@views @inline function _swap_adj_schur_blocks!(T::AbstractMatrix, Z::AbstractMatrix,
+    i1::Int, i2::Int, j1::Int, j2::Int, s1::Int, s2::Int, n::Int,
+    Δ::AbstractMatrix, M_K0::AbstractMatrix, M_K1::AbstractMatrix, M_rhs::AbstractVector,
+    M_X::AbstractMatrix, M_Q::AbstractMatrix)
+    m = s1 + s2
+    rind = i1:j2
+    K0  = M_K0[1:s1*s2, 1:s1*s2]
+    K1  = M_K1[1:s1*s2, 1:s1*s2]
+    rhs = M_rhs[1:s1*s2]
+    X   = M_X[1:s1, 1:s2]
+    Q   = M_Q[1:m, 1:m]
+
+    # Solve A*X - X*B = -C
+    kron!(K0, Δ[1:s2,1:s2], T[i1:i2,i1:i2])
+    K0 .-= kron!(K1, transpose(T[j1:j2,j1:j2]), Δ[1:s1,1:s1])
+    rhs .= -vec(T[i1:i2,j1:j2])
+    ldiv!(lu!(K0), rhs)
+    X .= reshape(rhs, s1, s2)
+
+    # Build orthogonal/unitary similarity
+    fill!(Q, zero(eltype(T)))
+    Q[1:s1, 1:s2] .= X
+    Q[s1+1:m, 1:s2] .= Δ[1:s2,1:s2]
+    Q[1:s1, s2+1:m] .= Δ[1:s1,1:s1]
+    F = qr!(Q)
+
+    lmul!(adjoint(F.Q), T[rind,i1:n])
+    rmul!(T[1:n,rind], F.Q)
+    rmul!(Z[:,rind], F.Q)
+
+    # Restore Schur structure
+    for k in 1:m-2
+        T[rind[k+2:end], rind[k]] .= zero(eltype(T))
+    end
+    T[i1+s2:j2, i1:i1+s2-1] .= zero(eltype(T))
+    if !(eltype(T) <: Real)
+        T[rind[2:end], rind[1:end-1]] .= zero(eltype(T))
+    end
 end
 
 """
