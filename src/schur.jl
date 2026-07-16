@@ -426,6 +426,8 @@ real case, a complex conjugate pair of eigenvalues must be either both included 
         end
     end
 
+    # TODO: Either enforce permutation indices to be increasing for 2x2 blocks,
+    #   or allow reordering of eigenvalues in 2x2 blocks (bad idea).
     permute!(vals, p)
     return S
 end
