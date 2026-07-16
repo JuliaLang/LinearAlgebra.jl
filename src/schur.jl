@@ -291,9 +291,13 @@ ordschur(schur::Schur, select::Union{Vector{Bool},BitVector}) =
     ordschur!(S::LinearAlgebra.Schur, p::AbstractVector{<:Integer}) -> F::GeneralizedSchur
 
 Reorders the Schur factorization `F` of a matrix `A = Z*T*Z'` according to the integer array
-`p` returning the reordered factorization `F` object using the algorithm in [^DK01]. The
-`i`-th diagonal entry of `F` is the `p[i]`-th diagonal element of `S`.  In the real case,
-a complex conjugate pair of eigenvalues must be either both included in `p` successively.
+`p` returning the reordered factorization `F` object using the algorithm in [^BD93], see also
+[^DK01]. The `i`-th diagonal entry of `F` is the `p[i]`-th diagonal element of `S`.  In the
+real case, a complex conjugate pair of eigenvalues must be either both included in `p` successively.
+
+[^BD93]   Zhaojun Bai and James W. Demmel, "On swapping diagonal blocks in real Schur form,"
+        Linear Algebra and its Applications Volume 186 pp 75-95, 1993
+        https://doi.org/10.1016/0024-3795(93)90286-W
 
 [^DK01]   Daniel Kressner, "Block algorithms for reordering standard and generalized Schur forms,"
         ACM Transactions on Mathematical Software Volume 32 Issue 4 pp 521-532
@@ -426,6 +430,7 @@ a complex conjugate pair of eigenvalues must be either both included in `p` succ
     return S
 end
 
+# Generic Julia routine
 @views @inline function _swap_adj_schur_blocks!(T::AbstractMatrix, Z::AbstractMatrix,
     i1::Int, i2::Int, j1::Int, j2::Int, s1::Int, s2::Int, n::Int,
     Δ::AbstractMatrix, M_K0::AbstractMatrix, M_K1::AbstractMatrix, M_rhs::AbstractVector,
@@ -464,6 +469,14 @@ end
     if !(eltype(T) <: Real)
         T[rind[2:end], rind[1:end-1]] .= zero(eltype(T))
     end
+end
+
+# LAPACK routine for BLAS types
+@views @inline function _swap_adj_schur_blocks!(T::StridedMatrix{<:LinearAlgebra.BlasFloat}, Z::StridedMatrix{<:LinearAlgebra.BlasFloat},
+    i1::Int, i2::Int, j1::Int, j2::Int, s1::Int, s2::Int, n::Int,
+    Δ::AbstractMatrix, M_K0::AbstractMatrix, M_K1::AbstractMatrix, M_rhs::AbstractVector,
+    M_X::AbstractMatrix, M_Q::AbstractMatrix)
+    LAPACK.trexc!(j1, i1, T, Z)
 end
 
 """
