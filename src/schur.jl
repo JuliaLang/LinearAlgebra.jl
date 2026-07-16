@@ -432,9 +432,7 @@ end
 
 # Generic Julia routine
 @views @inline function _swap_adj_schur_blocks!(T::AbstractMatrix, Z::AbstractMatrix,
-    i1::Int, i2::Int, j1::Int, j2::Int, s1::Int, s2::Int, n::Int,
-    Δ::AbstractMatrix, M_K0::AbstractMatrix, M_K1::AbstractMatrix, M_rhs::AbstractVector,
-    M_X::AbstractMatrix, M_Q::AbstractMatrix)
+    i1, i2, j1, j2, s1, s2, n, Δ, M_K0, M_K1, M_rhs, M_X, M_Q)
     m = s1 + s2
     rind = i1:j2
     K0  = M_K0[1:s1*s2, 1:s1*s2]
@@ -473,9 +471,7 @@ end
 
 # LAPACK routine for BLAS types
 @views @inline function _swap_adj_schur_blocks!(T::StridedMatrix{<:LinearAlgebra.BlasFloat}, Z::StridedMatrix{<:LinearAlgebra.BlasFloat},
-    i1::Int, i2::Int, j1::Int, j2::Int, s1::Int, s2::Int, n::Int,
-    Δ::AbstractMatrix, M_K0::AbstractMatrix, M_K1::AbstractMatrix, M_rhs::AbstractVector,
-    M_X::AbstractMatrix, M_Q::AbstractMatrix)
+    i1, _, j1, _, _, _, _, _, _, _, _, _, _)
     LAPACK.trexc!(j1, i1, T, Z)
 end
 
