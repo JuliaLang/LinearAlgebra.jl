@@ -816,14 +816,17 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
 end
 Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
         α::Number, β::Number) where {T<:Number}
-
     tA_uc = uppercase(tA) # potentially strip a WrapperChar
     aat = (tA_uc == 'N')
     if T <: Union{Real,Complex} && (iszero(β) || issymmetric(C))
         return copytri!(generic_syrk!(C, A, false, aat, α, β), 'U')
+    else
+        if aat
+            return _generic_matmatmul!(C, A, transpose(A), α, β)
+        else
+            return _generic_matmatmul!(C, transpose(A), A, α, β)
+        end
     end
-    tAt = aat ? 'T' : 'N'
-    return _generic_matmatmul!(C, wrap(A, tA), wrap(A, tAt), α, β)
 end
 # legacy method
 syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T}, _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
@@ -864,14 +867,17 @@ Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{TC}, tA::Abs
 end
 Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
         α::Number, β::Number) where {T<:Number}
-
     tA_uc = uppercase(tA) # potentially strip a WrapperChar
     aat = (tA_uc == 'N')
     if isreal(α) && isreal(β) && (iszero(β) || ishermitian(C))
         return copytri!(generic_syrk!(C, A, true, aat, α, β), 'U', true)
+    else
+        if aat
+            return _generic_matmatmul!(C, A, A', α, β)
+        else
+            return _generic_matmatmul!(C, A', A, α, β)
+        end
     end
-    tAt = aat ? 'C' : 'N'
-    return _generic_matmatmul!(C, wrap(A, tA), wrap(A, tAt), α, β)
 end
 # legacy method
 herk_wrapper!(C::Union{StridedMatrix{T}, StridedMatrix{Complex{T}}}, tA::AbstractChar, A::Union{StridedVecOrMat{T}, StridedVecOrMat{Complex{T}}},
