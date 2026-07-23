@@ -524,6 +524,7 @@ end
         tempblasint10_2 = zeros(BlasInt,10)
         @test_throws DimensionMismatch LAPACK.stein!(d,temp11,temp,tempblasint10,tempblasint10_2)
         @test_throws DimensionMismatch LAPACK.stein!(d,e,temp11,tempblasint10,tempblasint10_2)
+        @test_throws ArgumentError LAPACK.stein!([1.,2.,3.],[1.,2.],[0.,0.,0.],[1,1,1],[0,0,0])
     end
 end
 

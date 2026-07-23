@@ -104,8 +104,8 @@ function transpose_f!(f, B::AbstractMatrix, A::AbstractMatrix)
     m, n = length(inds[1]), length(inds[2])
     if m*n<=4*transposebaselength
         @inbounds begin
-            for j = inds[2]
-                for i = inds[1]
+            for i = inds[1]
+                for j = inds[2]
                     B[j,i] = f(A[i,j])
                 end
             end
@@ -118,8 +118,8 @@ end
 function transposeblock!(f, B::AbstractMatrix, A::AbstractMatrix, m::Int, n::Int, offseti::Int, offsetj::Int)
     if m*n<=transposebaselength
         @inbounds begin
-            for j = offsetj .+ (1:n)
-                for i = offseti .+ (1:m)
+            for i = offseti .+ (1:m)
+                for j = offsetj .+ (1:n)
                     B[j,i] = f(A[i,j])
                 end
             end

@@ -106,11 +106,11 @@ julia> Bidiagonal(A, :L) # contains the main diagonal and first subdiagonal of A
  ⋅  ⋅  4  4
 ```
 """
+Bidiagonal(A::AbstractMatrix, uplo::Symbol)
+
 function (::Type{Bi})(A::AbstractMatrix, uplo::Symbol) where {Bi<:Bidiagonal}
     Bi(diag(A, 0), diag(A, uplo === :U ? 1 : -1), uplo)
 end
-
-
 Bidiagonal(A::Bidiagonal) = A
 Bidiagonal{T}(A::Bidiagonal{T}) where {T} = A
 Bidiagonal{T}(A::Bidiagonal) where {T} = Bidiagonal{T}(A.dv, A.ev, A.uplo)
@@ -1439,8 +1439,8 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
 end
 
 # Eigensystems
-eigvals(M::Bidiagonal) = copy(M.dv)
-function eigvecs(M::Bidiagonal{T}) where T
+eigvals(M::Bidiagonal; sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
+function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
     n = length(M.dv)
     Q = Matrix{T}(undef, n,n)
     blks = [0; findall(iszero, M.ev); n]
@@ -1452,10 +1452,7 @@ function eigvecs(M::Bidiagonal{T}) where T
             for j = blks[idx_block] + 1:i - 1 #Starting from j=i, eigenvector elements will be 0
                 v[j+1] = (M.dv[i] - M.dv[j])/M.ev[j] * v[j]
             end
-            c = norm(v)
-            for j = 1:n
-                Q[j, i] = v[j] / c
-            end
+            Q[:, i] = normalize!(v)
         end
     else
         for idx_block = 1:length(blks) - 1, i = blks[idx_block + 1]:-1:blks[idx_block] + 1 #index of eigenvector
@@ -1464,15 +1461,12 @@ function eigvecs(M::Bidiagonal{T}) where T
             for j = (blks[idx_block+1] - 1):-1:max(1, (i - 1)) #Starting from j=i, eigenvector elements will be 0
                 v[j] = (M.dv[i] - M.dv[j+1])/M.ev[j] * v[j+1]
             end
-            c = norm(v)
-            for j = 1:n
-                Q[j, i] = v[j] / c
-            end
+            Q[:, i] = normalize!(v)
         end
     end
-    Q #Actually Triangular
+    return isnothing(sortby) ? Q : sorteig!(copy(M.dv), Q, sortby)[2]
 end
-eigen(M::Bidiagonal) = Eigen(eigvals(M), eigvecs(M))
+eigen(M::Bidiagonal; sortby=eigsortby) = Eigen(sorteig!(eigvals(M; sortby=nothing), eigvecs(M; sortby=nothing), sortby)...)
 
 Base._sum(A::Bidiagonal, ::Colon) = sum(A.dv) + sum(A.ev)
 function Base._sum(A::Bidiagonal, dims::Integer)

@@ -443,6 +443,11 @@ end
             @test isempty(normalize!(T[]))
         end
     end
+    a = [[1,2], [3,4]]
+    na = @inferred normalize(a)
+    @test norm(na) ≈ 1
+    @test na isa Vector{Vector{Float64}}
+    @test normalize!(convert(Vector{Vector{Float64}}, a)) ≈ na
 end
 
 @testset "normalize for multidimensional arrays" begin
@@ -478,21 +483,22 @@ end
 end
 
 @testset "potential overflow in normalize!" begin
-    δ = inv(prevfloat(typemax(Float64)))
+    δ = nextfloat(0.0)
     v = [δ, -δ]
 
-    @test norm(v) === 7.866824069956793e-309
+    @test norm(v) === 5.0e-324
     w = normalize(v)
     @test w ≈ [1/√2, -1/√2]
-    @test norm(w) === 1.0
     @test norm(normalize!(v) - w, Inf) < eps()
 end
 
 @testset "normalize with Infs. Issue 29681." begin
-    @test all(isequal.(normalize([1, -1, Inf]),
-                       [0.0, -0.0, NaN]))
-    @test all(isequal.(normalize([complex(1), complex(0, -1), complex(Inf, -Inf)]),
-                       [0.0 + 0.0im, 0.0 - 0.0im, NaN + NaN*im]))
+    for f in (normalize, normalize!)
+        @test all(isequal.(f([1, -1, Inf]),
+                           [0.0, -0.0, NaN]))
+        @test all(isequal.(f([complex(1), complex(0, -1), complex(Inf, -Inf)]),
+                           [0.0 + 0.0im, 0.0 - 0.0im, NaN + NaN*im]))
+    end
 end
 
 @testset "Issue 14657" begin

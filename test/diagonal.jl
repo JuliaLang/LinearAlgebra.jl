@@ -234,7 +234,7 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
             @test Array(D*a) ≈ DM*a
             @test Array(D/a) ≈ DM/a
             if elty <: Real
-                @test convert(Array, abs.(D)^a) ≈ abs.(DM)^a
+                @test convert(Array, abs.(D)^a) ≈ Matrix(abs.(DM))^a
             else
                 @test convert(Array, D^a) ≈ DM^a rtol=max(eps(relty), 1e-15) # TODO: improve precision
             end
@@ -1068,7 +1068,8 @@ end
 
 @testset "eigenvalue sorting" begin
     D = Diagonal([0.4, 0.2, -1.3])
-    @test eigvals(D) == eigen(D).values == [0.4, 0.2, -1.3] # not sorted by default
+    @test eigvals(D) == eigen(D).values == [-1.3, 0.2, 0.4] #sorted by default
+    @test eigvals(D; sortby=nothing) == eigen(D; sortby=nothing).values == [0.4, 0.2, -1.3]
     @test eigvals(D; sortby=LinearAlgebra.eigsortby) == [-1.3, 0.2, 0.4] # sortby keyword supported for eigvals(::Diagonal)
     @test eigvals(Matrix(D)) == eigen(Matrix(D)).values == [-1.3, 0.2, 0.4] # sorted even if diagonal special case is detected
     E = eigen(D; sortby=abs) # sortby keyword supported for eigen(::Diagonal)
@@ -1228,14 +1229,26 @@ end
     outTri = similar(TriA)
     out = similar(A)
     # 2 args
-    @testset for fun in (*, rmul!, rdiv!, /)
+    @testset for fun in (*, /)
         @test fun(copy(TriA), D)::Tri == fun(Matrix(TriA), D)
         @test fun(copy(UTriA), D)::Tri == fun(Matrix(UTriA), D)
     end
-    @testset for fun in (*, lmul!, ldiv!, \)
+    @testset for fun in (rmul!, rdiv!)
+        @test fun(copy(TriA), D)::Tri == fun(Matrix(TriA), D)
+        @test_throws ArgumentError fun(copy(UTriA), D) # issue #1600
+    end
+    @testset for fun in (*, \)
         @test fun(D, copy(TriA))::Tri == fun(D, Matrix(TriA))
         @test fun(D, copy(UTriA))::Tri == fun(D, Matrix(UTriA))
     end
+    @testset for fun in (lmul!, ldiv!)
+        @test fun(D, copy(TriA))::Tri == fun(D, Matrix(TriA))
+        @test_throws ArgumentError fun(D, copy(UTriA)) # issue #1600
+    end
+    @views TriA2 = Tri(copy(A)[[1, 2, 3, 4], [1, 2, 3, 4]]) #non-strided matrix
+    @test rmul!(TriA2, D) == rmul!(Matrix(TriA), D)
+    @views TriA2 = Tri(copy(A)[[1, 2, 3, 4], [1, 2, 3, 4]])
+    @test lmul!(D, TriA2) == lmul!(D, Matrix(TriA))
     # 3 args
     @test outTri === ldiv!(outTri, D, TriA)::Tri == ldiv!(out, D, Matrix(TriA))
     @test outTri === ldiv!(outTri, D, UTriA)::Tri == ldiv!(out, D, Matrix(UTriA))
@@ -1413,7 +1426,7 @@ end
 
     # AbstractArray out
     c = fill(0, 4, 4)
-    kron!(c, b, a) 
+    kron!(c, b, a)
     @test c == diagm([3, 6, 4, 8])
     @test c == kron!(fill(0, 4, 4), Matrix(b), Matrix(a)) # against dense kron!
     c = Matrix{Float64}(undef, 4, 4)

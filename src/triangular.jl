@@ -1044,6 +1044,11 @@ end
 +(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) = full(A) + full(B)
 +(A::AbstractTriangular, B::AbstractTriangular) = copyto!(similar(parent(A), size(A)), A) + copyto!(similar(parent(B), size(B)), B)
 
+zero(A::UpperTriangular) = UpperTriangular(zero(parent(A)))
+zero(A::LowerTriangular) = LowerTriangular(zero(parent(A)))
+zero(A::UnitUpperTriangular) = zero(UpperTriangular(parent(A)))
+zero(A::UnitLowerTriangular) = zero(LowerTriangular(parent(A)))
+
 function -(A::UpperTriangular, B::UpperTriangular)
     (parent(A) isa StridedMatrix || parent(B) isa StridedMatrix) && return A .- B
     UpperTriangular(A.data - B.data)
@@ -1238,7 +1243,7 @@ for (TA, TB) in ((:AbstractTriangular, :AbstractMatrix),
 end
 
 generic_matmatmul_NN!(C, A, B, alpha, beta) = generic_matmatmul!(C, 'N', 'N', A, B, alpha, beta)
-# Optimization for strided matrices, where we know that _generic_matmatmul! will be taken 
+# Optimization for strided matrices, where we know that _generic_matmatmul! will be taken
 for (TA, TB) in ((:UpperOrLowerTriangularStrided, :StridedMatrix),
                     (:StridedMatrix, :UpperOrLowerTriangularStrided),
                     (:UpperOrLowerTriangularStrided, :UpperOrLowerTriangularStrided)
@@ -1379,23 +1384,25 @@ end
 
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
-function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix})
-    LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data))
+function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+    return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix})
+function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
     for i in axes(A, 1)
         A.data[i,i] = 1
     end
-    LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data))
+    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
 end
-function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix})
-    LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)'))
+function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+    return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix})
+function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
     for i in axes(A, 1)
         A.data[i,i] = 1
     end
-    LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)'))
+    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
 end
 
 ####################
@@ -1977,7 +1984,7 @@ matop_dest(::typeof(\), A::UnitUpperOrUnitLowerTriangular, B) =
     similar(B, _inner_type_promotion(\, eltype(A), eltype(B)), size(B))
 
 matop_dest(::typeof(/), A, B::UnitUpperOrUnitLowerTriangular) =
-    similar(A, _inner_type_promotion(/, eltype(A), eltype(B)), size(A))    
+    similar(A, _inner_type_promotion(/, eltype(A), eltype(B)), size(A))
 ## The general promotion methods
 function mul(A::UpperOrLowerTriangular, B::AbstractMatrix)
     require_one_based_indexing(B)
@@ -2157,7 +2164,7 @@ function _log_quasitriu!(A0, A)
         R[i,i+1] = i / sqrt((2 * i)^2 - 1)
         R[i+1,i] = R[i,i+1]
     end
-    x,V = eigen(R)
+    x,V = eigen(R; sortby=nothing)
     w = Vector{Float64}(undef, m)
     for i in 1:m
         x[i] = (x[i] + 1) / 2
@@ -2645,7 +2652,7 @@ end
 
 sqrt(A::UpperTriangular; check::Bool=true) = sqrt_quasitriu(A, diagview(A); check) # matrix is upper triangular, so eigenvalues are just the diagonals
 # shouldn't need to do a check for UnitUpperTriangular because the eigenvalues are all 1, flag included so the function call lines up
-function sqrt(A::UnitUpperTriangular{T}; check=true) where T 
+function sqrt(A::UnitUpperTriangular{T}; check=true) where T
     B = A.data
     t = typeof(sqrt(zero(T)))
     R = Matrix{t}(I, size(A))
@@ -2671,7 +2678,7 @@ sqrt(A::UnitLowerTriangular; check::Bool=true) = copy(transpose(sqrt(copy(transp
 # A0 is triangular or quasitriangular matrix, evals is the eigenvalues
 function sqrt_quasitriu(A0, evals::AbstractVector; blockwidth = eltype(A0) <: Complex ? 512 : 256, check::Bool=true)
     n = checksquare(A0)
-    
+
     T = eltype(A0)
     Tr = typeof(sqrt(real(zero(T))))
     Tc = typeof(sqrt(complex(zero(T))))
@@ -2980,19 +2987,19 @@ end
 # End of auxiliary functions for matrix square root
 
 # Generic eigensystems
-eigvals(A::AbstractTriangular) = diag(A)
+eigvals(A::AbstractTriangular; sortby = eigsortby) = sorteig!(diag(A), sortby)
 # fallback for unknown types
-function eigvecs(A::AbstractTriangular{<:BlasFloat})
+function eigvecs(A::AbstractTriangular{<:BlasFloat}; sortby = eigsortby)
     if istriu(A)
-        eigvecs(UpperTriangular(Matrix(A)))
+        eigvecs(UpperTriangular(Matrix(A)); sortby)
     else # istril(A)
-        eigvecs(LowerTriangular(Matrix(A)))
+        eigvecs(LowerTriangular(Matrix(A)); sortby)
     end
 end
-function eigvecs(A::AbstractTriangular{T}) where T
+function eigvecs(A::AbstractTriangular{T}; sortby = eigsortby) where T
     TT = promote_type(T, Float32)
     if TT <: BlasFloat
-        return eigvecs(convert(AbstractMatrix{TT}, A))
+        return eigvecs(convert(AbstractMatrix{TT}, A); sortby)
     else
         throw(ArgumentError(lazy"eigvecs type $(typeof(A)) not supported. Please submit a pull request."))
     end
@@ -3016,7 +3023,7 @@ function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     return abs_det, sgn
 end
 
-eigen(A::AbstractTriangular) = Eigen(eigvals(A), eigvecs(A))
+eigen(A::AbstractTriangular; sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
 
 # Generic singular systems
 for func in (:svd, :svd!, :svdvals)
