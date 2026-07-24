@@ -1053,7 +1053,7 @@ generic_matvecmul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector
 """
     generic_matvecmul!(c::AbstractVector, tA, A::AbstractVecOrMat, b::AbstractVector, α::Number, β::Number)
 
-Combined inplace matrix-vector multiply-add ``A b α + c β`` (`tA == 'N'`),
+Calculates the combined matrix-vector multiply-add ``A b α + c β`` (`tA == 'N'`),
 ``A^⊤ b α + c β`` (`tA == 'T'`), or ``A' b α + c β`` (`tA == 'C'`).
 The result is stored in `c` by overwriting it.  Note that `c` must not be
 aliased with either `A` or `b`.
@@ -1151,10 +1151,10 @@ Base.@constprop :aggressive generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::A
 """
     generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number)
 
-Combined inplace matrix-matrix multiply-add ``A B α + C β`` (`tA == 'N'`),
-``A^⊤ B α + C β`` (`tA == 'T'`), or ``A' B α + C β`` (`tA == 'C'`), and potential matrix
-transpositions corresponding to `tB`. The result is stored in `C` by overwriting it.  Note that `C`
-must not be aliased with either `A` or `B`.
+Calculates the combined matrix-matrix multiply-add ``A B α + C β`` (`tA == 'N'`),
+``A^⊤ B α + C β`` (`tA == 'T'`), or ``A' B α + C β`` (`tA == 'C'`), with potential matrix
+transpositions of `B` corresponding to `tB`. The result is stored in `C` by overwriting it.  Note
+that `C` must not be aliased with either `A` or `B`.
 
 This is an abstraction layer below [`mul!`](@ref). Packages that provide their own storage type are
 advised to overload `generic_matmatmul!` instead of `mul!`.
