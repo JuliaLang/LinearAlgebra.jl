@@ -52,13 +52,13 @@ mul_wrappers = [
         @test LinearAlgebra.WrapperChar('c') == 'c'
         @test LinearAlgebra.WrapperChar('C') == 'C'
         @testset "constant propagation in uppercase/lowercase" begin
-            v = @inferred (() -> Val(uppercase(LinearAlgebra.WrapperChar('C'))))()
+            v = @inferred (() -> Val(LinearAlgebra._uppercase(LinearAlgebra.WrapperChar('C'))))()
             @test v isa Val{'C'}
-            v = @inferred (() -> Val(uppercase(LinearAlgebra.WrapperChar('s'))))()
+            v = @inferred (() -> Val(LinearAlgebra._uppercase(LinearAlgebra.WrapperChar('s'))))()
             @test v isa Val{'S'}
-            v = @inferred (() -> Val(lowercase(LinearAlgebra.WrapperChar('C'))))()
+            v = @inferred (() -> Val(LinearAlgebra._lowercase(LinearAlgebra.WrapperChar('C'))))()
             @test v isa Val{'c'}
-            v = @inferred (() -> Val(lowercase(LinearAlgebra.WrapperChar('s'))))()
+            v = @inferred (() -> Val(LinearAlgebra._lowercase(LinearAlgebra.WrapperChar('s'))))()
             @test v isa Val{'s'}
         end
     end
