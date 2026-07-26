@@ -8,9 +8,22 @@ const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
+testfiles = String[]
 for file in readlines(joinpath(@__DIR__, "testgroups"))
-    @info "Testing $file"
-    include(file * ".jl")
+    push!(testfiles, file * ".jl")
+end
+
+# ParallelTestRunner comes from the Pkg.test target; Julia base CI runs this
+# file without it and falls back to the serial path.
+if Base.find_package("ParallelTestRunner") !== nothing
+    using ParallelTestRunner
+    # Auto CPU thread count detection in ParallelTestRunner is bad
+    push!(ARGS, "--jobs=$(Sys.CPU_THREADS)")
+    testsuite = Dict{String,Expr}(splitext(f)[1] => :(include($(joinpath(@__DIR__, f))))
+                                  for f in testfiles)
+    runtests(LinearAlgebra, ARGS; testsuite)
+else
+    foreach(include, testfiles)
 end
 
 @testset "Docstrings" begin
