@@ -816,14 +816,17 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
 end
 Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
         α::Number, β::Number) where {T<:Number}
-
     tA_uc = uppercase(tA) # potentially strip a WrapperChar
     aat = (tA_uc == 'N')
     if T <: Union{Real,Complex} && (iszero(β) || issymmetric(C))
         return copytri!(generic_syrk!(C, A, false, aat, α, β), 'U')
+    else
+        if aat
+            return _generic_matmatmul!(C, A, transpose(A), α, β)
+        else
+            return _generic_matmatmul!(C, transpose(A), A, α, β)
+        end
     end
-    tAt = aat ? 'T' : 'N'
-    return _generic_matmatmul!(C, wrap(A, tA), wrap(A, tAt), α, β)
 end
 # legacy method
 syrk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T}, _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
@@ -864,14 +867,17 @@ Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{TC}, tA::Abs
 end
 Base.@constprop :aggressive function herk_wrapper!(C::StridedMatrix{T}, tA::AbstractChar, A::StridedVecOrMat{T},
         α::Number, β::Number) where {T<:Number}
-
     tA_uc = uppercase(tA) # potentially strip a WrapperChar
     aat = (tA_uc == 'N')
     if isreal(α) && isreal(β) && (iszero(β) || ishermitian(C))
         return copytri!(generic_syrk!(C, A, true, aat, α, β), 'U', true)
+    else
+        if aat
+            return _generic_matmatmul!(C, A, A', α, β)
+        else
+            return _generic_matmatmul!(C, A', A, α, β)
+        end
     end
-    tAt = aat ? 'C' : 'N'
-    return _generic_matmatmul!(C, wrap(A, tA), wrap(A, tAt), α, β)
 end
 # legacy method
 herk_wrapper!(C::Union{StridedMatrix{T}, StridedMatrix{Complex{T}}}, tA::AbstractChar, A::Union{StridedVecOrMat{T}, StridedVecOrMat{Complex{T}}},
@@ -1043,6 +1049,19 @@ end
 # legacy method, retained for backward compatibility
 generic_matvecmul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector, _add::MulAddMul = MulAddMul()) =
     generic_matvecmul!(C, tA, A, B, _add.alpha, _add.beta)
+
+"""
+    generic_matvecmul!(c::AbstractVector, tA, A::AbstractVecOrMat, b::AbstractVector, α::Number, β::Number)
+
+Calculates the combined matrix-vector multiply-add ``A b α + c β`` (`tA == 'N'`),
+``A^⊤ b α + c β`` (`tA == 'T'`), or ``A' b α + c β`` (`tA == 'C'`).
+The result is stored in `c` by overwriting it.  Note that `c` must not be
+aliased with either `A` or `b`.
+
+This is an abstraction layer below [`mul!`](@ref) used to dispatch on storage types.
+Packages that provide their own storage type are advised to overload `generic_matvecmul!`
+instead of `mul!`.
+"""
 @inline function generic_matvecmul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector,
                                     alpha::Number, beta::Number)
     tA_uc = uppercase(tA) # potentially convert a WrapperChar to a Char
@@ -1129,6 +1148,18 @@ end
 # legacy method
 Base.@constprop :aggressive generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, _add::MulAddMul = MulAddMul()) =
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), _add.alpha, _add.beta)
+
+"""
+    generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number)
+
+Calculates the combined matrix-matrix multiply-add ``A B α + C β`` (`tA == 'N'`),
+``A^⊤ B α + C β`` (`tA == 'T'`), or ``A' B α + C β`` (`tA == 'C'`), with potential matrix
+transpositions of `B` corresponding to `tB`. The result is stored in `C` by overwriting it.  Note
+that `C` must not be aliased with either `A` or `B`.
+
+This is an abstraction layer below [`mul!`](@ref). Packages that provide their own storage type are
+advised to overload `generic_matmatmul!` instead of `mul!`.
+"""
 Base.@constprop :aggressive generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
 
