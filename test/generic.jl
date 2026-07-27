@@ -985,4 +985,8 @@ end
     end
 end
 
+@testset "dummy test" begin
+    @test LinearAlgebra.mytestfun()
+end
+
 end # module TestGeneric
