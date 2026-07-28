@@ -1,7 +1,5 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-mytestfun() = true
-
 ## linalg.jl: Some generic Linear Algebra definitions
 
 # Elements of `out` may not be defined (e.g., for `BigFloat`). To make
