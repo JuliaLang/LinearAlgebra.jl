@@ -117,6 +117,7 @@ julia> [1 1; 0 1] * [1 0; 1 1]
 # We also define the core functionality within _mul to reuse the code elsewhere
 mul(A::AbstractMatrix, B::AbstractMatrix) = _mul(A, B)
 function _mul(A::AbstractMatrix, B::AbstractMatrix)
+    @assert false
     matmul_size_check(size(A), size(B))
     postop_proc(*, mul!(matop_dest(*, A, B), A, B), A, B)
 end

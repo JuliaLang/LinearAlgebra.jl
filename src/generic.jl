@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-mytestfun() = true
+mytestfun() = false
 
 ## linalg.jl: Some generic Linear Algebra definitions
 
