@@ -1164,7 +1164,7 @@ Base.@constprop :aggressive mul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMa
     generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
 
 # indirection via `generic_matmatmul!` to avoid breakage of packages
-generic_matmatmul!(C, tA, tB, A, B, alpha, beta)(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
+generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
     _generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
 
 # legacy method
