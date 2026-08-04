@@ -1747,12 +1747,19 @@ for (gemm, elty) in
             chkstride1(B)
             chkstride1(C)
             _cancel_prepare(Float64(m) * Float64(n) * Float64(ka))
+            # The annotation implies no cancellation point: the pre-call
+            # check binds the calling task's governing source (which gates
+            # delivery), and the post-call check throws a cancellation
+            # delivered mid-operation before the aborted (garbage) output
+            # can escape.
+            Base.@cancel_check
             @ccall(cancel_handler=(@cfunction(_cancel_handler, Cvoid, (Ptr{Cvoid}, UInt8)), C_NULL),
                 libblastrampoline.$fname(
                     transA::Ref{UInt8}, transB::Ref{UInt8}, m::Ref{BlasInt}, n::Ref{BlasInt},
                     ka::Ref{BlasInt}, alpha::Ref{$elty}, A::Ptr{$elty}, max(1,stride(A,2))::Ref{BlasInt},
                     B::Ptr{$elty}, max(1,stride(B,2))::Ref{BlasInt}, beta::Ref{$elty}, C::Ptr{$elty},
                     max(1,stride(C,2))::Ref{BlasInt}, 1::Clong, 1::Clong)::Cvoid)
+            Base.@cancel_check
             C
         end
         function gemm(transA::AbstractChar, transB::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
@@ -1826,12 +1833,16 @@ for (mfname, elty) in ((:dsymm_,:Float64),
             chkstride1(B)
             chkstride1(C)
             _cancel_prepare(Float64(m) * Float64(n) * Float64(j))
+            # See gemm!: bind the governing source before the call, observe
+            # a delivered cancellation after it.
+            Base.@cancel_check
             @ccall(cancel_handler=(@cfunction(_cancel_handler, Cvoid, (Ptr{Cvoid}, UInt8)), C_NULL),
                 libblastrampoline.$fname(
                     side::Ref{UInt8}, uplo::Ref{UInt8}, m::Ref{BlasInt}, n::Ref{BlasInt},
                     alpha::Ref{$elty}, A::Ptr{$elty}, max(1,stride(A,2))::Ref{BlasInt}, B::Ptr{$elty},
                     max(1,stride(B,2))::Ref{BlasInt}, beta::Ref{$elty}, C::Ptr{$elty}, max(1,stride(C,2))::Ref{BlasInt},
                     1::Clong, 1::Clong)::Cvoid)
+            Base.@cancel_check
             C
         end
         function symm(side::AbstractChar, uplo::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
@@ -1915,12 +1926,16 @@ for (mfname, elty) in ((:zhemm_,:ComplexF64),
             chkstride1(B)
             chkstride1(C)
             _cancel_prepare(Float64(m) * Float64(n) * Float64(j))
+            # See gemm!: bind the governing source before the call, observe
+            # a delivered cancellation after it.
+            Base.@cancel_check
             @ccall(cancel_handler=(@cfunction(_cancel_handler, Cvoid, (Ptr{Cvoid}, UInt8)), C_NULL),
                 libblastrampoline.$fname(
                     side::Ref{UInt8}, uplo::Ref{UInt8}, m::Ref{BlasInt}, n::Ref{BlasInt},
                     alpha::Ref{$elty}, A::Ptr{$elty}, max(1,stride(A,2))::Ref{BlasInt}, B::Ptr{$elty},
                     max(1,stride(B,2))::Ref{BlasInt}, beta::Ref{$elty}, C::Ptr{$elty}, max(1,stride(C,2))::Ref{BlasInt},
                     1::Clong, 1::Clong)::Cvoid)
+            Base.@cancel_check
             C
         end
         function hemm(side::AbstractChar, uplo::AbstractChar, alpha::($elty), A::AbstractMatrix{$elty}, B::AbstractMatrix{$elty})
