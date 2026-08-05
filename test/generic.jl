@@ -988,9 +988,12 @@ end
 @testset "$fn requires square matrices" for fn in (det, logdet, logabsdet)
     # general rectangular matrix, G
     @test_throws DimensionMismatch fn(ones(3, 2))
+    @test_throws DimensionMismatch fn(ones(BigInt, 3, 2))
     # rectangular matrices where istriu(A) or istril(A) is true
     @test_throws DimensionMismatch fn([I ones(2, 1)])
     @test_throws DimensionMismatch fn([I; ones(1, 2)])
+    @test_throws DimensionMismatch fn([I ones(BigInt, 2, 1)])
+    @test_throws DimensionMismatch fn([I; ones(BigInt, 1, 2)])
 end
 
 end # module TestGeneric
