@@ -483,28 +483,25 @@ end
     )
 end
 
-# We may inline the matmul2x2! and matmul3x3! calls for `α == true`
-# to simplify the @stable_muladdmul branches
-function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β)
-    if size(C) == size(A) == size(B) == (2,2)
-        matmul2x2!(C, tA, tB, A, B, α, β)
-        return true
+function matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β)
+    if α isa Bool
+        # Optimization: A precondition is that `α` is nonzero, so if `α isa Bool`,
+        # `α === true` follows. Let the compiler know.
+        α = true
     end
-    if size(C) == size(A) == size(B) == (3,3)
-        matmul3x3!(C, tA, tB, A, B, α, β)
-        return true
-    end
-    return false
-end
-function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α::Bool, β)
-    if size(C) == size(A) == size(B) == (2,2)
-        Aelements, Belements = _matmul2x2_elements(C, tA, tB, A, B)
-        @stable_muladdmul _modify2x2!(Aelements, Belements, C, MulAddMul(true, β))
-        return true
-    end
-    if size(C) == size(A) == size(B) == (3,3)
-        Aelements, Belements = _matmul3x3_elements(C, tA, tB, A, B)
-        @stable_muladdmul _modify3x3!(Aelements, Belements, C, MulAddMul(true, β))
+    (nA, mA) = lapack_size(tA, A)
+    (mB, kB) = lapack_size(tB, B)
+    (n, k) = lapack_size('N', C)
+    product_is_empty = iszero(n) || iszero(k)  # `isempty(C)`
+    if (n == nA) && (mA == mB) && (k == kB) && (product_is_empty || (n == mA == k ≤ 3))
+        if n == 1
+            matmul1x1!(C, tA, tB, A, B, α, β)
+        elseif n == 2
+            matmul2x2!(C, tA, tB, A, B, α, β)
+        elseif n == 3
+            matmul3x3!(C, tA, tB, A, B, α, β)
+        end
+        # for `n == 0` the product is empty, so there is nothing to do
         return true
     end
     return false
@@ -556,7 +553,7 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
     if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
         return _rmul_or_fill!(C, β)
     end
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
     alpha, beta = promote(α, β, zero(T))
     blasfn = _valtypeparam(val)
     if alpha isa Union{Bool,T} && beta isa Union{Bool,T} && blasfn ∈ (BlasFlag.SYMM, BlasFlag.HEMM)
@@ -912,7 +909,7 @@ Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::Ab
     mB, nB = lapack_size(tB, B)
 
     matmul_size_check(size(C), (mA, nA), (mB, nB))
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
 
     if C === A || B === C
         throw(ArgumentError("output matrix must not be aliased with input matrix"))
@@ -935,7 +932,7 @@ gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
 Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
                        A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
                        α::Number, β::Number) where {T<:Number}
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
     return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
 end
 
@@ -1254,16 +1251,82 @@ function _generic_matmatmul_generic!(C, A, B, alpha, beta)
     C
 end
 
+# multiply small matrices
+
+struct MatMulSmall!{M, N} <: Function end
+
+const matmul1x1! = MatMulSmall!{1, 1}()
+const matmul2x2! = MatMulSmall!{2, 2}()
+const matmul3x3! = MatMulSmall!{3, 3}()
+
+function (m::MatMulSmall!)(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, α = true)
+    β = false
+    m(C, tA, tB, A, B, α, β)
+end
+
+# multiply 1x1 matrices
+
+function __matmul1x1_elements(tA, A::AbstractVecOrMat)
+    @inbounds begin
+    tA_uc = uppercase(tA) # possibly unwrap a WrapperChar
+    a11 = A[1,1]
+    if tA_uc == 'N'
+        A11 = a11
+    elseif tA_uc == 'T'
+        # TODO making these lazy could improve perf
+        A11 = copy(transpose(a11))
+    elseif tA_uc == 'C'
+        # TODO making these lazy could improve perf
+        A11 = copy(a11')
+    elseif tA_uc == 'S'
+        if isuppercase(tA) # tA == 'S'
+            A11 = symmetric(a11, :U)
+        else
+            A11 = symmetric(a11, :L)
+        end
+    elseif tA_uc == 'H'
+        if isuppercase(tA) # tA == 'H'
+            A11 = hermitian(a11, :U)
+        else # if tA == 'h'
+            A11 = hermitian(a11, :L)
+        end
+    end
+    end # inbounds
+    (A11,)
+end
+
+__matmul1x1_elements(tA, tB, A, B) = __matmul1x1_elements(tA, A), __matmul1x1_elements(tB, B)
+
+function _matmul1x1_elements(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat)
+    __matmul_checks(C, A, B, (1,1))
+    __matmul1x1_elements(tA, tB, A, B)
+end
+
+function _modify1x1!(Aelements, Belements, C, _add)
+    (A11,), (B11,) = Aelements, Belements
+    @inbounds _modify!(_add, A11*B11, C, (1,1))
+    C
+end
+
+function matmul1x1!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, α, β)
+    Aelements, Belements = _matmul1x1_elements(C, tA, tB, A, B)
+    @stable_muladdmul _modify1x1!(Aelements, Belements, C, MulAddMul(α, β))
+    C
+end
+
 # multiply 2x2 matrices
 
 function __matmul_checks(C, A, B, sz)
     require_one_based_indexing(C, A, B)
-    matmul_size_check(size(C), size(A), size(B))
+    shape_A = lapack_size('N', A)
+    shape_B = lapack_size('N', B)
+    shape_C = lapack_size('N', C)
+    matmul_size_check(shape_C, shape_A, shape_B)
     if C === A || B === C
         throw(ArgumentError("output matrix must not be aliased with input matrix"))
     end
-    if !(size(A) == size(B) == sz) # if A and B are both of size sz, C must also be of size sz for the matmul_size_check to pass
-        pos, mismatched_sz = size(A) != sz ? ("first", size(A)) : ("second", size(B))
+    if !(shape_A == shape_B == sz) # if A and B are both of size sz, C must also be of size sz for the matmul_size_check to pass
+        pos, mismatched_sz = shape_A != sz ? ("first", shape_A) : ("second", shape_B)
         throw(DimensionMismatch(lazy"expected size: $sz, but got size $mismatched_sz for the $pos matrix"))
     end
     return nothing
@@ -1319,8 +1382,7 @@ function _modify2x2!(Aelements, Belements, C, _add)
     end # inbounds
     C
 end
-function matmul2x2!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix,
-                    α = true, β = false)
+function matmul2x2!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix, α, β)
     Aelements, Belements = _matmul2x2_elements(C, tA, tB, A, B)
     @stable_muladdmul _modify2x2!(Aelements, Belements, C, MulAddMul(α, β))
     C
@@ -1394,9 +1456,7 @@ function _modify3x3!(Aelements, Belements, C, _add)
     end # inbounds
     C
 end
-function matmul3x3!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix,
-                    α = true, β = false)
-
+function matmul3x3!(C::AbstractMatrix, tA, tB, A::AbstractMatrix, B::AbstractMatrix, α, β)
     Aelements, Belements = _matmul3x3_elements(C, tA, tB, A, B)
     @stable_muladdmul _modify3x3!(Aelements, Belements, C, MulAddMul(α, β))
     C
