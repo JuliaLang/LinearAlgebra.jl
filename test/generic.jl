@@ -524,6 +524,7 @@ end
 @testset "Issue 40128" begin
     @test det(BigInt[9 1 8 0; 0 0 8 7; 7 6 8 3; 2 9 7 7])::BigInt == -1
     @test det(BigInt[1 big(2)^65+1; 3 4])::BigInt == (4 - 3*(big(2)^65+1))
+    @test det(BigInt[big(2)^65+1 1; 0 big(2)^65-1])::BigInt == big(2)^130 - 1
 end
 
 # Minimal modulo number type - but not subtyping Number
