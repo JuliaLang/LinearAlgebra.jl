@@ -517,7 +517,7 @@ end
             # this should have worked before, Q is square, and R is 0 × 0:
             A_zero_cols = rand(F, dimA, 0)
             qr_zero_cols = qr(A_zero_cols)
-            @test size(qr_zero_cols.Q) == (dimA, dimA)
+            @test size(qr_zero_cols.Q) == (dimA, dimA)
             @test size(qr_zero_cols.R) == (0, 0)
             @test qr_zero_cols.Q == LinearAlgebra.I(dimA)
 
@@ -540,6 +540,25 @@ end
 
     @test rank(qr([1.0 2.0; 2.0 4.0], ColumnNorm())) == 1
     @test rank(qr([1.0 2.0 3.0; 4.0 5.0 6.0 ; 7.0 8.0 9.0], ColumnNorm())) == 2
+end
+
+@testset "QRCompactWY equality/hash" begin
+    @testset "$(size(A))" for A in (zeros(0, 0), zeros(0, 3), zeros(3, 0))
+        F, G = qr(A), qr(A)
+        @test F == G
+        @test isequal(F, G)
+        @test hash(F) == hash(G)
+    end
+
+    @testset "QRCompactWY equality checks T shape" begin
+        # This is a contrived example, but ensures that we don't violate the hash contract
+        F = LinearAlgebra.QRCompactWY(zeros(1, 1), reshape([1.0], 1, 1))
+        G = LinearAlgebra.QRCompactWY(zeros(1, 1), reshape([1.0 99.0], 1, 2))
+
+        @test F != G
+        @test !isequal(F, G)
+        @test hash(F) != hash(G)
+    end
 end
 
 end # module TestQR
