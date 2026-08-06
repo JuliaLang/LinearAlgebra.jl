@@ -1852,7 +1852,12 @@ end
 det(x::Number) = x
 
 # Resolve Issue #40128
-det(A::AbstractMatrix{BigInt}) = det_bareiss(A)
+function det(A::AbstractMatrix{BigInt})
+    if istriu(A) || istril(A)
+        return det(UpperTriangular(A))
+    end
+    return det_bareiss(A)
+end
 
 """
     logabsdet(M)
