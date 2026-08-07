@@ -222,4 +222,37 @@ end
     @test fact1.Z * fact1.T * fact1.Z' ≈ B
 end
 
+@testset "Arbitrary ordschur" begin
+    N = 4
+    # Real-valued matrix, real-valued eigenvalues
+    A = randn(N,N)
+    D = Diagonal(randn(N))
+    X = (A*D)/A
+    S = schur(X)
+    p = randperm(N)
+    S1 = ordschur!(copy(S),p)
+    @test S1.values ≈ S.values[p]
+    @test diag(S1.T) ≈ S.values[p]
+    # Bigfloat addendum
+    SB = Schur(big.(S.T), big.(S.Z), big.(S.values))
+    S2 = ordschur!(copy(SB),p)
+    @test S2.values ≈ SB.values[p]
+    @test diag(S2.T) ≈ SB.values[p]
+
+    # Complex-valued matrix, complex-valued eigenvalues
+    A = complex.(randn(N,N),randn(N,N))
+    D = Diagonal(complex.(randn(N),randn(N)))
+    X = (A*D)/A
+    S = schur(X)
+    p = randperm(N)
+    S1 = ordschur!(copy(S),p)
+    @test S1.values ≈ S.values[p]
+    @test diag(S1.T) ≈ S.values[p]
+    # Bigfloat addendum
+    SB = Schur(big.(S.T), big.(S.Z), big.(S.values))
+    S2 = ordschur!(copy(SB),p)
+    @test S2.values ≈ SB.values[p]
+    @test diag(S2.T) ≈ SB.values[p]
+end
+
 end # module TestSchur

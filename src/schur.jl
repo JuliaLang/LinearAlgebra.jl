@@ -303,6 +303,8 @@ real case, a complex conjugate pair of eigenvalues must be either both included 
         ACM Transactions on Mathematical Software Volume 32 Issue 4 pp 521-532
         https://doi.org/10.1145/1186785.1186787
 """
+function ordschur!(S::Schur, p::AbstractVector{<:Integer}) end
+
 @views @inbounds function ordschur!(S::Schur, p::AbstractVector{<:Integer})
     T = S.T
     Z = S.Z
