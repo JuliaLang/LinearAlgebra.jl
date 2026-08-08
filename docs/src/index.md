@@ -616,8 +616,6 @@ below (e.g. `mul!`) according to the usual Julia convention.
 
 ```@docs
 LinearAlgebra.mul!
-LinearAlgebra.generic_matvecmul!
-LinearAlgebra.generic_matmatmul!
 LinearAlgebra.lmul!
 LinearAlgebra.rmul!
 LinearAlgebra.ldiv!
