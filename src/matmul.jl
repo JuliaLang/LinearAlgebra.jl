@@ -1160,12 +1160,12 @@ that `C` must not be aliased with either `A` or `B`.
 This is an abstraction layer below [`mul!`](@ref). Packages that provide their own storage type are
 advised to overload this method instead of 5-arg `mul!`.
 """
-Base.@constprop :aggressive mul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
-    generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
+mul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
+    generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
 
 # indirection via `generic_matmatmul!` to avoid breakage of packages
-generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
-    _generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+Base.@constprop :aggressive generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
+    _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
 
 # legacy method
 _generic_matmatmul!(C::AbstractVecOrMat, A::AbstractVecOrMat, B::AbstractVecOrMat, _add::MulAddMul) =
