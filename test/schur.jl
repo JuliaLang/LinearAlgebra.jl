@@ -253,6 +253,33 @@ end
     S2 = ordschur!(copy(SB),p)
     @test S2.values ≈ SB.values[p]
     @test diag(S2.T) ≈ SB.values[p]
+
+    # Real-valued matrices with complex-valued eigenvalues
+    A = randn(N,N)
+    D = zeros(N,N)
+    np = rand(1:N÷2)
+    bs = shuffle([fill(2,np); fill(1,N-2np)])
+    i = 1
+    for n in bs
+        D[i:i+n-1,i:i+n-1] = n == 1 ? randn(1,1) : begin a,b = randn(2); [a b; -b a] end
+        i += n
+    end
+    X = (A*D)/A
+    S = schur(X)
+    I = findall(i -> i == 1 || iszero(S.T[i,i-1]), 1:N)
+    bs = [I[i]:(i < length(I) ? I[i+1]-1 : N) for i in eachindex(I)]
+    p = [j for r in shuffle(bs) for j in r]
+    S1 = ordschur!(copy(S),p)
+    @test S1.values ≈ S.values[p]
+    # Bigfloat addendum
+    SB = Schur(big.(S.T),big.(S.Z),big.(S.values))
+    S2 = ordschur!(copy(SB),p)
+    @test S2.values ≈ SB.values[p]
+    i = findfirst(!isreal,S.values)
+    j = first(k for k in 1:N if k ∉ (i,i+1))
+    p = [i,j,i+1,(k for k in 1:N if k ∉ (i,i+1,j))...]
+    @test_throws ArgumentError ordschur!(copy(S),p)
+    @test_throws ArgumentError ordschur!(copy(SB),p)
 end
 
 end # module TestSchur
