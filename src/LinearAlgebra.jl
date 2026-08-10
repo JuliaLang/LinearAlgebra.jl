@@ -846,7 +846,19 @@ end
 function __init__()
     # If users want to lazily load a different BLAS, they'd need to either change this call, or
     # clear the datastructures modified by this call and call it again with their own.
-    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, lbt_openblas_onload_callback)
+    #
+    # The callback is passed pre-erased with a statically-typed `@cfunction` so
+    # that no runtime trampoline is needed, which keeps this path compileable
+    # under `--trim` (see `Libdl.ErasedCallable`). The gate must be `@static`:
+    # a runtime `isdefined` check would leave a dynamic call in the compiled
+    # not-taken branch on Julia versions without `ErasedCallable`.
+    @static if isdefined(Libdl, :ErasedCallable)
+        callback = Libdl.ErasedCallable(lbt_openblas_onload_callback,
+                                        @cfunction(lbt_openblas_onload_callback, Any, ()))
+    else
+        callback = lbt_openblas_onload_callback
+    end
+    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, callback)
 end
 
 end # module LinearAlgebra
