@@ -1055,9 +1055,13 @@ Calculates the combined matrix-vector multiply-add ``A b α + c β`` (`tA == 'N'
 The result is stored in `c` by overwriting it.  Note that `c` must not be
 aliased with either `A` or `b`.
 
-This is an abstraction layer below [`mul!`](@ref) used to dispatch on storage types.
+This is an abstraction layer below 5-arg [`mul!`](@ref) used to dispatch on storage types.
 Packages that provide their own storage type are advised to overload this method signature
 instead of 5-arg `mul!`.
+
+!!! compat "Julia 1.13"
+    This method requires at least Julia 1.13 and supersedes the non-public `generic_matvecmul!`
+    method with the same signature.
 """
 mul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector, alpha::Number, beta::Number) =
     generic_matvecmul!(C, tA, A, B, alpha, beta)
@@ -1157,8 +1161,12 @@ Calculates the combined matrix-matrix multiply-add ``A B α + C β`` (`tA == 'N'
 transpositions of `B` corresponding to `tB`. The result is stored in `C` by overwriting it.  Note
 that `C` must not be aliased with either `A` or `B`.
 
-This is an abstraction layer below [`mul!`](@ref). Packages that provide their own storage type are
-advised to overload this method instead of 5-arg `mul!`.
+This is an abstraction layer below 5-arg [`mul!`](@ref). Packages that provide their own storage type
+are advised to overload this method instead of 5-arg `mul!`.
+
+!!! compat "Julia 1.13"
+    This method requires at least Julia 1.13 and supersedes the non-public `generic_matmatmul!`
+    method with the same signature.
 """
 mul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
     generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
