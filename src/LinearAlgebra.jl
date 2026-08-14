@@ -171,8 +171,6 @@ export
 public AbstractTriangular,
         Givens,
         checksquare,
-        generic_matmatmul!,
-        generic_matvecmul!,
         haszero,
         hermitian,
         hermitian_type,
