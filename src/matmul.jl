@@ -341,7 +341,7 @@ end
         end
     end
 
-    mul_wrapper!(
+    generic_matmatmul_wrapper!(
         C,
         tA,
         tB,
@@ -355,7 +355,7 @@ end
 # this indirection allows is to specialize on the types of the wrappers of A and B to some extent,
 # even though the wrappers are stripped off in mul!
 # By default, we ignore the wrapper info and forward the arguments to generic_matmatmul!
-mul_wrapper!(C, tA, tB, A, B, α, β, @nospecialize(val)) = mul!(C, tA, tB, A, B, α, β)
+generic_matmatmul_wrapper!(C, tA, tB, A, B, α, β, @nospecialize(val)) = mul!(C, tA, tB, A, B, α, β)
 
 """
     rmul!(A, B)
@@ -508,7 +508,7 @@ function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α::Bool, β)
 end
 
 # THE one big BLAS dispatch. This is split into syrk/herk/gemm and symm/hemm/none methods to improve latency
-Base.@constprop :aggressive function mul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
+Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
                                     α::Number, β::Number, val::BlasFlag.SyrkHerkGemm) where {T<:Number}
     mA, nA = lapack_size(tA, A)
     mB, nB = lapack_size(tB, B)
@@ -520,7 +520,7 @@ Base.@constprop :aggressive function mul_wrapper!(C::StridedMatrix{T}, tA, tB, A
     return C
 end
 
-function mul_wrapper!(C::StridedVecOrMat{Complex{T}}, tA, tB, A::StridedVecOrMat{Complex{T}}, B::StridedVecOrMat{T},
+function generic_matmatmul_wrapper!(C::StridedVecOrMat{Complex{T}}, tA, tB, A::StridedVecOrMat{Complex{T}}, B::StridedVecOrMat{T},
                     α::Number, β::Number, ::Val{BlasFlag.GEMM}) where {T<:BlasReal}
     gemm_wrapper!(C, tA, tB, A, B, α, β)
 end
@@ -545,7 +545,7 @@ Base.@constprop :aggressive function _syrk_herk_gemm_wrapper!(C, tA, tB, A, B, �
     return gemm_wrapper!(C, tA, tB, A, B, α, β)
 end
 _valtypeparam(v::Val{T}) where {T} = T
-Base.@constprop :aggressive function mul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
+Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
                                     α::Number, β::Number, val::BlasFlag.SymmHemmGeneric) where {T<:BlasFloat}
     mA, nA = lapack_size(tA, A)
     mB, nB = lapack_size(tB, B)
