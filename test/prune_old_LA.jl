@@ -64,10 +64,7 @@ let
                 end
             end
         end
-        # Calls that pass keyword arguments are dispatched through `Core.kwcall`, and
-        # the corresponding methods aren't listed in `methods(f)`, so they need to be
-        # deleted separately. Otherwise, e.g. `isapprox(x, y; norm)` would silently
-        # continue to be handled by the sysimage version of the method.
+
         for meth in methods(Core.kwcall)
             meth.module === LA || continue
             sig = Base.unwrap_unionall(meth.sig)
