@@ -624,6 +624,11 @@ function Base.Char(w::WrapperChar)
     end
 end
 WrapperChar(c::Char) = WrapperChar(c, _isuppercase(c))
+# The `AbstractChar` interface requires `codepoint` and construction from `UInt32`;
+# generic char operations are built on top of these — e.g. `Base.uppercase`, which
+# SparseArrays applies to the wrapper chars we pass to `generic_matvecmul!`.
+Base.codepoint(w::WrapperChar) = codepoint(Char(w))
+WrapperChar(n::UInt32) = WrapperChar(Char(n))
 # We extract the wrapperchar so that the result may be constant-propagated
 # This doesn't return a value of the same type on purpose
 _uppercase(w::WrapperChar) = _uppercase(w.wrapperchar)

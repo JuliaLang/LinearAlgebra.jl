@@ -61,6 +61,23 @@ mul_wrappers = [
             v = @inferred (() -> Val(LinearAlgebra._lowercase(LinearAlgebra.WrapperChar('s'))))()
             @test v isa Val{'s'}
         end
+        @testset "AbstractChar interface" begin
+            # `codepoint` and construction from a codepoint are required by the
+            # `AbstractChar` interface, functions like `uppercase` fail otherwise
+            WC = LinearAlgebra.WrapperChar
+            @test codepoint(WC('S', true)) == codepoint('S')
+            @test codepoint(WC('S', false)) == codepoint('s')
+            @test WC(UInt32('C')) == 'C'
+            for c in ('S', 'H'), isuppertri in (true, false)
+                w = WC(c, isuppertri)
+                @test isascii(w)
+                @test uppercase(w) == c
+                @test lowercase(w) == lowercase(c)
+                @test isuppercase(w) == isuppertri
+            end
+            @test uppercase(LinearAlgebra.wrapper_char(Symmetric(rand(2, 2), :L))) == 'S'
+            @test uppercase(LinearAlgebra.wrapper_char(Hermitian(rand(ComplexF64, 2, 2), :L))) == 'H'
+        end
     end
 end
 
