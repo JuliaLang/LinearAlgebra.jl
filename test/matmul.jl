@@ -63,9 +63,7 @@ mul_wrappers = [
         end
         @testset "AbstractChar interface" begin
             # `codepoint` and construction from a codepoint are required by the
-            # `AbstractChar` interface, and generic char operations are built on
-            # them — e.g. `Base.uppercase`, which SparseArrays applies to the
-            # wrapper chars we pass to its `generic_matvecmul!`
+            # `AbstractChar` interface, functions like `uppercase` fail otherwise
             WC = LinearAlgebra.WrapperChar
             @test codepoint(WC('S', true)) == codepoint('S')
             @test codepoint(WC('S', false)) == codepoint('s')
