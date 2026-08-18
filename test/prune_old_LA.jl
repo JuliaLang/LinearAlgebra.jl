@@ -54,12 +54,27 @@ let
     LA = get(Base.loaded_modules, LinalgSysImg, nothing)
     if LA !== nothing && prune_old_LA
         @assert hasmethod(*, Tuple{Matrix{Float64}, Matrix{Float64}})
+        ftypes_to_delete = Set{Any}()
         for methss in methods_to_delete
             meths = getglobal(Base, methss)
+            push!(ftypes_to_delete, typeof(meths))
             for meth in methods(meths)
                 if meth.module === LA
                     Base.delete_method(meth)
                 end
+            end
+        end
+        # Calls that pass keyword arguments are dispatched through `Core.kwcall`, and
+        # the corresponding methods aren't listed in `methods(f)`, so they need to be
+        # deleted separately. Otherwise, e.g. `isapprox(x, y; norm)` would silently
+        # continue to be handled by the sysimage version of the method.
+        for meth in methods(Core.kwcall)
+            meth.module === LA || continue
+            sig = Base.unwrap_unionall(meth.sig)
+            # signature: Tuple{typeof(Core.kwcall), NamedTuple, typeof(f), args...}
+            length(sig.parameters) >= 3 || continue
+            if sig.parameters[3] in ftypes_to_delete
+                Base.delete_method(meth)
             end
         end
     end
@@ -72,6 +87,8 @@ let
     LA = get(Base.loaded_modules, LinalgSysImg, nothing)
     if LA !== nothing && prune_old_LA
         @assert !hasmethod(*, Tuple{Matrix{Float64}, Matrix{Float64}})
+        @assert isempty(methods(Core.kwcall,
+            Tuple{NamedTuple, typeof(isapprox), Vector{Float64}, Vector{Float64}}))
     end
     prune_old_LA && Base.unreference_module(LinalgSysImg)
 end
