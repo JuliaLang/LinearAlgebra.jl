@@ -2018,10 +2018,10 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     end
 end
 
-norm_x_minus_y(x, y, nrm::F) where {F} = nrm(x - y)
+norm_x_minus_y(x, y, norm::F) where {F} = norm(x - y)
 FastContiguousArrayView{T,N,P<:Array,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
 const ArrayOrFastContiguousArrayView = Union{Array, FastContiguousArrayView}
-function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView, ::typeof(norm))
+function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView, norm::F) where {F}
     Base.promote_shape(size(x), size(y)) # ensure compatible size
     if isempty(x) && isempty(y)
         norm(zero(eltype(x)) - zero(eltype(y)))

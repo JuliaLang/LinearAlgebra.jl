@@ -1155,7 +1155,7 @@ function generic_normp(D::Diagonal, p)
     end
     return v
 end
-norm_x_minus_y(D1::Diagonal, D2::Diagonal, nrm::typeof(norm)) = norm_x_minus_y(D1.diag, D2.diag, nrm)
+norm_x_minus_y(D1::Diagonal, D2::Diagonal, norm) = norm_x_minus_y(D1.diag, D2.diag, norm)
 
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)
