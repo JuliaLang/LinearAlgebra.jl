@@ -1838,7 +1838,7 @@ end
 ## Basis for null space
 
 """
-    nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ, alg::Algorithm=default_svd_algorithm(A))
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes a basis for the nullspace of `M` by including the singular
@@ -1848,6 +1848,13 @@ where `σ₁` is `M`'s largest singular value.
 By default, the relative tolerance `rtol` is `n*ϵ`, where `n`
 is the size of the smallest dimension of `M`, and `ϵ` is the [`eps`](@ref) of
 the element type of `M`.
+
+The desired algorithm, `alg` is passed through to `svd`. The available algorithms will
+be the same as that of ['svd'](@ref).
+
+!!! compat "Julia 1.3"
+    The `alg` keyword argument requires Julia 1.3 or later.
+
 
 # Examples
 ```jldoctest
@@ -1876,10 +1883,10 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol), alg::Algorithm = default_svd_alg(A))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
-    SVD = svd(A; full=true)
+    SVD = svd(A; full=true, alg)
     tol = max(atol, SVD.S[1]*rtol)
     indstart = sum(s -> s .> tol, SVD.S) + 1
     return copy((@view SVD.Vt[indstart:end,:])')
