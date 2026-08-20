@@ -2037,3 +2037,34 @@ function lyap(A::AbstractMatrix{T}, C::AbstractMatrix{T}) where {T<:BlasFloat}
     rmul!(Q * Y * Q', inv(scale))
 end
 lyap(a::Union{Real,Complex}, c::Union{Real,Complex}) = -c/(2real(a))
+
+"""
+    abs(A::AbstractMatrix)
+
+Compute the matrix absolute value `|A| = sqrt(A'A)`
+
+# Examples
+```jldoctest
+julia> A = [1.0 2.0; 3.0 4.0];
+
+julia> abs(A)
+2×2 Hermitian{Float64, Matrix{Float64}}:
+ 2.05798  2.40098
+ 2.40098  3.77297
+```
+"""
+
+
+function abs(A::AbstractMatrix{T}) where T
+    m, n = size(A)
+    if isempty(A)
+        return zeros(float(T), n, n)
+    elseif isdiag(A)
+        return applydiagonal(abs, A)
+    elseif ishermitian(A)
+        return abs(Hermitian(A))
+    end
+    u, s, v = svd(A)
+    return Hermitian(v * Diagonal(s) * v')
+end
+
