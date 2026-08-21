@@ -171,8 +171,6 @@ export
 public AbstractTriangular,
         Givens,
         checksquare,
-        generic_matmatmul!,
-        generic_matvecmul!,
         haszero,
         hermitian,
         hermitian_type,
@@ -590,6 +588,25 @@ const ⋅ = dot
 const × = cross
 export ⋅, ×
 
+function _uppercase(c::Char)
+    if c ∈ ('N', 'T', 'C', 'H', 'S')
+        return c
+    elseif c ∈ ('n', 't', 'c', 'h', 's')
+        return c - 32
+    else
+        throw(ArgumentError("Unsupported character."))
+    end
+end
+_isuppercase(c::Char) = c ∈ ('N', 'T', 'C', 'H', 'S')
+function _lowercase(c::Char)
+    if c ∈ ('n', 't', 'c', 'h', 's')
+        return c
+    elseif c ∈ ('N', 'T', 'C', 'H', 'S')
+        return c + 32
+    else
+        throw(ArgumentError("Unsupported character."))
+    end
+end
 # Separate the char corresponding to the wrapper from that corresponding to the uplo
 # In most cases, the former may be constant-propagated, while the latter usually can't be.
 # This improves type-inference in wrap for Symmetric/Hermitian matrices
@@ -603,18 +620,22 @@ function Base.Char(w::WrapperChar)
     if T ∈ ('N', 'T', 'C') # known cases where isuppertri is true
         T
     else
-        _isuppertri(w) ? uppercase(T) : lowercase(T)
+        _isuppertri(w) ? _uppercase(T) : _lowercase(T)
     end
 end
+WrapperChar(c::Char) = WrapperChar(c, _isuppercase(c))
+# The `AbstractChar` interface requires `codepoint` and construction from `UInt32`;
+# generic char operations are built on top of these — e.g. `Base.uppercase`, which
+# SparseArrays applies to the wrapper chars we pass to `generic_matvecmul!`.
 Base.codepoint(w::WrapperChar) = codepoint(Char(w))
 WrapperChar(n::UInt32) = WrapperChar(Char(n))
-WrapperChar(c::Char) = WrapperChar(c, isuppercase(c))
 # We extract the wrapperchar so that the result may be constant-propagated
 # This doesn't return a value of the same type on purpose
-Base.uppercase(w::WrapperChar) = uppercase(w.wrapperchar)
-Base.lowercase(w::WrapperChar) = lowercase(w.wrapperchar)
+_uppercase(w::WrapperChar) = _uppercase(w.wrapperchar)
+_lowercase(w::WrapperChar) = _lowercase(w.wrapperchar)
+_isuppercase(w::WrapperChar) = w.isuppertri
 _isuppertri(w::WrapperChar) = w.isuppertri
-_isuppertri(x::AbstractChar) = isuppercase(x) # compatibility with earlier Char-based implementation
+_isuppertri(x::AbstractChar) = _isuppercase(x) # compatibility with earlier Char-based implementation
 _uplosym(x) = _isuppertri(x) ? (:U) : (:L)
 
 wrapper_char(::AbstractArray) = 'N'
@@ -625,7 +646,7 @@ wrapper_char(A::Hermitian) =  WrapperChar('H', A.uplo == 'U')
 wrapper_char(A::Hermitian{<:Real}) = WrapperChar('S', A.uplo == 'U')
 wrapper_char(A::Symmetric) = WrapperChar('S', A.uplo == 'U')
 
-wrapper_char_NTC(A::AbstractArray) = uppercase(wrapper_char(A)) == 'N'
+wrapper_char_NTC(A::AbstractArray) = _uppercase(wrapper_char(A)) == 'N'
 wrapper_char_NTC(A::Union{StridedArray, Adjoint, Transpose}) = true
 wrapper_char_NTC(A::Union{Symmetric, Hermitian}) = false
 
@@ -633,7 +654,7 @@ Base.@constprop :aggressive function wrap(A::AbstractVecOrMat, tA::AbstractChar)
     # merge the result of this before return, so that we can type-assert the return such
     # that even if the tmerge is inaccurate, inference can still identify that the
     # `_generic_matmatmul` signature still matches and doesn't require missing backedges
-    tA_uc = uppercase(tA)
+    tA_uc = _uppercase(tA)
     B = if tA_uc == 'N'
         A
     elseif tA_uc == 'T'

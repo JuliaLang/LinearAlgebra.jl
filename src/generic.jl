@@ -1845,15 +1845,19 @@ julia> det(BigInt[1 0; 2 2]) # exact integer determinant
 """
 function det(A::AbstractMatrix{T}) where {T}
     if istriu(A) || istril(A)
-        S = promote_type(T, typeof((one(T)*zero(T) + zero(T))/one(T)))
-        return prod(Base.Fix1(convert, S), @view A[diagind(A)]; init=one(S))
+        return det(UpperTriangular(A))
     end
     return det(lu(A; check = false))
 end
 det(x::Number) = x
 
 # Resolve Issue #40128
-det(A::AbstractMatrix{BigInt}) = det_bareiss(A)
+function det(A::AbstractMatrix{BigInt})
+    if istriu(A) || istril(A)
+        return det(UpperTriangular(A))
+    end
+    return det_bareiss(A)
+end
 
 """
     logabsdet(M)

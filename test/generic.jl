@@ -524,6 +524,7 @@ end
 @testset "Issue 40128" begin
     @test det(BigInt[9 1 8 0; 0 0 8 7; 7 6 8 3; 2 9 7 7])::BigInt == -1
     @test det(BigInt[1 big(2)^65+1; 3 4])::BigInt == (4 - 3*(big(2)^65+1))
+    @test det(BigInt[big(2)^65+1 1; 0 big(2)^65-1])::BigInt == big(2)^130 - 1
 end
 
 # Minimal modulo number type - but not subtyping Number
@@ -983,6 +984,17 @@ end
             @test eltype(x) <: T
         end
     end
+end
+
+@testset "$fn requires square matrices" for fn in (det, logdet, logabsdet)
+    # general rectangular matrix, G
+    @test_throws DimensionMismatch fn(ones(3, 2))
+    @test_throws DimensionMismatch fn(ones(BigInt, 3, 2))
+    # rectangular matrices where istriu(A) or istril(A) is true
+    @test_throws DimensionMismatch fn([I ones(2, 1)])
+    @test_throws DimensionMismatch fn([I; ones(1, 2)])
+    @test_throws DimensionMismatch fn([I ones(BigInt, 2, 1)])
+    @test_throws DimensionMismatch fn([I; ones(BigInt, 1, 2)])
 end
 
 end # module TestGeneric
