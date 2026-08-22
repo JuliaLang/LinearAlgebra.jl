@@ -324,6 +324,14 @@ end
     @test @inferred(opnorm(fill(1,2,2))) ≈ 2
 end
 
+@testset "norm > opnorm" begin
+    X = [1 0; 0 1]; Y = X + [1 0; 0 2]*1e-3
+    @test !isapprox(X, Y, atol=0.0021) # norm(X - Y) > opnorm(X - Y)
+    for (X, Y) in ((X, Y), (Diagonal(X), Diagonal(Y)))
+        @test isapprox(X, Y, atol=0.0021, norm=opnorm) && !isapprox(X, Y, atol=0.00199, norm=opnorm)
+    end
+end
+
 @testset "generic norm for arrays of arrays" begin
     x = Vector{Int}[[1,2], [3,4]]
     @test @inferred(norm(x)) ≈ sqrt(30)
