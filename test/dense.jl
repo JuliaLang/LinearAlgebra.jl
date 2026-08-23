@@ -1473,7 +1473,7 @@ end
     D = Diagonal([1.0, -2.0, 3.0, -4.0])
     @test abs(D) == Diagonal([1.0, 2.0, 3.0, 4.0])
     @test abs(D) isa Diagonal
-    
+
     # Hermitian
     H = Hermitian([1.0 2.0im; -2.0im 1.0])
     @test abs(H) ≈ Hermitian([2.0 1.0im; -1.0im 2.0])

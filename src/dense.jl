@@ -2067,4 +2067,3 @@ function abs(A::AbstractMatrix{T}) where T
     u, s, v = svd(A)
     return Hermitian(v * Diagonal(s) * v')
 end
-
