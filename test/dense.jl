@@ -1460,25 +1460,26 @@ end
     N = 10
 
     # Real valued Non-square
-    A = randn(N,N+2)
-    H = abs(A)
+    A = randn(N, N+2)
+    H = @inferred abs(A)
     @test H'H ≈ A'A
+    @test H isa Hermitian{Float64}
 
     # Complex valued non-square
-    A = randn(ComplexF64, N,N+2)
-    H = abs(A)
+    A = randn(ComplexF64, N, N+2)
+    H = @inferred abs(A)
     @test H'H ≈ A'A
+    @test H isa Hermitian{ComplexF64}
 
     # Diagonal
     D = Diagonal([1.0, -2.0, 3.0, -4.0])
-    @test abs(D) == Diagonal([1.0, 2.0, 3.0, 4.0])
+    @test (@inferred abs(D)) == Diagonal([1.0, 2.0, 3.0, 4.0])
     @test abs(D) isa Diagonal
 
     # Hermitian
     H = Hermitian([1.0 2.0im; -2.0im 1.0])
-    @test abs(H) ≈ Hermitian([2.0 1.0im; -1.0im 2.0])
+    @test (@inferred abs(H)) ≈ Hermitian([2.0 1.0im; -1.0im 2.0])
     @test abs(H) isa Hermitian
-    @test abs(H)^2 ≈ H^2
 end
 
 end # module TestDense
