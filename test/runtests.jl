@@ -21,7 +21,8 @@ if Base.find_package("ParallelTestRunner") !== nothing
     push!(ARGS, "--jobs=$(Sys.CPU_THREADS)")
     testsuite = Dict{String,Expr}(splitext(f)[1] => :(include($(joinpath(@__DIR__, f))))
                                   for f in testfiles)
-    runtests(LinearAlgebra, ARGS; testsuite)
+    runtests(LinearAlgebra, ARGS; testsuite,
+         init_worker_code = :(include($(joinpath(@__DIR__, "prune_old_LA.jl")))))
 else
     foreach(include, testfiles)
 end
