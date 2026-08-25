@@ -276,7 +276,7 @@ end
 *(J::UniformScaling, B::BitArray{2}) = *(J::UniformScaling, Array(B))
 *(A::AbstractMatrix, J::UniformScaling) = A*J.λ
 *(v::AbstractVector, J::UniformScaling) = reshape(v, length(v), 1) * J
-*(J::UniformScaling, A::AbstractVecOrMat) = J.λ*A
+*(J::UniformScaling, A::AbstractArray) = J.λ*A
 *(x::Number, J::UniformScaling) = UniformScaling(x*J.λ)
 *(J::UniformScaling, x::Number) = UniformScaling(J.λ*x)
 
