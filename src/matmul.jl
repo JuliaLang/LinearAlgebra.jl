@@ -1282,7 +1282,7 @@ end
 
 function __matmul1x1_elements(tA, A::AbstractVecOrMat)
     @inbounds begin
-    tA_uc = uppercase(tA) # possibly unwrap a WrapperChar
+    tA_uc = _uppercase(tA) # possibly unwrap a WrapperChar
     a11 = A[1,1]
     if tA_uc == 'N'
         A11 = a11
@@ -1293,13 +1293,13 @@ function __matmul1x1_elements(tA, A::AbstractVecOrMat)
         # TODO making these lazy could improve perf
         A11 = copy(a11')
     elseif tA_uc == 'S'
-        if isuppercase(tA) # tA == 'S'
+        if _isuppercase(tA) # tA == 'S'
             A11 = symmetric(a11, :U)
         else
             A11 = symmetric(a11, :L)
         end
     elseif tA_uc == 'H'
-        if isuppercase(tA) # tA == 'H'
+        if _isuppercase(tA) # tA == 'H'
             A11 = hermitian(a11, :U)
         else # if tA == 'h'
             A11 = hermitian(a11, :L)
