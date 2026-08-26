@@ -324,6 +324,14 @@ end
     @test @inferred(opnorm(fill(1,2,2))) ≈ 2
 end
 
+@testset "norm > opnorm" begin
+    X = [1 0; 0 1]; Y = X + [1 0; 0 2]*1e-3
+    @test !isapprox(X, Y, atol=0.0021) # norm(X - Y) > opnorm(X - Y)
+    for (X, Y) in ((X, Y), (Diagonal(X), Diagonal(Y)))
+        @test isapprox(X, Y, atol=0.0021, norm=opnorm) && !isapprox(X, Y, atol=0.00199, norm=opnorm)
+    end
+end
+
 @testset "generic norm for arrays of arrays" begin
     x = Vector{Int}[[1,2], [3,4]]
     @test @inferred(norm(x)) ≈ sqrt(30)
@@ -963,6 +971,24 @@ end
     n = @allocated isapprox(A, A)
     @test n == 0
     @test Int[] ≈ Int[]
+
+    @testset "norm keyword (issue #1675)" begin
+        x = [0.057618841449997994, -0.055947092101983294, 0.7492941853741162]
+        y = [0.057618841449997994, -0.055947092101983335, 0.7492941853741162]
+        # if the specified norm isn't finite, fall back to an elementwise comparison
+        for nonfinitenorm in (v -> NaN, v -> Inf)
+            @test isapprox(x, y; norm=nonfinitenorm, rtol=4e-11, atol=4e-11)
+            @test !isapprox(x, y .+ 1; norm=nonfinitenorm, rtol=4e-11, atol=4e-11)
+            @test isapprox(Diagonal(x), Diagonal(y); norm=nonfinitenorm, rtol=4e-11, atol=4e-11)
+            @test isapprox(view(x, :), view(y, :); norm=nonfinitenorm, rtol=4e-11, atol=4e-11)
+        end
+        # the specified norm is used to evaluate the distance
+        @test isapprox(x, y; norm=v -> 0.0, atol=0, rtol=0)
+        @test !isapprox(x, x; norm=v -> 1.0, atol=0, rtol=0)
+        @test !isapprox(Diagonal(x), Diagonal(x); norm=v -> 1.0, atol=0, rtol=0)
+        @test !isapprox(view(x, :), view(x, :); norm=v -> 1.0, atol=0, rtol=0)
+        @test isapprox(x, y; norm=v -> 1.0, atol=2)
+    end
 end
 
 @testset "issue 930" begin
