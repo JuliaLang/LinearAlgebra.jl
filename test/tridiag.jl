@@ -5,6 +5,7 @@ module TestTridiagonal
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
+import LinearAlgebra: eigsortby, sorteig!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
@@ -61,6 +62,7 @@ end
             c += im*convert(Vector{elty}, randn(n - 1))
         end
     end
+    @test_throws DimensionMismatch SymTridiagonal(d, d)
     @test_throws DimensionMismatch SymTridiagonal(dl, fill(elty(1), n+1))
     @test_throws ArgumentError SymTridiagonal(rand(n, n))
     @test_throws ArgumentError Tridiagonal(dl, dl, dl)
@@ -190,19 +192,6 @@ end
         @test !isdiag(Tridiagonal(dl,d,zerosdu))
         @test !isdiag(Tridiagonal(zerosdl,d,du))
         @test !isdiag(Tridiagonal(dl,d,du))
-
-        # Test methods that could fail due to dv and ev having the same length
-        # see #41089
-
-        badev = zero(d)
-        badev[end] = 1
-        S = SymTridiagonal(d, badev)
-
-        @test istriu(S, -2)
-        @test istriu(S, 0)
-        @test !istriu(S, 2)
-
-        @test isdiag(S)
     end
 
     @testset "iszero and isone" begin
@@ -229,12 +218,6 @@ end
         @test isone(Sone)
         @test !iszero(Smix)
         @test !isone(Smix)
-
-        badev = zeros(elty, 3)
-        badev[end] = 1
-
-        @test isone(SymTridiagonal(ones(elty, 3), badev))
-        @test iszero(SymTridiagonal(zeros(elty, 3), badev))
     end
 
     @testset for mat_type in (Tridiagonal, SymTridiagonal)
@@ -547,6 +530,21 @@ end
     @test Tridiagonal([1, 2], [4, 5, 1], [6.0, 7]) == [4.0 6.0 0.0; 1.0 5.0 7.0; 0.0 2.0 1.0]
 end
 
+@testset "SymTridiagonal dv and ev lengths" begin
+    # https://github.com/JuliaLang/LinearAlgebra.jl/issues/629
+
+    # Empty matrix can have length(dv) == length(ev)
+    @test SymTridiagonal(Float64[], Float64[]) isa SymTridiagonal
+
+    @test SymTridiagonal(ones(1), Float64[]) isa SymTridiagonal
+
+    # Must have length(dv) = length(ev) + 1
+    @test_throws DimensionMismatch SymTridiagonal(ones(1), ones(1))
+    @test_throws DimensionMismatch SymTridiagonal(ones(2), ones(2))
+    @test_throws DimensionMismatch SymTridiagonal(ones(4), ones(2))
+    @test_throws DimensionMismatch SymTridiagonal(ones(4), ones(5))
+end
+
 @testset "convert for SymTridiagonal" begin
     STF32 = SymTridiagonal{Float32}(fill(1f0, 5), fill(1f0, 4))
     @test convert(typeof(STF32), STF32) === STF32
@@ -573,7 +571,7 @@ end
 end
 
 @testset "Issue #26994 (and the empty case)" begin
-    T = SymTridiagonal([1.0],[3.0])
+    T = SymTridiagonal([1.0],Float64[])
     x = ones(1)
     @test T*x == ones(1)
     @test SymTridiagonal(ones(0), ones(0)) * ones(0, 2) == ones(0, 2)
@@ -694,19 +692,6 @@ end
     @test_throws ArgumentError SymTridiagonal{Float32}(T)
 end
 
-# Issue #38765
-@testset "Eigendecomposition with different lengths" begin
-    # length(A.ev) can be either length(A.dv) or length(A.dv) - 1
-    A = SymTridiagonal(fill(1.0, 3), fill(-1.0, 3))
-    F = eigen(A)
-    A2 = SymTridiagonal(fill(1.0, 3), fill(-1.0, 2))
-    F2 = eigen(A2)
-    test_approx_eq_modphase(F.vectors, F2.vectors)
-    @test F.values ≈ F2.values ≈ eigvals(A) ≈ eigvals(A2)
-    @test eigvecs(A) ≈ eigvecs(A2)
-    @test eigvecs(A, eigvals(A)[1:1]) ≈ eigvecs(A2, eigvals(A2)[1:1])
-end
-
 @testset "non-commutative algebra (#39701)" begin
     for A in (SymTridiagonal(Quaternion.(randn(5), randn(5), randn(5), randn(5)), Quaternion.(randn(4), randn(4), randn(4), randn(4))),
               Tridiagonal(Quaternion.(randn(4), randn(4), randn(4), randn(4)), Quaternion.(randn(5), randn(5), randn(5), randn(5)), Quaternion.(randn(4), randn(4), randn(4), randn(4))))
@@ -746,8 +731,7 @@ end
 
     # complex
     # https://github.com/JuliaLang/julia/pull/41037#discussion_r645524081
-    S = SymTridiagonal(randn(5) .+ 0im, randn(5) .+ 0im)
-    S.ev[end] = im
+    S = SymTridiagonal(randn(5) .+ 0im, randn(4) .+ 0im)
     @test issymmetric(S)
     @test ishermitian(S)
 
@@ -791,7 +775,7 @@ end
 @testset "non-number eltype" begin
     @testset "sum for SymTridiagonal" begin
         dv = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:10]
-        ev = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:10]
+        ev = [SizedArray{(2,2)}(rand(1:2048,2,2)) for i in 1:9]
         S = SymTridiagonal(dv, ev)
         Sdense = Matrix(S)
         @test Sdense == collect(S)
@@ -810,7 +794,7 @@ end
     end
     @testset "== between Tridiagonal and SymTridiagonal" begin
         dv = [SizedArray{(2,2)}([1 2;3 4]) for i in 1:4]
-        ev = [SizedArray{(2,2)}([3 4;1 2]) for i in 1:4]
+        ev = [SizedArray{(2,2)}([3 4;1 2]) for i in 1:3]
         S = SymTridiagonal(dv, ev)
         Sdense = Matrix(S)
         @test S == Tridiagonal(diag(Sdense, -1), diag(Sdense),  diag(Sdense, 1)) == S
@@ -822,12 +806,6 @@ end
     ev, dv = [1:4;], [1:5;]
     S = SymTridiagonal(dv, ev)
     T = Tridiagonal(zero(ev), zero(dv), zero(ev))
-    @test copyto!(T, S) == S
-    @test copyto!(zero(S), T) == T
-
-    ev2 = [1:5;]
-    S = SymTridiagonal(dv, ev2)
-    T = Tridiagonal(zeros(length(ev2)-1), zero(dv), zeros(length(ev2)-1))
     @test copyto!(T, S) == S
     @test copyto!(zero(S), T) == T
 
@@ -1253,6 +1231,41 @@ end
         @test S == S2
         LinearAlgebra.fillband!(S, 0, 10, 10)
         @test S == S2
+    end
+end
+
+@testset "issue #1491" begin
+    # example where dstemr fails and we need to fall back to dstebz + dstein
+    mat = SymTridiagonal([1.9081958235744878e-17, 2.4936649967166602e-17, 0.07337398524939442, -0.037808419232506454, -0.019817057861955256, 0.02058130717549595, 0.0954455291925313, -0.14462978163628976, -0.03603900926534216, 0.10574604437162191, 0.0032290029813105, -0.060091988785585734, 0.15705171399550666, -0.14949686924737385, -0.07781372420855004, 0.03553277340671564, -0.016676626898563265, 0.041446049523777104, 0.10027425296079334, -0.10113668506693083, -0.1489473358740452, 0.1254312751044567, 0.34898062637027333, -0.33073386964350204, 0.2590576535805837, -0.25350583802618526, 0.43822601856881893, -0.4307646088223485, 0.779796594155107, -0.8224956491946511, 0.9089301791662714, -0.8619090557448831, 0.2318453071607881, -0.23320912386320142, 1.3140530211788515, -1.3139256900796155, -0.08390903751033216, 0.08392205661902721, 0.22240033452483454, -0.22246103504490297, 0.029954811490418787, -0.027812830389636778, 0.5263757772376259, -0.5365156423835895, 0.39737424822653156, -0.37936748640222284, 0.9333689384817099, -0.9703849367869426, 1.4044213669711443, -1.3377550567558987, 0.13172978466921414, -0.13519350037871353, 0.4999843222780838, -0.5567430191155477, 1.581258524837276, -1.5341564150622489, 0.8586746358146186, -0.8739294540224967, -0.17581567809216825, 0.15338653603265703, 0.780052785514151, -0.7342698870670235, -0.3173535579981542, 1.3364975241689332, -2.007075402840063, 1.0579643498230522, 0.31139215377118973, -0.39386762936936015, 1.8984071979199968, -1.920544791889951, 0.49358795540233863, -0.4613352087464951, 2.455277289025621, -2.4875372089056578, 0.9570609479497718, -0.9570638796447994, -1.1779359208299722, 1.163074811976796, -1.9301179244054274, 1.9450298141233324, -1.1378646951262403, 0.6350150906475753, 0.08802515616268328, 0.44163280306776015, -0.32773792909920113, 0.32952024534152274, 1.4740728008471815, -1.5038699938845244, 0.6847048634935279, -0.6874625497241057, 1.8751566802154134, -1.8547286700155103, 1.2640098482403956, -1.2174383863708917], [4.0208830900619335, 2.571546145080502e-15, 3.6768867672571894, 2.1275700268385056, 2.6591525597707077, 1.5630051292577454, 3.169596676339297, 1.4476618215762946, 3.1868304175740785, 1.424991114261858, 3.4173704890401693, 1.081122203108007, 3.8388891688820155, 0.7188503200238101, 3.628959037595643, 1.2527365479664625, 3.655577511598652, 0.5795107784623137, 3.9154918603711404, 0.7305602983115349, 4.204984775263665, 0.4667273034707952, 4.086056779436833, 0.7605098745710153, 3.765995021766351, 0.684123305522116, 4.180477278972855, 0.22109649225044853, 4.1892495574511095, 0.5187290599147804, 4.267105890594963, 0.38956213309842774, 4.395771702058166, 0.012968327575103515, 4.370023869671557, 9.368149211179955e-5, 1.7478905204265782, 0.012088046413693718, 2.5400351007261417, 0.02355280591484052, 2.966532136162213, 0.1157714633509318, 3.4610631638791225, 0.21831668966320836, 3.6404645575284627, 0.2911241355881879, 4.444637765978322, 0.46127544435962, 3.9217404428871023, 0.4673958058890463, 3.6185829343499414, 0.6185854819553929, 4.063721954940776, 0.4953177806242663, 4.017151353166678, 0.4035551805802303, 4.318876887238373, 0.17260927157837835, 4.41629817034136, 0.251496875950196, 4.017922104317157, 0.47982184361329844, 3.1370471883575424, 2.4334652498110247, 1.9981994742982454, 0.8095271305424269, 4.40837268034087, 0.18738580231835025, 4.147189662985785, 0.02664936509207341, 2.521497611392047, 0.4752292595225756, 3.795983764313679, 0.004636199088478572, 2.8022242947838416, 0.0004261020805263317, 3.2721199558188827, 0.16661903081014354, 3.1196340292912215, 0.03715487568175004, 2.6328978561492336, 1.5366796979500048, 2.1884275437040994, 0.7509912208995596, 4.056762760327159, 0.3470101947911033, 4.267342895676449, 0.4303372808790385, 4.051346888184243, 0.14621115143865943, 4.2045273832895145, 0.2540956144073191, 4.064260328749705])
+    λ = [-4.683759859765017, -4.683759859765017, -4.680622745270949, -4.680066202102797, -4.680066202102788, -4.642387544636312, -4.642387544636312, -4.62850079279404, -4.5645761799521845, -4.564576179952184, -4.563095222112828, -4.563095222112824, -4.4746776824461, -4.474677682446098, -4.372795904675404, -4.372795904675403, -4.32974284978971, -4.329742849789709, -4.190416629535501, -4.160130115632619, -4.160130115632617, -4.158746679334386, -4.020883090061934, -4.0208830900619335, -4.0208830900619335, -3.992984903781014, -3.992984903781012, -3.992659934264744, -3.699861925653249, -3.699861925653247, -3.699861925580689, -3.4509279319955604, -3.4509279319955577, -3.4509279319623327, -3.4082484759685445, -3.4082484759685436, -3.4082484739031704, -2.9611516414045025, -2.9611516414045007, -2.9611516414045003, -2.5495001812022124, -2.549500181202207, -2.5495001812022027, -1.7498663309027835, -1.7498663308995552, -1.749866330899554, -1.749866330899551, 1.7498663308995548, 1.7498663308995575, 1.749866330899561, 1.7498663309055233, 2.549500181202202, 2.5495001812022067, 2.5495001812022093, 2.961151641404497, 2.9611516414045007, 2.9611516414045043, 3.408248467695482, 3.4082484759685476, 3.408248475968552, 3.450927931921516, 3.45092793199556, 3.4509279319955635, 3.6998619253791105, 3.6998619256532437, 3.6998619256532463, 3.99283345851548, 3.9929849037810126, 3.9929849037810143, 4.0208830900619335, 4.0208830900619335, 4.020883090061935, 4.159323562240434, 4.160130115632611, 4.160130115632616, 4.245716444792351, 4.32974284978971, 4.329742849789711, 4.372795904675407, 4.37279590467541, 4.474677682446099, 4.474677682446103, 4.563095222112824, 4.563095222112828, 4.564576179952181, 4.564576179952186, 4.6363803854054515, 4.642387544636308, 4.642387544636311, 4.679778864396294, 4.6800662021027755, 4.680066202102799, 4.6837598597650185, 4.683759859765019]
+    densemat = Symmetric(Matrix(mat))
+    F = eigen(mat)
+    Fdense = eigen(densemat)
+    @test λ ≈ eigvals(mat) ≈ eigvals(densemat) ≈ F.values ≈ Fdense.values
+    @test F.vectors ≈ Fdense.vectors
+end
+
+@testset "eigen sorting" begin
+    B = SymTridiagonal([3, 4, 1, 2],[1, 0, 2]) #block diagonal matrix to hit 'B' ordering of stebz!
+    fB = Float64.(B)
+    @test eigmin(fB) ≈ minimum(eigvals(fB))
+    @test eigmax(fB) ≈ maximum(eigvals(fB))
+    for A in (B, fB)
+        vals = eigvals(A; sortby = eigsortby)
+        @test vals == sort(vals) == eigvals!(fB; sortby = eigsortby)
+        vals = eigvals(A, 1:2; sortby = eigsortby)
+        @test vals == sort(vals) == eigvals!(fB, 1:2; sortby = eigsortby)
+        vals = eigvals(A, 2, 4; sortby = eigsortby)
+        @test vals == sort(vals) == eigvals!(fB, 2, 4; sortby = eigsortby)
+        fact = eigen(A; sortby = eigsortby)
+        @test fact == eigen!(fB; sortby = eigsortby)
+        @test fact == Eigen(sorteig!(fact.values, fact.vectors)...)
+        fact = eigen(A, 1:2; sortby = eigsortby)
+        @test fact == eigen!(fB, 1:2; sortby = eigsortby)
+        @test fact == Eigen(sorteig!(fact.values, fact.vectors)...)
+        fact = eigen(A, 2, 4; sortby = eigsortby)
+        @test fact == eigen!(fB, 2, 4; sortby = eigsortby)
+        @test fact == Eigen(sorteig!(fact.values, fact.vectors)...)
     end
 end
 

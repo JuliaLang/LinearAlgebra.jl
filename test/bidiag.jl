@@ -1157,7 +1157,9 @@ end
                 Bidiagonal([2], Int[], 'L'),
                 Bidiagonal([2], Int[], 'U'),
                 Bidiagonal([1,-2], [-4], 'U'),
-                Bidiagonal([1,-2], [-4], 'L')
+                Bidiagonal([1,-2], [-4], 'L'),
+                Bidiagonal([100, 2, 3], [1, 1], 'U'),  # first column dominates 1-norm
+                Bidiagonal([100, 2, 3], [1, 1], 'L'),  # first row dominates Inf-norm
             )
         @test opnorm(B, 1) == opnorm(Matrix(B), 1)
         @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
