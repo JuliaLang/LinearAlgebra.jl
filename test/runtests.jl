@@ -17,10 +17,6 @@ end
 # file without it and falls back to the serial path.
 if Base.find_package("ParallelTestRunner") !== nothing
     using ParallelTestRunner
-    # Auto CPU thread count detection in ParallelTestRunner is bad
-    if Sys.isapple() && Sys.ARCH === :aarch64
-        push!(ARGS, "--jobs=2")
-    end
     push!(ARGS, "--verbose")
     testsuite = Dict{String,Expr}(splitext(f)[1] => :(include($(joinpath(@__DIR__, f))))
                                   for f in testfiles)
