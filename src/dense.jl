@@ -2057,7 +2057,7 @@ julia> abs(A)
 
 function abs(A::AbstractMatrix{T}) where T
     m, n = size(A)
-    elseif isdiag(A)
+    if isdiag(A)
         return Hermitian(applydiagonal(x -> float(T)(abs(x)), A))
     elseif ishermitian(A)
         return abs(Hermitian(A))
