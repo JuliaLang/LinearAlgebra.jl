@@ -1458,25 +1458,36 @@ end
 
 @testset "abs(A::AbstractMatrix{T})" begin
     N = 10
-
-    # Real valued Non-square
+    
+    # Real valued Non-square 
     A = randn(N, N+2)
     H = @inferred abs(A)
     @test H'H ≈ A'A
     @test H isa Hermitian{Float64}
 
-    # Complex valued non-square
+    # Complex valued non-square 
     A = randn(ComplexF64, N, N+2)
     H = @inferred abs(A)
     @test H'H ≈ A'A
     @test H isa Hermitian{ComplexF64}
 
-    # Diagonal
+    # Dense diagonal matrix 
+    D = diagm([1.0, -2.0, 3.0, -4.0])
+    @test (@inferred abs(D)) ≈ diagm([1.0, 2.0, 3.0, 4.0])
+    @test abs(D) isa Hermitian{Float64}
+
+    # Dense Hermitian matrix 
+    A1 = randn(ComplexF64, N, N)
+    H_dense = A1 + A1'
+    @test (@inferred abs(H_dense)) ≈ abs(Hermitian(H_dense))
+    @test abs(H_dense) isa Hermitian{ComplexF64}
+
+    # Diagonal wrapper (
     D = Diagonal([1.0, -2.0, 3.0, -4.0])
     @test (@inferred abs(D)) == Diagonal([1.0, 2.0, 3.0, 4.0])
     @test abs(D) isa Diagonal
 
-    # Hermitian
+    # Hermitian wrapper 
     H = Hermitian([1.0 2.0im; -2.0im 1.0])
     @test (@inferred abs(H)) ≈ Hermitian([2.0 1.0im; -1.0im 2.0])
     @test abs(H) isa Hermitian
