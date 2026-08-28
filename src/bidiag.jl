@@ -1336,7 +1336,7 @@ function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     return c
 end
 # backward compatibility
-ldiv!(A::AdjOrTrans{<:Any, Bidiagonal}, B::AbstractVecOrMat) = ldiv!(wrapperop(A)(parent(A)), B)
+ldiv!(A::AdjOrTrans{<:Any, <:Bidiagonal}, B::AbstractVecOrMat) = ldiv!(wrapperop(A)(parent(A)), B)
 ldiv!(c::AbstractVecOrMat, A::AdjOrTrans{<:Any,<:Bidiagonal}, b::AbstractVecOrMat) =
     ldiv!(c, wrapperop(A)(parent(A)), b)
 
@@ -1399,7 +1399,7 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
 end
 rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
 # backward compatibility
-rdiv!(A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) = rdiv!(wrapperop(A)(parent(A)), B)
+rdiv!(A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) = rdiv!(A, wrapperop(B)(parent(B)))
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) =
     _rdiv!(C, A, wrapperop(B)(parent(B)))
 
