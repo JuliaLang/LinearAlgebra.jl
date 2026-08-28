@@ -1174,7 +1174,6 @@ julia> abs(A)
 ```
 """
 function abs(A::AbstractMatrix{T}) where T
-    m, n = size(A)
     if isdiag(A)
         return Hermitian(diagm(float(T).(abs.(diag(A)))))
     elseif ishermitian(A)
