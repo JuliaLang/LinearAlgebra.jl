@@ -1476,6 +1476,11 @@ end
     @test (@inferred abs(D)) ≈ diagm([1.0, 2.0, 3.0, 4.0])
     @test abs(D) isa Hermitian{Float64}
 
+    # Dense complex diagonal matrix
+    Dc = diagm([3.0 + 4.0im, -1.0 + 2.0im, 0.0 - 5.0im])
+    @test (@inferred abs(Dc)) ≈ diagm([5.0, sqrt(5.0), 5.0])
+    @test abs(Dc) isa Hermitian{ComplexF64}
+
     # Dense Hermitian matrix
     A1 = randn(ComplexF64, N, N)
     H_dense = A1 + A1'
