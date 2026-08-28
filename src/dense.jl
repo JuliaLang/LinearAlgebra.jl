@@ -1175,11 +1175,7 @@ julia> abs(A)
 """
 function abs(A::AbstractMatrix{T}) where T
     if isdiag(A)
-        if T <: Real
-            return Hermitian(applydiagonal(abs ∘ float, A))
-        else
-            return Hermitian(applydiagonal(complex ∘ abs ∘ float, A))
-        end
+        return Hermitian(convert(AbstractMatrix{float(T)}, applydiagonal(abs, A)))
     elseif ishermitian(A)
         return abs(Hermitian(A))
     end
