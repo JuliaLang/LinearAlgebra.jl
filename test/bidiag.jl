@@ -1296,4 +1296,14 @@ end
     end
 end
 
+@testset "AdjOrTrans of Bidiagonal" begin
+    for t in (Transpose, Adjoint)
+        @test t(Bidiagonal(ones(5), ones(4), :L)) \ ones(5) ≈ [1.0, 0.0, 1.0, 0.0, 1.0]
+        @test ldiv!(t(Bidiagonal(ones(5), ones(4), :L)), ones(5)) ≈ [1.0, 0.0, 1.0, 0.0, 1.0]
+        @test ldiv!(zeros(5), t(Bidiagonal(ones(5), ones(4), :L)), ones(5)) ≈ [1.0, 0.0, 1.0, 0.0, 1.0]
+        @test ones(5, 5) / t(Bidiagonal(ones(5), ones(4), :L)) ≈ [float(isodd(j)) for i in 1:5, j in 1:5]
+        @test rdiv!(ones(5,5), t(Bidiagonal(ones(5), ones(4), :U))) ≈ [float(isodd(j)) for i in 1:5, j in 1:5]
+    end
+end
+
 end # module TestBidiagonal
