@@ -106,11 +106,11 @@ julia> Bidiagonal(A, :L) # contains the main diagonal and first subdiagonal of A
  ⋅  ⋅  4  4
 ```
 """
+Bidiagonal(A::AbstractMatrix, uplo::Symbol)
+
 function (::Type{Bi})(A::AbstractMatrix, uplo::Symbol) where {Bi<:Bidiagonal}
     Bi(diag(A, 0), diag(A, uplo === :U ? 1 : -1), uplo)
 end
-
-
 Bidiagonal(A::Bidiagonal) = A
 Bidiagonal{T}(A::Bidiagonal{T}) where {T} = A
 Bidiagonal{T}(A::Bidiagonal) where {T} = Bidiagonal{T}(A.dv, A.ev, A.uplo)
@@ -1356,10 +1356,15 @@ function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     end
     return c
 end
+# backward compatibility
+ldiv!(A::AdjOrTrans{<:Any, <:Bidiagonal}, B::AbstractVecOrMat) = ldiv!(wrapperop(A)(parent(A)), B)
+ldiv!(c::AbstractVecOrMat, A::AdjOrTrans{<:Any,<:Bidiagonal}, b::AbstractVecOrMat) =
+    ldiv!(c, wrapperop(A)(parent(A)), b)
 
 ### Generic promotion methods and fallbacks
 \(A::Bidiagonal, B::AbstractVecOrMat) =
     ldiv!(matprod_dest(A, B, promote_op(\, eltype(A), eltype(B))), A, B)
+\(A::AdjOrTrans{<:Any,<:Bidiagonal}, B::AbstractVecOrMat) = wrapperop(A)(parent(A)) \ B
 
 ### Triangular specializations
 for tri in (:UpperTriangular, :UnitUpperTriangular)
@@ -1431,6 +1436,10 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     C
 end
 rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
+# backward compatibility
+rdiv!(A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) = rdiv!(A, wrapperop(B)(parent(B)))
+_rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) =
+    _rdiv!(C, A, wrapperop(B)(parent(B)))
 
 /(A::AbstractMatrix, B::Bidiagonal) =
     _rdiv!(similar(A, promote_op(/, eltype(A), eltype(B)), size(A)), A, B)

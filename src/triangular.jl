@@ -1237,8 +1237,8 @@ for (TA, TB) in ((:AbstractTriangular, :AbstractMatrix),
     end
 end
 
-generic_matmatmul_NN!(C, A, B, alpha, beta) = generic_matmatmul!(C, 'N', 'N', A, B, alpha, beta)
-# Optimization for strided matrices, where we know that _generic_matmatmul! will be taken 
+generic_matmatmul_NN!(C, A, B, alpha, beta) = mul!(C, 'N', 'N', A, B, alpha, beta)
+# Optimization for strided matrices, where we know that _generic_matmatmul! will be taken
 for (TA, TB) in ((:UpperOrLowerTriangularStrided, :StridedMatrix),
                     (:StridedMatrix, :UpperOrLowerTriangularStrided),
                     (:UpperOrLowerTriangularStrided, :UpperOrLowerTriangularStrided)
