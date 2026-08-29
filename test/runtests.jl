@@ -4,10 +4,6 @@ include("prune_old_LA.jl")
 
 using Test, LinearAlgebra
 
-const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
-isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
-
 testfiles = String[]
 for file in readlines(joinpath(@__DIR__, "testgroups"))
     push!(testfiles, file * ".jl")
