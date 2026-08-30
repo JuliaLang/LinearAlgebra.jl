@@ -851,13 +851,12 @@ end
                                   C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
         Base.systemerror("sysctlbyname", err != 0)
 
-        buf = Vector{UInt8}(undef, size[])
-        err = @ccall sysctlbyname(name::Cstring, buf::Ptr{Cvoid}, size::Ref{Csize_t},
-                                  C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
+        str = Base._string_n(size[] - 1) # implicitly allocates trailing NUL byte
+        err = @ccall sysctlbyname(name::Cstring, str::Ptr{UInt8}, size::Ptr{Csize_t},
+                                    C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
         Base.systemerror("sysctlbyname", err != 0)
 
-        # drop the trailing NUL terminator
-        return String(resize!(buf, size[]-1))
+        return str
     end
 
     @noinline function _sysctl_int32(name)
