@@ -847,12 +847,12 @@ end
 @static if Sys.isapple() && Sys.ARCH === :aarch64
     @noinline function _sysctl_str(name)
         size = Ref{Csize_t}()
-        err = @ccall sysctlbyname(name::Cstring, C_NULL::Ptr{Cvoid}, size::Ptr{Csize_t},
+        err = @ccall sysctlbyname(name::Cstring, C_NULL::Ptr{Cvoid}, size::Ref{Csize_t},
                                   C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
         Base.systemerror("sysctlbyname", err != 0)
 
         buf = Vector{UInt8}(undef, size[])
-        err = @ccall sysctlbyname(name::Cstring, buf::Ptr{Cvoid}, size::Ptr{Csize_t},
+        err = @ccall sysctlbyname(name::Cstring, buf::Ptr{Cvoid}, size::Ref{Csize_t},
                                   C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
         Base.systemerror("sysctlbyname", err != 0)
 
@@ -863,7 +863,7 @@ end
     @noinline function _sysctl_int32(name)
         value = Ref{Int32}(0)
         size = Ref{Csize_t}(sizeof(Int32))
-        err = @ccall sysctlbyname(name::Cstring, value::Ptr{Cvoid}, size::Ptr{Csize_t},
+        err = @ccall sysctlbyname(name::Cstring, value::Ptr{Cvoid}, size::Ref{Csize_t},
                                   C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
         Base.systemerror("sysctlbyname", err != 0)
         return value[]
