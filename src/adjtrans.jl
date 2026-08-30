@@ -373,6 +373,38 @@ Base.strides(A::Transpose{<:Any, <:AbstractVector}) = (stride(A.parent, 2), stri
 # For matrices it's slightly faster to use reverse and avoid calling stride twice
 Base.strides(A::Adjoint{<:Real, <:AbstractMatrix}) = reverse(strides(A.parent))
 Base.strides(A::Transpose{<:Any, <:AbstractMatrix}) = reverse(strides(A.parent))
+@static if isdefined(Base, :is_strided)
+    function Base.is_ptr_loadable(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVecOrMat}
+        Base.is_ptr_loadable(P)
+    end
+    function Base.is_ptr_storable(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVecOrMat}
+        Base.is_ptr_storable(P)
+    end
+    function Base.is_strided(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractMatrix}
+        Base.is_strided(P)
+    end
+    function Base.is_contiguous(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVector}
+        Base.is_contiguous(P)
+    end
+    function Base.is_vec_strided(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVector}
+        Base.is_strided(P)
+    end
+    function Base.is_ptr_loadable(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVecOrMat}
+        Base.is_ptr_loadable(P)
+    end
+    function Base.is_ptr_storable(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVecOrMat}
+        Base.is_ptr_storable(P)
+    end
+    function Base.is_strided(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractMatrix}
+        Base.is_strided(P)
+    end
+    function Base.is_contiguous(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVector}
+        Base.is_contiguous(P)
+    end
+    function Base.is_vec_strided(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVector}
+        Base.is_strided(P)
+    end
+end
 
 Base.cconvert(::Type{Ptr{T}}, A::Adjoint{<:Real, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
 Base.cconvert(::Type{Ptr{T}}, A::Transpose{<:Any, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
