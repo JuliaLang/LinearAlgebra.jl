@@ -1227,6 +1227,7 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
     T = promote_op(\, eltype(A), eltype(B))
+    TA = isconcretetype(T) ? T : eltype(A)
     if m == n
         if istril(A)
             if istriu(A)
@@ -1238,9 +1239,9 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(convert(AbstractArray{T}, A)) \ B
+        return lu(convert(AbstractArray{TA}, A)) \ B
     end
-    return qr(convert(AbstractArray{T}, A), ColumnNorm()) \ B
+    return qr(convert(AbstractArray{TA}, A), ColumnNorm()) \ B
 end
 
 function (\)(a::AbstractVector, b::AbstractArray)
