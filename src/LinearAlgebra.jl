@@ -838,6 +838,55 @@ function versioninfo(io::IO=stdout)
     return nothing
 end
 
+@static if Sys.isapple() && Sys.ARCH === :aarch64
+    @noinline function _sysctl_str(name)
+        size = Ref{Csize_t}()
+        err = @ccall sysctlbyname(name::Cstring, C_NULL::Ptr{Cvoid}, size::Ref{Csize_t},
+                                  C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
+        Base.systemerror("sysctlbyname", err != 0)
+
+        str = Base._string_n(size[] - 1) # implicitly allocates trailing NUL byte
+        err = @ccall sysctlbyname(name::Cstring, str::Ptr{UInt8}, size::Ptr{Csize_t},
+                                    C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
+        Base.systemerror("sysctlbyname", err != 0)
+
+        return str
+    end
+
+    @noinline function _sysctl_int32(name)
+        value = Ref{Int32}(0)
+        size = Ref{Csize_t}(sizeof(Int32))
+        err = @ccall sysctlbyname(name::Cstring, value::Ptr{Cvoid}, size::Ref{Csize_t},
+                                  C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
+        Base.systemerror("sysctlbyname", err != 0)
+        return value[]
+    end
+
+    # When the cpu has efficiency cores, count all but those.
+    # When the cpu does not, count all cores but 1
+    const cpus_to_use = OncePerProcess{Int32}() do
+        try
+            # offset defaults to 1 to leave one core
+            # free on devices without efficiency cores
+            offset = Int32(1)
+            # hw.nperflevels/hw.perflevel* only exist on Darwin ≥ 21 (macOS ≥ 12)
+            count = _sysctl_int32("hw.physicalcpu")
+            if parse(VersionNumber, _sysctl_str("kern.osrelease")) >= v"21"
+                for i in 0:_sysctl_int32("hw.nperflevels")-1
+                    _sysctl_str("hw.perflevel$i.name") == "Efficiency" || continue
+                    offset = _sysctl_int32("hw.perflevel$i.physicalcpu")
+                    break
+                end
+            elseif count > 1 && _sysctl_int32("hw.cpufamily") == 0x1b588bb3  # CPUFAMILY_ARM_FIRESTORM_ICESTORM (Apple M1)
+                offset = Int32(4)  # the M1 has 4 efficiency cores
+            end
+            return min(Sys.EFFECTIVE_CPU_THREADS, count - offset)
+        catch
+            return Sys.EFFECTIVE_CPU_THREADS - 1
+        end
+    end
+end
+
 function lbt_openblas_onload_callback()
     # We don't use `BLAS.lbt_forward()` here because we don't want to take a lock on the config cache.
     verbose = parse(Bool, get(ENV, "LBT_VERBOSE", "false"))
@@ -849,10 +898,10 @@ function lbt_openblas_onload_callback()
 
     # https://github.com/xianyi/OpenBLAS/blob/c43ec53bdd00d9423fc609d7b7ecb35e7bf41b85/README.md#setting-the-number-of-threads-using-environment-variables
     if !haskey(ENV, "OPENBLAS_NUM_THREADS") && !haskey(ENV, "GOTO_NUM_THREADS") && !haskey(ENV, "OMP_NUM_THREADS")
-        @static if Sys.isapple() && Base.BinaryPlatforms.arch(Base.BinaryPlatforms.HostPlatform()) == "aarch64"
-            nthreads = max(1, @ccall(jl_effective_threads()::Cint))
+        @static if Sys.isapple() && Sys.ARCH === :aarch64
+            nthreads = max(1, cpus_to_use())
         else
-            nthreads = max(1, @ccall(jl_effective_threads()::Cint) ÷ 2)
+            nthreads = max(1, Sys.EFFECTIVE_CPU_THREADS ÷ 2)
         end
         BLAS.lbt_set_num_threads(nthreads)
     end
