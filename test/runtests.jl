@@ -17,6 +17,7 @@ end
 # file without it and falls back to the serial path.
 if Base.find_package("ParallelTestRunner") !== nothing
     using ParallelTestRunner
+    LinearAlgebra.versioninfo()
     push!(ARGS, "--verbose")
     testsuite = Dict{String,Expr}(splitext(f)[1] => :(include($(joinpath(@__DIR__, f))))
                                   for f in testfiles)
