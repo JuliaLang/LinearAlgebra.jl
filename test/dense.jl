@@ -1476,6 +1476,11 @@ end
     @test (@inferred abs(D)) ≈ diagm([1.0, 2.0, 3.0, 4.0])
     @test abs(D) isa Hermitian{Float64}
 
+    # Guard against integer overflow
+    D_int8 = diagm(Int8[-128, 127])
+    @test (@inferred abs(D_int8)) ≈ diagm([128.0, 127.0])
+    @test abs(D_int8) isa Hermitian{Float64}
+
     # Dense complex diagonal matrix
     Dc = diagm([3.0 + 4.0im, -1.0 + 2.0im, 0.0 - 5.0im])
     @test (@inferred abs(Dc)) ≈ diagm([5.0, sqrt(5.0), 5.0])
