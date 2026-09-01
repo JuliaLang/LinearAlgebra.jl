@@ -148,7 +148,8 @@ Base.iterate(S::QRCompactWY, ::Val{:done}) = nothing
 #
 function _triuppers_qr(T)
     blocksize, cols = size(T)
-    return Iterators.map(0:div(cols - 1, blocksize)) do i
+    nblocks = iszero(cols) || iszero(blocksize) ? 0 : cld(cols, blocksize)
+    return Iterators.map(range(0, length=nblocks)) do i
         n = min(blocksize, cols - i * blocksize)
         return UpperTriangular(view(T, 1:n, (1:n) .+ i * blocksize))
     end
@@ -158,9 +159,11 @@ function Base.hash(F::QRCompactWY, h::UInt)
     return hash(F.factors, foldr(hash, _triuppers_qr(F.T); init=hash(QRCompactWY, h)))
 end
 function Base.:(==)(A::QRCompactWY, B::QRCompactWY)
+    size(A.T) == size(B.T) || return false
     return A.factors == B.factors && all(splat(==), zip(_triuppers_qr.((A.T, B.T))...))
 end
 function Base.isequal(A::QRCompactWY, B::QRCompactWY)
+    size(A.T) == size(B.T) || return false
     return isequal(A.factors, B.factors) && all(zip(_triuppers_qr.((A.T, B.T))...)) do (a, b)
         isequal(a, b)::Bool
     end
