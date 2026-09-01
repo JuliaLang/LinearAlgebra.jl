@@ -880,9 +880,9 @@ end
             elseif count > 1 && _sysctl_int32("hw.cpufamily") == 0x1b588bb3  # CPUFAMILY_ARM_FIRESTORM_ICESTORM (Apple M1)
                 offset = Int32(4)  # the M1 has 4 efficiency cores
             end
-            return count - offset
+            return min(Sys.EFFECTIVE_CPU_THREADS, count - offset)
         catch
-            return @ccall(jl_effective_threads()::Cint) - 1
+            return Sys.EFFECTIVE_CPU_THREADS - 1
         end
     end
 end
@@ -901,7 +901,7 @@ function lbt_openblas_onload_callback()
         @static if Sys.isapple() && Sys.ARCH === :aarch64
             nthreads = max(1, cpus_to_use())
         else
-            nthreads = max(1, @ccall(jl_effective_threads()::Cint) ÷ 2)
+            nthreads = max(1, Sys.EFFECTIVE_CPU_THREADS ÷ 2)
         end
         BLAS.lbt_set_num_threads(nthreads)
     end
