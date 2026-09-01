@@ -26,10 +26,13 @@ jobs:
           - x86
         julia-version:
           - 'nightly'
+        test-args:
+          - ''
         include:
           - os: macOS-latest
             julia-arch: aarch64
             julia-version: 'nightly'
+            test-args: '--jobs=2'
           - os: macOS-15-intel
             julia-arch: x64
             julia-version: 'nightly'
@@ -44,6 +47,7 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           compiled_modules: 'existing'
+          test_args: ${{ matrix.test-args }}
         env:
           JULIA_PRUNE_OLD_LA: 'true'
           JULIA_NUM_THREADS: 1

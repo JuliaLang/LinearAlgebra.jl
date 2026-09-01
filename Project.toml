@@ -8,7 +8,7 @@ OpenBLAS_jll = "4536629a-c528-5b80-bd46-f80d51c5b363"
 libblastrampoline_jll = "8e850b90-86db-534c-a0d3-1478176c7d93"
 
 [compat]
-ParallelTestRunner = "2"
+ParallelTestRunner = "2.8.2"
 
 [extras]
 ParallelTestRunner = "d3525ed8-44d0-4b2c-a655-542cee43accc"
