@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.StridedArrays
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
@@ -571,12 +572,22 @@ end
     @test repr(transpose([1f0,2f0])) == "transpose(Float32[1.0, 2.0])"
 end
 
+struct SVector4{T} <: AbstractArray{T,1}
+    x::NTuple{4, T}
+end
+Base.getindex(A::SVector4, ind::Int) = A.x[ind]
+Base.size(::SVector4) = (4,)
+
 @testset "strided transposes" begin
     for t in (Adjoint, Transpose)
         @test strides(t(rand(3))) == (3, 1)
+        check_strided_get(t(rand(3)))
         @test strides(t(rand(3,2))) == (3, 1)
+        check_strided_get(t(rand(3,2)))
         @test strides(t(view(rand(3, 2), :))) == (6, 1)
+        check_strided_get(t(view(rand(3, 2), :)))
         @test strides(t(view(rand(3, 2), :, 1:2))) == (3, 1)
+        check_strided_get(t(view(rand(3, 2), :, 1:2)))
 
         A = rand(3)
         @test pointer(t(A)) === pointer(A)
@@ -587,6 +598,10 @@ end
     @test_throws MethodError strides(Adjoint(rand(3, 2) .+ rand(3, 2).*im))
     @test strides(Transpose(rand(3) .+ rand(3).*im)) == (3, 1)
     @test strides(Transpose(rand(3, 2) .+ rand(3, 2).*im)) == (3, 1)
+    static_matrix = reshape(SVector4((1,2,3,4)), 2, 2)
+    # `strides` should fail here since elements need to be transposed.
+    @test Transpose(fill(static_matrix, 2, 2))[1,1] != static_matrix
+    @test_throws MethodError strides(Transpose(fill(static_matrix, 2, 2)))
 
     C = rand(3) .+ rand(3).*im
     @test_throws ErrorException pointer(Adjoint(C))
