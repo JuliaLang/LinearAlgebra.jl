@@ -68,7 +68,19 @@ julia> A[2,1]
 ```
 """
 SymTridiagonal(dv::V, ev::V) where {T,V<:AbstractVector{T}} = SymTridiagonal{T}(dv, ev)
-SymTridiagonal{T}(dv::V, ev::V) where {T,V<:AbstractVector{T}} = SymTridiagonal{T,V}(dv, ev)
+function SymTridiagonal{T}(dv::V, ev::V) where {T,V<:AbstractVector{T}}
+    # the second condition is false for infinite vectors, where length(dv) - 1 == length(dv)
+    if length(ev) == length(dv) != 0 && length(ev) != length(dv) - 1
+        Base.depwarn("constructing a `SymTridiagonal` with `length(ev) == length(dv)` is deprecated; " *
+            "`ev` should have one element less than `dv`. The last element of `ev` is ignored.", :SymTridiagonal)
+        ev = _droplast(ev)
+    end
+    return SymTridiagonal{T,V}(dv, ev)
+end
+# drop the last element, preserving the array type where possible so that
+# the result converts back to `V` in the inner constructor
+_droplast(v::AbstractVector) = v[begin:end-1]
+_droplast(v::SubArray) = view(v, firstindex(v):(lastindex(v) - 1))
 function SymTridiagonal{T}(dv::AbstractVector, ev::AbstractVector) where {T}
     d = convert(AbstractVector{T}, dv)::AbstractVector{T}
     e = convert(typeof(d), ev)::AbstractVector{T}
