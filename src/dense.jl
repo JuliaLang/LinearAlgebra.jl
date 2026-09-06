@@ -969,8 +969,8 @@ function log(A::AbstractMatrix)
         end
     elseif ishermitian(A) && eltype(A) <: BlasFloat
         return _safe_parent(log(Hermitian(A)))
-    elseif istriu(A) && eltype(A) <: BlasFloat
-        return triu!(parent(log(UpperTriangular(A))))
+    elseif istriu(A) && float(eltype(A)) <: BlasFloat
+return triu!(parent(log(UpperTriangular(float(A)))))
     elseif isreal(A)
         SchurF = schur(real(A))
         if istriu(SchurF.T)
