@@ -967,9 +967,9 @@ function log(A::AbstractMatrix)
         else
             return applydiagonal(log, A)
         end
-    elseif ishermitian(A)
+    elseif ishermitian(A) && eltype(A) <: Union{Real,Complex}
         return _safe_parent(log(Hermitian(A)))
-    elseif istriu(A)
+    elseif istriu(A) && eltype(A) <: Union{Real,Complex}
         return triu!(parent(log(UpperTriangular(A))))
     elseif isreal(A)
         SchurF = schur(real(A))
