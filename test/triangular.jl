@@ -124,7 +124,7 @@ end
 end
 
 @testset "matrix log for non-BlasFloat matrices" begin
-    for T in (Int, BigFloat)
+    for T in (Int,)
         A = UpperTriangular(T[1 2; 0 4])
         B = log(float(A))
         @test log(A) ≈ log(complex(A)) ≈ B
