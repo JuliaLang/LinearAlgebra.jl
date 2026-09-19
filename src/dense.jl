@@ -967,10 +967,10 @@ function log(A::AbstractMatrix)
         else
             return applydiagonal(log, A)
         end
-    elseif ishermitian(A) && eltype(A) <: BlasFloat
+    elseif ishermitian(A)
         return _safe_parent(log(Hermitian(A)))
     elseif istriu(A) && float(eltype(A)) <: BlasFloat
-return triu!(parent(log(UpperTriangular(float(A)))))
+        return triu!(parent(log(UpperTriangular(float(A)))))
     elseif isreal(A)
         SchurF = schur(real(A))
         if istriu(SchurF.T)
