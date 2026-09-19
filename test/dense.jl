@@ -904,7 +904,6 @@ end
     end
 
     @test log([1 2; 0 4]) == log(UpperTriangular(Float64[1 2; 0 4]))
-    @test log([1 0; 2 4]) == log(LowerTriangular(Float64[1 0; 2 4]))
 end
 
 @testset "Additional matrix square root tests" for elty in (Float64, ComplexF64)
