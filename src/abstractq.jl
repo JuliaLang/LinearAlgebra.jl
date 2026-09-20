@@ -398,6 +398,86 @@ function _lmul_compactwy!(A::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) wher
     B
 end
 
+# Generic fallback for right-multiplication by the compact WY representation, mirroring
+# LAPACK's `gemqrt!`. Since `A*Q = A(I - V₁T₁V₁') ⋯ (I - V_b T_b V_b')`, the blocks are
+# applied in increasing order here, and correspondingly in decreasing order for
+# `A*Q' = A(I - V_b T_b' V_b') ⋯ (I - V₁T₁'V₁')`; this is selected by `adj`.
+function _rmul_compactwy!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) where {adj}
+    require_one_based_indexing(A)
+    mQ, nQ = size(Q.factors)
+    mA, nA = size(A, 1), size(A, 2)
+    if nA != mQ
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $nQ)"))
+    end
+    Qfactors, QT = Q.factors, Q.T
+    nb, k = size(QT)
+    if !(0 <= k <= mQ)
+        throw(DimensionMismatch(lazy"wrong value for k = $k: must be between 0 and $mQ"))
+    end
+    (k == 0 || mA == 0) && return A
+    # workspace holding `A Vⱼ Tⱼ` for the block at hand
+    TW = promote_op(matprod, promote_op(matprod, eltype(A), eltype(Qfactors)), eltype(QT))
+    W = similar(A, TW, (mA, nb))
+    nblocks = cld(k, nb)
+    @inbounds for idx in (adj ? (nblocks:-1:1) : (1:1:nblocks)) # both `StepRange`s
+        k0 = (idx - 1) * nb
+        nj = min(nb, k - k0)
+        # W = A Vⱼ
+        for c = 1:nj
+            gc = k0 + c
+            for i = 1:mA
+                W[i,c] = A[i,gc] # implicit unit diagonal of V
+            end
+            for r = gc+1:mQ
+                f = Qfactors[r,gc]
+                for i = 1:mA
+                    W[i,c] += A[i,r]*f
+                end
+            end
+        end
+        # W = W Tⱼ, resp. W = W Tⱼ', in place
+        if adj
+            for c = 1:nj, i = 1:mA
+                y = W[i,c]*conj(QT[c,k0+c])
+                for d = c+1:nj
+                    y += W[i,d]*conj(QT[c,k0+d])
+                end
+                W[i,c] = y
+            end
+        else
+            for c = nj:-1:1, i = 1:mA
+                y = W[i,c]*QT[c,k0+c]
+                for d = 1:c-1
+                    y += W[i,d]*QT[d,k0+c]
+                end
+                W[i,c] = y
+            end
+        end
+        # A -= W Vⱼ', first for the columns meeting the unit diagonal of Vⱼ, ...
+        for c = 1:nj
+            gc = k0 + c
+            for i = 1:mA
+                s = W[i,c]
+                for d = 1:c-1
+                    s += W[i,d]*conj(Qfactors[gc,k0+d])
+                end
+                A[i,gc] -= s
+            end
+        end
+        # ... then for the columns strictly right of Vⱼ's diagonal block
+        for r = k0+nj+1:nA
+            for i = 1:mA
+                s = W[i,1]*conj(Qfactors[r,k0+1])
+                for d = 2:nj
+                    s += W[i,d]*conj(Qfactors[r,k0+d])
+                end
+                A[i,r] -= s
+            end
+        end
+    end
+    A
+end
+
 ### QB
 lmul!(A::QRCompactWYQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('L', 'N', A.factors, A.T, B)
@@ -501,6 +581,8 @@ function rmul!(A::AbstractVecOrMat, Q::QRPackedQ)
     A
 end
 
+rmul!(A::AbstractVecOrMat, Q::QRCompactWYQ) = _rmul_compactwy!(A, Q, Val(false))
+
 ### AQc
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T}}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.gemqrt!('R', 'T', Q.factors, Q.T, A))
@@ -536,6 +618,9 @@ function rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:QRPackedQ})
     end
     A
 end
+
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:QRCompactWYQ}) =
+    _rmul_compactwy!(A, adjQ.Q, Val(true))
 
 det(Q::QRPackedQ) = _det_tau(Q.τ)
 det(Q::QRCompactWYQ) =
