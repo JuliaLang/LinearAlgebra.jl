@@ -6,6 +6,7 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, rmul!, lmul!
+using LinearAlgebra: QRCompactWYQ, QRPackedQ, _lmul_compactwy!
 
 n = 10
 
@@ -540,6 +541,74 @@ end
 
     @test rank(qr([1.0 2.0; 2.0 4.0], ColumnNorm())) == 1
     @test rank(qr([1.0 2.0 3.0; 4.0 5.0 6.0 ; 7.0 8.0 9.0], ColumnNorm())) == 2
+end
+
+@testset "generic lmul! with QRCompactWYQ and its adjoint" begin
+    # the generic implementation must reproduce LAPACK's `gemqrt!`
+    @testset "matches LAPACK: $elty, ($m,$n), blocksize=$bs" for
+            elty in (Float32, Float64, ComplexF32, ComplexF64),
+            (m, n) in ((7, 4), (4, 7), (5, 5), (1, 1), (8, 1), (1, 6), (40, 37)),
+            bs in (1, 2, 3, 36)
+        A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
+        Q = qr(convert(Matrix{elty}, A), NoPivot(); blocksize=bs).Q
+        for nB in (1, 3)
+            B = elty <: Complex ? complex.(randn(m, nB), randn(m, nB)) : randn(m, nB)
+            B = convert(Matrix{elty}, B)
+            @test _lmul_compactwy!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B))
+            @test _lmul_compactwy!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B))
+        end
+        b = elty <: Complex ? complex.(randn(m), randn(m)) : randn(m)
+        b = convert(Vector{elty}, b)
+        @test _lmul_compactwy!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b))
+        @test _lmul_compactwy!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b))
+    end
+
+    # ... and must be the method selected for non-BLAS-compatible arguments
+    @testset "dispatch for non-BLAS eltypes" begin
+        m, n = 9, 5
+        Q = qr(randn(m, n), NoPivot(); blocksize=2).Q
+        Qm = lmul!(Q, Matrix{Float64}(I, m, m))
+        for B in (big.(randn(m, 3)), big.(randn(m)))
+            @test lmul!(Q, copy(B)) ≈ Qm * B rtol=1e-12
+            @test lmul!(Q', copy(B)) ≈ Qm' * B rtol=1e-12
+        end
+    end
+
+    # compare the blocked application against the unblocked one at full precision,
+    # using reflectors (V, τ) that are orthogonal up to `BigFloat` accuracy
+    @testset "blocked vs. unblocked in BigFloat: ($m,$n), nb=$nb" for
+            (m, n) in ((9, 5), (5, 9), (8, 8), (13, 6)), nb in (1, 2, 3, 5, 13)
+        factors = big.(qr(randn(m, n), NoPivot(); blocksize=1).factors)
+        k = min(m, n)
+        V = tril(factors[:, 1:k], -1) + Matrix{BigFloat}(I, m, k)
+        τ = BigFloat[2 / (V[:,i]'V[:,i]) for i in 1:k]
+        # the compact WY factor T of the reflectors (V, τ), blocked with block size nb
+        T = zeros(BigFloat, nb, k)
+        for k0 in 0:nb:k-1
+            nj = min(nb, k - k0)
+            for i in 1:nj
+                Tj = view(T, 1:i-1, k0+1:k0+i-1)  # the current block's T so far
+                T[1:i-1, k0+i] = -τ[k0+i] * (UpperTriangular(Tj) * (V[:, k0+1:k0+i-1]'V[:, k0+i]))
+                T[i, k0+i] = τ[k0+i]
+            end
+        end
+        Qc, Qp = QRCompactWYQ(factors, T), QRPackedQ(factors, τ)
+        for B in (big.(randn(m, 4)), big.(randn(m)))
+            @test lmul!(Qc, copy(B)) ≈ lmul!(Qp, copy(B))
+            @test lmul!(Qc', copy(B)) ≈ lmul!(Qp', copy(B))
+        end
+        Id = Matrix{BigFloat}(I, m, m)
+        @test lmul!(Qc', lmul!(Qc, copy(Id))) ≈ Id
+        @test lmul!(Qc, lmul!(Qc', copy(Id))) ≈ Id
+    end
+
+    @testset "dimension mismatch" begin
+        Q = qr(randn(7, 4), NoPivot(); blocksize=2).Q
+        @test_throws DimensionMismatch lmul!(Q, big.(randn(6, 2)))
+        @test_throws DimensionMismatch lmul!(Q', big.(randn(6, 2)))
+        @test_throws DimensionMismatch lmul!(Q, big.(randn(6)))
+        @test_throws DimensionMismatch lmul!(Q', big.(randn(6)))
+    end
 end
 
 end # module TestQR
