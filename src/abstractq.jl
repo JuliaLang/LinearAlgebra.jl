@@ -340,7 +340,6 @@ function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     (k == 0 || nB == 0) && return B
     TW = promote_op(matprod, eltype(QT), promote_op(matprod, eltype(Qfactors), eltype(B)))
     W = similar(B, TW, (nb, nB)) # workspace for `Tⱼ Vⱼ' B`
-    Bmat = reshape(B, mB, nB)
     for idx in (adj ? (1:1:cld(k, nb)) : (cld(k, nb):-1:1))
         k0 = (idx - 1) * nb
         nj = min(nb, k - k0)
@@ -348,7 +347,7 @@ function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
         # `Vⱼ` splits into a unit lower triangular top block and a rectangular one below it
         V1 = UnitLowerTriangular(view(Qfactors, top, top))
         V2 = view(Qfactors, bot, top)
-        B1, B2, Wj = view(Bmat, top, :), view(Bmat, bot, :), view(W, 1:nj, :)
+        B1, B2, Wj = view(B, top, :), view(B, bot, :), view(W, 1:nj, :)
         Tj = UpperTriangular(view(QT, 1:nj, top))
         # Wⱼ = Vⱼ'B
         copyto!(Wj, B1)
@@ -380,14 +379,13 @@ function _rqmul!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) where {adj}
     (k == 0 || mA == 0) && return A
     TW = promote_op(matprod, promote_op(matprod, eltype(A), eltype(Qfactors)), eltype(QT))
     W = similar(A, TW, (mA, nb)) # workspace for `A Vⱼ Tⱼ`
-    Amat = reshape(A, mA, nA)
     for idx in (adj ? (cld(k, nb):-1:1) : (1:1:cld(k, nb)))
         k0 = (idx - 1) * nb
         nj = min(nb, k - k0)
         left, right = k0+1:k0+nj, k0+nj+1:nA
         V1 = UnitLowerTriangular(view(Qfactors, left, left))
         V2 = view(Qfactors, right, left)
-        A1, A2, Wj = view(Amat, :, left), view(Amat, :, right), view(W, :, 1:nj)
+        A1, A2, Wj = view(A, :, left), view(A, :, right), view(W, :, 1:nj)
         Tj = UpperTriangular(view(QT, 1:nj, left))
         # Wⱼ = A Vⱼ
         copyto!(Wj, A1)
