@@ -610,10 +610,10 @@ function _lqmul!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     if nQ != mB
         throw(DimensionMismatch(lazy"matrix Q has dimensions ($nQ,$nQ) but B has dimensions ($mB, $nB)"))
     end
-    Qv, Bmat = Q.factors', reshape(B, mB, nB)
+    Qv = Q.factors'
     @inbounds for i in (adj ? (min(mQ,nQ):-1:1) : (1:1:min(mQ,nQ)))
         # `reflectorApply!` applies `I - vᵢ conj(τ)vᵢ'`, hence the conjugation for `Q'`
-        reflectorApply!(view(Qv, i:mB, i), adj ? conj(Q.τ[i]) : Q.τ[i], view(Bmat, i:mB, :))
+        reflectorApply!(view(Qv, i:mB, i), adj ? conj(Q.τ[i]) : Q.τ[i], view(B, i:mB, :))
     end
     B
 end
@@ -626,10 +626,10 @@ function _rqmul!(A::AbstractVecOrMat, Q::LQPackedQ, ::Val{adj}) where {adj}
     if nA != nQ
         throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($nQ, $nQ)"))
     end
-    Qv, Amat = Q.factors', reshape(A, mA, nA)
+    Qv = Q.factors'
     @inbounds for i in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
         # `reflectorApply!` applies `I - vᵢτvᵢ'` here, hence the conjugation for `Q`
-        reflectorApply!(view(Amat, :, i:nA), view(Qv, i:nA, i), adj ? Q.τ[i] : conj(Q.τ[i]))
+        reflectorApply!(view(A, :, i:nA), view(Qv, i:nA, i), adj ? Q.τ[i] : conj(Q.τ[i]))
     end
     A
 end
