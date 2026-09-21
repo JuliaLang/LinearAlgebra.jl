@@ -732,14 +732,24 @@ function quaternion_wy_factors(m, k, nb)
         v = V[:, i]
         Qref = Qref * (Matrix{QT}(I, m, m) - (v .* τ[i]) * v')
     end
-    return V, T, Qref
+    return V, τ, T, Qref
 end
 
 @testset "non-commutative element type: ($m,$k), nb=$nb" for
         (m, k) in ((6, 4), (5, 5), (8, 3)), nb in (1, 2, 3, 5)
     nb > k && continue
-    V, T, Qref = quaternion_wy_factors(m, k, nb)
+    V, τ, T, Qref = quaternion_wy_factors(m, k, nb)
     Q = QRCompactWYQ(V, T)
+    # Anchor the hand-built reference against the pre-existing `QRPackedQ` kernel, which is
+    # independent of everything under test here, so that a consistent mistake in the helper
+    # cannot make a wrong kernel look right.
+    let P = QRPackedQ(V, τ), B = [randn(Quaternion{Float64}) for _ in CartesianIndices((m, 2))]
+        @test lmul!(P, copy(B)) ≈ Qref * B
+        @test lmul!(P', copy(B)) ≈ Qref' * B
+        A = [randn(Quaternion{Float64}) for _ in CartesianIndices((2, m))]
+        @test rmul!(copy(A), P) ≈ A * Qref
+        @test rmul!(copy(A), P') ≈ A * Qref'
+    end
     if nb == k   # a single block: the WY identity can be checked directly
         @test Qref ≈ Matrix{Quaternion{Float64}}(I, m, m) - V * (T[1:k, 1:k] * V')
     end
