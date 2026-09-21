@@ -8,6 +8,11 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, rmul!, lmul!
 using LinearAlgebra: QRCompactWYQ, QRPackedQ, _lmul_compactwy!, _rmul_compactwy!
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+using Main.LinearAlgebraTestHelpers.Quaternions
+
 n = 10
 
 # Split n into 2 parts for tests needing two matrices
@@ -698,6 +703,53 @@ end
         Qi = QRCompactWYQ(randn(2, 3), randn(1, 5))
         @test_throws DimensionMismatch rmul!(big.(randn(3, 2)), Qi)
         @test_throws DimensionMismatch rmul!(big.(randn(3, 2)), Qi')
+    end
+end
+
+# The compact WY identity `Q = ∏(I - vᵢτᵢvᵢ') = ∏(I - VⱼTⱼVⱼ')` holds over a
+# non-commutative ring as long as every product keeps its operand order. `T` is built with
+# `τᵢ` on the right, as `t = -Tⱼ*(Vⱼ'vᵢ)*τᵢ`, which is what the reflector convention
+# `Hᵢ = I - vᵢτᵢvᵢ'` requires; commutative element types cannot tell the orders apart.
+function quaternion_wy_factors(m, k, nb)
+    QT = Quaternion{Float64}
+    V = tril([randn(QT) for _ in CartesianIndices((m, k))], -1) + Matrix{QT}(I, m, k)
+    τ = [randn(QT) for _ in 1:k]
+    T = zeros(QT, nb, k)
+    for k0 in 0:nb:k-1
+        nj = min(nb, k - k0)
+        for i in 1:nj
+            if i > 1
+                Tprev = T[1:i-1, k0+1:k0+i-1]
+                # this Quaternion helper defines no unary `-`; real scalars commute
+                T[1:i-1, k0+i] = (Tprev * (V[:, k0+1:k0+i-1]' * V[:, k0+i]) * τ[k0+i]) * (-1.0)
+            end
+            T[i, k0+i] = τ[k0+i]
+        end
+    end
+    # the reference Q = H_1 H_2 ⋯ H_k, assembled from explicit matrix products
+    Qref = Matrix{QT}(I, m, m)
+    for i in 1:k
+        v = V[:, i]
+        Qref = Qref * (Matrix{QT}(I, m, m) - (v .* τ[i]) * v')
+    end
+    return V, T, Qref
+end
+
+@testset "non-commutative element type: ($m,$k), nb=$nb" for
+        (m, k) in ((6, 4), (5, 5), (8, 3)), nb in (1, 2, 3, 5)
+    nb > k && continue
+    V, T, Qref = quaternion_wy_factors(m, k, nb)
+    Q = QRCompactWYQ(V, T)
+    if nb == k   # a single block: the WY identity can be checked directly
+        @test Qref ≈ Matrix{Quaternion{Float64}}(I, m, m) - V * (T[1:k, 1:k] * V')
+    end
+    for p in (1, 3)
+        B = [randn(Quaternion{Float64}) for _ in CartesianIndices((m, p))]
+        @test _lmul_compactwy!(Q, copy(B), Val(false)) ≈ Qref * B
+        @test _lmul_compactwy!(Q, copy(B), Val(true)) ≈ Qref' * B
+        A = [randn(Quaternion{Float64}) for _ in CartesianIndices((p, m))]
+        @test _rmul_compactwy!(copy(A), Q, Val(false)) ≈ A * Qref
+        @test _rmul_compactwy!(copy(A), Q, Val(true)) ≈ A * Qref'
     end
 end
 
