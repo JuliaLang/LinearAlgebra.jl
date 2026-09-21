@@ -6,7 +6,7 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, rmul!, lmul!
-using LinearAlgebra: LQPackedQ, _lmul_lq!, _rmul_lq!
+using LinearAlgebra: LQPackedQ, _lmul_lq!, _rmul_lq!, lqfactUnblocked!
 
 m = 10
 
@@ -349,6 +349,51 @@ end
         @test_throws DimensionMismatch lmul!(Q', big.(randn(5)))
         @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q)
         @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q')
+    end
+end
+
+@testset "generic (unblocked) LQ factorization" begin
+    @testset "reproduces LAPACK gelqf!: $elty, ($m,$n)" for
+            elty in (Float32, Float64, ComplexF32, ComplexF64),
+            (m, n) in ((4, 6), (6, 4), (5, 5), (1, 1), (1, 7), (8, 1), (13, 6), (2, 9))
+        A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
+        A = convert(Matrix{elty}, A)
+        Flap = lq!(copy(A))                  # LAPACK path
+        Fgen = lqfactUnblocked!(copy(A))     # generic path
+        @test Fgen.factors ≈ Flap.factors
+        @test Fgen.τ ≈ Flap.τ
+        @test Fgen.L ≈ Flap.L
+        @test Matrix(Fgen.Q) ≈ Matrix(Flap.Q)
+        @test Fgen.L * Fgen.Q ≈ A
+    end
+
+    @testset "lq for non-BLAS eltypes: ($m,$n)" for (m, n) in ((4, 6), (6, 4), (5, 5), (1, 7), (8, 1), (7, 3))
+        for A in (big.(randn(m, n)), complex.(big.(randn(m, n)), big.(randn(m, n))))
+            F = lq(A)
+            @test F isa LQ{eltype(A)}
+            @test F.L * F.Q ≈ A
+            @test istril(F.L)
+            nQ = size(F.Q, 1)
+            Id = Matrix{eltype(A)}(I, nQ, nQ)
+            # the reflectors are orthogonal to full BigFloat precision
+            @test lmul!(F.Q', lmul!(F.Q, copy(Id))) ≈ Id
+            @test rmul!(rmul!(copy(Id), F.Q), F.Q') ≈ Id
+        end
+    end
+
+    @testset "lq of exact and unusual element types" begin
+        @test lq(3).L * lq(3).Q ≈ fill(3.0, 1, 1)
+        Ai = [1 2 3; 4 5 6]
+        @test lq(Ai).L * lq(Ai).Q ≈ Ai
+        Ar = Rational{BigInt}[1//2 1//3; 1//5 1//7]
+        @test lq(Ar).L * lq(Ar).Q ≈ float.(Ar)
+    end
+
+    @testset "minimum-norm solve for an underdetermined BigFloat system" begin
+        A = big.(randn(3, 6))
+        b = big.(randn(3))
+        x = lq(A) \ b
+        @test A * x ≈ b
     end
 end
 

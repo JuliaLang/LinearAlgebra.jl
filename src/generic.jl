@@ -1817,6 +1817,33 @@ Multiplies `A` in-place by a Householder reflection on the left. It is equivalen
 end
 
 """
+    reflectorApply!(A, x, τ)
+
+Multiplies `A` in-place by a Householder reflection on the right. It is equivalent to
+`A .= A * (I - [1; x[2:end]] * τ * [1; x[2:end]]')`.
+"""
+@inline function reflectorApply!(A::AbstractVecOrMat, x::AbstractVector, τ::Number)
+    require_one_based_indexing(A, x)
+    m, n = size(A, 1), size(A, 2)
+    if length(x) != n
+        throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the second dimension of matrix A, $n"))
+    end
+    n == 0 && return A
+    @inbounds for i in axes(A, 1)
+        Avi = A[i, 1] # the leading entry of the reflector is an implicit one
+        for j in 2:n
+            Avi = muladd(A[i, j], x[j], Avi)
+        end
+        Avi = τ*Avi
+        A[i, 1] -= Avi
+        for j in 2:n
+            A[i, j] -= Avi*conj(x[j])
+        end
+    end
+    return A
+end
+
+"""
     det(M)
 
 Matrix determinant.
