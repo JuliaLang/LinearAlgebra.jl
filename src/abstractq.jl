@@ -340,56 +340,26 @@ function _lmul_compactwy!(A::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) wher
     (k == 0 || nB == 0) && return B
     TW = promote_op(matprod, eltype(AT), promote_op(matprod, eltype(Afactors), eltype(B)))
     W = similar(B, TW, (nb, nB)) # workspace for `Tⱼ Vⱼ' B`
-    nblocks = cld(k, nb)
-    @inbounds for idx in (adj ? (1:1:nblocks) : (nblocks:-1:1))
+    Bmat = reshape(B, mB, nB)
+    for idx in (adj ? (1:1:cld(k, nb)) : (cld(k, nb):-1:1))
         k0 = (idx - 1) * nb
         nj = min(nb, k - k0)
-        for j = 1:nB
-            # W = Vⱼ' B
-            for c = 1:nj
-                gc = k0 + c
-                w = convert(TW, B[gc,j]) # unit diagonal of V
-                for i = gc+1:mB
-                    w = muladd(conj(Afactors[i,gc]), B[i,j], w)
-                end
-                W[c,j] = w
-            end
-            # W = Tⱼ W, resp. W = Tⱼ' W
-            if adj
-                for c = nj:-1:1
-                    y = conj(AT[c,k0+c])*W[c,j]
-                    for d = 1:c-1
-                        y = muladd(conj(AT[d,k0+c]), W[d,j], y)
-                    end
-                    W[c,j] = y
-                end
-            else
-                for c = 1:nj
-                    y = AT[c,k0+c]*W[c,j]
-                    for d = c+1:nj
-                        y = muladd(AT[c,k0+d], W[d,j], y)
-                    end
-                    W[c,j] = y
-                end
-            end
-            # B -= Vⱼ W, for the rows meeting V's unit diagonal ...
-            for c = 1:nj
-                i = k0 + c
-                s = W[c,j]
-                for d = 1:c-1
-                    s = muladd(Afactors[i,k0+d], W[d,j], s)
-                end
-                B[i,j] -= s
-            end
-            # ... and for those below it
-            for i = k0+nj+1:mB
-                s = Afactors[i,k0+1]*W[1,j]
-                for d = 2:nj
-                    s = muladd(Afactors[i,k0+d], W[d,j], s)
-                end
-                B[i,j] -= s
-            end
-        end
+        top, bot = k0+1:k0+nj, k0+nj+1:mB
+        # `Vⱼ` splits into a unit lower triangular top block and a rectangular one below it
+        V1 = UnitLowerTriangular(view(Afactors, top, top))
+        V2 = view(Afactors, bot, top)
+        B1, B2, Wj = view(Bmat, top, :), view(Bmat, bot, :), view(W, 1:nj, :)
+        Tj = UpperTriangular(view(AT, 1:nj, top))
+        # Wⱼ = Vⱼ'B
+        copyto!(Wj, B1)
+        lmul!(V1', Wj)
+        mul!(Wj, V2', B2, true, true)
+        # Wⱼ = Tⱼ Wⱼ, resp. Wⱼ = Tⱼ' Wⱼ
+        adj ? lmul!(Tj', Wj) : lmul!(Tj, Wj)
+        # B -= Vⱼ Wⱼ
+        mul!(B2, V2, Wj, -1, true)
+        lmul!(V1, Wj)
+        B1 .-= Wj
     end
     B
 end
@@ -410,62 +380,25 @@ function _rmul_compactwy!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) wher
     (k == 0 || mA == 0) && return A
     TW = promote_op(matprod, promote_op(matprod, eltype(A), eltype(Qfactors)), eltype(QT))
     W = similar(A, TW, (mA, nb)) # workspace for `A Vⱼ Tⱼ`
-    nblocks = cld(k, nb)
-    @inbounds for idx in (adj ? (nblocks:-1:1) : (1:1:nblocks))
+    Amat = reshape(A, mA, nA)
+    for idx in (adj ? (cld(k, nb):-1:1) : (1:1:cld(k, nb)))
         k0 = (idx - 1) * nb
         nj = min(nb, k - k0)
-        # W = A Vⱼ
-        for c = 1:nj
-            gc = k0 + c
-            for i = 1:mA
-                W[i,c] = A[i,gc] # unit diagonal of V
-            end
-            for r = gc+1:mQ
-                f = Qfactors[r,gc]
-                for i = 1:mA
-                    W[i,c] = muladd(A[i,r], f, W[i,c])
-                end
-            end
-        end
-        # W = W Tⱼ, resp. W = W Tⱼ'
-        if adj
-            for c = 1:nj, i = 1:mA
-                y = W[i,c]*conj(QT[c,k0+c])
-                for d = c+1:nj
-                    y = muladd(W[i,d], conj(QT[c,k0+d]), y)
-                end
-                W[i,c] = y
-            end
-        else
-            for c = nj:-1:1, i = 1:mA
-                y = W[i,c]*QT[c,k0+c]
-                for d = 1:c-1
-                    y = muladd(W[i,d], QT[d,k0+c], y)
-                end
-                W[i,c] = y
-            end
-        end
-        # A -= W Vⱼ', for the columns meeting V's unit diagonal ...
-        for c = 1:nj
-            gc = k0 + c
-            for i = 1:mA
-                s = W[i,c]
-                for d = 1:c-1
-                    s = muladd(W[i,d], conj(Qfactors[gc,k0+d]), s)
-                end
-                A[i,gc] -= s
-            end
-        end
-        # ... and for those to the right of it
-        for r = k0+nj+1:nA
-            for i = 1:mA
-                s = W[i,1]*conj(Qfactors[r,k0+1])
-                for d = 2:nj
-                    s = muladd(W[i,d], conj(Qfactors[r,k0+d]), s)
-                end
-                A[i,r] -= s
-            end
-        end
+        left, right = k0+1:k0+nj, k0+nj+1:nA
+        V1 = UnitLowerTriangular(view(Qfactors, left, left))
+        V2 = view(Qfactors, right, left)
+        A1, A2, Wj = view(Amat, :, left), view(Amat, :, right), view(W, :, 1:nj)
+        Tj = UpperTriangular(view(QT, 1:nj, left))
+        # Wⱼ = A Vⱼ
+        copyto!(Wj, A1)
+        rmul!(Wj, V1)
+        mul!(Wj, A2, V2, true, true)
+        # Wⱼ = Wⱼ Tⱼ, resp. Wⱼ = Wⱼ Tⱼ'
+        adj ? rmul!(Wj, Tj') : rmul!(Wj, Tj)
+        # A -= Wⱼ Vⱼ'
+        mul!(A2, Wj, V2', -1, true)
+        rmul!(Wj, V1')
+        A1 .-= Wj
     end
     A
 end
