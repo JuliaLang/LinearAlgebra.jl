@@ -325,20 +325,20 @@ size(Q::Union{QRCompactWYQ,QRPackedQ}) = (n = size(Q.factors, 1); (n, n))
 # Generic counterpart of LAPACK's `gemqrt!`. The blocks of the compact WY representation
 # `Q = (I - V₁T₁V₁') ⋯ (I - V_bT_bV_b')` are applied in reverse order, resp. in increasing
 # order and with `Tⱼ'` in place of `Tⱼ` for `Q'` (`adj = true`).
-function _lqmul!(A::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
-    mA, nA = size(A.factors)
+    mQ, nQ = size(Q.factors)
     mB, nB = size(B, 1), size(B, 2)
-    if mA != mB
-        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but B has dimensions ($mB, $nB)"))
+    if mQ != mB
+        throw(DimensionMismatch(lazy"matrix Q has dimensions ($mQ,$mQ) but B has dimensions ($mB, $nB)"))
     end
-    Afactors, AT = A.factors, A.T
-    nb, k = size(AT)
-    if k > mA
-        throw(DimensionMismatch(lazy"wrong value for k = $k: must be at most $mA"))
+    Qfactors, QT = Q.factors, Q.T
+    nb, k = size(QT)
+    if k > mQ
+        throw(DimensionMismatch(lazy"wrong value for k = $k: must be at most $mQ"))
     end
     (k == 0 || nB == 0) && return B
-    TW = promote_op(matprod, eltype(AT), promote_op(matprod, eltype(Afactors), eltype(B)))
+    TW = promote_op(matprod, eltype(QT), promote_op(matprod, eltype(Qfactors), eltype(B)))
     W = similar(B, TW, (nb, nB)) # workspace for `Tⱼ Vⱼ' B`
     Bmat = reshape(B, mB, nB)
     for idx in (adj ? (1:1:cld(k, nb)) : (cld(k, nb):-1:1))
@@ -346,10 +346,10 @@ function _lqmul!(A::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
         nj = min(nb, k - k0)
         top, bot = k0+1:k0+nj, k0+nj+1:mB
         # `Vⱼ` splits into a unit lower triangular top block and a rectangular one below it
-        V1 = UnitLowerTriangular(view(Afactors, top, top))
-        V2 = view(Afactors, bot, top)
+        V1 = UnitLowerTriangular(view(Qfactors, top, top))
+        V2 = view(Qfactors, bot, top)
         B1, B2, Wj = view(Bmat, top, :), view(Bmat, bot, :), view(W, 1:nj, :)
-        Tj = UpperTriangular(view(AT, 1:nj, top))
+        Tj = UpperTriangular(view(QT, 1:nj, top))
         # Wⱼ = Vⱼ'B
         copyto!(Wj, B1)
         lmul!(V1', Wj)
@@ -370,7 +370,7 @@ function _rqmul!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) where {adj}
     mQ, nQ = size(Q.factors)
     mA, nA = size(A, 1), size(A, 2)
     if nA != mQ
-        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $nQ)"))
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $mQ)"))
     end
     Qfactors, QT = Q.factors, Q.T
     nb, k = size(QT)
