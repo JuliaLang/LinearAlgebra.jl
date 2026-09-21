@@ -575,13 +575,13 @@ end
         for nB in (1, 3)
             B = elty <: Complex ? complex.(randn(m, nB), randn(m, nB)) : randn(m, nB)
             B = convert(Matrix{elty}, B)
-            @test _lmul_compactwy!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B))
-            @test _lmul_compactwy!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B))
+            @test _lmul_compactwy!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B)) ≈ Q * B
+            @test _lmul_compactwy!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B)) ≈ Q' * B
         end
         b = elty <: Complex ? complex.(randn(m), randn(m)) : randn(m)
         b = convert(Vector{elty}, b)
-        @test _lmul_compactwy!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b))
-        @test _lmul_compactwy!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b))
+        @test _lmul_compactwy!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b)) ≈ Q * b
+        @test _lmul_compactwy!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b)) ≈ Q' * b
     end
 
     # ... and must be the method selected for non-BLAS-compatible arguments
@@ -632,8 +632,8 @@ end
         for mA in (1, 3)
             B = elty <: Complex ? complex.(randn(mA, m), randn(mA, m)) : randn(mA, m)
             B = convert(Matrix{elty}, B)
-            @test _rmul_compactwy!(copy(B), Q, Val(false)) ≈ rmul!(copy(B), Q)
-            @test _rmul_compactwy!(copy(B), Q, Val(true)) ≈ rmul!(copy(B), Q')
+            @test _rmul_compactwy!(copy(B), Q, Val(false)) ≈ rmul!(copy(B), Q) ≈ B * Q
+            @test _rmul_compactwy!(copy(B), Q, Val(true)) ≈ rmul!(copy(B), Q') ≈ B * Q'
         end
     end
 
@@ -660,6 +660,34 @@ end
         A = big.(randn(4, m))
         @test rmul!(copy(A), Qc) ≈ collect(lmul!(Qc', collect(A'))')
         @test rmul!(copy(A), Qc') ≈ collect(lmul!(Qc, collect(A'))')
+    end
+
+    # `qsize_check` lets `Q*B` and `A*Q'` also take the operand with `size(Q.factors, 2)`
+    # rows resp. columns, which `mul!` zero-extends to the full `mQ`. For a QR
+    # factorization of a tall matrix that is the smaller dimension, and the path is
+    # reachable only through `*`, never through `lmul!`/`rmul!`.
+    @testset "flexible operand size via *: $elty, ($m,$n), blocksize=$bs" for
+            elty in (Float64, ComplexF64),
+            (m, n) in ((7, 4), (6, 2), (5, 1), (40, 37)),
+            bs in (1, 2, 36)
+        A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
+        Q = qr(convert(Matrix{elty}, A), NoPivot(); blocksize=bs).Q   # Q is m×m
+        Qsq = Matrix(Q * I)
+        p = 3
+        B = elty <: Complex ? complex.(randn(n, p), randn(n, p)) : randn(n, p)
+        B = convert(Matrix{elty}, B)
+        @test Q * B ≈ Qsq * [B; zeros(elty, m - n, p)]
+        @test size(Q * B) == (m, p)
+        C = elty <: Complex ? complex.(randn(p, n), randn(p, n)) : randn(p, n)
+        C = convert(Matrix{elty}, C)
+        @test C * Q' ≈ [C zeros(elty, p, m - n)] * Qsq'
+        @test size(C * Q') == (p, m)
+        b = elty <: Complex ? complex.(randn(n), randn(n)) : randn(n)
+        b = convert(Vector{elty}, b)
+        @test Q * b ≈ Qsq * [b; zeros(elty, m - n)]
+        # the other two directions admit only the full size
+        @test_throws DimensionMismatch Q' * B
+        @test_throws DimensionMismatch C * Q
     end
 
     @testset "dimension mismatch" begin
