@@ -8,6 +8,11 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, rmul!, lmul!
 using LinearAlgebra: LQPackedQ, _lmul_lq!, _rmul_lq!, lqfactUnblocked!
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+using Main.LinearAlgebraTestHelpers.Quaternions
+
 m = 10
 
 Random.seed!(1234321)
@@ -262,6 +267,23 @@ function bigfloat_lq_reflectors(m, n)
     return LQPackedQ(factors, τ)
 end
 
+# `Q = H_k' ⋯ H_1'` with `Hᵢ = I - vᵢτᵢvᵢ'`, built from explicit matrix products so that
+# every operand order is fixed. Used to check the kernels for a non-commutative element type.
+function quaternion_lq_refQ(factors, τ, n, k)
+    QT = eltype(factors)
+    Q = Matrix{QT}(I, n, n)
+    for i in 1:k
+        v = zeros(QT, n)
+        v[i] = one(Float64)
+        for l in i+1:n
+            v[l] = conj(factors[i,l])
+        end
+        # Hᵢ' = I - vᵢ conj(τᵢ) vᵢ', and Q accumulates so that H_k' ends up leftmost
+        Q = (Matrix{QT}(I, n, n) - (v .* conj(τ[i])) * v') * Q
+    end
+    return Q
+end
+
 @testset "generic lmul!/rmul! with LQPackedQ and its adjoint" begin
     @testset "matches LAPACK: $elty, ($m,$n)" for
             elty in (Float32, Float64, ComplexF32, ComplexF64),
@@ -339,6 +361,26 @@ end
         # the other two directions admit only the full size
         @test_throws DimensionMismatch Q * B
         @test_throws DimensionMismatch C * Q'
+    end
+
+    # The scalar τᵢ sits between the vectors in `Hᵢ = I - vᵢτᵢvᵢ'`, so `lmul!` must apply it
+    # as `vᵢ*(τᵢ*(vᵢ'B))` while `rmul!` must apply it as `((A*vᵢ)*τᵢ)*vᵢ'`. Commutative
+    # element types cannot distinguish the two, hence the quaternion check.
+    @testset "non-commutative element type: ($m,$n)" for (m, n) in ((4, 6), (6, 4), (5, 5), (3, 7))
+        QT = Quaternion{Float64}
+        k = min(m, n)
+        factors = [randn(QT) for _ in CartesianIndices((m, n))]
+        τ = [randn(QT) for _ in 1:k]
+        Q = LQPackedQ(factors, τ)
+        Qref = quaternion_lq_refQ(factors, τ, n, k)
+        for p in (1, 3)
+            B = [randn(QT) for _ in CartesianIndices((n, p))]
+            @test _lmul_lq!(Q, copy(B), Val(false)) ≈ Qref * B
+            @test _lmul_lq!(Q, copy(B), Val(true)) ≈ Qref' * B
+            A = [randn(QT) for _ in CartesianIndices((p, n))]
+            @test _rmul_lq!(copy(A), Q, Val(false)) ≈ A * Qref
+            @test _rmul_lq!(copy(A), Q, Val(true)) ≈ A * Qref'
+        end
     end
 
     @testset "dimension mismatch" begin

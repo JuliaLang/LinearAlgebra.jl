@@ -645,7 +645,7 @@ function _rmul_lq!(A::AbstractVecOrMat, Q::LQPackedQ, ::Val{adj}) where {adj}
             for l = i+1:nA
                 Avi = muladd(A[r,l], conj(Qfactors[i,l]), Avi)
             end
-            Avi = τi*Avi
+            Avi = Avi*τi # the scalar multiplies `A*vᵢ` from the right
             A[r,i] -= Avi
             for l = i+1:nA
                 A[r,l] -= Avi*Qfactors[i,l]
