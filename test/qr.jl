@@ -6,7 +6,7 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, rmul!, lmul!
-using LinearAlgebra: QRCompactWYQ, QRPackedQ, _lmul_compactwy!, _rmul_compactwy!
+using LinearAlgebra: QRCompactWYQ, QRPackedQ, _lqmul!, _rqmul!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
@@ -580,13 +580,13 @@ end
         for nB in (1, 3)
             B = elty <: Complex ? complex.(randn(m, nB), randn(m, nB)) : randn(m, nB)
             B = convert(Matrix{elty}, B)
-            @test _lmul_compactwy!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B)) ≈ Q * B
-            @test _lmul_compactwy!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B)) ≈ Q' * B
+            @test _lqmul!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B)) ≈ Q * B
+            @test _lqmul!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B)) ≈ Q' * B
         end
         b = elty <: Complex ? complex.(randn(m), randn(m)) : randn(m)
         b = convert(Vector{elty}, b)
-        @test _lmul_compactwy!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b)) ≈ Q * b
-        @test _lmul_compactwy!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b)) ≈ Q' * b
+        @test _lqmul!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b)) ≈ Q * b
+        @test _lqmul!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b)) ≈ Q' * b
     end
 
     # ... and must be the method selected for non-BLAS-compatible arguments
@@ -637,8 +637,8 @@ end
         for mA in (1, 3)
             B = elty <: Complex ? complex.(randn(mA, m), randn(mA, m)) : randn(mA, m)
             B = convert(Matrix{elty}, B)
-            @test _rmul_compactwy!(copy(B), Q, Val(false)) ≈ rmul!(copy(B), Q) ≈ B * Q
-            @test _rmul_compactwy!(copy(B), Q, Val(true)) ≈ rmul!(copy(B), Q') ≈ B * Q'
+            @test _rqmul!(copy(B), Q, Val(false)) ≈ rmul!(copy(B), Q) ≈ B * Q
+            @test _rqmul!(copy(B), Q, Val(true)) ≈ rmul!(copy(B), Q') ≈ B * Q'
         end
     end
 
@@ -755,11 +755,11 @@ end
     end
     for p in (1, 3)
         B = [randn(Quaternion{Float64}) for _ in CartesianIndices((m, p))]
-        @test _lmul_compactwy!(Q, copy(B), Val(false)) ≈ Qref * B
-        @test _lmul_compactwy!(Q, copy(B), Val(true)) ≈ Qref' * B
+        @test _lqmul!(Q, copy(B), Val(false)) ≈ Qref * B
+        @test _lqmul!(Q, copy(B), Val(true)) ≈ Qref' * B
         A = [randn(Quaternion{Float64}) for _ in CartesianIndices((p, m))]
-        @test _rmul_compactwy!(copy(A), Q, Val(false)) ≈ A * Qref
-        @test _rmul_compactwy!(copy(A), Q, Val(true)) ≈ A * Qref'
+        @test _rqmul!(copy(A), Q, Val(false)) ≈ A * Qref
+        @test _rqmul!(copy(A), Q, Val(true)) ≈ A * Qref'
     end
 end
 

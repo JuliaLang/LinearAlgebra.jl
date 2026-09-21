@@ -325,7 +325,7 @@ size(Q::Union{QRCompactWYQ,QRPackedQ}) = (n = size(Q.factors, 1); (n, n))
 # Generic counterpart of LAPACK's `gemqrt!`. The blocks of the compact WY representation
 # `Q = (I - V₁T₁V₁') ⋯ (I - V_bT_bV_b')` are applied in reverse order, resp. in increasing
 # order and with `Tⱼ'` in place of `Tⱼ` for `Q'` (`adj = true`).
-function _lmul_compactwy!(A::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+function _lqmul!(A::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
     mA, nA = size(A.factors)
     mB, nB = size(B, 1), size(B, 2)
@@ -364,8 +364,8 @@ function _lmul_compactwy!(A::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) wher
     B
 end
 
-# as `_lmul_compactwy!`, for `A*Q` resp. `A*Q'`, traversing the blocks the other way round
-function _rmul_compactwy!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) where {adj}
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, traversing the blocks the other way round
+function _rqmul!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) where {adj}
     require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
     mA, nA = size(A, 1), size(A, 2)
@@ -406,7 +406,7 @@ end
 ### QB
 lmul!(A::QRCompactWYQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('L', 'N', A.factors, A.T, B)
-lmul!(A::QRCompactWYQ, B::AbstractVecOrMat) = _lmul_compactwy!(A, B, Val(false))
+lmul!(A::QRCompactWYQ, B::AbstractVecOrMat) = _lqmul!(A, B, Val(false))
 lmul!(A::QRPackedQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.ormqr!('L', 'N', A.factors, A.τ, B)
 function lmul!(A::QRPackedQ, B::AbstractVecOrMat)
@@ -441,7 +441,7 @@ lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,<:StridedMatrix}}, B::StridedVecOrMa
 lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.gemqrt!('L', 'C', Q.factors, Q.T, B))
 lmul!(adjA::AdjointQ{<:Any,<:QRCompactWYQ}, B::AbstractVecOrMat) =
-    _lmul_compactwy!(adjA.Q, B, Val(true))
+    _lqmul!(adjA.Q, B, Val(true))
 lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.ormqr!('L', 'T', Q.factors, Q.τ, B))
 lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
@@ -476,7 +476,7 @@ end
 ### AQ
 rmul!(A::StridedVecOrMat{T}, B::QRCompactWYQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('R', 'N', B.factors, B.T, A)
-rmul!(A::AbstractVecOrMat, Q::QRCompactWYQ) = _rmul_compactwy!(A, Q, Val(false))
+rmul!(A::AbstractVecOrMat, Q::QRCompactWYQ) = _rqmul!(A, Q, Val(false))
 rmul!(A::StridedVecOrMat{T}, B::QRPackedQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
     LAPACK.ormqr!('R', 'N', B.factors, B.τ, A)
 function rmul!(A::AbstractVecOrMat, Q::QRPackedQ)
@@ -511,7 +511,7 @@ rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T}}) where {T<:
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T}}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.gemqrt!('R', 'C', Q.factors, Q.T, A))
 rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:QRCompactWYQ}) =
-    _rmul_compactwy!(A, adjQ.Q, Val(true))
+    _rqmul!(A, adjQ.Q, Val(true))
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRPackedQ{T}}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.ormqr!('R', 'T', Q.factors, Q.τ, A))
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRPackedQ{T}}) where {T<:BlasComplex} =
