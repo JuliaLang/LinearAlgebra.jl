@@ -615,6 +615,10 @@ end
         @test_throws DimensionMismatch lmul!(Q', big.(randn(6, 2)))
         @test_throws DimensionMismatch lmul!(Q, big.(randn(6)))
         @test_throws DimensionMismatch lmul!(Q', big.(randn(6)))
+        # a T factor declaring more reflectors than `factors` has rows
+        Qi = QRCompactWYQ(randn(2, 3), randn(1, 5))
+        @test_throws DimensionMismatch lmul!(Qi, big.(randn(2, 2)))
+        @test_throws DimensionMismatch lmul!(Qi', big.(randn(2, 2)))
     end
 end
 
@@ -662,6 +666,10 @@ end
         Q = qr(randn(7, 4), NoPivot(); blocksize=2).Q
         @test_throws DimensionMismatch rmul!(big.(randn(3, 6)), Q)
         @test_throws DimensionMismatch rmul!(big.(randn(3, 6)), Q')
+        # a T factor declaring more reflectors than `factors` has rows
+        Qi = QRCompactWYQ(randn(2, 3), randn(1, 5))
+        @test_throws DimensionMismatch rmul!(big.(randn(3, 2)), Qi)
+        @test_throws DimensionMismatch rmul!(big.(randn(3, 2)), Qi')
     end
 end
 
