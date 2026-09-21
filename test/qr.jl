@@ -720,8 +720,7 @@ function quaternion_wy_factors(m, k, nb)
         for i in 1:nj
             if i > 1
                 Tprev = T[1:i-1, k0+1:k0+i-1]
-                # this Quaternion helper defines no unary `-`; real scalars commute
-                T[1:i-1, k0+i] = (Tprev * (V[:, k0+1:k0+i-1]' * V[:, k0+i]) * τ[k0+i]) * (-1.0)
+                T[1:i-1, k0+i] = -(Tprev * (V[:, k0+1:k0+i-1]' * V[:, k0+i]) * τ[k0+i])
             end
             T[i, k0+i] = τ[k0+i]
         end
