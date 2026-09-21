@@ -6,6 +6,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, rmul!, lmul!
+using LinearAlgebra: QRPackedQ, _lqmul!, _rqmul!
+
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+using Main.LinearAlgebraTestHelpers.Quaternions
 
 n = 10
 
@@ -540,6 +546,70 @@ end
 
     @test rank(qr([1.0 2.0; 2.0 4.0], ColumnNorm())) == 1
     @test rank(qr([1.0 2.0 3.0; 4.0 5.0 6.0 ; 7.0 8.0 9.0], ColumnNorm())) == 2
+end
+
+@testset "generic lmul!/rmul! with QRPackedQ and its adjoint" begin
+    @testset "matches LAPACK: $elty, ($m,$n)" for
+            elty in (Float32, Float64, ComplexF32, ComplexF64),
+            (m, n) in ((7, 4), (4, 7), (5, 5), (1, 1), (8, 1), (1, 6), (13, 6), (40, 37))
+        A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
+        Q = qr(convert(Matrix{elty}, A), ColumnNorm()).Q
+        for p in (1, 3)
+            B = elty <: Complex ? complex.(randn(m, p), randn(m, p)) : randn(m, p)
+            B = convert(Matrix{elty}, B)
+            @test _lqmul!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B))
+            @test _lqmul!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B))
+            C = elty <: Complex ? complex.(randn(p, m), randn(p, m)) : randn(p, m)
+            C = convert(Matrix{elty}, C)
+            @test _rqmul!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q)
+            @test _rqmul!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q')
+        end
+        b = elty <: Complex ? complex.(randn(m), randn(m)) : randn(m)
+        b = convert(Vector{elty}, b)
+        @test _lqmul!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b))
+        @test _lqmul!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b))
+    end
+
+    # The scalar τᵢ sits between the vectors in `Hᵢ = I - vᵢτᵢvᵢ'`, so `lmul!` applies it as
+    # `vᵢ*(τᵢ*(vᵢ'B))` while `rmul!` applies it as `((A*vᵢ)*τᵢ)*vᵢ'`. Commutative element
+    # types cannot distinguish the two, hence the quaternion check.
+    @testset "non-commutative element type: ($m,$k)" for (m, k) in ((6, 4), (5, 5), (8, 3), (7, 2))
+        QT = Quaternion{Float64}
+        V = tril([randn(QT) for _ in CartesianIndices((m, k))], -1) + Matrix{QT}(I, m, k)
+        τ = [randn(QT) for _ in 1:k]
+        Qref = Matrix{QT}(I, m, m)
+        for i in 1:k
+            v = V[:, i]
+            Qref = Qref * (Matrix{QT}(I, m, m) - (v .* τ[i]) * v')
+        end
+        Q = QRPackedQ(V, τ)
+        for p in (1, 3)
+            B = [randn(QT) for _ in CartesianIndices((m, p))]
+            @test _lqmul!(Q, copy(B), Val(false)) ≈ Qref * B
+            @test _lqmul!(Q, copy(B), Val(true)) ≈ Qref' * B
+            A = [randn(QT) for _ in CartesianIndices((p, m))]
+            @test _rqmul!(copy(A), Q, Val(false)) ≈ A * Qref
+            @test _rqmul!(copy(A), Q, Val(true)) ≈ A * Qref'
+        end
+    end
+
+    @testset "BigFloat end-to-end via qr: ($m,$n)" for (m, n) in ((6, 4), (4, 6), (5, 5))
+        A = big.(randn(m, n))
+        F = qr(A)
+        @test F.Q * F.R ≈ A
+        nQ = size(F.Q, 1)
+        Id = Matrix{BigFloat}(I, nQ, nQ)
+        @test lmul!(F.Q', lmul!(F.Q, copy(Id))) ≈ Id
+        @test rmul!(rmul!(copy(Id), F.Q), F.Q') ≈ Id
+    end
+
+    @testset "dimension mismatch" begin
+        Q = qr(randn(7, 4), ColumnNorm()).Q
+        @test_throws DimensionMismatch _lqmul!(Q, big.(randn(6, 2)), Val(false))
+        @test_throws DimensionMismatch _lqmul!(Q, big.(randn(6, 2)), Val(true))
+        @test_throws DimensionMismatch _rqmul!(big.(randn(2, 6)), Q, Val(false))
+        @test_throws DimensionMismatch _rqmul!(big.(randn(2, 6)), Q, Val(true))
+    end
 end
 
 end # module TestQR
