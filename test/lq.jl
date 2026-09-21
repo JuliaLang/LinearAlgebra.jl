@@ -6,7 +6,7 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, rmul!, lmul!
-using LinearAlgebra: LQPackedQ, _lmul_lq!, _rmul_lq!, lqfactUnblocked!
+using LinearAlgebra: LQPackedQ, QRPackedQ, _lmul_lq!, _rmul_lq!, lqfactUnblocked!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
@@ -373,6 +373,18 @@ end
         τ = [randn(QT) for _ in 1:k]
         Q = LQPackedQ(factors, τ)
         Qref = quaternion_lq_refQ(factors, τ, n, k)
+        # Anchor the hand-built reference against the pre-existing `QRPackedQ` kernel: the
+        # adjoint undoes the conjugated row storage, so `LQPackedQ(factors, τ)` acts as
+        # `QRPackedQ(factors', τ)'`. That kernel predates this branch and is independent of
+        # everything under test here, so a consistent mistake in the helper cannot make a
+        # wrong kernel look right.
+        let P = QRPackedQ(factors', τ), B = [randn(QT) for _ in CartesianIndices((n, 2))]
+            @test lmul!(P', copy(B)) ≈ Qref * B
+            @test lmul!(P, copy(B)) ≈ Qref' * B
+            A = [randn(QT) for _ in CartesianIndices((2, n))]
+            @test rmul!(copy(A), P') ≈ A * Qref
+            @test rmul!(copy(A), P) ≈ A * Qref'
+        end
         for p in (1, 3)
             B = [randn(QT) for _ in CartesianIndices((n, p))]
             @test _lmul_lq!(Q, copy(B), Val(false)) ≈ Qref * B
