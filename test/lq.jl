@@ -435,6 +435,16 @@ end
         end
     end
 
+    # `reflectorApply!` applies `A*(I - vτv')`, so `τ` has to multiply `A*v` from the
+    # right, opposite to the left-applying method. Commutative element types cannot tell
+    # the two apart, so only this reconstructs incorrectly if the order is wrong.
+    @testset "non-commutative element type: ($m,$n)" for (m, n) in ((4, 6), (6, 4), (5, 5), (3, 7))
+        A = [randn(Quaternion{Float64}) for _ in CartesianIndices((m, n))]
+        F = lq(copy(A))
+        @test F.L * F.Q ≈ A
+        @test istril(F.L)
+    end
+
     @testset "lq of exact and unusual element types" begin
         @test lq(3).L * lq(3).Q ≈ fill(3.0, 1, 1)
         Ai = [1 2 3; 4 5 6]
