@@ -333,13 +333,10 @@ function ordschur!(S::Schur, p::AbstractVector{<:Integer}) end
             i += 1
         end
     end
-    if i == n
-        sizes[n] = 1
-    end
 
     # A 2x2 real Schur block must move as a unit
     if eltype(T) <: Real
-        pinv = similar(p)
+        pinv = similar(p, Int)
         for i in 1:n
             pinv[p[i]] = i
         end
@@ -414,7 +411,6 @@ function ordschur!(S::Schur, p::AbstractVector{<:Integer}) end
             sizes[i1:j2] .= 0
             sizes[i1] = s2
             sizes[i1+s2] = s1
-            blocks[curpos-1] = i1
             blocks[curpos] = i1 + s2
 
             b1 = current[curpos-1]
@@ -435,7 +431,7 @@ function ordschur!(S::Schur, p::AbstractVector{<:Integer}) end
 end
 
 # Generic Julia routine
-@views @inline function _swap_adj_schur_blocks!(T::AbstractMatrix, Z::AbstractMatrix,
+@views @inbounds @inline function _swap_adj_schur_blocks!(T::StridedMatrix, Z::StridedMatrix,
     i1, i2, j1, j2, s1, s2, n, Δ, M_K0, M_K1, M_rhs, M_X, M_Q)
     m = s1 + s2
     rind = i1:j2
@@ -448,7 +444,8 @@ end
     # Solve A*X - X*B = -C
     kron!(K0, Δ[1:s2,1:s2], T[i1:i2,i1:i2])
     K0 .-= kron!(K1, transpose(T[j1:j2,j1:j2]), Δ[1:s1,1:s1])
-    rhs .= -vec(T[i1:i2,j1:j2])
+    rhs .= .-vec(T[i1:i2,j1:j2])
+    # TODO: Handle singular matrix in ldiv!
     ldiv!(lu!(K0), rhs)
     X .= reshape(rhs, s1, s2)
 
