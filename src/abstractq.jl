@@ -334,8 +334,8 @@ function _lmul_compactwy!(A::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) wher
     end
     Afactors, AT = A.factors, A.T
     nb, k = size(AT)
-    if !(0 <= k <= mA)
-        throw(DimensionMismatch(lazy"wrong value for k = $k: must be between 0 and $mA"))
+    if k > mA
+        throw(DimensionMismatch(lazy"wrong value for k = $k: must be at most $mA"))
     end
     (k == 0 || nB == 0) && return B
     TW = promote_op(matprod, eltype(AT), promote_op(matprod, eltype(Afactors), eltype(B)))
@@ -404,8 +404,8 @@ function _rmul_compactwy!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) wher
     end
     Qfactors, QT = Q.factors, Q.T
     nb, k = size(QT)
-    if !(0 <= k <= mQ)
-        throw(DimensionMismatch(lazy"wrong value for k = $k: must be between 0 and $mQ"))
+    if k > mQ
+        throw(DimensionMismatch(lazy"wrong value for k = $k: must be at most $mQ"))
     end
     (k == 0 || mA == 0) && return A
     TW = promote_op(matprod, promote_op(matprod, eltype(A), eltype(Qfactors)), eltype(QT))
