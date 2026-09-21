@@ -6,7 +6,7 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, rmul!, lmul!
-using LinearAlgebra: LQPackedQ, QRPackedQ, _lmul_lq!, _rmul_lq!, lqfactUnblocked!
+using LinearAlgebra: LQPackedQ, QRPackedQ, _lqmul!, _rqmul!, lqfactUnblocked!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
@@ -294,17 +294,17 @@ end
         for p in (1, 3)
             B = elty <: Complex ? complex.(randn(nQ, p), randn(nQ, p)) : randn(nQ, p)
             B = convert(Matrix{elty}, B)
-            @test _lmul_lq!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B)) ≈ Q * B
-            @test _lmul_lq!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B)) ≈ Q' * B
+            @test _lqmul!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B)) ≈ Q * B
+            @test _lqmul!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B)) ≈ Q' * B
             C = elty <: Complex ? complex.(randn(p, nQ), randn(p, nQ)) : randn(p, nQ)
             C = convert(Matrix{elty}, C)
-            @test _rmul_lq!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q) ≈ C * Q
-            @test _rmul_lq!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q') ≈ C * Q'
+            @test _rqmul!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q) ≈ C * Q
+            @test _rqmul!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q') ≈ C * Q'
         end
         b = elty <: Complex ? complex.(randn(nQ), randn(nQ)) : randn(nQ)
         b = convert(Vector{elty}, b)
-        @test _lmul_lq!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b)) ≈ Q * b
-        @test _lmul_lq!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b)) ≈ Q' * b
+        @test _lqmul!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b)) ≈ Q * b
+        @test _lqmul!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b)) ≈ Q' * b
     end
 
     @testset "dispatch for non-BLAS eltypes" begin
@@ -387,11 +387,11 @@ end
         end
         for p in (1, 3)
             B = [randn(QT) for _ in CartesianIndices((n, p))]
-            @test _lmul_lq!(Q, copy(B), Val(false)) ≈ Qref * B
-            @test _lmul_lq!(Q, copy(B), Val(true)) ≈ Qref' * B
+            @test _lqmul!(Q, copy(B), Val(false)) ≈ Qref * B
+            @test _lqmul!(Q, copy(B), Val(true)) ≈ Qref' * B
             A = [randn(QT) for _ in CartesianIndices((p, n))]
-            @test _rmul_lq!(copy(A), Q, Val(false)) ≈ A * Qref
-            @test _rmul_lq!(copy(A), Q, Val(true)) ≈ A * Qref'
+            @test _rqmul!(copy(A), Q, Val(false)) ≈ A * Qref
+            @test _rqmul!(copy(A), Q, Val(true)) ≈ A * Qref'
         end
     end
 

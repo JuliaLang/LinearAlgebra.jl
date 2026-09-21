@@ -603,7 +603,7 @@ qsize_check(A::AbstractVecOrMat, Q::LQPackedQ) =
 # in the `i`th row of `Q.factors`, so `vᵢ` is the `i`th column of `Q.factors'`, and the
 # reflectors can be applied with `reflectorApply!`. `Q` applies the `Hᵢ'` and `Q'` the `Hᵢ`,
 # in opposite orders; `adj = true` selects the latter.
-function _lmul_lq!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+function _lqmul!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
     mB, nB = size(B, 1), size(B, 2)
@@ -618,8 +618,8 @@ function _lmul_lq!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     B
 end
 
-# as `_lmul_lq!`, for `A*Q` resp. `A*Q'`, applying the reflectors the other way round
-function _rmul_lq!(A::AbstractVecOrMat, Q::LQPackedQ, ::Val{adj}) where {adj}
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, applying the reflectors the other way round
+function _rqmul!(A::AbstractVecOrMat, Q::LQPackedQ, ::Val{adj}) where {adj}
     require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
     mA, nA = size(A, 1), size(A, 2)
@@ -645,8 +645,8 @@ rmul!(A::StridedVecOrMat{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:Bla
     (B = adjB.Q; LAPACK.ormlq!('R', 'T', B.factors, B.τ, A))
 rmul!(A::StridedVecOrMat{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:BlasComplex} =
     (B = adjB.Q; LAPACK.ormlq!('R', 'C', B.factors, B.τ, A))
-rmul!(A::AbstractVecOrMat, Q::LQPackedQ) = _rmul_lq!(A, Q, Val(false))
-rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:LQPackedQ}) = _rmul_lq!(A, adjQ.Q, Val(true))
+rmul!(A::AbstractVecOrMat, Q::LQPackedQ) = _rqmul!(A, Q, Val(false))
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:LQPackedQ}) = _rqmul!(A, adjQ.Q, Val(true))
 
 ### QB / QcB
 lmul!(A::LQPackedQ{T}, B::StridedVecOrMat{T}) where {T<:BlasFloat} = LAPACK.ormlq!('L','N',A.factors,A.τ,B)
@@ -654,8 +654,8 @@ lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:Bla
     (A = adjA.Q; LAPACK.ormlq!('L', 'T', A.factors, A.τ, B))
 lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (A = adjA.Q; LAPACK.ormlq!('L', 'C', A.factors, A.τ, B))
-lmul!(Q::LQPackedQ, B::AbstractVecOrMat) = _lmul_lq!(Q, B, Val(false))
-lmul!(adjQ::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVecOrMat) = _lmul_lq!(adjQ.Q, B, Val(true))
+lmul!(Q::LQPackedQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
+lmul!(adjQ::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, B, Val(true))
 
 # division by a matrix
 function /(adjQ::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVecOrMat)
