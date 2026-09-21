@@ -598,6 +598,63 @@ qsize_check(A::AbstractVecOrMat, Q::LQPackedQ) =
     size(A, 2) in size(Q.factors) ||
         throw(DimensionMismatch(lazy"second dimension of A, $(size(A,2)), must equal one of the dimensions of Q, $(size(Q.factors))"))
 
+# Generic counterparts of LAPACK's `ormlq!`. In the LQ factorization, `Q = H_k' ⋯ H_1'` is
+# the product of the adjoints of the reflectors `Hᵢ = I - τᵢvᵢvᵢ'`, where `vᵢ[i] = 1`,
+# `vᵢ[l] = 0` for `l < i` and `conj(vᵢ[l]) = Q.factors[i,l]` for `l > i`. So `Q` applies the
+# `Hᵢ'` and `Q'` the `Hᵢ`, in opposite orders; `adj = true` selects the latter.
+function _lmul_lq!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    require_one_based_indexing(B)
+    mQ, nQ = size(Q.factors)
+    mB, nB = size(B, 1), size(B, 2)
+    if nQ != mB
+        throw(DimensionMismatch(lazy"matrix Q has dimensions ($nQ,$nQ) but B has dimensions ($mB, $nB)"))
+    end
+    Qfactors = Q.factors
+    k = min(mQ, nQ)
+    @inbounds for i in (adj ? (k:-1:1) : (1:1:k))
+        τi = adj ? Q.τ[i] : conj(Q.τ[i])
+        for j = 1:nB
+            vBj = B[i,j] # unit entry of vᵢ
+            for l = i+1:mB
+                vBj = muladd(Qfactors[i,l], B[l,j], vBj)
+            end
+            vBj = τi*vBj
+            B[i,j] -= vBj
+            for l = i+1:mB
+                B[l,j] -= conj(Qfactors[i,l])*vBj
+            end
+        end
+    end
+    B
+end
+
+# as `_lmul_lq!`, for `A*Q` resp. `A*Q'`, applying the reflectors the other way round
+function _rmul_lq!(A::AbstractVecOrMat, Q::LQPackedQ, ::Val{adj}) where {adj}
+    require_one_based_indexing(A)
+    mQ, nQ = size(Q.factors)
+    mA, nA = size(A, 1), size(A, 2)
+    if nA != nQ
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($nQ, $nQ)"))
+    end
+    Qfactors = Q.factors
+    k = min(mQ, nQ)
+    @inbounds for i in (adj ? (1:1:k) : (k:-1:1))
+        τi = adj ? Q.τ[i] : conj(Q.τ[i])
+        for r = 1:mA
+            Avi = A[r,i] # unit entry of vᵢ
+            for l = i+1:nA
+                Avi = muladd(A[r,l], conj(Qfactors[i,l]), Avi)
+            end
+            Avi = τi*Avi
+            A[r,i] -= Avi
+            for l = i+1:nA
+                A[r,l] -= Avi*Qfactors[i,l]
+            end
+        end
+    end
+    A
+end
+
 # in-place right-application of LQPackedQs
 # these methods require that the applied-to matrix's (A's) number of columns
 # match the number of columns (nQ) of the LQPackedQ (Q) (necessary for in-place
@@ -609,6 +666,8 @@ rmul!(A::StridedVecOrMat{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:Bla
     (B = adjB.Q; LAPACK.ormlq!('R', 'T', B.factors, B.τ, A))
 rmul!(A::StridedVecOrMat{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:BlasComplex} =
     (B = adjB.Q; LAPACK.ormlq!('R', 'C', B.factors, B.τ, A))
+rmul!(A::AbstractVecOrMat, Q::LQPackedQ) = _rmul_lq!(A, Q, Val(false))
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:LQPackedQ}) = _rmul_lq!(A, adjQ.Q, Val(true))
 
 ### QB / QcB
 lmul!(A::LQPackedQ{T}, B::StridedVecOrMat{T}) where {T<:BlasFloat} = LAPACK.ormlq!('L','N',A.factors,A.τ,B)
@@ -616,6 +675,8 @@ lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:Bla
     (A = adjA.Q; LAPACK.ormlq!('L', 'T', A.factors, A.τ, B))
 lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (A = adjA.Q; LAPACK.ormlq!('L', 'C', A.factors, A.τ, B))
+lmul!(Q::LQPackedQ, B::AbstractVecOrMat) = _lmul_lq!(Q, B, Val(false))
+lmul!(adjQ::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVecOrMat) = _lmul_lq!(adjQ.Q, B, Val(true))
 
 # division by a matrix
 function /(adjQ::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVecOrMat)

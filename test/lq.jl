@@ -6,6 +6,7 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, rmul!, lmul!
+using LinearAlgebra: LQPackedQ, _lmul_lq!, _rmul_lq!
 
 m = 10
 
@@ -242,6 +243,85 @@ end
         L2, Q2 = lq(Q1)
         @test Matrix(Q1) ≈ Matrix(Q2)
         @test L2 ≈ I
+    end
+end
+
+# The reflectors of a `Float64` LQ factorization, promoted to `BigFloat` and with τ
+# recomputed so that every `I - τᵢvᵢvᵢ'` is orthogonal to full `BigFloat` precision.
+function bigfloat_lq_reflectors(m, n)
+    factors = big.(lq(randn(m, n)).factors)
+    nQ, k = size(factors, 2), min(size(factors)...)
+    τ = map(1:k) do i
+        v = zeros(BigFloat, nQ)
+        v[i] = 1
+        for l in i+1:nQ
+            v[l] = conj(factors[i,l])
+        end
+        return 2 / (v'v)
+    end
+    return LQPackedQ(factors, τ)
+end
+
+@testset "generic lmul!/rmul! with LQPackedQ and its adjoint" begin
+    @testset "matches LAPACK: $elty, ($m,$n)" for
+            elty in (Float32, Float64, ComplexF32, ComplexF64),
+            (m, n) in ((4, 6), (6, 4), (5, 5), (1, 1), (1, 7), (8, 1), (13, 6))
+        A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
+        Q = lq(convert(Matrix{elty}, A)).Q
+        nQ = size(Q, 1)
+        for p in (1, 3)
+            B = elty <: Complex ? complex.(randn(nQ, p), randn(nQ, p)) : randn(nQ, p)
+            B = convert(Matrix{elty}, B)
+            @test _lmul_lq!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B))
+            @test _lmul_lq!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B))
+            C = elty <: Complex ? complex.(randn(p, nQ), randn(p, nQ)) : randn(p, nQ)
+            C = convert(Matrix{elty}, C)
+            @test _rmul_lq!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q)
+            @test _rmul_lq!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q')
+        end
+        b = elty <: Complex ? complex.(randn(nQ), randn(nQ)) : randn(nQ)
+        b = convert(Vector{elty}, b)
+        @test _lmul_lq!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b))
+        @test _lmul_lq!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b))
+    end
+
+    @testset "dispatch for non-BLAS eltypes" begin
+        for (m, n) in ((4, 6), (6, 4), (5, 5))
+            Q = lq(randn(m, n)).Q
+            Qsq = squareQ(Q)
+            nQ = size(Q, 1)
+            for B in (big.(randn(nQ, 3)), big.(randn(nQ)))
+                @test lmul!(Q, copy(B)) ≈ Qsq * B rtol=1e-12
+                @test lmul!(Q', copy(B)) ≈ Qsq' * B rtol=1e-12
+            end
+            C = big.(randn(3, nQ))
+            @test rmul!(copy(C), Q) ≈ C * Qsq rtol=1e-12
+            @test rmul!(copy(C), Q') ≈ C * Qsq' rtol=1e-12
+        end
+    end
+
+    @testset "full BigFloat precision: ($m,$n)" for (m, n) in ((4, 6), (6, 4), (5, 5), (9, 3))
+        Q = bigfloat_lq_reflectors(m, n)
+        nQ = size(Q, 1)
+        Id = Matrix{BigFloat}(I, nQ, nQ)
+        @test lmul!(Q', lmul!(Q, copy(Id))) ≈ Id
+        @test lmul!(Q, lmul!(Q', copy(Id))) ≈ Id
+        @test rmul!(rmul!(copy(Id), Q), Q') ≈ Id
+        @test rmul!(rmul!(copy(Id), Q'), Q) ≈ Id
+        # left- and right-multiplication have to be consistent: A*Q == (Q'*A')'
+        A = big.(randn(4, nQ))
+        @test rmul!(copy(A), Q) ≈ collect(lmul!(Q', collect(A'))')
+        @test rmul!(copy(A), Q') ≈ collect(lmul!(Q, collect(A'))')
+    end
+
+    @testset "dimension mismatch" begin
+        Q = lq(randn(4, 6)).Q   # Q is 6×6
+        @test_throws DimensionMismatch lmul!(Q, big.(randn(5, 2)))
+        @test_throws DimensionMismatch lmul!(Q', big.(randn(5, 2)))
+        @test_throws DimensionMismatch lmul!(Q, big.(randn(5)))
+        @test_throws DimensionMismatch lmul!(Q', big.(randn(5)))
+        @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q)
+        @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q')
     end
 end
 
