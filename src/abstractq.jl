@@ -599,9 +599,10 @@ qsize_check(A::AbstractVecOrMat, Q::LQPackedQ) =
         throw(DimensionMismatch(lazy"second dimension of A, $(size(A,2)), must equal one of the dimensions of Q, $(size(Q.factors))"))
 
 # Generic counterparts of LAPACK's `ormlq!`. In the LQ factorization, `Q = H_k' ⋯ H_1'` is
-# the product of the adjoints of the reflectors `Hᵢ = I - τᵢvᵢvᵢ'`, where `vᵢ[i] = 1`,
-# `vᵢ[l] = 0` for `l < i` and `conj(vᵢ[l]) = Q.factors[i,l]` for `l > i`. So `Q` applies the
-# `Hᵢ'` and `Q'` the `Hᵢ`, in opposite orders; `adj = true` selects the latter.
+# the product of the adjoints of the reflectors `Hᵢ = I - τᵢvᵢvᵢ'`. LAPACK stores `conj(vᵢ)`
+# in the `i`th row of `Q.factors`, so `vᵢ` is the `i`th column of `Q.factors'`, and the
+# reflectors can be applied with `reflectorApply!`. `Q` applies the `Hᵢ'` and `Q'` the `Hᵢ`,
+# in opposite orders; `adj = true` selects the latter.
 function _lmul_lq!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
@@ -609,21 +610,10 @@ function _lmul_lq!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     if nQ != mB
         throw(DimensionMismatch(lazy"matrix Q has dimensions ($nQ,$nQ) but B has dimensions ($mB, $nB)"))
     end
-    Qfactors = Q.factors
-    k = min(mQ, nQ)
-    @inbounds for i in (adj ? (k:-1:1) : (1:1:k))
-        τi = adj ? Q.τ[i] : conj(Q.τ[i])
-        for j = 1:nB
-            vBj = B[i,j] # unit entry of vᵢ
-            for l = i+1:mB
-                vBj = muladd(Qfactors[i,l], B[l,j], vBj)
-            end
-            vBj = τi*vBj
-            B[i,j] -= vBj
-            for l = i+1:mB
-                B[l,j] -= conj(Qfactors[i,l])*vBj
-            end
-        end
+    Qv, Bmat = Q.factors', reshape(B, mB, nB)
+    @inbounds for i in (adj ? (min(mQ,nQ):-1:1) : (1:1:min(mQ,nQ)))
+        # `reflectorApply!` applies `I - vᵢ conj(τ)vᵢ'`, hence the conjugation for `Q'`
+        reflectorApply!(view(Qv, i:mB, i), adj ? conj(Q.τ[i]) : Q.τ[i], view(Bmat, i:mB, :))
     end
     B
 end
@@ -636,21 +626,10 @@ function _rmul_lq!(A::AbstractVecOrMat, Q::LQPackedQ, ::Val{adj}) where {adj}
     if nA != nQ
         throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($nQ, $nQ)"))
     end
-    Qfactors = Q.factors
-    k = min(mQ, nQ)
-    @inbounds for i in (adj ? (1:1:k) : (k:-1:1))
-        τi = adj ? Q.τ[i] : conj(Q.τ[i])
-        for r = 1:mA
-            Avi = A[r,i] # unit entry of vᵢ
-            for l = i+1:nA
-                Avi = muladd(A[r,l], conj(Qfactors[i,l]), Avi)
-            end
-            Avi = Avi*τi # the scalar multiplies `A*vᵢ` from the right
-            A[r,i] -= Avi
-            for l = i+1:nA
-                A[r,l] -= Avi*Qfactors[i,l]
-            end
-        end
+    Qv, Amat = Q.factors', reshape(A, mA, nA)
+    @inbounds for i in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
+        # `reflectorApply!` applies `I - vᵢτvᵢ'` here, hence the conjugation for `Q`
+        reflectorApply!(view(Amat, :, i:nA), view(Qv, i:nA, i), adj ? Q.τ[i] : conj(Q.τ[i]))
     end
     A
 end
