@@ -272,17 +272,17 @@ end
         for p in (1, 3)
             B = elty <: Complex ? complex.(randn(nQ, p), randn(nQ, p)) : randn(nQ, p)
             B = convert(Matrix{elty}, B)
-            @test _lmul_lq!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B))
-            @test _lmul_lq!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B))
+            @test _lmul_lq!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B)) ≈ Q * B
+            @test _lmul_lq!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B)) ≈ Q' * B
             C = elty <: Complex ? complex.(randn(p, nQ), randn(p, nQ)) : randn(p, nQ)
             C = convert(Matrix{elty}, C)
-            @test _rmul_lq!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q)
-            @test _rmul_lq!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q')
+            @test _rmul_lq!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q) ≈ C * Q
+            @test _rmul_lq!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q') ≈ C * Q'
         end
         b = elty <: Complex ? complex.(randn(nQ), randn(nQ)) : randn(nQ)
         b = convert(Vector{elty}, b)
-        @test _lmul_lq!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b))
-        @test _lmul_lq!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b))
+        @test _lmul_lq!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b)) ≈ Q * b
+        @test _lmul_lq!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b)) ≈ Q' * b
     end
 
     @testset "dispatch for non-BLAS eltypes" begin
@@ -312,6 +312,33 @@ end
         A = big.(randn(4, nQ))
         @test rmul!(copy(A), Q) ≈ collect(lmul!(Q', collect(A'))')
         @test rmul!(copy(A), Q') ≈ collect(lmul!(Q, collect(A'))')
+    end
+
+    # `qsize_check` lets `Q'*B` and `A*Q` also take the operand with `size(Q.factors, 1)`
+    # rows resp. columns, which `mul!` zero-extends to the full `nQ`. That is only
+    # reachable through `*`, never through `lmul!`/`rmul!`.
+    @testset "flexible operand size via *: $elty, ($m,$n)" for
+            elty in (Float64, ComplexF64), (m, n) in ((4, 6), (2, 7), (1, 5), (5, 6))
+        A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
+        Q = lq(convert(Matrix{elty}, A)).Q   # Q is n×n, factors are m×n with m < n
+        Qsq = squareQ(Q)
+        p = 3
+        B = elty <: Complex ? complex.(randn(m, p), randn(m, p)) : randn(m, p)
+        B = convert(Matrix{elty}, B)
+        Bext = [B; zeros(elty, n - m, p)]
+        @test Q' * B ≈ Qsq' * Bext
+        @test size(Q' * B) == (n, p)
+        C = elty <: Complex ? complex.(randn(p, m), randn(p, m)) : randn(p, m)
+        C = convert(Matrix{elty}, C)
+        Cext = [C zeros(elty, p, n - m)]
+        @test C * Q ≈ Cext * Qsq
+        @test size(C * Q) == (p, n)
+        b = elty <: Complex ? complex.(randn(m), randn(m)) : randn(m)
+        b = convert(Vector{elty}, b)
+        @test Q' * b ≈ Qsq' * [b; zeros(elty, n - m)]
+        # the other two directions admit only the full size
+        @test_throws DimensionMismatch Q * B
+        @test_throws DimensionMismatch C * Q'
     end
 
     @testset "dimension mismatch" begin
