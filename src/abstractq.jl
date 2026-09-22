@@ -353,6 +353,47 @@ function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     B
 end
 
+# Generic counterpart of LAPACK's `gemqrt!`. The blocks of the compact WY representation
+# `Q = (I - V₁T₁V₁') ⋯ (I - V_bT_bV_b')` are applied in reverse order, resp. in increasing
+# order and with `Tⱼ'` in place of `Tⱼ` for `Q'` (`adj = true`).
+function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    require_one_based_indexing(B)
+    mQ, nQ = size(Q.factors)
+    mB, nB = size(B, 1), size(B, 2)
+    if mQ != mB
+        throw(DimensionMismatch(lazy"matrix Q has dimensions ($mQ,$mQ) but B has dimensions ($mB, $nB)"))
+    end
+    Qfactors, QT = Q.factors, Q.T
+    nb, k = size(QT)
+    if k > mQ
+        throw(DimensionMismatch(lazy"wrong value for k = $k: must be at most $mQ"))
+    end
+    (k == 0 || nB == 0) && return B
+    TW = promote_op(matprod, eltype(QT), promote_op(matprod, eltype(Qfactors), eltype(B)))
+    W = similar(B, TW, (nb, nB)) # workspace for `Tⱼ Vⱼ' B`
+    for idx in (adj ? (1:1:cld(k, nb)) : (cld(k, nb):-1:1))
+        k0 = (idx - 1) * nb
+        nj = min(nb, k - k0)
+        top, bot = k0+1:k0+nj, k0+nj+1:mB
+        # `Vⱼ` splits into a unit lower triangular top block and a rectangular one below it
+        V1 = UnitLowerTriangular(view(Qfactors, top, top))
+        V2 = view(Qfactors, bot, top)
+        B1, B2, Wj = view(B, top, :), view(B, bot, :), view(W, 1:nj, :)
+        Tj = UpperTriangular(view(QT, 1:nj, top))
+        # Wⱼ = Vⱼ'B
+        copyto!(Wj, B1)
+        lmul!(V1', Wj)
+        mul!(Wj, V2', B2, true, true)
+        # Wⱼ = Tⱼ Wⱼ, resp. Wⱼ = Tⱼ' Wⱼ
+        adj ? lmul!(Tj', Wj) : lmul!(Tj, Wj)
+        # B -= Vⱼ Wⱼ
+        mul!(B2, V2, Wj, -1, true)
+        lmul!(V1, Wj)
+        B1 .-= Wj
+    end
+    B
+end
+
 # as `_lqmul!`, for `A*Q` resp. `A*Q'`, running over the reflectors the other way round and
 # multiplying by `τₖ` from the right rather than from the left
 function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
@@ -381,9 +422,49 @@ function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
     end
     A
 end
+
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, traversing the blocks the other way round
+function _rqmul!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) where {adj}
+    require_one_based_indexing(A)
+    mQ, nQ = size(Q.factors)
+    mA, nA = size(A, 1), size(A, 2)
+    if nA != mQ
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $mQ)"))
+    end
+    Qfactors, QT = Q.factors, Q.T
+    nb, k = size(QT)
+    if k > mQ
+        throw(DimensionMismatch(lazy"wrong value for k = $k: must be at most $mQ"))
+    end
+    (k == 0 || mA == 0) && return A
+    TW = promote_op(matprod, promote_op(matprod, eltype(A), eltype(Qfactors)), eltype(QT))
+    W = similar(A, TW, (mA, nb)) # workspace for `A Vⱼ Tⱼ`
+    for idx in (adj ? (cld(k, nb):-1:1) : (1:1:cld(k, nb)))
+        k0 = (idx - 1) * nb
+        nj = min(nb, k - k0)
+        left, right = k0+1:k0+nj, k0+nj+1:nA
+        V1 = UnitLowerTriangular(view(Qfactors, left, left))
+        V2 = view(Qfactors, right, left)
+        A1, A2, Wj = view(A, :, left), view(A, :, right), view(W, :, 1:nj)
+        Tj = UpperTriangular(view(QT, 1:nj, left))
+        # Wⱼ = A Vⱼ
+        copyto!(Wj, A1)
+        rmul!(Wj, V1)
+        mul!(Wj, A2, V2, true, true)
+        # Wⱼ = Wⱼ Tⱼ, resp. Wⱼ = Wⱼ Tⱼ'
+        adj ? rmul!(Wj, Tj') : rmul!(Wj, Tj)
+        # A -= Wⱼ Vⱼ'
+        mul!(A2, Wj, V2', -1, true)
+        rmul!(Wj, V1')
+        A1 .-= Wj
+    end
+    A
+end
+
 ### QB
 lmul!(A::QRCompactWYQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('L', 'N', A.factors, A.T, B)
+lmul!(Q::QRCompactWYQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
 lmul!(A::QRPackedQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.ormqr!('L', 'N', A.factors, A.τ, B)
 lmul!(Q::QRPackedQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
@@ -393,6 +474,7 @@ lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,<:StridedMatrix}}, B::StridedVecOrMa
     (Q = adjQ.Q; LAPACK.gemqrt!('L', 'T', Q.factors, Q.T, B))
 lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.gemqrt!('L', 'C', Q.factors, Q.T, B))
+lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, B, Val(true))
 lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.ormqr!('L', 'T', Q.factors, Q.τ, B))
 lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
@@ -402,6 +484,7 @@ lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, 
 ### AQ
 rmul!(A::StridedVecOrMat{T}, B::QRCompactWYQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('R', 'N', B.factors, B.T, A)
+rmul!(A::AbstractVecOrMat, Q::QRCompactWYQ) = _rqmul!(A, Q, Val(false))
 rmul!(A::StridedVecOrMat{T}, B::QRPackedQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
     LAPACK.ormqr!('R', 'N', B.factors, B.τ, A)
 rmul!(A::AbstractVecOrMat, Q::QRPackedQ) = _rqmul!(A, Q, Val(false))
@@ -411,6 +494,8 @@ rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T}}) where {T<:
     (Q = adjQ.Q; LAPACK.gemqrt!('R', 'T', Q.factors, Q.T, A))
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T}}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.gemqrt!('R', 'C', Q.factors, Q.T, A))
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:QRCompactWYQ}) =
+    _rqmul!(A, adjQ.Q, Val(true))
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRPackedQ{T}}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.ormqr!('R', 'T', Q.factors, Q.τ, A))
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRPackedQ{T}}) where {T<:BlasComplex} =
