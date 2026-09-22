@@ -1817,13 +1817,6 @@ Multiplies `A` in-place by a Householder reflection on the left. It is equivalen
 end
 
 """
-    reflectorApply!(A, x, τ)
-
-Multiplies `A` in-place by a Householder reflection on the right. It is equivalent to
-`A .= A * (I - [1; x[2:end]] * τ * [1; x[2:end]]')`.
-"""
-
-"""
     det(M)
 
 Matrix determinant.
