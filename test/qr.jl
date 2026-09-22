@@ -685,21 +685,25 @@ end
             elty in (Float64, ComplexF64),
             (m, n) in ((7, 4), (6, 2), (5, 1), (40, 37)),
             bs in (1, 2, 36)
+        # `Q` still comes from LAPACK; the operands are `BigFloat`, so that `*` has to
+        # zero-extend and then reach the generic methods, and `Qsq` stays an independent
+        # `Float64`-accurate reference, hence the tolerance
+        eltb = elty <: Complex ? Complex{BigFloat} : BigFloat
         A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
         Q = qr(convert(Matrix{elty}, A), NoPivot(); blocksize=bs).Q   # Q is m×m
         Qsq = Matrix(Q * I)
         p = 3
         B = elty <: Complex ? complex.(randn(n, p), randn(n, p)) : randn(n, p)
-        B = convert(Matrix{elty}, B)
-        @test Q * B ≈ Qsq * [B; zeros(elty, m - n, p)]
+        B = convert(Matrix{eltb}, B)
+        @test Q * B ≈ Qsq * [B; zeros(eltb, m - n, p)] rtol=1e-12
         @test size(Q * B) == (m, p)
         C = elty <: Complex ? complex.(randn(p, n), randn(p, n)) : randn(p, n)
-        C = convert(Matrix{elty}, C)
-        @test C * Q' ≈ [C zeros(elty, p, m - n)] * Qsq'
+        C = convert(Matrix{eltb}, C)
+        @test C * Q' ≈ [C zeros(eltb, p, m - n)] * Qsq' rtol=1e-12
         @test size(C * Q') == (p, m)
         b = elty <: Complex ? complex.(randn(n), randn(n)) : randn(n)
-        b = convert(Vector{elty}, b)
-        @test Q * b ≈ Qsq * [b; zeros(elty, m - n)]
+        b = convert(Vector{eltb}, b)
+        @test Q * b ≈ Qsq * [b; zeros(eltb, m - n)] rtol=1e-12
         # the other two directions admit only the full size
         @test_throws DimensionMismatch Q' * B
         @test_throws DimensionMismatch C * Q
