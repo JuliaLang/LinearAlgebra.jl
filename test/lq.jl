@@ -6,6 +6,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, rmul!, lmul!
+using LinearAlgebra: LQPackedQ, QRPackedQ, _lqmul!, _rqmul!
+
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+using Main.LinearAlgebraTestHelpers.Quaternions
 
 m = 10
 
@@ -242,6 +248,226 @@ end
         L2, Q2 = lq(Q1)
         @test Matrix(Q1) ≈ Matrix(Q2)
         @test L2 ≈ I
+    end
+end
+
+# The reflectors of a `Float64` LQ factorization, promoted to `BigFloat` and with τ
+# recomputed so that every `I - τᵢvᵢvᵢ'` is orthogonal to full `BigFloat` precision.
+function bigfloat_lq_reflectors(m, n)
+    factors = big.(lq(randn(m, n)).factors)
+    nQ, k = size(factors, 2), min(size(factors)...)
+    τ = map(1:k) do i
+        v = zeros(BigFloat, nQ)
+        v[i] = 1
+        for l in i+1:nQ
+            v[l] = conj(factors[i,l])
+        end
+        return 2 / (v'v)
+    end
+    return LQPackedQ(factors, τ)
+end
+
+# `Q = H_k' ⋯ H_1'` with `Hᵢ = I - vᵢτᵢvᵢ'`, built from explicit matrix products so that
+# every operand order is fixed. Used to check the kernels for a non-commutative element type.
+function quaternion_lq_refQ(factors, τ, n, k)
+    QT = eltype(factors)
+    Q = Matrix{QT}(I, n, n)
+    for i in 1:k
+        v = zeros(QT, n)
+        v[i] = one(Float64)
+        for l in i+1:n
+            v[l] = conj(factors[i,l])
+        end
+        # Hᵢ' = I - vᵢ conj(τᵢ) vᵢ', and Q accumulates so that H_k' ends up leftmost
+        Q = (Matrix{QT}(I, n, n) - (v .* conj(τ[i])) * v') * Q
+    end
+    return Q
+end
+
+@testset "generic lmul!/rmul! with LQPackedQ and its adjoint" begin
+    @testset "matches LAPACK: $elty, ($m,$n)" for
+            elty in (Float32, Float64, ComplexF32, ComplexF64),
+            (m, n) in ((4, 6), (6, 4), (5, 5), (1, 1), (1, 7), (8, 1), (13, 6))
+        A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
+        Q = lq(convert(Matrix{elty}, A)).Q
+        nQ = size(Q, 1)
+        for p in (1, 3)
+            B = elty <: Complex ? complex.(randn(nQ, p), randn(nQ, p)) : randn(nQ, p)
+            B = convert(Matrix{elty}, B)
+            @test _lqmul!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B))
+            @test _lqmul!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B))
+            C = elty <: Complex ? complex.(randn(p, nQ), randn(p, nQ)) : randn(p, nQ)
+            C = convert(Matrix{elty}, C)
+            @test _rqmul!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q)
+            @test _rqmul!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q')
+        end
+        b = elty <: Complex ? complex.(randn(nQ), randn(nQ)) : randn(nQ)
+        b = convert(Vector{elty}, b)
+        @test _lqmul!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b))
+        @test _lqmul!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b))
+    end
+
+    @testset "dispatch for non-BLAS eltypes" begin
+        for (m, n) in ((4, 6), (6, 4), (5, 5))
+            Q = lq(randn(m, n)).Q
+            Qsq = squareQ(Q)
+            nQ = size(Q, 1)
+            for B in (big.(randn(nQ, 3)), big.(randn(nQ)))
+                @test lmul!(Q, copy(B)) ≈ Qsq * B rtol=1e-12
+                @test lmul!(Q', copy(B)) ≈ Qsq' * B rtol=1e-12
+                # `*` promotes `Q` to `BigFloat` and so reaches the generic methods too
+                @test Q * B ≈ Qsq * B rtol=1e-12
+                @test Q' * B ≈ Qsq' * B rtol=1e-12
+            end
+            C = big.(randn(3, nQ))
+            @test rmul!(copy(C), Q) ≈ C * Qsq rtol=1e-12
+            @test rmul!(copy(C), Q') ≈ C * Qsq' rtol=1e-12
+            @test C * Q ≈ C * Qsq rtol=1e-12
+            @test C * Q' ≈ C * Qsq' rtol=1e-12
+        end
+    end
+
+    @testset "full BigFloat precision: ($m,$n)" for (m, n) in ((4, 6), (6, 4), (5, 5), (9, 3))
+        Q = bigfloat_lq_reflectors(m, n)
+        nQ = size(Q, 1)
+        Id = Matrix{BigFloat}(I, nQ, nQ)
+        @test lmul!(Q', lmul!(Q, copy(Id))) ≈ Id
+        @test lmul!(Q, lmul!(Q', copy(Id))) ≈ Id
+        @test rmul!(rmul!(copy(Id), Q), Q') ≈ Id
+        @test rmul!(rmul!(copy(Id), Q'), Q) ≈ Id
+        # left- and right-multiplication have to be consistent: A*Q == (Q'*A')'
+        A = big.(randn(4, nQ))
+        @test rmul!(copy(A), Q) ≈ collect(lmul!(Q', collect(A'))')
+        @test rmul!(copy(A), Q') ≈ collect(lmul!(Q, collect(A'))')
+    end
+
+    # `qsize_check` lets `Q'*B` and `A*Q` also take the operand with `size(Q.factors, 1)`
+    # rows resp. columns, which `mul!` zero-extends to the full `nQ`. That is only
+    # reachable through `*`, never through `lmul!`/`rmul!`.
+    @testset "flexible operand size via *: $elty, ($m,$n)" for
+            elty in (Float64, ComplexF64), (m, n) in ((4, 6), (2, 7), (1, 5), (5, 6))
+        # `Q` is factorized by LAPACK, but the `BigFloat` operands make `*` promote it
+        # (there is no mixed-eltype `mul!` for an `AbstractQ`) and zero-extend, so the
+        # multiplication itself runs through the generic methods. `Qsq` stays an
+        # independent `Float64`-accurate reference, hence the tolerance
+        eltb = elty <: Complex ? Complex{BigFloat} : BigFloat
+        A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
+        Q = lq(convert(Matrix{elty}, A)).Q   # Q is n×n, factors are m×n with m < n
+        Qsq = squareQ(Q)
+        p = 3
+        B = elty <: Complex ? complex.(randn(m, p), randn(m, p)) : randn(m, p)
+        B = convert(Matrix{eltb}, B)
+        Bext = [B; zeros(eltb, n - m, p)]
+        @test Q' * B ≈ Qsq' * Bext rtol=1e-12
+        @test size(Q' * B) == (n, p)
+        C = elty <: Complex ? complex.(randn(p, m), randn(p, m)) : randn(p, m)
+        C = convert(Matrix{eltb}, C)
+        Cext = [C zeros(eltb, p, n - m)]
+        @test C * Q ≈ Cext * Qsq rtol=1e-12
+        @test size(C * Q) == (p, n)
+        b = elty <: Complex ? complex.(randn(m), randn(m)) : randn(m)
+        b = convert(Vector{eltb}, b)
+        @test Q' * b ≈ Qsq' * [b; zeros(eltb, n - m)] rtol=1e-12
+        # the other two directions admit only the full size
+        @test_throws DimensionMismatch Q * B
+        @test_throws DimensionMismatch C * Q'
+    end
+
+    # The scalar τᵢ sits between the vectors in `Hᵢ = I - vᵢτᵢvᵢ'`, so `lmul!` must apply it
+    # as `vᵢ*(τᵢ*(vᵢ'B))` while `rmul!` must apply it as `((A*vᵢ)*τᵢ)*vᵢ'`. Commutative
+    # element types cannot distinguish the two, hence the quaternion check.
+    @testset "non-commutative element type: ($m,$n)" for (m, n) in ((4, 6), (6, 4), (5, 5), (3, 7))
+        QT = Quaternion{Float64}
+        k = min(m, n)
+        factors = [randn(QT) for _ in CartesianIndices((m, n))]
+        τ = [randn(QT) for _ in 1:k]
+        Q = LQPackedQ(factors, τ)
+        Qref = quaternion_lq_refQ(factors, τ, n, k)
+        # Anchor the hand-built reference against the pre-existing `QRPackedQ` kernel: the
+        # adjoint undoes the conjugated row storage, so `LQPackedQ(factors, τ)` acts as
+        # `QRPackedQ(factors', τ)'`. That kernel predates this branch and is independent of
+        # everything under test here, so a consistent mistake in the helper cannot make a
+        # wrong kernel look right.
+        let P = QRPackedQ(factors', τ), B = [randn(QT) for _ in CartesianIndices((n, 2))]
+            @test lmul!(P', copy(B)) ≈ Qref * B
+            @test lmul!(P, copy(B)) ≈ Qref' * B
+            A = [randn(QT) for _ in CartesianIndices((2, n))]
+            @test rmul!(copy(A), P') ≈ A * Qref
+            @test rmul!(copy(A), P) ≈ A * Qref'
+        end
+        for p in (1, 3)
+            B = [randn(QT) for _ in CartesianIndices((n, p))]
+            @test _lqmul!(Q, copy(B), Val(false)) ≈ Qref * B
+            @test _lqmul!(Q, copy(B), Val(true)) ≈ Qref' * B
+            A = [randn(QT) for _ in CartesianIndices((p, n))]
+            @test _rqmul!(copy(A), Q, Val(false)) ≈ A * Qref
+            @test _rqmul!(copy(A), Q, Val(true)) ≈ A * Qref'
+        end
+    end
+
+    @testset "dimension mismatch" begin
+        Q = lq(randn(4, 6)).Q   # Q is 6×6
+        @test_throws DimensionMismatch lmul!(Q, big.(randn(5, 2)))
+        @test_throws DimensionMismatch lmul!(Q', big.(randn(5, 2)))
+        @test_throws DimensionMismatch lmul!(Q, big.(randn(5)))
+        @test_throws DimensionMismatch lmul!(Q', big.(randn(5)))
+        @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q)
+        @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q')
+    end
+end
+
+@testset "generic (unblocked) LQ factorization" begin
+    @testset "reproduces LAPACK gelqf!: $elty, ($m,$n)" for
+            elty in (Float32, Float64, ComplexF32, ComplexF64),
+            (m, n) in ((4, 6), (6, 4), (5, 5), (1, 1), (1, 7), (8, 1), (13, 6), (2, 9))
+        A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
+        A = convert(Matrix{elty}, A)
+        Flap = lq!(copy(A))                  # LAPACK path
+        Fgen = invoke(lq!, Tuple{AbstractMatrix}, copy(A))   # generic path
+        @test Fgen.factors ≈ Flap.factors
+        @test Fgen.τ ≈ Flap.τ
+        @test Fgen.L ≈ Flap.L
+        @test Matrix(Fgen.Q) ≈ Matrix(Flap.Q)
+        @test Fgen.L * Fgen.Q ≈ A
+    end
+
+    @testset "lq for non-BLAS eltypes: ($m,$n)" for (m, n) in ((4, 6), (6, 4), (5, 5), (1, 7), (8, 1), (7, 3))
+        for A in (big.(randn(m, n)), complex.(big.(randn(m, n)), big.(randn(m, n))))
+            F = lq(A)
+            @test F isa LQ{eltype(A)}
+            @test F.L * F.Q ≈ A
+            @test istril(F.L)
+            nQ = size(F.Q, 1)
+            Id = Matrix{eltype(A)}(I, nQ, nQ)
+            # the reflectors are orthogonal to full BigFloat precision
+            @test lmul!(F.Q', lmul!(F.Q, copy(Id))) ≈ Id
+            @test rmul!(rmul!(copy(Id), F.Q), F.Q') ≈ Id
+        end
+    end
+
+    # `reflectorApply!` applies `A*(I - vτv')`, so `τ` has to multiply `A*v` from the
+    # right, opposite to the left-applying method. Commutative element types cannot tell
+    # the two apart, so only this reconstructs incorrectly if the order is wrong.
+    @testset "non-commutative element type: ($m,$n)" for (m, n) in ((4, 6), (6, 4), (5, 5), (3, 7))
+        A = [randn(Quaternion{Float64}) for _ in CartesianIndices((m, n))]
+        F = lq(copy(A))
+        @test F.L * F.Q ≈ A
+        @test istril(F.L)
+    end
+
+    @testset "lq of exact and unusual element types" begin
+        @test lq(3).L * lq(3).Q ≈ fill(3.0, 1, 1)
+        Ai = [1 2 3; 4 5 6]
+        @test lq(Ai).L * lq(Ai).Q ≈ Ai
+        Ar = Rational{BigInt}[1//2 1//3; 1//5 1//7]
+        @test lq(Ar).L * lq(Ar).Q ≈ float.(Ar)
+    end
+
+    @testset "minimum-norm solve for an underdetermined BigFloat system" begin
+        A = big.(randn(3, 6))
+        b = big.(randn(3))
+        x = lq(A) \ b
+        @test A * x ≈ b
     end
 end
 

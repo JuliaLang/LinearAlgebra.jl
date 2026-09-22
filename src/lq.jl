@@ -70,6 +70,24 @@ matrix as a workspace. See also [`lq`](@ref).
 """
 lq!(A::StridedMatrix{<:BlasFloat}) = LQ(LAPACK.gelqf!(A)...)
 
+# Generic counterpart of LAPACK's `gelqf!`. Like `gelqf!`, it reflects the conjugated rows,
+# so that the reflector `vₖ` of row `k` ends up stored conjugated in `A[k, k+1:n]`, matching
+# what `LQPackedQ` expects.
+function lq!(A::AbstractMatrix{T}) where {T}
+    require_one_based_indexing(A)
+    m, n = size(A)
+    τ = zeros(T, min(m,n))
+    for k = 1:min(n - 1 + !(T<:Real), m)
+        x = view(A, k, k:n)
+        T <: Real || conj!(x)
+        τk = reflector!(x)
+        τ[k] = τk
+        reflectorApply!(view(A, k+1:m, k:n), x, τk)
+        T <: Real || conj!(x)
+    end
+    LQ(A, τ)
+end
+
 """
     lq(A) -> S::LQ
 

@@ -645,6 +645,42 @@ qsize_check(A::AbstractVecOrMat, Q::LQPackedQ) =
     size(A, 2) in size(Q.factors) ||
         throw(DimensionMismatch(lazy"second dimension of A, $(size(A,2)), must equal one of the dimensions of Q, $(size(Q.factors))"))
 
+# Generic counterparts of LAPACK's `ormlq!`. In the LQ factorization, `Q = H_k' ⋯ H_1'` is
+# the product of the adjoints of the reflectors `Hᵢ = I - τᵢvᵢvᵢ'`. LAPACK stores `conj(vᵢ)`
+# in the `i`th row of `Q.factors`, so `vᵢ` is the `i`th column of `Q.factors'`, and the
+# reflectors can be applied with `reflectorApply!`. `Q` applies the `Hᵢ'` and `Q'` the `Hᵢ`,
+# in opposite orders; `adj = true` selects the latter.
+function _lqmul!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    require_one_based_indexing(B)
+    mQ, nQ = size(Q.factors)
+    mB, nB = size(B, 1), size(B, 2)
+    if nQ != mB
+        throw(DimensionMismatch(lazy"matrix Q has dimensions ($nQ,$nQ) but B has dimensions ($mB, $nB)"))
+    end
+    Qv = Q.factors'
+    @inbounds for i in (adj ? (min(mQ,nQ):-1:1) : (1:1:min(mQ,nQ)))
+        # `reflectorApply!` applies `I - vᵢ conj(τ)vᵢ'`, hence the conjugation for `Q'`
+        reflectorApply!(view(Qv, i:mB, i), adj ? conj(Q.τ[i]) : Q.τ[i], view(B, i:mB, :))
+    end
+    B
+end
+
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, applying the reflectors the other way round
+function _rqmul!(A::AbstractVecOrMat, Q::LQPackedQ, ::Val{adj}) where {adj}
+    require_one_based_indexing(A)
+    mQ, nQ = size(Q.factors)
+    mA, nA = size(A, 1), size(A, 2)
+    if nA != nQ
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($nQ, $nQ)"))
+    end
+    Qv = Q.factors'
+    @inbounds for i in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
+        # `reflectorApply!` applies `I - vᵢτvᵢ'` here, hence the conjugation for `Q`
+        reflectorApply!(view(A, :, i:nA), view(Qv, i:nA, i), adj ? Q.τ[i] : conj(Q.τ[i]))
+    end
+    A
+end
+
 # in-place right-application of LQPackedQs
 # these methods require that the applied-to matrix's (A's) number of columns
 # match the number of columns (nQ) of the LQPackedQ (Q) (necessary for in-place
@@ -656,6 +692,8 @@ rmul!(A::StridedVecOrMat{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:Bla
     (B = adjB.Q; LAPACK.ormlq!('R', 'T', B.factors, B.τ, A))
 rmul!(A::StridedVecOrMat{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:BlasComplex} =
     (B = adjB.Q; LAPACK.ormlq!('R', 'C', B.factors, B.τ, A))
+rmul!(A::AbstractVecOrMat, Q::LQPackedQ) = _rqmul!(A, Q, Val(false))
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:LQPackedQ}) = _rqmul!(A, adjQ.Q, Val(true))
 
 ### QB / QcB
 lmul!(A::LQPackedQ{T}, B::StridedVecOrMat{T}) where {T<:BlasFloat} = LAPACK.ormlq!('L','N',A.factors,A.τ,B)
@@ -663,6 +701,8 @@ lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:Bla
     (A = adjA.Q; LAPACK.ormlq!('L', 'T', A.factors, A.τ, B))
 lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (A = adjA.Q; LAPACK.ormlq!('L', 'C', A.factors, A.τ, B))
+lmul!(Q::LQPackedQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
+lmul!(adjQ::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, B, Val(true))
 
 # division by a matrix
 function /(adjQ::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVecOrMat)
