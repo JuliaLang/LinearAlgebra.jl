@@ -578,6 +578,46 @@ lmul!(adjQ::AdjointQ{<:Any,<:BlasHessenbergQ{T,true}}, X::StridedVecOrMat{T}) wh
 rmul!(X::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:BlasHessenbergQ{T,true}}) where {T<:BlasFloat} =
     (Q = adjQ.Q; LAPACK.ormtr!('R', Q.uplo, ifelse(T<:Real, 'T', 'C'), Q.factors, Q.τ, X))
 
+# `Q = H_1 ⋯ H_{n-1}` with the reflectors shifted one row down, so the packed kernels apply
+# once `factors` and the operand are restricted to rows 2:n. For `uplo == 'U'` the reflectors
+# run in the opposite order and sit above the diagonal, which reversing both index orders
+# turns back into the packed layout.
+function _hessenbergpacked(Q::HessenbergQ)
+    n = size(Q.factors, 1)
+    Q.uplo == 'U' ?
+        (QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), n-1:-1:1) :
+        (QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), 2:n)
+end
+
+function _lqmul!(Q::HessenbergQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    require_one_based_indexing(B)
+    n = size(Q.factors, 1)
+    mB, nB = size(B, 1), size(B, 2)
+    if n != mB
+        throw(DimensionMismatch(lazy"matrix Q has dimensions ($n,$n) but B has dimensions ($mB, $nB)"))
+    end
+    P, rows = _hessenbergpacked(Q)
+    _lqmul!(P, view(B, rows, :), Val(adj))
+    B
+end
+
+function _rqmul!(A::AbstractVecOrMat, Q::HessenbergQ, ::Val{adj}) where {adj}
+    require_one_based_indexing(A)
+    n = size(Q.factors, 1)
+    mA, nA = size(A, 1), size(A, 2)
+    if nA != n
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($n, $n)"))
+    end
+    P, cols = _hessenbergpacked(Q)
+    _rqmul!(view(A, :, cols), P, Val(adj))
+    A
+end
+
+lmul!(Q::HessenbergQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
+lmul!(adjQ::AdjointQ{<:Any,<:HessenbergQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, B, Val(true))
+rmul!(A::AbstractVecOrMat, Q::HessenbergQ) = _rqmul!(A, Q, Val(false))
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:HessenbergQ}) = _rqmul!(A, adjQ.Q, Val(true))
+
 lmul!(Q::HessenbergQ{T}, X::Adjoint{T,<:StridedVecOrMat{T}}) where {T} = rmul!(X', Q')'
 rmul!(X::Adjoint{T,<:StridedVecOrMat{T}}, Q::HessenbergQ{T}) where {T} = lmul!(Q', X')'
 lmul!(adjQ::AdjointQ{<:Any,<:HessenbergQ{T}}, X::Adjoint{T,<:StridedVecOrMat{T}}) where {T}  = rmul!(X', adjQ')'
