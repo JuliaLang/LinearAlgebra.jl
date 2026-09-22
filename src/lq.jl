@@ -70,10 +70,10 @@ matrix as a workspace. See also [`lq`](@ref).
 """
 lq!(A::StridedMatrix{<:BlasFloat}) = LQ(LAPACK.gelqf!(A)...)
 
-# Generic counterpart of LAPACK's `gelqf!`, mirroring `qrfactUnblocked!`. Like `gelqf!`, it
-# reflects the conjugated rows, so that the reflector `vₖ` of row `k` ends up stored
-# conjugated in `A[k, k+1:n]`, matching what `LQPackedQ` expects.
-function lqfactUnblocked!(A::AbstractMatrix{T}) where {T}
+# Generic counterpart of LAPACK's `gelqf!`. Like `gelqf!`, it reflects the conjugated rows,
+# so that the reflector `vₖ` of row `k` ends up stored conjugated in `A[k, k+1:n]`, matching
+# what `LQPackedQ` expects.
+function lq!(A::AbstractMatrix{T}) where {T}
     require_one_based_indexing(A)
     m, n = size(A)
     τ = zeros(T, min(m,n))
@@ -87,7 +87,6 @@ function lqfactUnblocked!(A::AbstractMatrix{T}) where {T}
     end
     LQ(A, τ)
 end
-lq!(A::AbstractMatrix) = lqfactUnblocked!(A)
 
 """
     lq(A) -> S::LQ

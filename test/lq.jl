@@ -6,7 +6,7 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, rmul!, lmul!
-using LinearAlgebra: LQPackedQ, QRPackedQ, _lqmul!, _rqmul!, lqfactUnblocked!
+using LinearAlgebra: LQPackedQ, QRPackedQ, _lqmul!, _rqmul!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
@@ -423,7 +423,7 @@ end
         A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
         A = convert(Matrix{elty}, A)
         Flap = lq!(copy(A))                  # LAPACK path
-        Fgen = lqfactUnblocked!(copy(A))     # generic path
+        Fgen = invoke(lq!, Tuple{AbstractMatrix}, copy(A))   # generic path
         @test Fgen.factors ≈ Flap.factors
         @test Fgen.τ ≈ Flap.τ
         @test Fgen.L ≈ Flap.L
