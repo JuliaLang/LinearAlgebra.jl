@@ -154,9 +154,29 @@ Base.cat_length(a::AbstractQ) = prod(size(a))
 Base.cat_ndims(a::AbstractQ) = ndims(a)
 Base.cat_indices(A::AbstractQ, d) = axes(A, d)
 
-function show(io::IO, ::MIME{Symbol("text/plain")}, Q::AbstractQ)
-    print(io, Base.dims2string(size(Q)), ' ', summary(Q))
+# display
+Base.summary(io::IO, Q::AbstractQ) = print(io, Base.dims2string(size(Q)), ' ', typeof(Q))
+
+# `AbstractQ`s are displayed like matrices, with their entries. Since the entries of a `Q`
+# are not stored but computed, `print_matrix` is run on a lazy matrix view whose columns
+# are computed on demand, one `lmul!` per column, and cached. `print_matrix` only requests
+# the entries it actually displays, so for a large `Q` only the displayed (corner) columns
+# are ever computed, and no entry is computed more than once.
+struct QDisplayCache{T,QT<:AbstractQ{T}} <: AbstractMatrix{T}
+    Q::QT
+    columns::Dict{Int,Vector{T}}
 end
+QDisplayCache(Q::AbstractQ{T}) where {T} = QDisplayCache{T,typeof(Q)}(Q, Dict{Int,Vector{T}}())
+
+size(C::QDisplayCache) = size(C.Q)
+function getindex(C::QDisplayCache, i::Int, j::Int)
+    @boundscheck checkbounds(C, i, j)
+    column = get!(() -> C.Q[:, j], C.columns, j)
+    return column[i]
+end
+Base.summary(io::IO, C::QDisplayCache) = Base.summary(io, C.Q)
+
+show(io::IO, mime::MIME{Symbol("text/plain")}, Q::AbstractQ) = show(io, mime, QDisplayCache(Q))
 
 # multiplication
 # generically, treat AbstractQ like a matrix with its definite size

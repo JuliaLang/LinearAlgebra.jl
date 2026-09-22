@@ -337,7 +337,10 @@ depending on context:
 julia> using LinearAlgebra
 
 julia> Q = qr(rand(3,2)).Q
-3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}
+3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}:
+ -0.320597   0.865734  -0.384346
+ -0.765834  -0.475694  -0.432683
+ -0.557419   0.155628   0.815514
 
 julia> Matrix(Q)
 3×2 Matrix{Float64}:
