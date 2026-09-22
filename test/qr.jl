@@ -685,9 +685,10 @@ end
             elty in (Float64, ComplexF64),
             (m, n) in ((7, 4), (6, 2), (5, 1), (40, 37)),
             bs in (1, 2, 36)
-        # `Q` still comes from LAPACK; the operands are `BigFloat`, so that `*` has to
-        # zero-extend and then reach the generic methods, and `Qsq` stays an independent
-        # `Float64`-accurate reference, hence the tolerance
+        # `Q` is factorized by LAPACK, but the `BigFloat` operands make `*` promote it
+        # (there is no mixed-eltype `mul!` for an `AbstractQ`) and zero-extend, so the
+        # multiplication itself runs through the generic methods. `Qsq` stays an
+        # independent `Float64`-accurate reference, hence the tolerance
         eltb = elty <: Complex ? Complex{BigFloat} : BigFloat
         A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
         Q = qr(convert(Matrix{elty}, A), NoPivot(); blocksize=bs).Q   # Q is m×m
