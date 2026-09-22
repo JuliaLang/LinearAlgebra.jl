@@ -580,13 +580,13 @@ end
         for nB in (1, 3)
             B = elty <: Complex ? complex.(randn(m, nB), randn(m, nB)) : randn(m, nB)
             B = convert(Matrix{elty}, B)
-            @test _lqmul!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B)) ≈ Q * B
-            @test _lqmul!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B)) ≈ Q' * B
+            @test _lqmul!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B))
+            @test _lqmul!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B))
         end
         b = elty <: Complex ? complex.(randn(m), randn(m)) : randn(m)
         b = convert(Vector{elty}, b)
-        @test _lqmul!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b)) ≈ Q * b
-        @test _lqmul!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b)) ≈ Q' * b
+        @test _lqmul!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b))
+        @test _lqmul!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b))
     end
 
     # ... and must be the method selected for non-BLAS-compatible arguments
@@ -597,6 +597,9 @@ end
         for B in (big.(randn(m, 3)), big.(randn(m)))
             @test lmul!(Q, copy(B)) ≈ Qm * B rtol=1e-12
             @test lmul!(Q', copy(B)) ≈ Qm' * B rtol=1e-12
+            # `*` promotes `Q` to `BigFloat` and so reaches the generic methods too
+            @test Q * B ≈ Qm * B rtol=1e-12
+            @test Q' * B ≈ Qm' * B rtol=1e-12
         end
     end
 
@@ -608,6 +611,8 @@ end
         for B in (big.(randn(m, 4)), big.(randn(m)))
             @test lmul!(Qc, copy(B)) ≈ lmul!(Qp, copy(B))
             @test lmul!(Qc', copy(B)) ≈ lmul!(Qp', copy(B))
+            @test Qc * B ≈ Qp * B
+            @test Qc' * B ≈ Qp' * B
         end
         Id = Matrix{BigFloat}(I, m, m)
         @test lmul!(Qc', lmul!(Qc, copy(Id))) ≈ Id
@@ -637,8 +642,8 @@ end
         for mA in (1, 3)
             B = elty <: Complex ? complex.(randn(mA, m), randn(mA, m)) : randn(mA, m)
             B = convert(Matrix{elty}, B)
-            @test _rqmul!(copy(B), Q, Val(false)) ≈ rmul!(copy(B), Q) ≈ B * Q
-            @test _rqmul!(copy(B), Q, Val(true)) ≈ rmul!(copy(B), Q') ≈ B * Q'
+            @test _rqmul!(copy(B), Q, Val(false)) ≈ rmul!(copy(B), Q)
+            @test _rqmul!(copy(B), Q, Val(true)) ≈ rmul!(copy(B), Q')
         end
     end
 
@@ -649,6 +654,9 @@ end
         A = big.(randn(4, m))
         @test rmul!(copy(A), Q) ≈ A * Qm rtol=1e-12
         @test rmul!(copy(A), Q') ≈ A * Qm' rtol=1e-12
+        # `*` promotes `Q` to `BigFloat` and so reaches the generic methods too
+        @test A * Q ≈ A * Qm rtol=1e-12
+        @test A * Q' ≈ A * Qm' rtol=1e-12
     end
 
     @testset "blocked vs. unblocked in BigFloat: ($m,$n), nb=$nb" for
@@ -657,6 +665,8 @@ end
         for A in (big.(randn(4, m)), big.(randn(1, m)))
             @test rmul!(copy(A), Qc) ≈ rmul!(copy(A), Qp)
             @test rmul!(copy(A), Qc') ≈ rmul!(copy(A), Qp')
+            @test A * Qc ≈ A * Qp
+            @test A * Qc' ≈ A * Qp'
         end
         Id = Matrix{BigFloat}(I, m, m)
         @test rmul!(rmul!(copy(Id), Qc), Qc') ≈ Id
