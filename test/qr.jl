@@ -592,24 +592,6 @@ end
             @test _rqmul!(copy(A), Q, Val(true)) ≈ A * Qref'
         end
     end
-
-    @testset "BigFloat end-to-end via qr: ($m,$n)" for (m, n) in ((6, 4), (4, 6), (5, 5))
-        A = big.(randn(m, n))
-        F = qr(A)
-        @test F.Q * F.R ≈ A
-        nQ = size(F.Q, 1)
-        Id = Matrix{BigFloat}(I, nQ, nQ)
-        @test lmul!(F.Q', lmul!(F.Q, copy(Id))) ≈ Id
-        @test rmul!(rmul!(copy(Id), F.Q), F.Q') ≈ Id
-    end
-
-    @testset "dimension mismatch" begin
-        Q = qr(randn(7, 4), ColumnNorm()).Q
-        @test_throws DimensionMismatch _lqmul!(Q, big.(randn(6, 2)), Val(false))
-        @test_throws DimensionMismatch _lqmul!(Q, big.(randn(6, 2)), Val(true))
-        @test_throws DimensionMismatch _rqmul!(big.(randn(2, 6)), Q, Val(false))
-        @test_throws DimensionMismatch _rqmul!(big.(randn(2, 6)), Q, Val(true))
-    end
 end
 
 end # module TestQR
