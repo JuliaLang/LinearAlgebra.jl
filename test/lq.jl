@@ -346,9 +346,10 @@ end
     # reachable through `*`, never through `lmul!`/`rmul!`.
     @testset "flexible operand size via *: $elty, ($m,$n)" for
             elty in (Float64, ComplexF64), (m, n) in ((4, 6), (2, 7), (1, 5), (5, 6))
-        # `Q` still comes from LAPACK; the operands are `BigFloat`, so that `*` has to
-        # zero-extend and then reach the generic methods, and `Qsq` stays an independent
-        # `Float64`-accurate reference, hence the tolerance
+        # `Q` is factorized by LAPACK, but the `BigFloat` operands make `*` promote it
+        # (there is no mixed-eltype `mul!` for an `AbstractQ`) and zero-extend, so the
+        # multiplication itself runs through the generic methods. `Qsq` stays an
+        # independent `Float64`-accurate reference, hence the tolerance
         eltb = elty <: Complex ? Complex{BigFloat} : BigFloat
         A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
         Q = lq(convert(Matrix{elty}, A)).Q   # Q is n×n, factors are m×n with m < n
