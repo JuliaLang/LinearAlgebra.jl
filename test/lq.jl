@@ -294,17 +294,17 @@ end
         for p in (1, 3)
             B = elty <: Complex ? complex.(randn(nQ, p), randn(nQ, p)) : randn(nQ, p)
             B = convert(Matrix{elty}, B)
-            @test _lqmul!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B)) ≈ Q * B
-            @test _lqmul!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B)) ≈ Q' * B
+            @test _lqmul!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B))
+            @test _lqmul!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B))
             C = elty <: Complex ? complex.(randn(p, nQ), randn(p, nQ)) : randn(p, nQ)
             C = convert(Matrix{elty}, C)
-            @test _rqmul!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q) ≈ C * Q
-            @test _rqmul!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q') ≈ C * Q'
+            @test _rqmul!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q)
+            @test _rqmul!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q')
         end
         b = elty <: Complex ? complex.(randn(nQ), randn(nQ)) : randn(nQ)
         b = convert(Vector{elty}, b)
-        @test _lqmul!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b)) ≈ Q * b
-        @test _lqmul!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b)) ≈ Q' * b
+        @test _lqmul!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b))
+        @test _lqmul!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b))
     end
 
     @testset "dispatch for non-BLAS eltypes" begin
@@ -315,10 +315,15 @@ end
             for B in (big.(randn(nQ, 3)), big.(randn(nQ)))
                 @test lmul!(Q, copy(B)) ≈ Qsq * B rtol=1e-12
                 @test lmul!(Q', copy(B)) ≈ Qsq' * B rtol=1e-12
+                # `*` promotes `Q` to `BigFloat` and so reaches the generic methods too
+                @test Q * B ≈ Qsq * B rtol=1e-12
+                @test Q' * B ≈ Qsq' * B rtol=1e-12
             end
             C = big.(randn(3, nQ))
             @test rmul!(copy(C), Q) ≈ C * Qsq rtol=1e-12
             @test rmul!(copy(C), Q') ≈ C * Qsq' rtol=1e-12
+            @test C * Q ≈ C * Qsq rtol=1e-12
+            @test C * Q' ≈ C * Qsq' rtol=1e-12
         end
     end
 
@@ -341,23 +346,27 @@ end
     # reachable through `*`, never through `lmul!`/`rmul!`.
     @testset "flexible operand size via *: $elty, ($m,$n)" for
             elty in (Float64, ComplexF64), (m, n) in ((4, 6), (2, 7), (1, 5), (5, 6))
+        # `Q` still comes from LAPACK; the operands are `BigFloat`, so that `*` has to
+        # zero-extend and then reach the generic methods, and `Qsq` stays an independent
+        # `Float64`-accurate reference, hence the tolerance
+        eltb = elty <: Complex ? Complex{BigFloat} : BigFloat
         A = elty <: Complex ? complex.(randn(m, n), randn(m, n)) : randn(m, n)
         Q = lq(convert(Matrix{elty}, A)).Q   # Q is n×n, factors are m×n with m < n
         Qsq = squareQ(Q)
         p = 3
         B = elty <: Complex ? complex.(randn(m, p), randn(m, p)) : randn(m, p)
-        B = convert(Matrix{elty}, B)
-        Bext = [B; zeros(elty, n - m, p)]
-        @test Q' * B ≈ Qsq' * Bext
+        B = convert(Matrix{eltb}, B)
+        Bext = [B; zeros(eltb, n - m, p)]
+        @test Q' * B ≈ Qsq' * Bext rtol=1e-12
         @test size(Q' * B) == (n, p)
         C = elty <: Complex ? complex.(randn(p, m), randn(p, m)) : randn(p, m)
-        C = convert(Matrix{elty}, C)
-        Cext = [C zeros(elty, p, n - m)]
-        @test C * Q ≈ Cext * Qsq
+        C = convert(Matrix{eltb}, C)
+        Cext = [C zeros(eltb, p, n - m)]
+        @test C * Q ≈ Cext * Qsq rtol=1e-12
         @test size(C * Q) == (p, n)
         b = elty <: Complex ? complex.(randn(m), randn(m)) : randn(m)
-        b = convert(Vector{elty}, b)
-        @test Q' * b ≈ Qsq' * [b; zeros(elty, n - m)]
+        b = convert(Vector{eltb}, b)
+        @test Q' * b ≈ Qsq' * [b; zeros(eltb, n - m)] rtol=1e-12
         # the other two directions admit only the full size
         @test_throws DimensionMismatch Q * B
         @test_throws DimensionMismatch C * Q'
