@@ -1822,23 +1822,6 @@ end
 Multiplies `A` in-place by a Householder reflection on the right. It is equivalent to
 `A .= A * (I - [1; x[2:end]] * τ * [1; x[2:end]]')`.
 """
-@inline function reflectorApply!(A::AbstractVecOrMat, x::AbstractVector, τ::Number)
-    require_one_based_indexing(A, x)
-    m, n = size(A, 1), size(A, 2)
-    if length(x) != n
-        throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the second dimension of matrix A, $n"))
-    end
-    n == 0 && return A
-    for i in axes(A, 1)
-        Ai, xi = @inbounds view(A, i, 2:n), view(x, 2:n)
-        # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x`
-        # from the right, opposite to the left-applying method above
-        Avi = (@inbounds(A[i, 1]) + transpose(Ai)*xi)*τ
-        @inbounds A[i, 1] -= Avi
-        Ai .-= Avi .* conj.(xi)
-    end
-    return A
-end
 
 """
     det(M)
