@@ -322,6 +322,10 @@ size(Q::Union{QRCompactWYQ,QRPackedQ}) = (n = size(Q.factors, 1); (n, n))
 
 ## Multiplication
 
+# Generic counterparts of LAPACK's `ormqr!`. With `Q = H_1 ⋯ H_k` and `Hᵢ = I - vᵢτᵢvᵢ'`
+# stored in the columns of `Q.factors`, `Q` applies the reflectors in decreasing order,
+# `Q'` in increasing order and with `conj(τᵢ)` in place of `τᵢ`; `adj = true` selects the
+# latter. The loop bodies are those of the four methods this replaces.
 function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
@@ -349,6 +353,9 @@ function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     B
 end
 
+# Generic counterpart of LAPACK's `gemqrt!`. The blocks of the compact WY representation
+# `Q = (I - V₁T₁V₁') ⋯ (I - V_bT_bV_b')` are applied in reverse order, resp. in increasing
+# order and with `Tⱼ'` in place of `Tⱼ` for `Q'` (`adj = true`).
 function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
@@ -387,6 +394,8 @@ function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     B
 end
 
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, running over the reflectors the other way round and
+# multiplying by `τₖ` from the right rather than from the left
 function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
     require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
@@ -414,6 +423,7 @@ function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
     A
 end
 
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, traversing the blocks the other way round
 function _rqmul!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) where {adj}
     require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
@@ -454,41 +464,9 @@ end
 ### QB
 lmul!(A::QRCompactWYQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('L', 'N', A.factors, A.T, B)
-lmul!(A::QRCompactWYQ, B::AbstractVecOrMat) = _lqmul!(A, B, Val(false))
+lmul!(Q::QRCompactWYQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
 lmul!(A::QRPackedQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.ormqr!('L', 'N', A.factors, A.τ, B)
-function lmul!(A::QRPackedQ, B::AbstractVecOrMat)
-    require_one_based_indexing(B)
-    mA, nA = size(A.factors)
-    mB, nB = size(B,1), size(B,2)
-    if mA != mB
-        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but B has dimensions ($mB, $nB)"))
-    end
-    Afactors = A.factors
-    @inbounds begin
-        for k = min(mA,nA):-1:1
-            for j = 1:nB
-                vBj = B[k,j]
-                for i = k+1:mB
-                    vBj += conj(Afactors[i,k])*B[i,j]
-                end
-                vBj = A.τ[k]*vBj
-                B[k,j] -= vBj
-                for i = k+1:mB
-                    B[i,j] -= Afactors[i,k]*vBj
-                end
-            end
-        end
-    end
-    B
-end
-
-### QB
-lmul!(Q::QRCompactWYQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
-    LAPACK.gemqrt!('L', 'N', Q.factors, Q.T, B)
-lmul!(Q::QRCompactWYQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
-lmul!(Q::QRPackedQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
-    LAPACK.ormqr!('L', 'N', Q.factors, Q.τ, B)
 lmul!(Q::QRPackedQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
 
 ### QcB
@@ -507,8 +485,8 @@ lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, 
 rmul!(A::StridedVecOrMat{T}, B::QRCompactWYQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('R', 'N', B.factors, B.T, A)
 rmul!(A::AbstractVecOrMat, Q::QRCompactWYQ) = _rqmul!(A, Q, Val(false))
-rmul!(A::StridedVecOrMat{T}, Q::QRPackedQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
-    LAPACK.ormqr!('R', 'N', Q.factors, B.τ, A)
+rmul!(A::StridedVecOrMat{T}, B::QRPackedQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
+    LAPACK.ormqr!('R', 'N', B.factors, B.τ, A)
 rmul!(A::AbstractVecOrMat, Q::QRPackedQ) = _rqmul!(A, Q, Val(false))
 
 ### AQc
