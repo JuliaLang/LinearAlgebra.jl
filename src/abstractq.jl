@@ -544,6 +544,12 @@ end
 HessenbergQ(F::Hessenberg{<:Any,<:UpperHessenberg,S,W}) where {S,W} = HessenbergQ{eltype(F.factors),S,W,false}(F.uplo, F.factors, F.τ)
 HessenbergQ(F::Hessenberg{<:Any,<:SymTridiagonal,S,W}) where {S,W} = HessenbergQ{eltype(F.factors),S,W,true}(F.uplo, F.factors, F.τ)
 
+function HessenbergQ{T}(Q::HessenbergQ{<:Any,<:Any,<:Any,sym}) where {T,sym}
+    factors, τ = convert(AbstractMatrix{T}, Q.factors), convert(AbstractVector{T}, Q.τ)
+    HessenbergQ{T,typeof(factors),typeof(τ),sym}(Q.uplo, factors, τ)
+end
+convert(::Type{AbstractQ{T}}, Q::HessenbergQ) where {T} = HessenbergQ{T}(Q)
+
 size(Q::HessenbergQ, dim::Integer) = size(getfield(Q, :factors), dim == 2 ? 1 : dim)
 size(Q::HessenbergQ) = size(Q, 1), size(Q, 2)
 
