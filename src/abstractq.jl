@@ -345,7 +345,7 @@ size(Q::Union{QRCompactWYQ,QRPackedQ}) = (n = size(Q.factors, 1); (n, n))
 # Generic counterparts of LAPACK's `ormqr!`. With `Q = H_1 ⋯ H_k` and `Hᵢ = I - vᵢτᵢvᵢ'`
 # stored in the columns of `Q.factors`, `Q` applies the reflectors in decreasing order,
 # `Q'` in increasing order and with `conj(τᵢ)` in place of `τᵢ`; `adj = true` selects the
-# latter.
+# latter. Each reflector is applied by `reflectorApply!`.
 function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
@@ -353,22 +353,9 @@ function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     if mQ != mB
         throw(DimensionMismatch(lazy"matrix Q has dimensions ($mQ,$nQ) but B has dimensions ($mB, $nB)"))
     end
-    Qfactors = Q.factors
-    @inbounds begin
-        for k in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
-            τk = adj ? conj(Q.τ[k]) : Q.τ[k]
-            for j = 1:nB
-                vBj = B[k,j]
-                for i = k+1:mB
-                    vBj += conj(Qfactors[i,k])*B[i,j]
-                end
-                vBj = τk*vBj
-                B[k,j] -= vBj
-                for i = k+1:mB
-                    B[i,j] -= Qfactors[i,k]*vBj
-                end
-            end
-        end
+    @inbounds for k in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
+        # `reflectorApply!` applies `I - vᵢ conj(τ)vᵢ'`, hence the conjugation for `Q`
+        reflectorApply!(view(Q.factors, k:mB, k), adj ? Q.τ[k] : conj(Q.τ[k]), view(B, k:mB, :))
     end
     B
 end
