@@ -1829,13 +1829,18 @@ Multiplies `A` in-place by a Householder reflection on the right. It is equivale
         throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the second dimension of matrix A, $n"))
     end
     n == 0 && return A
-    for i in axes(A, 1)
-        Ai, xi = @inbounds view(A, i, 2:n), view(x, 2:n)
-        # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x`
-        # from the right, opposite to the left-applying method above
-        Avi = (@inbounds(A[i, 1]) + transpose(Ai)*xi)*τ
-        @inbounds A[i, 1] -= Avi
-        Ai .-= Avi .* conj.(xi)
+    # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x` from
+    # the right, opposite to the left-applying method above
+    @inbounds for i in axes(A, 1)
+        Avi = A[i, 1]
+        for j in 2:n
+            Avi += A[i, j]*x[j]
+        end
+        Avi *= τ
+        A[i, 1] -= Avi
+        for j in 2:n
+            A[i, j] -= Avi*conj(x[j])
+        end
     end
     return A
 end
