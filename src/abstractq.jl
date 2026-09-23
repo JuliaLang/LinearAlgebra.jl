@@ -581,14 +581,8 @@ rmul!(X::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:BlasHessenbergQ{T,true}}) wh
 # `Q = H_1 ⋯ H_{n-1}` with the reflectors shifted one row down, so the packed kernels apply
 # once `factors` and the operand are restricted to rows 2:n. For `uplo == 'U'` the reflectors
 # run in the opposite order and sit above the diagonal, which reversing both index orders
-# turns back into the packed layout.
-function _hessenbergpacked(Q::HessenbergQ)
-    n = size(Q.factors, 1)
-    Q.uplo == 'U' ?
-        (QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), n-1:-1:1) :
-        (QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), 2:n)
-end
-
+# turns back into the packed layout. The two branches call the kernel separately to keep
+# the view types concrete.
 function _lqmul!(Q::HessenbergQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
     n = size(Q.factors, 1)
@@ -596,8 +590,11 @@ function _lqmul!(Q::HessenbergQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     if n != mB
         throw(DimensionMismatch(lazy"matrix Q has dimensions ($n,$n) but B has dimensions ($mB, $nB)"))
     end
-    P, rows = _hessenbergpacked(Q)
-    _lqmul!(P, view(B, rows, :), Val(adj))
+    if Q.uplo == 'U'
+        _lqmul!(QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), view(B, n-1:-1:1, :), Val(adj))
+    else
+        _lqmul!(QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), view(B, 2:n, :), Val(adj))
+    end
     B
 end
 
@@ -608,8 +605,11 @@ function _rqmul!(A::AbstractVecOrMat, Q::HessenbergQ, ::Val{adj}) where {adj}
     if nA != n
         throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($n, $n)"))
     end
-    P, cols = _hessenbergpacked(Q)
-    _rqmul!(view(A, :, cols), P, Val(adj))
+    if Q.uplo == 'U'
+        _rqmul!(view(A, :, n-1:-1:1), QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), Val(adj))
+    else
+        _rqmul!(view(A, :, 2:n), QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), Val(adj))
+    end
     A
 end
 
