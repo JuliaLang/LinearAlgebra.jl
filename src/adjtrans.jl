@@ -342,14 +342,14 @@ size(A::AdjOrTransAbsMat) = reverse(size(A.parent))
 axes(v::AdjOrTransAbsVec) = (axes(v.parent,2), axes(v.parent)...)
 axes(A::AdjOrTransAbsMat) = reverse(axes(A.parent))
 IndexStyle(::Type{<:AdjOrTransAbsVec}) = IndexLinear()
-@propagate_inbounds Base.isassigned(v::AdjOrTransAbsVec, i::Int) = isassigned(v.parent, i-1+first(axes(v.parent)[1]))
-@propagate_inbounds Base.isassigned(v::AdjOrTransAbsMat, i::Int, j::Int) = isassigned(v.parent, j, i)
-@propagate_inbounds getindex(v::AdjOrTransAbsVec{T}, i::Int) where {T} = wrapperop(v)(v.parent[i-1+first(axes(v.parent)[1])])::T
-@propagate_inbounds getindex(A::AdjOrTransAbsMat{T}, i::Int, j::Int) where {T} = wrapperop(A)(A.parent[j, i])::T
-@propagate_inbounds setindex!(v::AdjOrTransAbsVec, x, i::Int) = (setindex!(v.parent, _wrapperop(v)(x), i-1+first(axes(v.parent)[1])); v)
-@propagate_inbounds setindex!(A::AdjOrTransAbsMat, x, i::Int, j::Int) = (setindex!(A.parent, _wrapperop(A)(x), j, i); A)
+@propagate_inbounds Base.isassigned(v::AdjOrTransAbsVec, i::Integer) = isassigned(v.parent, i - oneunit(i) + first(axes(v.parent)[oneunit(i)]))
+@propagate_inbounds Base.isassigned(v::AdjOrTransAbsMat, i::Integer, j::Integer) = isassigned(v.parent, j, i)
+@propagate_inbounds getindex(v::AdjOrTransAbsVec{T}, i::Integer) where {T} = wrapperop(v)(v.parent[i-one(i)+first(axes(v.parent)[one(i)])])::T
+@propagate_inbounds getindex(A::AdjOrTransAbsMat{T}, i::Integer, j::Integer) where {T} = wrapperop(A)(A.parent[j, i])::T
+@propagate_inbounds setindex!(v::AdjOrTransAbsVec, x, i::Integer) = (setindex!(v.parent, _wrapperop(v)(x), i - one(i) + first(axes(v.parent)[one(i)])); v)
+@propagate_inbounds setindex!(A::AdjOrTransAbsMat, x, i::Integer, j::Integer) = (setindex!(A.parent, _wrapperop(A)(x), j, i); A)
 # AbstractArray interface, additional definitions to retain wrapper over vectors where appropriate
-@propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, is::AbstractArray{Int}) = wrapperop(v)(v.parent[is])
+@propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, is::AbstractArray{<:Integer}) = wrapperop(v)(v.parent[is])
 @propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, ::Colon) = wrapperop(v)(v.parent[:])
 
 # band indexing
