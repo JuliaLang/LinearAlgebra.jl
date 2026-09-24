@@ -1012,6 +1012,12 @@ end
     end
 end
 
+@testset "issue 1687" begin
+    A = rand(3, 3)
+    B = AbstractFloat[1.0, 2.0, 3.0]
+    @test A \ B isa Vector{Float64}
+end
+
 @testset "$fn requires square matrices" for fn in (det, logdet, logabsdet)
     # general rectangular matrix, G
     @test_throws DimensionMismatch fn(ones(3, 2))
