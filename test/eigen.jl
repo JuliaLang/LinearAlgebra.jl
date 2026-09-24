@@ -314,4 +314,52 @@ end
     @test_throws ArgumentError isposdef(F)
 end
 
+@testset "infinite eigenvalues of a regular pencil" begin
+    @testset "eltype $T" for T in (Float32, Float64)
+        B = T[1 0 0; 0 1 0; 0 0 0]                     # rank 2 -> one infinite eigenvalue
+        lambdas = eigvals(T[1 0 0; 0 2 0; 0 0 3], B)
+        @test count(isinf, lambdas) == 1
+        @test !any(isnan, lambdas)
+        @test sort(filter(isfinite, lambdas)) ≈ T[1, 2]
+        # A complex pair anywhere in the spectrum moves every eigenvalue onto the complex branch.
+        @testset "A[3,3] = $s" for s in (3, -3)
+            A = T[0 -1 0; 1 0 0; 0 0 s]
+            for lambdas in (eigvals(A, B), eigen(A, B).values)
+                @test eltype(lambdas) === Complex{T}
+                @test count(isinf, lambdas) == 1
+                @test !any(isnan, lambdas)
+                @test imag(lambdas[findfirst(isinf, lambdas)]) == 0
+            end
+            @test !any(isnan, eigvals(A, B; sortby=nothing))
+            vals, vecs = eigen(A, B)
+            v = vecs[:, findfirst(isinf, vals)]
+            @test norm(B * v) <= 10eps(T) * norm(v)
+            @test norm(A * v) > sqrt(eps(T))
+        end
+    end
+
+    @testset "multiplicity" begin
+        A = [0.0 -1 0 0; 1 0 0 0; 0 0 3 0; 0 0 0 5]
+        # rank(B) == 1 leaves det(A - lambda*B) constant, so the whole spectrum is infinite.
+        for (k, ninf) in ((1, 1), (2, 2), (3, 4))
+            B = diagm([fill(1.0, 4 - k); fill(0.0, k)])
+            lambdas = eigvals(A, B)
+            @test count(isinf, lambdas) == ninf
+            @test !any(isnan, lambdas)
+            # Reversing the pencil turns infinite eigenvalues into zeros.
+            @test count(x -> abs(x) < 1e-10, eigvals(B, A)) == ninf
+        end
+    end
+
+    @testset "promoted element types" begin
+        @test !any(isnan, eigvals([0.0 -1 0; 1 0 0; 0 0 3.0], [1 0 0; 0 1 0; 0 0 0]))
+    end
+
+    @testset "controls" begin
+        # A singular pencil has indeterminate eigenvalues and must keep reporting NaN.
+        @test any(isnan, eigvals([1.0 0 0; 0 0 0; 0 0 0.0], diagm([1.0, 0.0, 0.0])))
+        @test eigvals([0.0 -1 0; 1 0 0; 0 0 3.0], Matrix(1.0I, 3, 3)) ≈ [-im, im, 3]
+    end
+end
+
 end # module TestEigen

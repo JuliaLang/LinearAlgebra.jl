@@ -461,6 +461,13 @@ function det(A::Eigen)
 end
 
 # Generalized eigenproblem
+# ALPHAI(j) == 0 means the eigenvalue is real, so do not divide it by a possibly zero BETA(j).
+function _generalized_eigvals(alphar::AbstractVector{T}, alphai::AbstractVector{T},
+                              beta::AbstractVector{T}) where {T<:BlasReal}
+    return Complex{T}[iszero(ai) && !iszero(ar) ? complex(ar / b, zero(T)) : complex(ar, ai) / b
+                      for (ar, ai, b) in zip(alphar, alphai, beta)]
+end
+
 function eigen!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function,Nothing}=eigsortby) where T<:BlasReal
     issymmetric(A) && isposdef(B) && return eigen!(Symmetric(A), Symmetric(B), sortby=sortby)
     n = size(A, 1)
@@ -485,7 +492,7 @@ function eigen!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function
         end
         j += 1
     end
-    return GeneralizedEigen(sorteig!(complex.(alphar, alphai)./beta, vecs, sortby)...)
+    return GeneralizedEigen(sorteig!(_generalized_eigvals(alphar, alphai, beta), vecs, sortby)...)
 end
 
 function eigen!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function,Nothing}=eigsortby) where T<:BlasComplex
@@ -604,7 +611,7 @@ function eigvals!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Functi
     else
         alphar, alphai, beta, vl, vr = LAPACK.ggev3!('N', 'N', A, B)
     end
-    return sorteig!((iszero(alphai) ? alphar : complex.(alphar, alphai))./beta, sortby)
+    return sorteig!(iszero(alphai) ? alphar ./ beta : _generalized_eigvals(alphar, alphai, beta), sortby)
 end
 function eigvals!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function,Nothing}=eigsortby) where T<:BlasComplex
     ishermitian(A) && isposdef(B) && return sorteig!(eigvals!(Hermitian(A), Hermitian(B)), sortby)
