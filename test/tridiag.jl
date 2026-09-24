@@ -62,7 +62,7 @@ end
             c += im*convert(Vector{elty}, randn(n - 1))
         end
     end
-    @test_throws DimensionMismatch SymTridiagonal(d, d)
+    @test_deprecated SymTridiagonal(d, d)
     @test_throws DimensionMismatch SymTridiagonal(dl, fill(elty(1), n+1))
     @test_throws ArgumentError SymTridiagonal(rand(n, n))
     @test_throws ArgumentError Tridiagonal(dl, dl, dl)
@@ -539,10 +539,17 @@ end
     @test SymTridiagonal(ones(1), Float64[]) isa SymTridiagonal
 
     # Must have length(dv) = length(ev) + 1
-    @test_throws DimensionMismatch SymTridiagonal(ones(1), ones(1))
-    @test_throws DimensionMismatch SymTridiagonal(ones(2), ones(2))
     @test_throws DimensionMismatch SymTridiagonal(ones(4), ones(2))
     @test_throws DimensionMismatch SymTridiagonal(ones(4), ones(5))
+
+    # length(ev) == length(dv) is deprecated; the last element of ev is ignored
+    @test (@test_deprecated SymTridiagonal(ones(1), ones(1))) == SymTridiagonal(ones(1), Float64[])
+    @test (@test_deprecated SymTridiagonal([1.0, 2.0], [3.0, 4.0])) == SymTridiagonal([1.0, 2.0], [3.0])
+    a, b = collect(1.0:4), collect(5.0:8)
+    S = @test_deprecated SymTridiagonal(view(a, 1:3), view(b, 1:3))
+    @test S == SymTridiagonal(a[1:3], b[1:2])
+    @test S.ev isa SubArray && parent(S.ev) === b
+    @test (@test_deprecated SymTridiagonal(1:3, 1:3)) == SymTridiagonal(1:3, 1:2)
 end
 
 @testset "convert for SymTridiagonal" begin
