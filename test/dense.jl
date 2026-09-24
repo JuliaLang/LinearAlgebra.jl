@@ -136,6 +136,13 @@ bimg  = randn(n,2)/2
                 @test size(@inferred nullspace(transpose(a[:, 1]))) == (n, n - 1)
                 @test size(@inferred nullspace(transpose(b[1, :]))) == (2, 1)
             end
+
+            @testset "Test SVD algorithm kwarg, issue #1571" begin
+                a_null_QR = nullspace(a, alg=LinearAlgebra.QRIteration())
+                @test norm(a * a_null_QR, Inf) ≈ zero(eltya) atol=n*ε
+                a_null_div = nullspace(a, alg=LinearAlgebra.DivideAndConquer())
+                @test norm(a * a_null_div, Inf) ≈ zero(eltya) atol=n*ε
+            end
         end
     end # for eltyb
 
