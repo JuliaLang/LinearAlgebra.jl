@@ -373,6 +373,38 @@ Base.strides(A::Transpose{<:Number, <:AbstractVector}) = (stride(A.parent, 2), s
 # For matrices it's slightly faster to use reverse and avoid calling stride twice
 Base.strides(A::Adjoint{<:Real, <:AbstractMatrix}) = reverse(strides(A.parent))
 Base.strides(A::Transpose{<:Number, <:AbstractMatrix}) = reverse(strides(A.parent))
+@static if isdefined(Base, :isstrided)
+    function Base.isunsafeloadable(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVecOrMat}
+        Base.isunsafeloadable(P)
+    end
+    function Base.isunsafestorable(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVecOrMat}
+        Base.isunsafestorable(P)
+    end
+    function Base.isstrided(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractMatrix}
+        Base.isstrided(P)
+    end
+    function Base.isdense(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVector}
+        Base.isdense(P)
+    end
+    function Base.islinearstrided(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVector}
+        Base.isstrided(P)
+    end
+    function Base.isunsafeloadable(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVecOrMat}
+        Base.isunsafeloadable(P)
+    end
+    function Base.isunsafestorable(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVecOrMat}
+        Base.isunsafestorable(P)
+    end
+    function Base.isstrided(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractMatrix}
+        Base.isstrided(P)
+    end
+    function Base.isdense(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVector}
+        Base.isdense(P)
+    end
+    function Base.islinearstrided(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVector}
+        Base.isstrided(P)
+    end
+end
 
 Base.cconvert(::Type{Ptr{T}}, A::Adjoint{<:Real, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
 Base.cconvert(::Type{Ptr{T}}, A::Transpose{<:Number, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
