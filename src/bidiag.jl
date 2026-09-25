@@ -1335,10 +1335,15 @@ function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     end
     return c
 end
+# backward compatibility
+ldiv!(A::AdjOrTrans{<:Any, <:Bidiagonal}, B::AbstractVecOrMat) = ldiv!(wrapperop(A)(parent(A)), B)
+ldiv!(c::AbstractVecOrMat, A::AdjOrTrans{<:Any,<:Bidiagonal}, b::AbstractVecOrMat) =
+    ldiv!(c, wrapperop(A)(parent(A)), b)
 
 ### Generic promotion methods and fallbacks
 \(A::Bidiagonal, B::AbstractVecOrMat) =
     postop_proc(\, ldiv!(matop_dest(\, A, B), A, B), A, B)
+\(A::AdjOrTrans{<:Any,<:Bidiagonal}, B::AbstractVecOrMat) = wrapperop(A)(parent(A)) \ B
 
 postop_proc(::Union{typeof(*),typeof(\)}, C, B::Bidiagonal, ::UpperOrUnitUpperTriangular) = B.uplo == 'U' ? UpperTriangular(C) : C
 postop_proc(::typeof(/), C, B::Bidiagonal, ::UpperOrUnitUpperTriangular) = B.uplo == 'U' ? UpperTriangular(C) : C
@@ -1393,6 +1398,10 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     C
 end
 rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
+# backward compatibility
+rdiv!(A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) = rdiv!(A, wrapperop(B)(parent(B)))
+_rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) =
+    _rdiv!(C, A, wrapperop(B)(parent(B)))
 
 /(A::AbstractMatrix, B::Bidiagonal) =
     postop_proc(/, _rdiv!(matop_dest(/, A, B), A, B), A, B)

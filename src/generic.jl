@@ -1817,6 +1817,30 @@ Multiplies `A` in-place by a Householder reflection on the left. It is equivalen
 end
 
 """
+    reflectorApply!(A, x, τ)
+
+Multiplies `A` in-place by a Householder reflection on the right. It is equivalent to
+`A .= A * (I - [1; x[2:end]] * τ * [1; x[2:end]]')`.
+"""
+@inline function reflectorApply!(A::AbstractVecOrMat, x::AbstractVector, τ::Number)
+    require_one_based_indexing(A, x)
+    m, n = size(A, 1), size(A, 2)
+    if length(x) != n
+        throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the second dimension of matrix A, $n"))
+    end
+    n == 0 && return A
+    for i in axes(A, 1)
+        Ai, xi = @inbounds view(A, i, 2:n), view(x, 2:n)
+        # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x`
+        # from the right, opposite to the left-applying method above
+        Avi = (@inbounds(A[i, 1]) + transpose(Ai)*xi)*τ
+        @inbounds A[i, 1] -= Avi
+        Ai .-= Avi .* conj.(xi)
+    end
+    return A
+end
+
+"""
     det(M)
 
 Matrix determinant.
@@ -1845,15 +1869,19 @@ julia> det(BigInt[1 0; 2 2]) # exact integer determinant
 """
 function det(A::AbstractMatrix{T}) where {T}
     if istriu(A) || istril(A)
-        S = promote_type(T, typeof((one(T)*zero(T) + zero(T))/one(T)))
-        return prod(Base.Fix1(convert, S), @view A[diagind(A)]; init=one(S))
+        return det(UpperTriangular(A))
     end
     return det(lu(A; check = false))
 end
 det(x::Number) = x
 
 # Resolve Issue #40128
-det(A::AbstractMatrix{BigInt}) = det_bareiss(A)
+function det(A::AbstractMatrix{BigInt})
+    if istriu(A) || istril(A)
+        return det(UpperTriangular(A))
+    end
+    return det_bareiss(A)
+end
 
 """
     logabsdet(M)
@@ -2004,7 +2032,7 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     atol::Real=0,
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
-    d = norm_x_minus_y(x, y)
+    d = norm_x_minus_y(x, y, norm)
     if isfinite(d)
         return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
     else
@@ -2014,10 +2042,10 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     end
 end
 
-norm_x_minus_y(x, y) = norm(x - y)
+norm_x_minus_y(x, y, nrm::F) where {F} = nrm(x - y)
 FastContiguousArrayView{T,N,P<:Array,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
 const ArrayOrFastContiguousArrayView = Union{Array, FastContiguousArrayView}
-function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView)
+function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView, ::typeof(norm))
     Base.promote_shape(size(x), size(y)) # ensure compatible size
     if isempty(x) && isempty(y)
         norm(zero(eltype(x)) - zero(eltype(y)))

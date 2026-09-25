@@ -11,6 +11,7 @@ include("InfiniteArrays.jl")
 include("OffsetArrays.jl")
 include("Quaternions.jl")
 include("SizedArrays.jl")
+include("StridedArrays.jl")
 include("StructArrays.jl")
 
 end

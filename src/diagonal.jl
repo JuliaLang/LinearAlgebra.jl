@@ -974,7 +974,7 @@ function logdet(D::Diagonal{<:Complex}) # make sure branch cut is correct
 end
 
 # Matrix functions
-for f in (:exp, :cis, :log, :sqrt,
+for f in (:exp, :cis, :log, :sqrt, :abs,
           :cos, :sin, :tan, :csc, :sec, :cot,
           :cosh, :sinh, :tanh, :csch, :sech, :coth,
           :acos, :asin, :atan, :acsc, :asec, :acot,
@@ -1155,7 +1155,7 @@ function generic_normp(D::Diagonal, p)
     end
     return v
 end
-norm_x_minus_y(D1::Diagonal, D2::Diagonal) = norm_x_minus_y(D1.diag, D2.diag)
+norm_x_minus_y(D1::Diagonal, D2::Diagonal, ::typeof(norm)) = norm_x_minus_y(D1.diag, D2.diag, norm)
 
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)

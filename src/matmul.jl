@@ -73,16 +73,16 @@ end
 
 _mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
                 alpha::Number, beta::Number) =
-    generic_matvecmul!(y, wrapper_char(A), _unwrap(A), x, alpha, beta)
+    mul!(y, wrapper_char(A), _unwrap(A), x, alpha, beta)
 # BLAS cases
 # equal eltypes
-generic_matvecmul!(y::StridedVector{T}, tA, A::StridedVecOrMat{T}, x::StridedVector{T},
+mul!(y::StridedVector{T}, tA, A::StridedVecOrMat{T}, x::StridedVector{T},
                 alpha::Number, beta::Number) where {T<:BlasFloat} =
     gemv!(y, tA, A, x, alpha, beta)
 
 # Real (possibly transposed) matrix times complex vector.
 # Multiply the matrix with the real and imaginary parts separately
-generic_matvecmul!(y::StridedVector{Complex{T}}, tA, A::StridedVecOrMat{T}, x::StridedVector{Complex{T}},
+mul!(y::StridedVector{Complex{T}}, tA, A::StridedVecOrMat{T}, x::StridedVector{Complex{T}},
                 alpha::Number, beta::Number) where {T<:BlasReal} =
     gemv!(y, tA, A, x, alpha, beta)
 
@@ -90,7 +90,7 @@ generic_matvecmul!(y::StridedVector{Complex{T}}, tA, A::StridedVecOrMat{T}, x::S
 # Reinterpret the matrix as a real matrix and do real matvec computation.
 # works only in cooperation with BLAS when A is untransposed (tA == 'N')
 # but that check is included in gemv! anyway
-generic_matvecmul!(y::StridedVector{Complex{T}}, tA, A::StridedVecOrMat{Complex{T}}, x::StridedVector{T},
+mul!(y::StridedVector{Complex{T}}, tA, A::StridedVecOrMat{Complex{T}}, x::StridedVector{T},
                 alpha::Number, beta::Number) where {T<:BlasReal} =
     gemv!(y, tA, A, x, alpha, beta)
 
@@ -355,10 +355,7 @@ end
 # this indirection allows is to specialize on the types of the wrappers of A and B to some extent,
 # even though the wrappers are stripped off in mul!
 # By default, we ignore the wrapper info and forward the arguments to generic_matmatmul!
-function generic_matmatmul_wrapper!(C, tA, tB, A, B, α, β, @nospecialize(val))
-    generic_matmatmul!(C, tA, tB, A, B, α, β)
-end
-
+generic_matmatmul_wrapper!(C, tA, tB, A, B, α, β, @nospecialize(val)) = mul!(C, tA, tB, A, B, α, β)
 
 """
     rmul!(A, B)
@@ -672,12 +669,12 @@ end
 # legacy method
 Base.@constprop :aggressive generic_matmatmul!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
         _add::MulAddMul = MulAddMul()) where {T<:BlasFloat} =
-    generic_matmatmul!(C, tA, tB, A, B, _add.alpha, _add.beta)
+    mul!(C, tA, tB, A, B, _add.alpha, _add.beta)
 
 # legacy method
 Base.@constprop :aggressive generic_matmatmul!(C::StridedVecOrMat{Complex{T}}, tA, tB, A::StridedVecOrMat{Complex{T}}, B::StridedVecOrMat{T},
         _add::MulAddMul = MulAddMul()) where {T<:BlasReal} =
-    generic_matmatmul!(C, tA, tB, A, B, _add.alpha, _add.beta)
+    mul!(C, tA, tB, A, B, _add.alpha, _add.beta)
 
 # Supporting functions for matrix multiplication
 
@@ -1048,21 +1045,29 @@ end
 
 # legacy method, retained for backward compatibility
 generic_matvecmul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector, _add::MulAddMul = MulAddMul()) =
-    generic_matvecmul!(C, tA, A, B, _add.alpha, _add.beta)
+    mul!(C, tA, A, B, _add.alpha, _add.beta)
 
 """
-    generic_matvecmul!(c::AbstractVector, tA, A::AbstractVecOrMat, b::AbstractVector, α::Number, β::Number)
+    mul!(c::AbstractVector, tA, A::AbstractVecOrMat, b::AbstractVector, α::Number, β::Number)
 
 Calculates the combined matrix-vector multiply-add ``A b α + c β`` (`tA == 'N'`),
 ``A^⊤ b α + c β`` (`tA == 'T'`), or ``A' b α + c β`` (`tA == 'C'`).
 The result is stored in `c` by overwriting it.  Note that `c` must not be
 aliased with either `A` or `b`.
 
-This is an abstraction layer below [`mul!`](@ref) used to dispatch on storage types.
-Packages that provide their own storage type are advised to overload `generic_matvecmul!`
-instead of `mul!`.
+This is an abstraction layer below 5-arg [`mul!`](@ref) used to dispatch on storage types.
+Packages that provide their own storage type are advised to overload this method signature
+instead of 5-arg `mul!`.
+
+!!! compat "Julia 1.13"
+    This method requires at least Julia 1.13 and supersedes the non-public `generic_matvecmul!`
+    method with the same signature.
 """
-@inline function generic_matvecmul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector,
+mul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector, alpha::Number, beta::Number) =
+    generic_matvecmul!(C, tA, A, B, alpha, beta)
+
+# indirection to avoid breakage of packages
+Base.@constprop :aggressive function generic_matvecmul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector,
                                     alpha::Number, beta::Number)
     tA_uc = _uppercase(tA) # potentially convert a WrapperChar to a Char
     Anew, ta = tA_uc in ('S', 'H') ? (wrap(A, tA), oftype(tA, 'N')) : (A, tA)
@@ -1084,9 +1089,10 @@ function __generic_matvecmul!(f::F, C::AbstractVector, A::AbstractVecOrMat, B::A
             for k = eachindex(C)
                 aoffs = (k-1)*Astride
                 firstterm = f(A[aoffs + 1]) * B[1]
-                s = zero(firstterm + firstterm)
+                z = zero(firstterm + firstterm)
+                s = convert(promote_type(eltype(C), typeof(z)), z)
                 for i in nonzeroinds(B)
-                    s += f(A[aoffs+i]) * B[i]
+                    s = muladd(f(A[aoffs+i]), B[i], s)
                 end
                 @stable_muladdmul _modify!(MulAddMul(alpha,beta), s, C, k)
             end
@@ -1112,7 +1118,7 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
                 aoffs = (k-1)*Astride
                 b = @stable_muladdmul MulAddMul(alpha,false)(B[k])
                 for i = eachindex(C)
-                    C[i] += A[aoffs + i] * b
+                    C[i] = muladd(A[aoffs + i], b, C[i])
                 end
             end
         end
@@ -1140,7 +1146,7 @@ function generic_matmatmul(tA, tB, A::AbstractVecOrMat{T}, B::AbstractMatrix{S})
     mA, nA = lapack_size(tA, A)
     mB, nB = lapack_size(tB, B)
     C = similar(B, promote_op(matprod, T, S), mA, nB)
-    generic_matmatmul!(C, tA, tB, A, B, true, false)
+    mul!(C, tA, tB, A, B, true, false)
 end
 
 # aggressive const prop makes mixed eltype mul!(C, A, B) invoke _generic_matmatmul! directly
@@ -1149,16 +1155,24 @@ Base.@constprop :aggressive generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::A
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), _add.alpha, _add.beta)
 
 """
-    generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number)
+    mul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number)
 
 Calculates the combined matrix-matrix multiply-add ``A B α + C β`` (`tA == 'N'`),
 ``A^⊤ B α + C β`` (`tA == 'T'`), or ``A' B α + C β`` (`tA == 'C'`), with potential matrix
 transpositions of `B` corresponding to `tB`. The result is stored in `C` by overwriting it.  Note
 that `C` must not be aliased with either `A` or `B`.
 
-This is an abstraction layer below [`mul!`](@ref). Packages that provide their own storage type are
-advised to overload `generic_matmatmul!` instead of `mul!`.
+This is an abstraction layer below 5-arg [`mul!`](@ref). Packages that provide their own storage type
+are advised to overload this method instead of 5-arg `mul!`.
+
+!!! compat "Julia 1.13"
+    This method requires at least Julia 1.13 and supersedes the non-public `generic_matmatmul!`
+    method with the same signature.
 """
+mul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
+    generic_matmatmul!(C, tA, tB, A, B, alpha, beta)
+
+# indirection via `generic_matmatmul!` to avoid breakage of packages
 Base.@constprop :aggressive generic_matmatmul!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat, alpha::Number, beta::Number) =
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
 

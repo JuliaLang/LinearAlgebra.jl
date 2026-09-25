@@ -211,7 +211,15 @@ function lbt_forward_ccall(path::AbstractString; clear::Bool = false, verbose::B
 end
 
 function lbt_forward(path::AbstractString; clear::Bool = false, verbose::Bool = false, suffix_hint::Union{String,Nothing} = nothing)
-    lbt_forward_ccall(path; clear, verbose, suffix_hint)
+    ret = lbt_forward_ccall(path; clear, verbose, suffix_hint)
+    # A different library may now back the BLAS calls: re-probe the
+    # cancellation extension on the next large call. (A concurrently running
+    # handler that still sees the old symbols trips a token slot of the
+    # previous library, which is harmless.)
+    _cancel_tok_f[] = C_NULL
+    _cancel_cancel_f[] = C_NULL
+    _cancel_state[] = 0
+    return ret
 end
 
 function lbt_set_default_func(addr)

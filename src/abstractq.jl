@@ -154,9 +154,29 @@ Base.cat_length(a::AbstractQ) = prod(size(a))
 Base.cat_ndims(a::AbstractQ) = ndims(a)
 Base.cat_indices(A::AbstractQ, d) = axes(A, d)
 
-function show(io::IO, ::MIME{Symbol("text/plain")}, Q::AbstractQ)
-    print(io, Base.dims2string(size(Q)), ' ', summary(Q))
+# display
+Base.summary(io::IO, Q::AbstractQ) = print(io, Base.dims2string(size(Q)), ' ', typeof(Q))
+
+# `AbstractQ`s are displayed like matrices, with their entries. Since the entries of a `Q`
+# are not stored but computed, `print_matrix` is run on a lazy matrix view whose columns
+# are computed on demand, one `lmul!` per column, and cached. `print_matrix` only requests
+# the entries it actually displays, so for a large `Q` only the displayed (corner) columns
+# are ever computed, and no entry is computed more than once.
+struct QDisplayCache{T,QT<:AbstractQ{T}} <: AbstractMatrix{T}
+    Q::QT
+    columns::Dict{Int,Vector{T}}
 end
+QDisplayCache(Q::AbstractQ{T}) where {T} = QDisplayCache{T,typeof(Q)}(Q, Dict{Int,Vector{T}}())
+
+size(C::QDisplayCache) = size(C.Q)
+function getindex(C::QDisplayCache, i::Int, j::Int)
+    @boundscheck checkbounds(C, i, j)
+    column = get!(() -> C.Q[:, j], C.columns, j)
+    return column[i]
+end
+Base.summary(io::IO, C::QDisplayCache) = Base.summary(io, C.Q)
+
+show(io::IO, mime::MIME{Symbol("text/plain")}, Q::AbstractQ) = show(io, mime, QDisplayCache(Q))
 
 # multiplication
 # generically, treat AbstractQ like a matrix with its definite size
@@ -321,139 +341,186 @@ size(Q::Union{QRCompactWYQ,QRPackedQ}, dim::Integer) =
 size(Q::Union{QRCompactWYQ,QRPackedQ}) = (n = size(Q.factors, 1); (n, n))
 
 ## Multiplication
-### QB
-lmul!(A::QRCompactWYQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
-    LAPACK.gemqrt!('L', 'N', A.factors, A.T, B)
-lmul!(A::QRPackedQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
-    LAPACK.ormqr!('L', 'N', A.factors, A.τ, B)
-function lmul!(A::QRPackedQ, B::AbstractVecOrMat)
+
+# Generic counterparts of LAPACK's `ormqr!`. With `Q = H_1 ⋯ H_k` and `Hᵢ = I - vᵢτᵢvᵢ'`
+# stored in the columns of `Q.factors`, `Q` applies the reflectors in decreasing order,
+# `Q'` in increasing order and with `conj(τᵢ)` in place of `τᵢ`; `adj = true` selects the
+# latter. The loop bodies are those of the four methods this replaces.
+function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
-    mA, nA = size(A.factors)
-    mB, nB = size(B,1), size(B,2)
-    if mA != mB
-        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but B has dimensions ($mB, $nB)"))
+    mQ, nQ = size(Q.factors)
+    mB, nB = size(B, 1), size(B, 2)
+    if mQ != mB
+        throw(DimensionMismatch(lazy"matrix Q has dimensions ($mQ,$nQ) but B has dimensions ($mB, $nB)"))
     end
-    Afactors = A.factors
+    Qfactors = Q.factors
     @inbounds begin
-        for k = min(mA,nA):-1:1
+        for k in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
+            τk = adj ? conj(Q.τ[k]) : Q.τ[k]
             for j = 1:nB
                 vBj = B[k,j]
                 for i = k+1:mB
-                    vBj += conj(Afactors[i,k])*B[i,j]
+                    vBj += conj(Qfactors[i,k])*B[i,j]
                 end
-                vBj = A.τ[k]*vBj
+                vBj = τk*vBj
                 B[k,j] -= vBj
                 for i = k+1:mB
-                    B[i,j] -= Afactors[i,k]*vBj
+                    B[i,j] -= Qfactors[i,k]*vBj
                 end
             end
         end
     end
     B
 end
+
+# Generic counterpart of LAPACK's `gemqrt!`. The blocks of the compact WY representation
+# `Q = (I - V₁T₁V₁') ⋯ (I - V_bT_bV_b')` are applied in reverse order, resp. in increasing
+# order and with `Tⱼ'` in place of `Tⱼ` for `Q'` (`adj = true`).
+function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    require_one_based_indexing(B)
+    mQ, nQ = size(Q.factors)
+    mB, nB = size(B, 1), size(B, 2)
+    if mQ != mB
+        throw(DimensionMismatch(lazy"matrix Q has dimensions ($mQ,$mQ) but B has dimensions ($mB, $nB)"))
+    end
+    Qfactors, QT = Q.factors, Q.T
+    nb, k = size(QT)
+    if k > mQ
+        throw(DimensionMismatch(lazy"wrong value for k = $k: must be at most $mQ"))
+    end
+    (k == 0 || nB == 0) && return B
+    TW = promote_op(matprod, eltype(QT), promote_op(matprod, eltype(Qfactors), eltype(B)))
+    W = similar(B, TW, (nb, nB)) # workspace for `Tⱼ Vⱼ' B`
+    for idx in (adj ? (1:1:cld(k, nb)) : (cld(k, nb):-1:1))
+        k0 = (idx - 1) * nb
+        nj = min(nb, k - k0)
+        top, bot = k0+1:k0+nj, k0+nj+1:mB
+        # `Vⱼ` splits into a unit lower triangular top block and a rectangular one below it
+        V1 = UnitLowerTriangular(view(Qfactors, top, top))
+        V2 = view(Qfactors, bot, top)
+        B1, B2, Wj = view(B, top, :), view(B, bot, :), view(W, 1:nj, :)
+        Tj = UpperTriangular(view(QT, 1:nj, top))
+        # Wⱼ = Vⱼ'B
+        copyto!(Wj, B1)
+        lmul!(V1', Wj)
+        mul!(Wj, V2', B2, true, true)
+        # Wⱼ = Tⱼ Wⱼ, resp. Wⱼ = Tⱼ' Wⱼ
+        adj ? lmul!(Tj', Wj) : lmul!(Tj, Wj)
+        # B -= Vⱼ Wⱼ
+        mul!(B2, V2, Wj, -1, true)
+        lmul!(V1, Wj)
+        B1 .-= Wj
+    end
+    B
+end
+
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, running over the reflectors the other way round and
+# multiplying by `τₖ` from the right rather than from the left
+function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
+    require_one_based_indexing(A)
+    mQ, nQ = size(Q.factors)
+    mA, nA = size(A, 1), size(A, 2)
+    if nA != mQ
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $nQ)"))
+    end
+    Qfactors = Q.factors
+    @inbounds begin
+        for k in (adj ? (min(mQ,nQ):-1:1) : (1:1:min(mQ,nQ)))
+            τk = adj ? conj(Q.τ[k]) : Q.τ[k]
+            for i = 1:mA
+                vAi = A[i,k]
+                for j = k+1:mQ
+                    vAi += A[i,j]*Qfactors[j,k]
+                end
+                vAi = vAi*τk
+                A[i,k] -= vAi
+                for j = k+1:nA
+                    A[i,j] -= vAi*conj(Qfactors[j,k])
+                end
+            end
+        end
+    end
+    A
+end
+
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, traversing the blocks the other way round
+function _rqmul!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) where {adj}
+    require_one_based_indexing(A)
+    mQ, nQ = size(Q.factors)
+    mA, nA = size(A, 1), size(A, 2)
+    if nA != mQ
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $mQ)"))
+    end
+    Qfactors, QT = Q.factors, Q.T
+    nb, k = size(QT)
+    if k > mQ
+        throw(DimensionMismatch(lazy"wrong value for k = $k: must be at most $mQ"))
+    end
+    (k == 0 || mA == 0) && return A
+    TW = promote_op(matprod, promote_op(matprod, eltype(A), eltype(Qfactors)), eltype(QT))
+    W = similar(A, TW, (mA, nb)) # workspace for `A Vⱼ Tⱼ`
+    for idx in (adj ? (cld(k, nb):-1:1) : (1:1:cld(k, nb)))
+        k0 = (idx - 1) * nb
+        nj = min(nb, k - k0)
+        left, right = k0+1:k0+nj, k0+nj+1:nA
+        V1 = UnitLowerTriangular(view(Qfactors, left, left))
+        V2 = view(Qfactors, right, left)
+        A1, A2, Wj = view(A, :, left), view(A, :, right), view(W, :, 1:nj)
+        Tj = UpperTriangular(view(QT, 1:nj, left))
+        # Wⱼ = A Vⱼ
+        copyto!(Wj, A1)
+        rmul!(Wj, V1)
+        mul!(Wj, A2, V2, true, true)
+        # Wⱼ = Wⱼ Tⱼ, resp. Wⱼ = Wⱼ Tⱼ'
+        adj ? rmul!(Wj, Tj') : rmul!(Wj, Tj)
+        # A -= Wⱼ Vⱼ'
+        mul!(A2, Wj, V2', -1, true)
+        rmul!(Wj, V1')
+        A1 .-= Wj
+    end
+    A
+end
+
+### QB
+lmul!(A::QRCompactWYQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
+    LAPACK.gemqrt!('L', 'N', A.factors, A.T, B)
+lmul!(Q::QRCompactWYQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
+lmul!(A::QRPackedQ{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
+    LAPACK.ormqr!('L', 'N', A.factors, A.τ, B)
+lmul!(Q::QRPackedQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
 
 ### QcB
 lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.gemqrt!('L', 'T', Q.factors, Q.T, B))
 lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.gemqrt!('L', 'C', Q.factors, Q.T, B))
+lmul!(adjQ::AdjointQ{<:Any,<:QRCompactWYQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, B, Val(true))
 lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.ormqr!('L', 'T', Q.factors, Q.τ, B))
 lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.ormqr!('L', 'C', Q.factors, Q.τ, B))
-function lmul!(adjA::AdjointQ{<:Any,<:QRPackedQ}, B::AbstractVecOrMat)
-    require_one_based_indexing(B)
-    A = adjA.Q
-    mA, nA = size(A.factors)
-    mB, nB = size(B,1), size(B,2)
-    if mA != mB
-        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but B has dimensions ($mB, $nB)"))
-    end
-    Afactors = A.factors
-    @inbounds begin
-        for k = 1:min(mA,nA)
-            for j = 1:nB
-                vBj = B[k,j]
-                for i = k+1:mB
-                    vBj += conj(Afactors[i,k])*B[i,j]
-                end
-                vBj = conj(A.τ[k])*vBj
-                B[k,j] -= vBj
-                for i = k+1:mB
-                    B[i,j] -= Afactors[i,k]*vBj
-                end
-            end
-        end
-    end
-    B
-end
+lmul!(adjQ::AdjointQ{<:Any,<:QRPackedQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, B, Val(true))
 
 ### AQ
 rmul!(A::StridedVecOrMat{T}, B::QRCompactWYQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
     LAPACK.gemqrt!('R', 'N', B.factors, B.T, A)
+rmul!(A::AbstractVecOrMat, Q::QRCompactWYQ) = _rqmul!(A, Q, Val(false))
 rmul!(A::StridedVecOrMat{T}, B::QRPackedQ{T,<:StridedMatrix}) where {T<:BlasFloat} =
     LAPACK.ormqr!('R', 'N', B.factors, B.τ, A)
-function rmul!(A::AbstractVecOrMat, Q::QRPackedQ)
-    require_one_based_indexing(A)
-    mQ, nQ = size(Q.factors)
-    mA, nA = size(A,1), size(A,2)
-    if nA != mQ
-        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $nQ)"))
-    end
-    Qfactors = Q.factors
-    @inbounds begin
-        for k = 1:min(mQ,nQ)
-            for i = 1:mA
-                vAi = A[i,k]
-                for j = k+1:mQ
-                    vAi += A[i,j]*Qfactors[j,k]
-                end
-                vAi = vAi*Q.τ[k]
-                A[i,k] -= vAi
-                for j = k+1:nA
-                    A[i,j] -= vAi*conj(Qfactors[j,k])
-                end
-            end
-        end
-    end
-    A
-end
+rmul!(A::AbstractVecOrMat, Q::QRPackedQ) = _rqmul!(A, Q, Val(false))
 
 ### AQc
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T}}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.gemqrt!('R', 'T', Q.factors, Q.T, A))
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRCompactWYQ{T}}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.gemqrt!('R', 'C', Q.factors, Q.T, A))
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:QRCompactWYQ}) =
+    _rqmul!(A, adjQ.Q, Val(true))
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRPackedQ{T}}) where {T<:BlasReal} =
     (Q = adjQ.Q; LAPACK.ormqr!('R', 'T', Q.factors, Q.τ, A))
 rmul!(A::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:QRPackedQ{T}}) where {T<:BlasComplex} =
     (Q = adjQ.Q; LAPACK.ormqr!('R', 'C', Q.factors, Q.τ, A))
-function rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:QRPackedQ})
-    require_one_based_indexing(A)
-    Q = adjQ.Q
-    mQ, nQ = size(Q.factors)
-    mA, nA = size(A,1), size(A,2)
-    if nA != mQ
-        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $nQ)"))
-    end
-    Qfactors = Q.factors
-    @inbounds begin
-        for k = min(mQ,nQ):-1:1
-            for i = 1:mA
-                vAi = A[i,k]
-                for j = k+1:mQ
-                    vAi += A[i,j]*Qfactors[j,k]
-                end
-                vAi = vAi*conj(Q.τ[k])
-                A[i,k] -= vAi
-                for j = k+1:nA
-                    A[i,j] -= vAi*conj(Qfactors[j,k])
-                end
-            end
-        end
-    end
-    A
-end
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:QRPackedQ}) = _rqmul!(A, adjQ.Q, Val(true))
 
 det(Q::QRPackedQ) = _det_tau(Q.τ)
 det(Q::QRCompactWYQ) =
@@ -497,6 +564,12 @@ end
 HessenbergQ(F::Hessenberg{<:Any,<:UpperHessenberg,S,W}) where {S,W} = HessenbergQ{eltype(F.factors),S,W,false}(F.uplo, F.factors, F.τ)
 HessenbergQ(F::Hessenberg{<:Any,<:SymTridiagonal,S,W}) where {S,W} = HessenbergQ{eltype(F.factors),S,W,true}(F.uplo, F.factors, F.τ)
 
+function HessenbergQ{T}(Q::HessenbergQ{<:Any,<:Any,<:Any,sym}) where {T,sym}
+    factors, τ = convert(AbstractMatrix{T}, Q.factors), convert(AbstractVector{T}, Q.τ)
+    HessenbergQ{T,typeof(factors),typeof(τ),sym}(Q.uplo, factors, τ)
+end
+convert(::Type{AbstractQ{T}}, Q::HessenbergQ) where {T} = HessenbergQ{T}(Q)
+
 size(Q::HessenbergQ, dim::Integer) = size(getfield(Q, :factors), dim == 2 ? 1 : dim)
 size(Q::HessenbergQ) = size(Q, 1), size(Q, 2)
 
@@ -524,6 +597,46 @@ lmul!(adjQ::AdjointQ{<:Any,<:BlasHessenbergQ{T,true}}, X::StridedVecOrMat{T}) wh
     (Q = adjQ.Q; LAPACK.ormtr!('L', Q.uplo, ifelse(T<:Real, 'T', 'C'), Q.factors, Q.τ, X))
 rmul!(X::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:BlasHessenbergQ{T,true}}) where {T<:BlasFloat} =
     (Q = adjQ.Q; LAPACK.ormtr!('R', Q.uplo, ifelse(T<:Real, 'T', 'C'), Q.factors, Q.τ, X))
+
+# `Q = H_1 ⋯ H_{n-1}` with the reflectors shifted one row down, so the packed kernels apply
+# once `factors` and the operand are restricted to rows 2:n. For `uplo == 'U'` the reflectors
+# run in the opposite order and sit above the diagonal, which reversing both index orders
+# turns back into the packed layout. The two branches call the kernel separately to keep
+# the view types concrete.
+function _lqmul!(Q::HessenbergQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    require_one_based_indexing(B)
+    n = size(Q.factors, 1)
+    mB, nB = size(B, 1), size(B, 2)
+    if n != mB
+        throw(DimensionMismatch(lazy"matrix Q has dimensions ($n,$n) but B has dimensions ($mB, $nB)"))
+    end
+    if Q.uplo == 'U'
+        _lqmul!(QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), view(B, n-1:-1:1, :), Val(adj))
+    else
+        _lqmul!(QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), view(B, 2:n, :), Val(adj))
+    end
+    B
+end
+
+function _rqmul!(A::AbstractVecOrMat, Q::HessenbergQ, ::Val{adj}) where {adj}
+    require_one_based_indexing(A)
+    n = size(Q.factors, 1)
+    mA, nA = size(A, 1), size(A, 2)
+    if nA != n
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($n, $n)"))
+    end
+    if Q.uplo == 'U'
+        _rqmul!(view(A, :, n-1:-1:1), QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), Val(adj))
+    else
+        _rqmul!(view(A, :, 2:n), QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), Val(adj))
+    end
+    A
+end
+
+lmul!(Q::HessenbergQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
+lmul!(adjQ::AdjointQ{<:Any,<:HessenbergQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, B, Val(true))
+rmul!(A::AbstractVecOrMat, Q::HessenbergQ) = _rqmul!(A, Q, Val(false))
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:HessenbergQ}) = _rqmul!(A, adjQ.Q, Val(true))
 
 lmul!(Q::HessenbergQ{T}, X::Adjoint{T,<:StridedVecOrMat{T}}) where {T} = rmul!(X', Q')'
 rmul!(X::Adjoint{T,<:StridedVecOrMat{T}}, Q::HessenbergQ{T}) where {T} = lmul!(Q', X')'
@@ -598,6 +711,42 @@ qsize_check(A::AbstractVecOrMat, Q::LQPackedQ) =
     size(A, 2) in size(Q.factors) ||
         throw(DimensionMismatch(lazy"second dimension of A, $(size(A,2)), must equal one of the dimensions of Q, $(size(Q.factors))"))
 
+# Generic counterparts of LAPACK's `ormlq!`. In the LQ factorization, `Q = H_k' ⋯ H_1'` is
+# the product of the adjoints of the reflectors `Hᵢ = I - τᵢvᵢvᵢ'`. LAPACK stores `conj(vᵢ)`
+# in the `i`th row of `Q.factors`, so `vᵢ` is the `i`th column of `Q.factors'`, and the
+# reflectors can be applied with `reflectorApply!`. `Q` applies the `Hᵢ'` and `Q'` the `Hᵢ`,
+# in opposite orders; `adj = true` selects the latter.
+function _lqmul!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    require_one_based_indexing(B)
+    mQ, nQ = size(Q.factors)
+    mB, nB = size(B, 1), size(B, 2)
+    if nQ != mB
+        throw(DimensionMismatch(lazy"matrix Q has dimensions ($nQ,$nQ) but B has dimensions ($mB, $nB)"))
+    end
+    Qv = Q.factors'
+    @inbounds for i in (adj ? (min(mQ,nQ):-1:1) : (1:1:min(mQ,nQ)))
+        # `reflectorApply!` applies `I - vᵢ conj(τ)vᵢ'`, hence the conjugation for `Q'`
+        reflectorApply!(view(Qv, i:mB, i), adj ? conj(Q.τ[i]) : Q.τ[i], view(B, i:mB, :))
+    end
+    B
+end
+
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, applying the reflectors the other way round
+function _rqmul!(A::AbstractVecOrMat, Q::LQPackedQ, ::Val{adj}) where {adj}
+    require_one_based_indexing(A)
+    mQ, nQ = size(Q.factors)
+    mA, nA = size(A, 1), size(A, 2)
+    if nA != nQ
+        throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($nQ, $nQ)"))
+    end
+    Qv = Q.factors'
+    @inbounds for i in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
+        # `reflectorApply!` applies `I - vᵢτvᵢ'` here, hence the conjugation for `Q`
+        reflectorApply!(view(A, :, i:nA), view(Qv, i:nA, i), adj ? Q.τ[i] : conj(Q.τ[i]))
+    end
+    A
+end
+
 # in-place right-application of LQPackedQs
 # these methods require that the applied-to matrix's (A's) number of columns
 # match the number of columns (nQ) of the LQPackedQ (Q) (necessary for in-place
@@ -609,6 +758,8 @@ rmul!(A::StridedVecOrMat{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:Bla
     (B = adjB.Q; LAPACK.ormlq!('R', 'T', B.factors, B.τ, A))
 rmul!(A::StridedVecOrMat{T}, adjB::AdjointQ{<:Any,<:LQPackedQ{T}}) where {T<:BlasComplex} =
     (B = adjB.Q; LAPACK.ormlq!('R', 'C', B.factors, B.τ, A))
+rmul!(A::AbstractVecOrMat, Q::LQPackedQ) = _rqmul!(A, Q, Val(false))
+rmul!(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:LQPackedQ}) = _rqmul!(A, adjQ.Q, Val(true))
 
 ### QB / QcB
 lmul!(A::LQPackedQ{T}, B::StridedVecOrMat{T}) where {T<:BlasFloat} = LAPACK.ormlq!('L','N',A.factors,A.τ,B)
@@ -616,6 +767,8 @@ lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:Bla
     (A = adjA.Q; LAPACK.ormlq!('L', 'T', A.factors, A.τ, B))
 lmul!(adjA::AdjointQ{<:Any,<:LQPackedQ{T}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
     (A = adjA.Q; LAPACK.ormlq!('L', 'C', A.factors, A.τ, B))
+lmul!(Q::LQPackedQ, B::AbstractVecOrMat) = _lqmul!(Q, B, Val(false))
+lmul!(adjQ::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVecOrMat) = _lqmul!(adjQ.Q, B, Val(true))
 
 # division by a matrix
 function /(adjQ::AdjointQ{<:Any,<:LQPackedQ}, B::AbstractVecOrMat)

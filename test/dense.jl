@@ -902,6 +902,8 @@ end
         @test exp(log(A8)) ≈ A8
         @test typeof(log(A8)) == Matrix{elty}
     end
+
+    @test log([1 2; 0 4]) == log(UpperTriangular(Float64[1 2; 0 4]))
 end
 
 @testset "Additional matrix square root tests" for elty in (Float64, ComplexF64)
@@ -1454,6 +1456,53 @@ end
     @test_throws DimensionMismatch LinearAlgebra.checksquare(B)
     @test_throws DimensionMismatch LinearAlgebra.checksquare(C)
     @test_throws DimensionMismatch LinearAlgebra.checksquare(A,B)
+end
+
+@testset "abs(A::AbstractMatrix{T})" begin
+    N = 10
+
+    # Real valued Non-square
+    A = randn(N, N+2)
+    H = @inferred abs(A)
+    @test H'H ≈ A'A
+    @test H isa Hermitian{Float64}
+
+    # Complex valued non-square
+    A = randn(ComplexF64, N, N+2)
+    H = @inferred abs(A)
+    @test H'H ≈ A'A
+    @test H isa Hermitian{ComplexF64}
+
+    # Dense diagonal matrix
+    D = diagm([1.0, -2.0, 3.0, -4.0])
+    @test (@inferred abs(D)) ≈ diagm([1.0, 2.0, 3.0, 4.0])
+    @test abs(D) isa Hermitian{Float64}
+
+    # Guard against integer overflow
+    D_int8 = diagm(Int8[-128, 127])
+    @test (@inferred abs(D_int8)) ≈ diagm([128.0, 127.0])
+    @test abs(D_int8) isa Hermitian{Float64}
+
+    # Dense complex diagonal matrix
+    Dc = diagm([3.0 + 4.0im, -1.0 + 2.0im, 0.0 - 5.0im])
+    @test (@inferred abs(Dc)) ≈ diagm([5.0, sqrt(5.0), 5.0])
+    @test abs(Dc) isa Hermitian{ComplexF64}
+
+    # Dense Hermitian matrix
+    A1 = randn(ComplexF64, N, N)
+    H_dense = A1 + A1'
+    @test (@inferred abs(H_dense)) ≈ abs(Hermitian(H_dense))
+    @test abs(H_dense) isa Hermitian{ComplexF64}
+
+    # Diagonal wrapper
+    D = Diagonal([1.0, -2.0, 3.0, -4.0])
+    @test (@inferred abs(D)) == Diagonal([1.0, 2.0, 3.0, 4.0])
+    @test abs(D) isa Diagonal
+
+    # Hermitian wrapper
+    H = Hermitian([1.0 2.0im; -2.0im 1.0])
+    @test (@inferred abs(H)) ≈ Hermitian([2.0 1.0im; -1.0im 2.0])
+    @test abs(H) isa Hermitian
 end
 
 end # module TestDense
