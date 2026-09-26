@@ -198,6 +198,9 @@ end
     end
     @test ldiv!(H, copy(B); shift=Inf) == zeros(4, 3)
     @test rdiv!(copy(B'), H; shift=-Inf) == zeros(3, 4)
+    # compare to a large finite shift
+    @test norm(ldiv!(H, copy(B); shift=1e100)) < 1e-90
+    @test norm(rdiv!(copy(B'), H; shift=-1e100)) < 1e-90
     B[2, 2] = NaN
     @test all(isnan, ldiv!(H, copy(B); shift=Inf))
     @test all(isnan, rdiv!(copy(B'), H; shift=Inf))

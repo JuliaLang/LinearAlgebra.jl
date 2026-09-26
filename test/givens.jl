@@ -178,6 +178,53 @@ end
     end
 end
 
+# The exceptional cases should be the limits of the finite cases: compare the result for
+# infinite inputs to the result where each infinite component is replaced by a huge value.
+@testset "givensAlgorithm - non-finite inputs are limits of large inputs" begin
+    # replace ±Inf components by ±M
+    finitize(x::Real, M) = isinf(x) ? copysign(M, x) : x
+    finitize(z::Complex, M) = complex(finitize(real(z), M), finitize(imag(z), M))
+    # does x (computed with huge values M) approximate the limit y (computed with Inf)?
+    # The finite inputs are O(1), so the finite results converge like O(1/M).
+    function islimit(x::Real, y::Real, M)
+        isinf(y) ? sign(x) == sign(y) && abs(x) >= M/10 :
+            isapprox(x, y; atol=sqrt(eps(typeof(x))) + 10/M)
+    end
+    islimit(x::Complex, y::Complex, M) =
+        islimit(real(x), real(y), M) && islimit(imag(x), imag(y), M)
+    islimit(x::Tuple, y::Tuple, M) = all(islimit(a, b, M) for (a, b) in zip(x, y))
+
+    function check(f, g, T)
+        res = givensAlgorithm(f, g)
+        for M in (T(1e10), sqrt(floatmax(T)), floatmax(T)/4)
+            if isinf(f) && isinf(g)
+                # no limit: the rotation for huge inputs depends on their ratio
+                @test all(isnan, res)
+                c1, = givensAlgorithm(finitize(f, M), finitize(g, M))
+                c2, = givensAlgorithm(finitize(f, M), finitize(g, M/2))
+                @test isfinite(c1) && isfinite(c2) && !(c1 ≈ c2)
+            else
+                resM = givensAlgorithm(finitize(f, M), finitize(g, M))
+                @test all(isfinite, resM)
+                @test islimit(resM, res, M)
+            end
+        end
+    end
+
+    vals = (Inf, -Inf, 3, -2, 0)
+    @testset for T in (Float32, Float64, BigFloat)
+        for f in vals, g in vals
+            (isinf(f) || isinf(g)) && check(T(f), T(g), T)
+        end
+    end
+    @testset for T in (Float32, Float64)
+        cvals = [complex(T(a), T(b)) for a in vals for b in vals]
+        for f in cvals, g in cvals
+            (isinf(f) || isinf(g)) && check(f, g, T)
+        end
+    end
+end
+
 # ordering of compositions
 @testset "givens compositions ordering" begin
     R1, R2 = givens(1.,1.,1,2)[1], givens(1.,1.,2,3)[1]
