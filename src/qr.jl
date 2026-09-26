@@ -705,8 +705,17 @@ end
 
 
 function ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
+    require_one_based_indexing(B)
     m, n = size(A)
-    m < n && return _wide_qr_ldiv!(A, B)
+    if m < n
+        # underdetermined: the right-hand side occupies the first m rows of B,
+        # and B must have room for the n-row solution
+        size(B, 1) >= n ||
+            throw(DimensionMismatch(lazy"B has leading dimension $(size(B, 1)) but needs at least $n"))
+        return _wide_qr_ldiv!(A, B)
+    end
+    size(B, 1) == m ||
+        throw(DimensionMismatch(lazy"first dimension of B, $(size(B, 1)), must match first dimension of A, $m"))
 
     lmul!(adjoint(A.Q), view(B, 1:m, :))
     R = A.factors
