@@ -512,6 +512,30 @@ end
     @test x ≈ xf
 end
 
+@testset "ldiv! checks the size of the right-hand side (LinearAlgebra.jl#616)" begin
+    for T in (Float64, ComplexF64, BigFloat)
+        # tall: the right-hand side must have exactly m rows
+        A = randn(T, 5, 3)
+        for F in (LinearAlgebra.qrfactUnblocked!(copy(A)), qr(A, ColumnNorm()))
+            if F isa QR # the LAPACK-backed QRPivoted method allows extra rows
+                @test_throws DimensionMismatch ldiv!(F, randn(T, 6))
+                @test_throws DimensionMismatch ldiv!(F, randn(T, 6, 2))
+            end
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 4))
+            b = randn(T, 5)
+            @test ldiv!(F, copy(b))[1:3] ≈ A \ b
+        end
+        # wide: the right-hand side must have room for the n-row solution
+        W = randn(T, 3, 5)
+        for F in (LinearAlgebra.qrfactUnblocked!(copy(W)), qr(W, ColumnNorm()))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 3))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 4, 2))
+            b = randn(T, 3)
+            @test W * ldiv!(F, [b; zeros(T, 2)]) ≈ b
+        end
+    end
+end
+
 @testset "issue #53451" begin
     # in the issue it was noted that QR factorizations of zero-column matrices
     # were possible, but zero row-matrices errored, because LAPACK does not
