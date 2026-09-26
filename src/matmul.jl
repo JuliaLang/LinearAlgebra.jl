@@ -481,7 +481,8 @@ end
 end
 
 # The generic kernels index with the axes of the arrays within `@inbounds` loops,
-# so matching sizes are not sufficient, and the axes must match as well.
+# so matching sizes are not sufficient, and the axes must match. Since matching axes
+# imply matching sizes, this also subsumes `matmul_size_check`.
 function matmul_axes_check(C::AbstractVecOrMat, A::AbstractVecOrMat, B::AbstractVecOrMat)
     # we use two `axes` calls in case of `AbstractVector`
     if axes(A, 1) != axes(C, 1) || axes(A, 2) != axes(B, 1) || axes(B, 2) != axes(C, 2)
@@ -490,6 +491,8 @@ function matmul_axes_check(C::AbstractVecOrMat, A::AbstractVecOrMat, B::Abstract
     return nothing
 end
 @noinline function matmul_axes_check_error(C::AbstractVecOrMat, A::AbstractVecOrMat, B::AbstractVecOrMat)
+    # report incompatible sizes with the more descriptive error messages
+    matmul_size_check(size(C), size(A), size(B))
     AxM, AxK = axes(A, 1), axes(A, 2)
     BxK, BxN = axes(B, 1), axes(B, 2)
     CxM, CxN = axes(C, 1), axes(C, 2)
@@ -1204,7 +1207,6 @@ _generic_matmatmul!(C::AbstractVecOrMat, A::AbstractVecOrMat, B::AbstractVecOrMa
 
 @noinline function _generic_matmatmul!(C::AbstractVecOrMat{R}, A::AbstractVecOrMat, B::AbstractVecOrMat,
                              alpha::Number, beta::Number) where {R}
-    matmul_size_check(size(C), size(A), size(B))
     matmul_axes_check(C, A, B)
     __generic_matmatmul!(C, A, B, alpha, beta, Val(isbitstype(R) && sizeof(R) ≤ 16))
     return C
