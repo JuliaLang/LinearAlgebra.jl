@@ -819,4 +819,16 @@ end
     end
 end
 
+@testset "powers of Q from square, tall and wide matrices" begin
+    for T in (Float64, ComplexF64, BigFloat), sz in ((5, 5), (6, 3), (3, 6))
+        Q = qr(randn(T, sz...)).Q
+        Qm = Q*I
+        @test size(Qm) == (sz[1], sz[1])
+        for p in (-3, -2, -1, 0, 1, 2, 3, 4)
+            @test (Q^p)::Matrix{T} ≈ Qm^p
+            @test (Q'^p)::Matrix{T} ≈ Qm'^p
+        end
+    end
+end
+
 end # module TestQR
