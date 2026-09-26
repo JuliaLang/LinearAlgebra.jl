@@ -134,7 +134,7 @@ let n = 10
         @test size(H.Q) == size(A)
         @test size(H) == size(A)
         @test_throws FieldError H.Z
-        @test convert(Array, H) ≈ A
+        @test Array(H) ≈ A
         @test (H.Q * H.H) * H.Q' ≈ A ≈ (Matrix(H.Q) * Matrix(H.H)) * Matrix(H.Q)'
         @test (H.Q' * A) * H.Q ≈ H.H
         #getindex for HessenbergQ
@@ -153,12 +153,12 @@ let n = 10
         @test q == H.Q
         @test h == H.H
 
-        @test convert(Array, 2 * H) ≈ 2 * A ≈ convert(Array, H * 2)
-        @test convert(Array, H + 2I) ≈ A + 2I ≈ convert(Array, 2I + H)
-        @test convert(Array, H + (2+4im)I) ≈ A + (2+4im)I ≈ convert(Array, (2+4im)I + H)
-        @test convert(Array, H - 2I) ≈ A - 2I ≈ -convert(Array, 2I - H)
-        @test convert(Array, -H) == -convert(Array, H)
-        @test convert(Array, 2*(H + (2+4im)I)) ≈ 2A + (4+8im)I
+        @test Array(2 * H) ≈ 2 * A ≈ Array(H * 2)
+        @test Array(H + 2I) ≈ A + 2I ≈ Array(2I + H)
+        @test Array(H + (2+4im)I) ≈ A + (2+4im)I ≈ Array((2+4im)I + H)
+        @test Array(H - 2I) ≈ A - 2I ≈ -Array(2I - H)
+        @test Array(-H) == -Array(H)
+        @test Array(2*(H + (2+4im)I)) ≈ 2A + (4+8im)I
 
         b = convert(Vector{eltype(H)}, b_)
         B = convert(Matrix{eltype(H)}, B_)
@@ -198,7 +198,7 @@ end
     n = 10
     A = Tridiagonal(rand(n-1), rand(n), rand(n-1))
     H = hessenberg(A)
-    @test convert(Array, H) ≈ A
+    @test Array(H) ≈ A
 end
 
 # check logdet on a matrix that has a positive determinant

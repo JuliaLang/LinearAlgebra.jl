@@ -94,4 +94,12 @@ end
     @test hash(F) != hash(G)
 end
 
+@testset "deprecated conversion of factorizations to arrays" begin
+    A = [4.0 1.0; 1.0 3.0]
+    for F in (lu(A), cholesky(A), qr(A), svd(A), eigen(A), schur(A), hessenberg(A), lq(A))
+        @test_deprecated convert(Matrix, F)
+        @test_deprecated convert(AbstractMatrix, F)
+    end
+end
+
 end

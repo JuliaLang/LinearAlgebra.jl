@@ -34,7 +34,7 @@ aimg  = randn(n,n)/2
         @test sort(real(f.values)) ≈ sort(real(d))
         @test sort(imag(f.values)) ≈ sort(imag(d))
         @test istriu(f.Schur) || eltype(a)<:Real
-        @test convert(Array, f) ≈ a
+        @test Array(f) ≈ a
         @test_throws FieldError f.A
 
         sch, vecs, vals = schur(UpperTriangular(triu(a)))
