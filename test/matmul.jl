@@ -13,6 +13,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
 
 ## Test Julia fallbacks to BLAS routines
 
@@ -1326,6 +1327,41 @@ end
         @test M' * M' == Mod.(A' * A', 20)
         @test M * M[:, 1] == Mod.(A * A[:, 1], 20)
         @test M' * M[:, 1] == Mod.(A' * A[:, 1], 20)
+    end
+end
+
+@testset "generic matmul checks axes (issue #1670)" begin
+    @testset "n = $n, T = $T" for n in (2, 3, 4), T in (Float64, BigFloat, Int)
+        M1 = rand(T <: Integer ? (1:9) : T, n, n)
+        M2 = rand(T <: Integer ? (1:9) : T, n, n)
+        Or = OffsetArray(M1, -2, 0) # offset rows
+        Oc = OffsetArray(M1, 0, -2) # offset columns
+        @testset "mismatched axes" begin
+            for W in (identity, adjoint, transpose, Symmetric, Hermitian, UpperHessenberg)
+                @test_throws DimensionMismatch W(M2) * Or
+                @test_throws DimensionMismatch Oc * W(M2)
+            end
+            # the result of * is one-based, whereas the axes of the product are offset
+            @test_throws DimensionMismatch Or * M2
+            @test_throws DimensionMismatch M2 * Oc
+            @test_throws DimensionMismatch mul!(similar(M1), Or, M2)
+            @test_throws DimensionMismatch mul!(similar(M1), M2, Oc)
+            @test_throws DimensionMismatch mul!(similar(M1), M2, Or, 2, 3)
+            @test_throws DimensionMismatch mul!(OffsetArray(similar(M1), -2, 0), M1, M2)
+            @test_throws DimensionMismatch mul!(OffsetArray(similar(M1), 0, -2), M1, M2)
+            @test_throws DimensionMismatch mul!(OffsetArray(similar(M1), 0, -2), M1, M2, 2, 3)
+            @test_throws DimensionMismatch LinearAlgebra.generic_matmatmul!(similar(M1), 'N', 'N', Or, M2, true, false)
+        end
+        @testset "matching axes" begin
+            A = OffsetArray(M1, -2, 3)
+            B = OffsetArray(M2, 3, 1)
+            C = OffsetArray(zeros(T, n, n), -2, 1)
+            @test mul!(C, A, B) ≈ OffsetArray(M1 * M2, axes(C))
+            C .= 1
+            @test mul!(C, A, B, 2, 3) ≈ OffsetArray(2 * M1 * M2 .+ 3, axes(C))
+            C2 = OffsetArray(zeros(T, n, n), 3, 1)
+            @test mul!(C2, adjoint(A), OffsetArray(M2, -2, 1)) ≈ OffsetArray(M1' * M2, axes(C2))
+        end
     end
 end
 
