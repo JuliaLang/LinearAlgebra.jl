@@ -187,6 +187,22 @@ let n = 10
     end
 end
 
+@testset "UpperHessenberg solves with infinite shift (#687)" begin
+    H = UpperHessenberg(randn(4, 4))
+    B = randn(4, 3)
+    for shift in (Inf, -Inf, complex(1, Inf))
+        X = complex(B)
+        @test ldiv!(H, X; shift) == zeros(4, 3)
+        X = complex(B')
+        @test rdiv!(X, H; shift) == zeros(3, 4)
+    end
+    @test ldiv!(H, copy(B); shift=Inf) == zeros(4, 3)
+    @test rdiv!(copy(B'), H; shift=-Inf) == zeros(3, 4)
+    B[2, 2] = NaN
+    @test all(isnan, ldiv!(H, copy(B); shift=Inf))
+    @test all(isnan, rdiv!(copy(B'), H; shift=Inf))
+end
+
 @testset "Reverse operation on UpperHessenberg" begin
     A = UpperHessenberg(randn(5, 5))
     @test reverse(A, dims=1) == reverse(Matrix(A), dims=1)

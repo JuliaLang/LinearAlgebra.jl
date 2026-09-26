@@ -146,6 +146,38 @@ end
     @test !isfinite(r)
 end
 
+# exceptional cases, see Bindel et al., "On Computing Givens Rotations Reliably and Efficiently"
+@testset "givensAlgorithm - non-finite inputs" begin
+    for T in (Float32, Float64, BigFloat)
+        for (f, g, cs, sn, r) in ((Inf, 2, 1, 0, Inf), (-Inf, 2, 1, 0, -Inf),
+                                  (2, Inf, 0, 1, Inf), (-2, -Inf, 0, -1, Inf))
+            res = givensAlgorithm(T(f), T(g))
+            @test res isa NTuple{3,T}
+            @test res == (cs, sn, r)
+        end
+        for (f, g) in ((Inf, Inf), (-Inf, Inf), (NaN, 1), (1, NaN), (NaN, Inf))
+            @test all(isnan, givensAlgorithm(T(f), T(g)))
+        end
+    end
+    for T in (Float32, Float64)
+        CT = Complex{T}
+        for (f, g, cs, sn, r) in ((CT(Inf, 1), CT(2, 3), 1, 0, CT(Inf, 1)),
+                                  (CT(-Inf, Inf), CT(0, 1), 1, 0, CT(-Inf, Inf)),
+                                  (CT(1, 2), CT(Inf, 0), 0, CT(1, 2)/sqrt(T(5)), CT(Inf, Inf)),
+                                  (CT(0, -3), CT(1, -Inf), 0, 1, CT(0, -Inf)),
+                                  (CT(-2, 0), CT(-Inf, -Inf), 0, CT(1, -1)/sqrt(T(2)), CT(-Inf, 0)),
+                                  (CT(0), CT(1, -Inf), 0, CT(0, 1), CT(Inf, 0)))
+            c, s, ρ = givensAlgorithm(f, g)
+            @test c isa T && s isa CT && ρ isa CT
+            @test c == cs && s ≈ sn && ρ == r
+        end
+        for (f, g) in ((CT(Inf), CT(0, Inf)), (CT(NaN), CT(1)), (CT(1), CT(1, NaN)))
+            c, s, r = givensAlgorithm(f, g)
+            @test isnan(c) && isnan(s) && isnan(r)
+        end
+    end
+end
+
 # ordering of compositions
 @testset "givens compositions ordering" begin
     R1, R2 = givens(1.,1.,1,2)[1], givens(1.,1.,2,3)[1]
