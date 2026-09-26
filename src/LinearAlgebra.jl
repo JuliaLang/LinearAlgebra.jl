@@ -511,6 +511,19 @@ See also: `copymutable_oftype`.
 copy_similar(A::AbstractArray, ::Type{T}) where {T} = copyto!(similar(A, T, size(A)), A)
 
 """
+    _valeltype(A)
+
+Return `eltype(A)` if it is concrete (or `A` is empty). Otherwise, return the type obtained
+by promoting the types of all values stored in `A`, as seen through `getindex`, such that
+elements that are not referenced by a wrapper like `Symmetric` are ignored.
+
+This is used to determine the element type of the copy of `A` that is passed to in-place
+factorizations when `eltype(A)` is abstract, e.g., `Real` or `Number`.
+"""
+_valeltype(A::AbstractArray{T}) where {T} =
+    (isconcretetype(T) || isempty(A)) ? T : mapreduce(typeof, promote_type, A)
+
+"""
     BandIndex(band, index)
 
 Represent a Cartesian index as a linear index along a band.

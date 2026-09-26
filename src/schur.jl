@@ -152,7 +152,7 @@ julia> t == F.T && z == F.Z && vals == F.values
 true
 ```
 """
-schur(A::AbstractMatrix{T}) where {T} = schur!(eigencopy_oftype(A, eigtype(T)))
+schur(A::AbstractMatrix) = schur!(eigencopy_oftype(A, eigtype(A)))
 function schur(A::RealHermSymComplexHerm)
     F = eigen(A; sortby=nothing)
     return Schur(typeof(F.vectors)(Diagonal(F.values)), F.vectors, F.values)
@@ -364,7 +364,7 @@ Iterating the decomposition produces the components `F.S`, `F.T`, `F.Q`, `F.Z`,
 `F.α`, and `F.β`.
 """
 function schur(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
+    S = promote_type(eigtype(A), _valeltype(B))
     return schur!(copy_similar(A, S), copy_similar(B, S))
 end
 
