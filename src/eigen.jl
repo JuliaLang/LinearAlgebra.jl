@@ -546,7 +546,7 @@ julia> vals == F.values && vecs == F.vectors
 true
 ```
 """
-function eigen(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
+function eigen(A::AbstractMatrix, B::AbstractMatrix; kws...)
     S = promote_type(eigtype(A), _valeltype(B))
     eigen!(copy_similar(A, S), copy_similar(B, S); kws...)
 end
@@ -641,7 +641,7 @@ julia> eigvals(A,B)
  0.0 + 1.0im
 ```
 """
-function eigvals(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
+function eigvals(A::AbstractMatrix, B::AbstractMatrix; kws...)
     S = promote_type(eigtype(A), _valeltype(B))
     return eigvals!(copy_similar(A, S), copy_similar(B, S); kws...)
 end

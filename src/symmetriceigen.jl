@@ -246,7 +246,7 @@ end
 eigmax(A::RealHermSymComplexHerm{<:Real}) = eigvals(A, size(A, 1):size(A, 1))[1]
 eigmin(A::RealHermSymComplexHerm{<:Real}) = eigvals(A, 1:1)[1]
 
-function eigen(A::HermOrSym{TA}, B::HermOrSym{TB}; kws...) where {TA,TB}
+function eigen(A::HermOrSym, B::HermOrSym; kws...)
     S = promote_type(eigtype(A), _valeltype(B))
     return eigen!(eigencopy_oftype(A, S), eigencopy_oftype(B, S); kws...)
 end
@@ -323,7 +323,7 @@ UtiAUi!(A::Symmetric, U) = Symmetric(_UtiAUi!(copytri!(parent(A), A.uplo), U), _
 UtiAUi!(A::Hermitian, U) = Hermitian(_UtiAUi!(copytri!(parent(A), A.uplo, true), U), _sym_uplo(A.uplo))
 _UtiAUi!(A, U) = rdiv!(ldiv!(U', A), U)
 
-function eigvals(A::HermOrSym{TA}, B::HermOrSym{TB}; kws...) where {TA,TB}
+function eigvals(A::HermOrSym, B::HermOrSym; kws...)
     S = promote_type(eigtype(A), _valeltype(B))
     return eigvals!(eigencopy_oftype(A, S), eigencopy_oftype(B, S); kws...)
 end

@@ -190,7 +190,7 @@ julia> Uonly == U
 true
 ```
 """
-function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T}
+function svd(A::AbstractVecOrMat; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0)
     svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
 end
 function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T <: Union{Float16,Complex{Float16}}}
@@ -519,7 +519,7 @@ julia> U == Uonly
 true
 ```
 """
-function svd(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}) where {TA,TB}
+function svd(A::AbstractMatrix, B::AbstractMatrix)
     S = promote_type(eigtype(A), _valeltype(B))
     return svd!(copy_similar(A, S), copy_similar(B, S))
 end
@@ -628,7 +628,7 @@ julia> svdvals(A, B)
  1.0
 ```
 """
-function svdvals(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}) where {TA,TB}
+function svdvals(A::AbstractMatrix, B::AbstractMatrix)
     S = promote_type(eigtype(A), _valeltype(B))
     return svdvals!(copy_similar(A, S), copy_similar(B, S))
 end
