@@ -173,6 +173,50 @@ end
     end
 end
 
+@testset "gelsy! with preallocated workspace (#980)" begin
+    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64), (m, n) in ((6, 4), (4, 6), (5, 5))
+        A = rand(elty, m, n)
+        rtol = sqrt(eps(real(elty)))
+        for B in (rand(elty, m), rand(elty, m, 3))
+            X0 = A \ B
+            Bc = copy(B)
+            X, r = LAPACK.gelsy!(copy(A), B)
+            @test X ≈ X0 rtol=rtol
+            @test r == min(m, n)
+            @test B == Bc # B is not overwritten
+            @test size(X, 1) == n
+
+            Bwork = B isa AbstractVector ? similar(B, max(m, n)) : similar(B, max(m, n), size(B, 2))
+            jpvt = zeros(LinearAlgebra.BlasInt, n)
+            work = elty[]
+            kws = elty <: Complex ? (; rwork = Vector{real(elty)}(undef, 2n)) : (;)
+            X, r = LAPACK.gelsy!(copy(A), B, eps(real(elty)); Bwork, jpvt, work, kws...)
+            @test X ≈ X0 rtol=rtol
+            @test r == min(m, n)
+            @test B == Bc
+            @test parent(X) === Bwork
+            @test sort(jpvt) == 1:n
+            @test !isempty(work)
+            # reuse workspace; jpvt contents on input must not matter
+            B2 = rand(elty, size(B)...)
+            X, r = LAPACK.gelsy!(copy(A), B2; Bwork, jpvt, work, kws...)
+            @test X ≈ A \ B2 rtol=rtol
+            if m >= n
+                # solve in place
+                B3 = copy(B2)
+                X, r = LAPACK.gelsy!(copy(A), B3; Bwork = B3)
+                @test X ≈ A \ B2 rtol=rtol
+                @test parent(X) === B3
+            end
+            @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), B; Bwork = similar(B, max(m, n) - 1, size(B, 2)))
+            @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), B; jpvt = zeros(LinearAlgebra.BlasInt, n + 1))
+            if elty <: Complex
+                @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), B; rwork = Vector{real(elty)}(undef, 2n - 1))
+            end
+        end
+    end
+end
+
 @testset "gglse errors" begin
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         A = rand(elty,10,10)
