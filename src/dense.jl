@@ -710,7 +710,7 @@ julia> exp(A)
  0.0      2.71828
 ```
 """
-exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(eltype(A))))
+exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(A)))
 exp(A::AdjointAbsMat) = adjoint(exp(parent(A)))
 exp(A::TransposeAbsMat) = transpose(exp(parent(A)))
 

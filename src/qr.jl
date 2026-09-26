@@ -342,6 +342,7 @@ qr!(A::AbstractMatrix) = qr!(A, NoPivot())
 @deprecate qr!(A::AbstractMatrix, ::Val{false}) qr!(A, NoPivot())
 
 _qreltype(::Type{T}) where T = typeof(zero(T)/sqrt(abs2(one(T))))
+_qreltype(A::AbstractArray) = _qreltype(_valeltype(A))
 
 """
     qr(A, pivot = NoPivot(); blocksize) -> F
@@ -426,9 +427,9 @@ true
     elementary reflectors, so that the `Q` and `R` matrices can be stored
     compactly rather than two separate dense matrices.
 """
-function qr(A::AbstractMatrix{T}, arg...; kwargs...) where T
+function qr(A::AbstractMatrix, arg...; kwargs...)
     require_one_based_indexing(A)
-    AA = copy_similar(A, _qreltype(T))
+    AA = copy_similar(A, _qreltype(A))
     return _qr(AA, arg...; kwargs...)
 end
 # TODO: remove in Julia v2.0

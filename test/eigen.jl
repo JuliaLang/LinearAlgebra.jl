@@ -314,4 +314,40 @@ end
     @test_throws ArgumentError isposdef(F)
 end
 
+@testset "abstract eltypes are promoted according to the stored values (#287)" begin
+    # the working precision is determined by the stored values, not by `eltype(A)` alone
+    A = Real[1.0 big(floatmax(Float64))+1; 1.0 big(1.0)]
+    @test LinearAlgebra.eigtype(A) === BigFloat
+    @test LinearAlgebra.eigtype(Real[1 2f0; 3 4]) === Float32
+    @test LinearAlgebra.eigtype(Real[1 2; 3 4]) === Float64
+    @test LinearAlgebra.eigtype(Any[1 2.0; 3 4]) === Float64
+    @test LinearAlgebra.eigtype(Matrix{Real}(undef, 0, 0)) === Float64
+    # results agree with those for the corresponding concretely typed matrix
+    for (A, Ac) in ((Real[1 2f0; 3 4], Float32[1 2; 3 4]),
+                    (Any[1 2.0; 3 4], [1.0 2; 3 4]))
+        @test eigvals(A) == eigvals(Ac)
+        @test eltype(eigen(A).vectors) === eltype(eigen(Ac).vectors)
+        @test svdvals(A) == svdvals(Ac)
+        @test schur(A).T == schur(Ac).T
+        @test hessenberg(A).H == hessenberg(Ac).H
+        @test exp(A) == exp(Ac)
+    end
+    # complex values in a `Number` matrix used to throw an `InexactError`
+    A = Number[1 im; 1 2]
+    Ac = ComplexF64[1 im; 1 2]
+    @test eigvals(A) == eigvals(Ac)
+    @test eigen(A).vectors == eigen(Ac).vectors
+    @test schur(A).T == schur(Ac).T
+    @test svdvals(A) == svdvals(Ac)
+    @test eigvals(Real[1 2; 3 4], Number[1 0; 0 im]) == eigvals([1.0 2; 3 4], ComplexF64[1 0; 0 im])
+    @test eigvals(Hermitian(Number[2 im; -im 2])) == eigvals(Hermitian(ComplexF64[2 im; -im 2]))
+    @test eigvals(Symmetric(Real[2 1; 1 2f0])) == eigvals(Symmetric(Float32[2 1; 1 2]))
+    # values in the triangle that is not referenced by the wrapper do not affect the result
+    S = Symmetric(Real[2.0 1; 1 2])
+    S.data[2,1] = big(7)
+    @test LinearAlgebra.eigtype(S) === Float64
+    @test eigvals(S) == eigvals(Symmetric([2.0 1; 1 2]))
+    @test eigvals(Matrix{Real}(undef, 0, 0)) == Float64[]
+end
+
 end # module TestEigen
