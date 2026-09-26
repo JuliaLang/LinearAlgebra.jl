@@ -97,6 +97,7 @@ end
     @test Matrix{ComplexF64}(undef, 5, 0) |> t -> t't == zeros(0, 0)
     @test Matrix{ComplexF64}(undef, 5, 0) |> t -> t * t' == zeros(5, 5)
 end
+
 @testset "1x1 matmul" begin
     AA = fill(3, 1, 1)
     BB = fill(5, 1, 1)
@@ -129,6 +130,7 @@ end
     C = ones(1, 1)
     @test_throws ArgumentError LinearAlgebra.matmul1x1!(C, 'N', 'N', C, ones(1, 1))
 end
+
 @testset "2x2 matmul" begin
     AA = [1 2; 3 4]
     BB = [5 6; 7 8]
