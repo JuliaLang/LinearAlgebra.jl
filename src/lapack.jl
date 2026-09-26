@@ -1319,14 +1319,9 @@ gesvx!(A::AbstractMatrix, B::AbstractVecOrMat)
 
 # workspace handling for gelsy!: xGELSY needs a right-hand side buffer with
 # max(m, n) rows, which it overwrites with the solution in its first n rows
-function _gelsy_Bwork(B::AbstractVecOrMat, ::Nothing, m, n)
-    if size(B, 1) != m
-        throw(DimensionMismatch(lazy"B has leading dimension $(size(B,1)) but needs $m"))
-    end
-    return [B; zeros(eltype(B), max(0, n - m), size(B, 2))]
-end
-function _gelsy_Bwork(B::AbstractVecOrMat, Bwork::AbstractVecOrMat, m, n)
+function _gelsy_chkBwork!(Bwork::AbstractVecOrMat, B::AbstractVecOrMat, m, n)
     require_one_based_indexing(Bwork)
+    chkstride1(Bwork)
     if size(B, 1) != m
         throw(DimensionMismatch(lazy"B has leading dimension $(size(B,1)) but needs $m"))
     end
@@ -1338,16 +1333,15 @@ function _gelsy_Bwork(B::AbstractVecOrMat, Bwork::AbstractVecOrMat, m, n)
     end
     return Bwork
 end
-function _gelsy_chkjpvt(jpvt::AbstractVector, n)
+function _gelsy_chkjpvt!(jpvt::AbstractVector, n)
     if length(jpvt) != n
         throw(DimensionMismatch(lazy"jpvt has length $(length(jpvt)), but needs $n"))
     end
     # nonzero entries of jpvt on input fix columns of A in xGELSY, so reset them
     fill!(jpvt, 0)
 end
-_gelsy_result(B::AbstractVecOrMat, newB::AbstractVecOrMat, ::Nothing, n) = subsetrows(B, newB, n)
-_gelsy_result(B::AbstractVecOrMat, newB::AbstractVector, Bwork::AbstractVector, n) = view(newB, 1:n)
-_gelsy_result(B::AbstractVecOrMat, newB::AbstractMatrix, Bwork::AbstractMatrix, n) = view(newB, 1:n, :)
+_gelsy_result(Bwork::AbstractVector, n) = view(Bwork, 1:n)
+_gelsy_result(Bwork::AbstractMatrix, n) = view(Bwork, 1:n, :)
 
 for (gelsd, gelsy, elty) in
     ((:dgelsd_,:dgelsy_,:Float64),
@@ -1406,18 +1400,17 @@ for (gelsd, gelsy, elty) in
         #       INTEGER            JPVT( * )
         #       DOUBLE PRECISION   A( LDA, * ), B( LDB, * ), WORK( * )
         function gelsy!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, rcond::Real=eps($elty);
-                        Bwork::Union{Nothing,AbstractVecOrMat{$elty}} = nothing,
+                        Bwork::AbstractVecOrMat{$elty} = similar(B, max(size(A)...), Base.tail(size(B))...),
                         jpvt::AbstractVector{BlasInt} = zeros(BlasInt, size(A, 2)),
                         work::AbstractVector{$elty} = Vector{$elty}(undef, 1))
             require_one_based_indexing(A, B, jpvt, work)
             chkstride1(A, jpvt, work)
             m, n = size(A)
             nrhs = size(B, 2)
-            newB = _gelsy_Bwork(B, Bwork, m, n)
-            chkstride1(newB)
-            _gelsy_chkjpvt(jpvt, n)
+            _gelsy_chkBwork!(Bwork, B, m, n)
+            _gelsy_chkjpvt!(jpvt, n)
             lda = max(1, stride(A,2))
-            ldb = max(1, stride(newB,2))
+            ldb = max(1, stride(Bwork,2))
             rnk = Ref{BlasInt}()
             info = Ref{BlasInt}()
             isempty(work) && resize!(work, 1)
@@ -1429,7 +1422,7 @@ for (gelsd, gelsy, elty) in
                      Ref{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
                      Ptr{BlasInt}),
                     m, n, nrhs, A,
-                    lda, newB, ldb, jpvt,
+                    lda, Bwork, ldb, jpvt,
                     $elty(rcond), rnk, work, lwork,
                     info)
                 chklapackerror(info[])
@@ -1439,7 +1432,7 @@ for (gelsd, gelsy, elty) in
                     lwork = BlasInt(length(work))
                 end
             end
-            _gelsy_result(B, newB, Bwork, n), rnk[]
+            _gelsy_result(Bwork, n), rnk[]
         end
     end
 end
@@ -1505,7 +1498,7 @@ for (gelsd, gelsy, elty, relty) in
         #       DOUBLE PRECISION   RWORK( * )
         #       COMPLEX*16         A( LDA, * ), B( LDB, * ), WORK( * )
         function gelsy!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, rcond::Real=eps($relty);
-                        Bwork::Union{Nothing,AbstractVecOrMat{$elty}} = nothing,
+                        Bwork::AbstractVecOrMat{$elty} = similar(B, max(size(A)...), Base.tail(size(B))...),
                         jpvt::AbstractVector{BlasInt} = zeros(BlasInt, size(A, 2)),
                         work::AbstractVector{$elty} = Vector{$elty}(undef, 1),
                         rwork::AbstractVector{$relty} = Vector{$relty}(undef, 2size(A, 2)))
@@ -1513,14 +1506,13 @@ for (gelsd, gelsy, elty, relty) in
             chkstride1(A, jpvt, work, rwork)
             m, n = size(A)
             nrhs = size(B, 2)
-            newB = _gelsy_Bwork(B, Bwork, m, n)
-            chkstride1(newB)
-            _gelsy_chkjpvt(jpvt, n)
+            _gelsy_chkBwork!(Bwork, B, m, n)
+            _gelsy_chkjpvt!(jpvt, n)
             if length(rwork) < 2n
                 throw(DimensionMismatch(lazy"rwork has length $(length(rwork)), but needs at least $(2n)"))
             end
             lda = max(1, stride(A,2))
-            ldb = max(1, stride(newB,2))
+            ldb = max(1, stride(Bwork,2))
             rnk = Ref{BlasInt}(1)
             info = Ref{BlasInt}()
             isempty(work) && resize!(work, 1)
@@ -1532,7 +1524,7 @@ for (gelsd, gelsy, elty, relty) in
                      Ref{$relty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
                      Ptr{$relty}, Ptr{BlasInt}),
                     m, n, nrhs, A,
-                    lda, newB, ldb, jpvt,
+                    lda, Bwork, ldb, jpvt,
                     $relty(rcond), rnk, work, lwork,
                     rwork, info)
                 chklapackerror(info[])
@@ -1542,7 +1534,7 @@ for (gelsd, gelsy, elty, relty) in
                     lwork = BlasInt(length(work))
                 end
             end
-            _gelsy_result(B, newB, Bwork, n), rnk[]
+            _gelsy_result(Bwork, n), rnk[]
         end
     end
 end
@@ -1578,8 +1570,8 @@ allocations when `gelsy!` is called repeatedly:
 - `Bwork`: array with at least `max(size(A)...)` rows and `size(B, 2)` columns. The
   right-hand side `B` is copied into its first `size(A, 1)` rows (unless `Bwork === B`,
   which is allowed if `size(A, 1) ≥ size(A, 2)`), and on output its first `size(A, 2)`
-  rows contain the solution. If `Bwork` is provided, `X` is returned as a view into
-  `Bwork`; otherwise, `X` is a newly allocated array.
+  rows contain the solution, which is returned as the view `X` into `Bwork`. By default,
+  a new buffer of minimal size is allocated.
 - `jpvt`: integer vector of length `size(A, 2)`; its contents on input are ignored. On
   output, it contains the column permutation of the pivoted QR factorization, i.e., the
   factorization is that of `A[:, jpvt]`.

@@ -184,7 +184,7 @@ end
             @test X ≈ X0 rtol=rtol
             @test r == min(m, n)
             @test B == Bc # B is not overwritten
-            @test size(X, 1) == n
+            @test size(X) == (n, size(B)[2:end]...)
 
             Bwork = B isa AbstractVector ? similar(B, max(m, n)) : similar(B, max(m, n), size(B, 2))
             jpvt = zeros(LinearAlgebra.BlasInt, n)
@@ -214,6 +214,15 @@ end
                 @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), B; rwork = Vector{real(elty)}(undef, 2n - 1))
             end
         end
+    end
+    @testset "rank-deficient, uninitialized Bwork" for elty in (Float32, Float64, ComplexF32, ComplexF64)
+        # rows of Bwork beyond size(A, 1) are not read on input
+        A = rand(elty, 3, 2) * rand(elty, 2, 5)
+        b = rand(elty, 3)
+        X, r = LAPACK.gelsy!(copy(A), b; Bwork = fill(elty(NaN), 7))
+        @test r == 2
+        @test length(X) == 5
+        @test X ≈ pinv(A) * b rtol=sqrt(eps(real(elty)))
     end
 end
 
