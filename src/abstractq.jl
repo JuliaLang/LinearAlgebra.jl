@@ -19,7 +19,7 @@ transpose(Q::AbstractQ{<:Real}) = AdjointQ(Q)
 transpose(Q::AbstractQ) = error("transpose not implemented for $(typeof(Q)). Consider using adjoint instead of transpose.")
 adjoint(adjQ::AdjointQ) = adjQ.Q
 
-(^)(Q::AbstractQ, p::Integer) = p < 0 ? power_by_squaring(inv(Q), -p) : power_by_squaring(Q, p)
+(^)(Q::AbstractQ, p::Integer) = p < 0 ? power_by_squaring(inv(Q)*I, -p) : power_by_squaring(Q*I, p)
 @inline Base.literal_pow(::typeof(^), Q::AbstractQ, ::Val{1}) = Q
 @inline Base.literal_pow(::typeof(^), Q::AbstractQ, ::Val{-1}) = inv(Q)
 
@@ -49,7 +49,8 @@ AbstractMatrix(Q::AbstractQ) = Q*I
 AbstractArray(Q::AbstractQ) = AbstractMatrix(Q)
 AbstractMatrix{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
 AbstractArray{T}(Q::AbstractQ) where {T} = AbstractMatrix{T}(Q)
-convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray} = T(Q)
+# an `AbstractQ` is not an array; use `Matrix(Q)`, `Array(Q)` or `AbstractMatrix(Q)` instead
+@deprecate(convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray}, T(Q), false)
 # legacy
 @deprecate(convert(::Type{AbstractMatrix{T}}, Q::AbstractQ) where {T},
     convert(LinearAlgebra.AbstractQ{T}, Q), false)
