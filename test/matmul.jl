@@ -121,9 +121,12 @@ end
         @test mul!(ones(T, 1, 1), fill(T(NaN), 1, 1), ones(T, 1, 1), false, true) == ones(T, 1, 1)
         @test mul!(ones(T, 1, 1), fill(T(NaN), 1, 1), ones(T, 1, 1), 0.0, 1.0) == ones(T, 1, 1)
     end
-    for wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
-        @test wrapper_a(AA) * wrapper_b(BB) == Array(wrapper_a(AA)) * Array(wrapper_b(BB))
-        @test wrapper_a(AAi) * wrapper_b(BBi) == Array(wrapper_a(AAi)) * Array(wrapper_b(BBi))
+    # BLAS eltypes reach the 1x1 kernel with Symmetric/Hermitian wrappers through the symm/hemm path
+    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+            wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
+        @test mul!(fill(one(eltype(A)), 1, 1), wrapper_a(A), wrapper_b(B), 2, 3) ==
+            2 * Array(wrapper_a(A)) * Array(wrapper_b(B)) .+ 3
     end
     @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 2, 2), AA, BB)
     @test_throws "expected 1x1 matrices" LinearAlgebra.matmul1x1!(zeros(1, 1), 'N', 'N', zeros(1, 2), zeros(2, 1))
