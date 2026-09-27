@@ -254,8 +254,8 @@ julia> svdvals(A)
  0.0
 ```
 """
-svdvals(A::AbstractMatrix{T}) where {T} = svdvals!(eigencopy_oftype(A, eigtype(T)))
-svdvals(A::AbstractVector{T}) where {T} = [convert(eigtype(T), norm(A))]
+svdvals(A::AbstractMatrix{T}) where {T} = _tohalf(T, svdvals!(eigencopy_oftype(A, eigtype(T))))
+svdvals(A::AbstractVector{T}) where {T} = _tohalf(T, [convert(eigtype(T), norm(A))])
 svdvals(x::Number) = abs(x)
 svdvals(S::SVD{<:Any,T}) where {T} = (S.S)::Vector{T}
 
@@ -630,7 +630,7 @@ julia> svdvals(A, B)
 """
 function svdvals(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}) where {TA,TB}
     S = promote_type(eigtype(TA), TB)
-    return svdvals!(copy_similar(A, S), copy_similar(B, S))
+    return _tohalf(promote_type(TA, TB), svdvals!(copy_similar(A, S), copy_similar(B, S)))
 end
 svdvals(x::Number, y::Number) = abs(x/y)
 

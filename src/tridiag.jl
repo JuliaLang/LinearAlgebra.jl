@@ -313,28 +313,28 @@ end
 eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}; kws...) =
     syevr_tri_eigen('A', A.dv, A.ev, 0.0, 0.0, 0, 0; kws...)
 eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}; kws...) = eigen!(A; kws...)
-eigen(A::SymTridiagonal{T}; kws...) where T = eigen!(copymutable_oftype(A, eigtype(T)); kws...)
+eigen(A::SymTridiagonal{T}; kws...) where T = _tohalf(T, eigen!(copymutable_oftype(A, eigtype(T)); kws...))
 
 eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; kws...) =
     syevr_tri_eigen('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop; kws...)
 eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; kws...) =
     eigen!(A, irange; kws...)
 eigen(A::SymTridiagonal{T}, irange::UnitRange; kws...) where T =
-    eigen!(copymutable_oftype(A, eigtype(T)), irange; kws...)
+    _tohalf(T, eigen!(copymutable_oftype(A, eigtype(T)), irange; kws...))
 
 eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; kws...) =
     syevr_tri_eigen('V', A.dv, A.ev, vl, vu, 0, 0; kws...)
 eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; kws...) =
     eigen!(A, vl, vu; kws...)
 eigen(A::SymTridiagonal{T}, vl::Real, vu::Real; kws...) where T =
-    eigen!(copymutable_oftype(A, eigtype(T)), vl, vu; kws...)
+    _tohalf(T, eigen!(copymutable_oftype(A, eigtype(T)), vl, vu; kws...))
 
 function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}; sortby = eigsortby)
     vals = syevr_tri_eigvals('A', A.dv, A.ev, 0.0, 0.0, 0, 0)
     return sorteig!(vals, sortby == eigsortby ? nothing : sortby)
 end
 eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}; kws...) = eigvals!(A; kws...)
-eigvals(A::SymTridiagonal{T}; kws...) where T = eigvals!(copymutable_oftype(A, eigtype(T)); kws...)
+eigvals(A::SymTridiagonal{T}; kws...) where T = _tohalf(T, eigvals!(copymutable_oftype(A, eigtype(T)); kws...))
 
 function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; sortby = eigsortby)
     vals = syevr_tri_eigvals('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)
@@ -342,7 +342,7 @@ function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRan
 end
 eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; kws...) = eigvals!(A, irange; kws...)
 eigvals(A::SymTridiagonal{T}, irange::UnitRange; kws...) where T =
-    eigvals!(copymutable_oftype(A, eigtype(T)), irange; kws...)
+    _tohalf(T, eigvals!(copymutable_oftype(A, eigtype(T)), irange; kws...))
 
 function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; sortby = eigsortby)
     vals = syevr_tri_eigvals('V', A.dv, A.ev, vl, vu, 0, 0)
@@ -350,7 +350,7 @@ function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::R
 end
 eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; kws...) = eigvals!(A, vl, vu; kws...)
 eigvals(A::SymTridiagonal{T}, vl::Real, vu::Real; kws...) where T =
-    eigvals!(copymutable_oftype(A, eigtype(T)), vl, vu; kws...)
+    _tohalf(T, eigvals!(copymutable_oftype(A, eigtype(T)), vl, vu; kws...))
 
 #Computes largest and smallest eigenvalue
 eigmax(A::SymTridiagonal) = eigvals(A, size(A, 1):size(A, 1); sortby = eigsortby)[1]
