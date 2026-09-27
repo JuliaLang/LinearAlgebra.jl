@@ -6,7 +6,6 @@
 
 #TODO const DOT_CUTOFF = 128
 const ASUM_CUTOFF = 32
-const NRM2_CUTOFF = 32
 
 # Generic cross-over constant based on benchmarking on a single thread with an i7 CPU @ 2.5GHz
 # L1 cache: 32K, L2 cache: 256K, L3 cache: 6144K
@@ -103,9 +102,6 @@ end
 
 norm1(x::Union{Array{T},StridedVector{T}}) where {T<:BlasReal} =
     length(x) < ASUM_CUTOFF ? generic_norm1(x) : BLAS.asum(x)
-
-norm2(x::Union{Array{T},StridedVector{T}}) where {T<:BlasFloat} =
-    length(x) < NRM2_CUTOFF ? generic_norm2(x) : BLAS.nrm2(x)
 
 # Conservative assessment of types that have zero(T) defined for themselves
 """
