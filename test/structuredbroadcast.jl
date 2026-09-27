@@ -167,6 +167,21 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
                     && all(isnan, Q[1, 2:end]))
             end
         end
+
+        @testset "zero absorbing functions nested in other operations" begin
+            for X in (D, B, U, L)
+                fX = Array(X)
+                @test (Q = 2 .* M .+ X; Q isa Matrix && Q == 2 .* M .+ fX)
+                @test (Q = X .* (Inf .* 2.0); Q isa Matrix && isequal(Q, fX .* (Inf .* 2.0)))
+                @test (Q = X .+ (0.0 .* 2.0); Q isa typeof(X) && Q == fX .+ (0.0 .* 2.0))
+                @test (Q = M .* M .+ X; Q isa Matrix && Q == M .* M .+ fX)
+                @test (Q = X .+ fV .* M; Q isa Matrix && Q == fX .+ fV .* M)
+                @test (Q = 2 .* X .* M; Q isa typeof(X) && Q == 2 .* fX .* M)
+                @test X .* (2 .* M) == fX .* (2 .* M)
+                @test (Q = X .* (1.0 ./ zero(M)); Q isa Matrix && isequal(Q, fX .* (1.0 ./ zero(M))))
+                @test (Q = (X .* M) .+ X; Q isa typeof(X) && Q == fX .* M .+ fX)
+            end
+        end
     end
 end
 
