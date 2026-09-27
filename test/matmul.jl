@@ -277,6 +277,30 @@ end
     end
 end
 
+# a Number type that can be scaled by a Float64 but has no promotion rules
+struct ScaledPair <: Number
+    x::Float64
+    y::Float64
+end
+Base.:*(a::Float64, v::ScaledPair) = ScaledPair(a*v.x, a*v.y)
+Base.:+(a::ScaledPair, b::ScaledPair) = ScaledPair(a.x+b.x, a.y+b.y)
+Base.zero(::Type{ScaledPair}) = ScaledPair(0, 0)
+Base.zero(::ScaledPair) = ScaledPair(0, 0)
+
+@testset "generic_matvecmul with eltypes that do not promote" begin
+    A = [1.0 2; 3 4]
+    b = [ScaledPair(1, 2), ScaledPair(3, 4)]
+    @test mul!(similar(b), A, b) == [ScaledPair(7, 10), ScaledPair(15, 22)]
+    @test mul!(similar(b), transpose(A), b) == [ScaledPair(10, 14), ScaledPair(14, 20)]
+end
+
+@testset "generic_matvecmul accumulates in the destination eltype" begin
+    A = fill(Int8(100), 2, 2)
+    b = fill(Int8(100), 2)
+    @test mul!(zeros(Int32, 2), A, b) == fill(Int32(20000), 2)
+    @test mul!(zeros(Int32, 2), transpose(A), b) == fill(Int32(20000), 2)
+end
+
 @testset "generic_matvecmul for vectors of matrices" begin
     x = [1 2 3; 4 5 6]
     A = reshape([x,2x,3x,4x],2,2)
