@@ -152,8 +152,10 @@ end
         @test *(adjoint(Ai), adjoint(Bi)) == [-28.25-66im 9.75-58im; -26-89im 21-73im]
         @test_throws DimensionMismatch [1 2; 0 0; 0 0] * [1 2]
     end
-    for wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
-        @test wrapper_a(AA) * wrapper_b(BB) == Array(wrapper_a(AA)) * Array(wrapper_b(BB))
+    # BLAS eltypes reach the small-matrix kernels with Symmetric/Hermitian wrappers through the symm/hemm path
+    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+            wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
     end
     @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 3, 3), AA, BB)
 end
@@ -175,8 +177,10 @@ end
         @test *(adjoint(Ai), adjoint(Bi)) == [1+2im 20.75+9im -44.75+42im; 19.5+17.5im -54-36.5im 51-14.5im; 13+7.5im 11.25+31.5im -43.25-14.5im]
         @test_throws DimensionMismatch [1 2 3; 0 0 0; 0 0 0] * [1 2 3]
     end
-    for wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
-        @test wrapper_a(AA) * wrapper_b(BB) == Array(wrapper_a(AA)) * Array(wrapper_b(BB))
+    # BLAS eltypes reach the small-matrix kernels with Symmetric/Hermitian wrappers through the symm/hemm path
+    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+            wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
     end
     @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 4, 4), AA, BB)
 end
