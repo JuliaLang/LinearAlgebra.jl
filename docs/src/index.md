@@ -278,6 +278,42 @@ Stacktrace:
 [...]
 ```
 
+A `UniformScaling` can also be used in broadcasting, where it behaves like a square matrix
+whose size is determined by the other arguments. That is, the first two dimensions of the
+result must have the same length `n`, and the `UniformScaling` then contributes the elements of
+the `n×n` matrix `U(n)`:
+
+```jldoctest
+julia> U = UniformScaling(2);
+
+julia> a = [1 2; 3 4];
+
+julia> a .+ U
+2×2 Matrix{Int64}:
+ 3  2
+ 3  6
+
+julia> a .* U
+2×2 Matrix{Int64}:
+ 2  0
+ 0  8
+
+julia> a .+= U; a
+2×2 Matrix{Int64}:
+ 3  2
+ 3  6
+
+julia> [1 2 3; 4 5 6] .+ U
+ERROR: DimensionMismatch: cannot broadcast a UniformScaling to a shape that is not square in the first two dimensions; got axes (Base.OneTo(2), Base.OneTo(3))
+Stacktrace:
+[...]
+```
+
+If none of the arguments of a broadcast has a shape, the result is again a `UniformScaling`,
+provided that the function maps the off-diagonal zeros to zero (as in `U .+ I` or `2 .* U`).
+Otherwise (as in `U .+ 1`), an error is thrown, since the result cannot be represented without
+an explicit size.
+
 If you need to solve many systems of the form `(A+μI)x = b` for the same `A` and different `μ`, it might be beneficial
 to first compute the Hessenberg factorization `F` of `A` via the [`hessenberg`](@ref) function.
 Given `F`, Julia employs an efficient algorithm for `(F+μ*I) \ b` (equivalent to `(A+μ*I)x \ b`) and related

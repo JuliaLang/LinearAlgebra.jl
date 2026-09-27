@@ -11,8 +11,19 @@ the identity operator, `λ*I`. Although without an explicit `size`, it
 acts similarly to a matrix in many cases and includes support for some
 indexing. See also [`I`](@ref).
 
+In broadcasting, a `UniformScaling` acts like a square matrix whose size is
+determined by the other arguments: the first two dimensions of the result must
+have the same length `n`, and the `UniformScaling` then contributes the elements
+of the `n×n` matrix `λ*I(n)` (and is broadcast along any trailing dimensions).
+Broadcasting only over `UniformScaling`s and scalars, as in `I .+ I`, yields a
+`UniformScaling` again, provided that the function maps the off-diagonal zeros
+to zero.
+
 !!! compat "Julia 1.6"
      Indexing using ranges is available as of Julia 1.6.
+
+!!! compat "Julia 1.14"
+     Broadcasting with `UniformScaling`s is available as of Julia 1.14.
 
 # Examples
 ```jldoctest
@@ -34,6 +45,20 @@ julia> J[1:2, 1:2]
 2×2 Matrix{Float64}:
  2.0  0.0
  0.0  2.0
+
+julia> A .+ J
+2×2 Matrix{Float64}:
+ 3.0  2.0
+ 3.0  6.0
+
+julia> A .* J
+2×2 Matrix{Float64}:
+ 2.0  0.0
+ 0.0  8.0
+
+julia> J .+ I
+UniformScaling{Float64}
+3.0*I
 ```
 """
 struct UniformScaling{T<:Number}
@@ -338,6 +363,127 @@ Base.literal_pow(::typeof(^), J::UniformScaling, x::Val) = UniformScaling(Base.l
 Broadcast.broadcasted(::typeof(^), J::UniformScaling, x::Number) = UniformScaling(J.λ^x)
 function Broadcast.broadcasted(::typeof(Base.literal_pow), ::typeof(^), J::UniformScaling, x::Val)
     UniformScaling(Base.literal_pow(^, J.λ, x))
+end
+
+## Generic broadcasting
+#
+# A `UniformScaling` has no size of its own, so it cannot take part in broadcasting
+# like an ordinary array. Instead, it behaves like a square matrix whose size is
+# determined by the other arguments: the result of the broadcast must have at
+# least two dimensions, the first two of which must have the same length `n`,
+# and `J` then acts as the `n×n` matrix `J(n)` along these dimensions (and is
+# broadcast along any trailing dimensions).
+#
+# This is implemented via a custom `BroadcastStyle`, `UniformScalingStyle`, which
+# takes precedence over every other style, and defers the decision on the actual
+# style of the result to `Broadcast.instantiate`, when the axes of the result are
+# known. At that point, every `UniformScaling` in the (possibly nested)
+# broadcasted expression is replaced by an explicitly sized, lazy
+# `UniformScalingMatrix`, and the style is recomputed from the arguments. This way,
+# packages that define their own broadcast styles (e.g. for GPU arrays or sparse
+# arrays) only ever see `AbstractMatrix` arguments, and the remaining machinery
+# (`similar`, `copyto!`, ...) is that of the other arguments.
+#
+# If no argument carries a shape (e.g. `I .+ I` or `.-I`), the result is again a
+# `UniformScaling`, provided that the broadcasted function maps the off-diagonal
+# zeros to zero. Otherwise (e.g. `I .+ 1`), an error is thrown.
+
+Base.ndims(::Type{<:UniformScaling}) = 2
+
+struct UniformScalingStyle <: Broadcast.BroadcastStyle end
+Broadcast.BroadcastStyle(::Type{<:UniformScaling}) = UniformScalingStyle()
+# UniformScalingStyle takes precedence over all other styles
+Broadcast.BroadcastStyle(::UniformScalingStyle, ::Broadcast.BroadcastStyle) = UniformScalingStyle()
+Broadcast.BroadcastStyle(::UniformScalingStyle, ::UniformScalingStyle) = UniformScalingStyle()
+Broadcast.BroadcastStyle(::UniformScalingStyle, ::Broadcast.Unknown) = UniformScalingStyle()
+
+Broadcast.broadcastable(J::UniformScaling) = J
+
+"""
+    UniformScalingMatrix{T} <: AbstractMatrix{T}
+
+An explicitly sized, lazy matrix representation `λ*I` of a [`UniformScaling`](@ref)
+with the given `axes`. This type is an implementation detail of broadcasting with
+`UniformScaling`s: `Broadcast.instantiate` replaces every `UniformScaling` in a
+broadcasted expression by a `UniformScalingMatrix` with the axes of the result.
+"""
+struct UniformScalingMatrix{T<:Number,Ax<:Tuple{AbstractUnitRange{<:Integer},AbstractUnitRange{<:Integer}}} <: AbstractMatrix{T}
+    λ::T
+    axes::Ax
+end
+UniformScalingMatrix(J::UniformScaling, ax::Tuple) = UniformScalingMatrix(J.λ, (ax[1], ax[2]))
+Base.axes(A::UniformScalingMatrix) = A.axes
+Base.size(A::UniformScalingMatrix) = map(length, A.axes)
+Base.IndexStyle(::Type{<:UniformScalingMatrix}) = IndexCartesian()
+@inline function Base.getindex(A::UniformScalingMatrix, i::Int, j::Int)
+    @boundscheck checkbounds(A, i, j)
+    return ifelse(i == j, A.λ, zero(A.λ))
+end
+Base.replace_in_print_matrix(A::UniformScalingMatrix, i::Integer, j::Integer, s::AbstractString) =
+    i == j ? s : Base.replace_with_centered_mark(s)
+
+# The axes of a `UniformScaling` are determined by the other arguments of the broadcast
+_axes_ignoring_uniformscaling(::UniformScaling) = ()
+_axes_ignoring_uniformscaling(x) = axes(x)
+_combine_axes_ignoring_uniformscaling(A) = _axes_ignoring_uniformscaling(A)
+@inline _combine_axes_ignoring_uniformscaling(A, B...) =
+    Broadcast.broadcast_shape(_axes_ignoring_uniformscaling(A), _combine_axes_ignoring_uniformscaling(B...))
+@inline Base.axes(bc::Broadcasted{UniformScalingStyle}) =
+    bc.axes isa Nothing ? _combine_axes_ignoring_uniformscaling(bc.args...) : bc.axes
+
+# A `UniformScaling` can only be broadcast to a shape that is square in the first two dimensions
+function _check_uniformscaling_axes(ax::Tuple{Any,Any,Vararg{Any}})
+    if length(ax[1]) != length(ax[2])
+        throw(DimensionMismatch(lazy"cannot broadcast a UniformScaling to a shape that is not square in the first two dimensions; got axes $ax"))
+    end
+    return nothing
+end
+_check_uniformscaling_axes(ax::Tuple) =
+    throw(DimensionMismatch(lazy"broadcasting with a UniformScaling requires at least two dimensions; got axes $ax"))
+Broadcast.check_broadcast_axes(shp, ::UniformScaling) = _check_uniformscaling_axes(shp)
+
+# Only the first two indices matter; the `UniformScaling` is broadcast along any trailing dimension
+@inline function Broadcast._broadcast_getindex(J::UniformScaling, I::CartesianIndex)
+    i, j = Tuple(I) # throws for fewer than two dimensions
+    return J[i, j]
+end
+
+# Replace every `UniformScaling` in a (nested) broadcasted expression by a
+# `UniformScalingMatrix` with the (first two) axes of the result
+_replace_uniformscaling(J::UniformScaling, ax) = UniformScalingMatrix(J, ax)
+_replace_uniformscaling(x, ax) = x
+function _replace_uniformscaling(bc::Broadcasted{UniformScalingStyle}, ax)
+    args = map(x -> _replace_uniformscaling(x, ax), bc.args)
+    # the style is recomputed from the new arguments, and the axes are left to be computed
+    return Broadcasted(bc.f, args)
+end
+
+@inline function Broadcast.instantiate(bc::Broadcasted{UniformScalingStyle})
+    if bc.axes isa Nothing
+        ax = axes(bc)
+        # if no argument has a shape, the result is a UniformScaling again, see `copy` below
+        ax isa Tuple{} && return Broadcasted{UniformScalingStyle}(bc.f, bc.args, ax)
+    else
+        ax = bc.axes
+    end
+    _check_uniformscaling_axes(ax)
+    bc′ = _replace_uniformscaling(bc, ax)
+    # let the machinery of the actual style of the result compute and check the axes
+    return Broadcast.instantiate(Broadcasted(bc′.style, bc′.f, bc′.args, bc.axes))
+end
+
+function Base.copy(bc::Broadcasted{UniformScalingStyle})
+    bc.axes isa Nothing && return copy(Broadcast.instantiate(bc))
+    # This is only reached if none of the arguments has a shape, i.e., all
+    # arguments are UniformScalings, scalars, or nested broadcasts thereof.
+    # The result is then a UniformScaling if `f` maps the off-diagonal zeros to
+    # zero, and cannot be represented (without a size) otherwise.
+    d = Broadcast._broadcast_getindex(bc, CartesianIndex(1, 1)) # a diagonal element
+    o = Broadcast._broadcast_getindex(bc, CartesianIndex(1, 2)) # an off-diagonal element
+    if !(iszerodefined(typeof(o)) ? iszero(o) : isequal(o, 0))
+        throw(ArgumentError(lazy"broadcasting $(bc.f) over UniformScalings and scalars does not produce a UniformScaling, since it does not map the off-diagonal zeros to zero; broadcast over a matrix with an explicit size, e.g. `I(n)`, instead"))
+    end
+    return UniformScaling(d)
 end
 
 ==(J1::UniformScaling,J2::UniformScaling) = (J1.λ == J2.λ)
