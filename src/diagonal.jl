@@ -966,8 +966,11 @@ function diag(D::Diagonal, k::Integer=0)
     end
     return v
 end
-tr(D::Diagonal) = sum(tr, D.diag)
-det(D::Diagonal) = prod(det, D.diag)
+tr(D::Diagonal{<:Number}) = sum(D.diag)
+det(D::Diagonal{<:Number}) = prod(D.diag)
+# for block-diagonal matrices, the empty case returns the trace/determinant of an empty block
+tr(D::Diagonal) = isempty(D.diag) ? tr(zeros(promote_leaf_eltypes(D.diag), 0, 0)) : sum(tr, D.diag)
+det(D::Diagonal) = isempty(D.diag) ? det(zeros(promote_leaf_eltypes(D.diag), 0, 0)) : prod(det, D.diag)
 function logdet(D::Diagonal{<:Complex}) # make sure branch cut is correct
     z = sum(log, D.diag)
     complex(real(z), rem2pi(imag(z), RoundNearest))
