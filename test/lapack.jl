@@ -226,6 +226,57 @@ end
     end
 end
 
+@testset "gelsd! with preallocated workspace (#434)" begin
+    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64), (m, n) in ((6, 4), (4, 6), (5, 5))
+        A = rand(elty, m, n)
+        rtol = sqrt(eps(real(elty)))
+        for B in (rand(elty, m), rand(elty, m, 3))
+            X0 = A \ B
+            Bc = copy(B)
+            X, r = LAPACK.gelsd!(copy(A), B)
+            @test X ≈ X0 rtol=rtol
+            @test r == min(m, n)
+            @test B == Bc # B is not overwritten
+            @test size(X) == (n, size(B)[2:end]...)
+
+            Bwork = B isa AbstractVector ? similar(B, max(m, n)) : similar(B, max(m, n), size(B, 2))
+            sv = Vector{real(elty)}(undef, min(m, n))
+            work = elty[]
+            iwork = LinearAlgebra.BlasInt[]
+            kws = elty <: Complex ? (; rwork = real(elty)[]) : (;)
+            X, r = LAPACK.gelsd!(copy(A), B, -1; Bwork, s = sv, work, iwork, kws...)
+            @test X ≈ X0 rtol=rtol
+            @test r == min(m, n)
+            @test B == Bc
+            @test parent(X) === Bwork
+            @test sv ≈ svdvals(A) rtol=rtol
+            @test !isempty(work) && !isempty(iwork)
+            elty <: Complex && @test !isempty(kws.rwork)
+            # reuse workspace
+            B2 = rand(elty, size(B)...)
+            X, r = LAPACK.gelsd!(copy(A), B2; Bwork, s = sv, work, iwork, kws...)
+            @test X ≈ A \ B2 rtol=rtol
+            if m >= n
+                # solve in place
+                B3 = copy(B2)
+                X, r = LAPACK.gelsd!(copy(A), B3; Bwork = B3)
+                @test X ≈ A \ B2 rtol=rtol
+                @test parent(X) === B3
+            end
+            @test_throws DimensionMismatch LAPACK.gelsd!(copy(A), B; Bwork = similar(B, max(m, n) - 1, size(B, 2)))
+            @test_throws DimensionMismatch LAPACK.gelsd!(copy(A), B; s = Vector{real(elty)}(undef, min(m, n) + 1))
+        end
+    end
+    @testset "rank-deficient, uninitialized Bwork" for elty in (Float32, Float64, ComplexF32, ComplexF64)
+        A = rand(elty, 3, 2) * rand(elty, 2, 5)
+        b = rand(elty, 3)
+        X, r = LAPACK.gelsd!(copy(A), b, sqrt(eps(real(elty))); Bwork = fill(elty(NaN), 7))
+        @test r == 2
+        @test length(X) == 5
+        @test X ≈ pinv(A) * b rtol=sqrt(eps(real(elty)))
+    end
+end
+
 @testset "gglse errors" begin
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         A = rand(elty,10,10)
