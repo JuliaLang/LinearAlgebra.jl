@@ -966,8 +966,11 @@ function diag(D::Diagonal, k::Integer=0)
     end
     return v
 end
-tr(D::Diagonal) = sum(tr, D.diag)
-det(D::Diagonal) = prod(det, D.diag)
+tr(D::Diagonal{<:Number}) = sum(D.diag)
+det(D::Diagonal{<:Number}) = prod(D.diag)
+tr(D::Diagonal) = isempty(D.diag) ? zero(promote_leaf_eltypes(D.diag)) : sum(tr, D.diag)
+# for block-diagonal matrices, the empty case returns the determinant of an empty block
+det(D::Diagonal) = isempty(D.diag) ? det(zeros(promote_leaf_eltypes(D.diag), 0, 0)) : prod(det, D.diag)
 function logdet(D::Diagonal{<:Complex}) # make sure branch cut is correct
     z = sum(log, D.diag)
     complex(real(z), rem2pi(imag(z), RoundNearest))
@@ -1109,7 +1112,7 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
     if size(A, 1) == size(A, 2) && isdiag(A)
         return eigen(Diagonal(A), D; sortby)
     elseif all(isposdef, D.diag)
-        S = promote_type(eigtype(eltype(A)), eltype(D))
+        S = promote_type(eigtype(A), _valeltype(D))
         return _tohalf(promote_type(eltype(A), eltype(D)), eigen(A, cholesky(Diagonal{S}(D)); sortby))
     else
         B = D \ A
