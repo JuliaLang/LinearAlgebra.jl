@@ -190,11 +190,11 @@ julia> Uonly == U
 true
 ```
 """
-function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T}
-    svd!(eigencopy_oftype(A, eigtype(T)); full, alg, atol, rtol)
+function svd(A::AbstractVecOrMat; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0)
+    svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
 end
 function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T <: Union{Float16,Complex{Float16}}}
-    A = svd!(eigencopy_oftype(A, eigtype(T)); full, alg, atol, rtol)
+    A = svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
     return SVD{T}(A)
 end
 function svd(x::Number; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Real=0, rtol::Real=0)
@@ -254,7 +254,7 @@ julia> svdvals(A)
  0.0
 ```
 """
-svdvals(A::AbstractMatrix{T}) where {T} = svdvals!(eigencopy_oftype(A, eigtype(T)))
+svdvals(A::AbstractMatrix) = svdvals!(eigencopy_oftype(A, eigtype(A)))
 svdvals(A::AbstractVector{T}) where {T} = [convert(eigtype(T), norm(A))]
 svdvals(x::Number) = abs(x)
 svdvals(S::SVD{<:Any,T}) where {T} = (S.S)::Vector{T}
@@ -519,8 +519,8 @@ julia> U == Uonly
 true
 ```
 """
-function svd(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}) where {TA,TB}
-    S = promote_type(eigtype(TA),TB)
+function svd(A::AbstractMatrix, B::AbstractMatrix)
+    S = promote_type(eigtype(A), _valeltype(B))
     return svd!(copy_similar(A, S), copy_similar(B, S))
 end
 # This method can be heavily optimized but it is probably not critical
@@ -628,8 +628,8 @@ julia> svdvals(A, B)
  1.0
 ```
 """
-function svdvals(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
+function svdvals(A::AbstractMatrix, B::AbstractMatrix)
+    S = promote_type(eigtype(A), _valeltype(B))
     return svdvals!(copy_similar(A, S), copy_similar(B, S))
 end
 svdvals(x::Number, y::Number) = abs(x/y)
