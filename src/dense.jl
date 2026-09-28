@@ -5,7 +5,6 @@
 ## BLAS cutoff threshold constants
 
 #TODO const DOT_CUTOFF = 128
-const ASUM_CUTOFF = 32
 
 # Generic cross-over constant based on benchmarking on a single thread with an i7 CPU @ 2.5GHz
 # L1 cache: 32K, L2 cache: 256K, L3 cache: 6144K
@@ -99,9 +98,6 @@ function norm(x::StridedVector{T}, rx::Union{UnitRange{TI},AbstractRange{TI}}) w
     end
     GC.@preserve x BLAS.nrm2(length(rx), pointer(x)+(first(rx)-1)*sizeof(T), step(rx))
 end
-
-norm1(x::Union{Array{T},StridedVector{T}}) where {T<:BlasReal} =
-    length(x) < ASUM_CUTOFF ? generic_norm1(x) : BLAS.asum(x)
 
 # Conservative assessment of types that have zero(T) defined for themselves
 """
