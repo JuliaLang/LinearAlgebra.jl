@@ -1113,9 +1113,11 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
         return eigen(Diagonal(A), D; sortby)
     elseif all(isposdef, D.diag)
         S = promote_type(eigtype(A), _valeltype(D))
-        return eigen(A, cholesky(Diagonal{S}(D)); sortby)
+        return _tohalf(promote_type(eltype(A), eltype(D)), eigen(A, cholesky(Diagonal{S}(D)); sortby))
     else
-        return eigen!(D \ A; sortby)
+        B = D \ A
+        # `eigen!` only exists for BLAS element types
+        return eltype(B) <: BlasFloat ? eigen!(B; sortby) : eigen(B; sortby)
     end
 end
 

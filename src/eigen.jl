@@ -340,6 +340,16 @@ eigtype(T) = promote_type(Float32, typeof(zero(T)/sqrt(abs2(one(T)))))
 # for arrays with an abstract eltype, take the promoted type of the stored values into account
 eigtype(A::AbstractArray) = eigtype(_valeltype(A))
 
+# Half-precision input is computed in single precision (LAPACK has no half-precision
+# routines); convert the results back so that they match the input precision, as
+# done for the factorizations `eigen`, `svd` and `cholesky`.
+_tohalf(::Type, x) = x
+_tohalf(::Type{<:Union{Float16,Complex{Float16}}}, x::AbstractArray{<:Real}) = convert(AbstractArray{Float16}, x)
+_tohalf(::Type{<:Union{Float16,Complex{Float16}}}, x::AbstractArray{<:Complex}) = convert(AbstractArray{ComplexF16}, x)
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::Eigen) = Eigen(_tohalf(T, F.values), _tohalf(T, F.vectors))
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::GeneralizedEigen) =
+    GeneralizedEigen(_tohalf(T, F.values), _tohalf(T, F.vectors))
+
 """
     eigvals(A; permute::Bool=true, scale::Bool=true, sortby) -> values
 
@@ -363,7 +373,7 @@ julia> eigvals(diag_matrix)
 ```
 """
 eigvals(A::AbstractMatrix{T}; kws...) where T =
-    eigvals!(eigencopy_oftype(A, eigtype(A)); kws...)
+    _tohalf(T, eigvals!(eigencopy_oftype(A, eigtype(A)); kws...))
 
 """
 For a scalar input, `eigvals` will return a scalar.
@@ -546,9 +556,9 @@ julia> vals == F.values && vecs == F.vectors
 true
 ```
 """
-function eigen(A::AbstractMatrix, B::AbstractMatrix; kws...)
+function eigen(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
     S = promote_type(eigtype(A), _valeltype(B))
-    eigen!(copy_similar(A, S), copy_similar(B, S); kws...)
+    _tohalf(promote_type(TA, TB), eigen!(copy_similar(A, S), copy_similar(B, S); kws...))
 end
 eigen(A::Number, B::Number) = eigen(fill(A,1,1), fill(B,1,1))
 
@@ -641,9 +651,9 @@ julia> eigvals(A,B)
  0.0 + 1.0im
 ```
 """
-function eigvals(A::AbstractMatrix, B::AbstractMatrix; kws...)
+function eigvals(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
     S = promote_type(eigtype(A), _valeltype(B))
-    return eigvals!(copy_similar(A, S), copy_similar(B, S); kws...)
+    return _tohalf(promote_type(TA, TB), eigvals!(copy_similar(A, S), copy_similar(B, S); kws...))
 end
 
 """

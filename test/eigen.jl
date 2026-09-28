@@ -5,7 +5,7 @@ module TestEigen
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
-using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, UtiAUi!
+using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, UtiAUi!, eigtype
 
 n = 10
 
@@ -289,6 +289,67 @@ end
     @test B isa Eigen{Float16, ComplexF16, Matrix{Float16}, Vector{ComplexF16}}
     @test B.values isa Vector{ComplexF16}
     @test B.vectors isa Matrix{Float16}
+end
+
+@testset "Float16 values match the factorizations" begin
+    A = Float16[2 1 0; 1 3 1; 0 1 4]    # symmetric positive definite
+    N = Float16[1 2 0; 3 4 1; 0 1 2]    # nonsymmetric, real eigenvalues
+    for T in (Float16, ComplexF16)
+        R = real(T)
+        H = Hermitian(T.(A))
+        B = T.(Diagonal(Float16[3, 2, 1]))
+        # value-only functions return half precision, like `eigen` and `svd`
+        for (v, v32) in ((eigvals(T.(N)), eigvals(eigtype(T).(N))),
+                         (eigvals(H), eigvals(Hermitian(eigtype(T).(A)))),
+                         (eigvals(H, 1:2), eigvals(Hermitian(eigtype(T).(A)), 1:2)),
+                         (eigvals(H, 0, 10), eigvals(Hermitian(eigtype(T).(A)), 0, 10)),
+                         (eigvals(T.(N), B), eigvals(eigtype(T).(N), eigtype(T).(B))),
+                         (eigvals(H, Hermitian(B)), eigvals(Hermitian(eigtype(T).(A)), Hermitian(eigtype(T).(B)))),
+                         (eigvals(Tridiagonal(T.(A))), eigvals(Tridiagonal(eigtype(T).(A)))),
+                         (eigvals(Hermitian(Tridiagonal(T.(A)))), eigvals(Hermitian(Tridiagonal(eigtype(T).(A))))),
+                         (svdvals(T.(N)), svdvals(eigtype(T).(N))),
+                         (svdvals(H), svdvals(Hermitian(eigtype(T).(A)))),
+                         (svdvals(UpperTriangular(T.(N))), svdvals(UpperTriangular(eigtype(T).(N)))),
+                         (svdvals(Bidiagonal(T.(N), :U)), svdvals(Bidiagonal(eigtype(T).(N), :U))),
+                         (svdvals(T.(N), B), svdvals(eigtype(T).(N), eigtype(T).(B))),
+                         (svdvals(T.(N[:, 1])), svdvals(eigtype(T).(N[:, 1]))))
+            @test eltype(v) <: Union{Float16, ComplexF16}
+            @test v ≈ v32 rtol=1e-2
+        end
+        @test eigvals(T.(N)) ≈ eigen(T.(N)).values
+        @test eigvals(H) ≈ eigen(H).values
+        @test svdvals(T.(N)) ≈ svd(T.(N)).S
+        @test eigmax(H) isa Float16
+        @test eigmin(T.(A)) isa Float16
+        @test eigmax(H) ≈ maximum(eigvals(H))
+        # factorizations with index ranges, intervals, or a second matrix
+        for F in (eigen(H, 1:2), eigen(H, 0, 10), eigen(T.(N), B), eigen(H, Hermitian(B)))
+            @test eltype(F.values) <: Union{Float16, ComplexF16}
+            @test eltype(F.vectors) <: Union{Float16, ComplexF16}
+        end
+        @test eigen(H, 1:2).values ≈ eigvals(H, 1:2)
+        # generalized problem with a dense or an indefinite diagonal right-hand side
+        for B2 in (Matrix(B), T.(Diagonal(Float16[3, -2, 1])))
+            F = eigen(T.(N), B2)
+            @test eltype(F.values) <: Union{Float16, ComplexF16}
+            @test T.(N) * F.vectors ≈ B2 * F.vectors * Diagonal(F.values) rtol=1e-2
+            @test eltype(eigvals(T.(N), B2)) <: Union{Float16, ComplexF16}
+        end
+    end
+    S = SymTridiagonal(Float16[2, 3, 4], Float16[1, 1])
+    S32 = SymTridiagonal(Float32[2, 3, 4], Float32[1, 1])
+    for (v, v32) in ((eigvals(S), eigvals(S32)), (eigvals(S, 1:2), eigvals(S32, 1:2)),
+                     (eigvals(S, 0, 10), eigvals(S32, 0, 10)), (eigen(S).values, eigen(S32).values),
+                     (eigen(S, 1:2).values, eigen(S32, 1:2).values), (eigen(S, 0, 10).values, eigen(S32, 0, 10).values))
+        @test v isa Vector{Float16}
+        @test v ≈ v32 rtol=1e-2
+    end
+    @test eigen(S).vectors isa Matrix{Float16}
+    @test eigmax(S) isa Float16
+    # mixed precision promotes as before
+    @test eigvals(A, Float64.(A)) isa Vector{Float64}
+    @test eigvals(A, Int.(Matrix(I, 3, 3))) isa Vector{Float16}
+    @test svdvals(A, Float32.(A)) isa Vector{Float32}
 end
 
 @testset "complex eigen inference (#52289)" begin
