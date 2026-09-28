@@ -594,6 +594,21 @@ function generic_norm2(x)
     end
 end
 
+function generic_norm2(x::AbstractArray{<:Number})
+    T = _valeltype(x)
+    Tout = float(real(T))
+    !(Tout <: AbstractFloat) && return invoke(generic_norm2, Tuple{Any}, x)
+    Tsum = promote_type(Float64, T)
+    norm² = sum(abs2 ∘ Tsum, x)
+    if isfinite(norm²) && (norm² ≥ floatmin(norm²))
+        return convert(Tout, sqrt(norm²))  # fast path: no overflow/underflow or subnormals
+    else
+        scale = isinf(norm²) ? floatmin(norm²)*4 : inv(floatmin(norm²)*4)
+        res = sqrt(sum(x -> abs2(x * scale), x)) / scale
+        return convert(Tout, res)
+    end
+end
+
 # Compute L_p norm ‖x‖ₚ = sum(abs(x).^p)^(1/p)
 # (Not technically a "norm" for p < 1.)
 function generic_normp(x, p)
@@ -1829,13 +1844,18 @@ Multiplies `A` in-place by a Householder reflection on the right. It is equivale
         throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the second dimension of matrix A, $n"))
     end
     n == 0 && return A
-    for i in axes(A, 1)
-        Ai, xi = @inbounds view(A, i, 2:n), view(x, 2:n)
-        # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x`
-        # from the right, opposite to the left-applying method above
-        Avi = (@inbounds(A[i, 1]) + transpose(Ai)*xi)*τ
-        @inbounds A[i, 1] -= Avi
-        Ai .-= Avi .* conj.(xi)
+    # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x` from
+    # the right, opposite to the left-applying method above
+    @inbounds for i in axes(A, 1)
+        Avi = A[i, 1]
+        for j in 2:n
+            Avi += A[i, j]*x[j]
+        end
+        Avi *= τ
+        A[i, 1] -= Avi
+        for j in 2:n
+            A[i, j] -= Avi*conj(x[j])
+        end
     end
     return A
 end
@@ -2020,10 +2040,25 @@ julia> LinearAlgebra.promote_leaf_eltypes(a)
 ComplexF64 (alias for Complex{Float64})
 ```
 """
-promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Number} = T
-promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:NumberArray} = eltype(T)
+# The element type may only be used as a shortcut if it is concrete, since otherwise
+# (e.g. `Number[1.0]`) the leaf types may be narrower than the declared element type
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Number} =
+    isconcretetype(T) ? T : _promote_leaf_eltypes(x)
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:NumberArray} =
+    isconcretetype(eltype(T)) ? eltype(T) : _promote_leaf_eltypes(x)
+promote_leaf_eltypes(x::AbstractArray{Union{}}) = Bool
 promote_leaf_eltypes(x::T) where {T} = T
-promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = _promote_leaf_eltypes(x)
+_promote_leaf_eltypes(x::Tuple) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+function _promote_leaf_eltypes(x::AbstractArray)
+    # loop instead of mapreduce, to avoid a dynamic call to promote_type for every element
+    T = Bool
+    for el in x
+        S = el isa Number ? typeof(el) : promote_leaf_eltypes(el)
+        S === T || (T = promote_type(T, S))
+    end
+    return T
+end
 
 # isapprox: approximate equality of arrays [like isapprox(Number,Number)]
 # Supports nested arrays; e.g., for `a = [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]`

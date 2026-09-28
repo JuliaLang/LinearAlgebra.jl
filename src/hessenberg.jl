@@ -563,8 +563,8 @@ julia> q == F.Q && h == F.H
 true
 ```
 """
-hessenberg(A::AbstractMatrix{T}) where T =
-    hessenberg!(eigencopy_oftype(A, eigtype(T)))
+hessenberg(A::AbstractMatrix) =
+    hessenberg!(eigencopy_oftype(A, eigtype(A)))
 
 function show(io::IO, mime::MIME"text/plain", F::Hessenberg)
     summary(io, F)
