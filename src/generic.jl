@@ -603,7 +603,7 @@ function generic_norm2(x::AbstractArray{<:Number})
     if isfinite(norm²) && (norm² ≥ floatmin(norm²))
         return convert(Tout, sqrt(norm²))  # fast path: no overflow/underflow or subnormals
     else
-        scale = isinf(norm²) ? floatmin(norm²)*4 : inv(floatmin(norm²)*4)
+        scale = isinf(norm²) ? floatmin(norm²)^(3/4) : inv(floatmin(norm²)^(3/4))
         res = sqrt(sum(x -> abs2(x * scale), x)) / scale
         return convert(Tout, res)
     end
