@@ -523,11 +523,13 @@ end
             b = randn(T, 5)
             @test ldiv!(F, copy(b))[1:3] ≈ A \ b
         end
-        # wide: the right-hand side must have room for the n-row solution
+        # wide: the right-hand side must have exactly n rows to hold the solution
         W = randn(T, 3, 5)
         for F in (LinearAlgebra.qrfactUnblocked!(copy(W)), qr(W, ColumnNorm()))
             @test_throws DimensionMismatch ldiv!(F, randn(T, 3))
             @test_throws DimensionMismatch ldiv!(F, randn(T, 4, 2))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 6))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 6, 2))
             b = randn(T, 3)
             @test W * ldiv!(F, [b; zeros(T, 2)]) ≈ b
         end
