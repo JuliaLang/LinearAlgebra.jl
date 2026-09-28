@@ -594,7 +594,6 @@ function generic_norm2(x)
     end
 end
 
-_valeltype(A::AbstractArray{T}) where {T} = (isconcretetype(T) || isempty(A)) ? T : mapreduce(typeof, promote_type, A)
 function generic_norm2(x::AbstractArray{<:Number})
     T = _valeltype(x)
     Tout = float(real(T))
