@@ -594,6 +594,21 @@ function generic_norm2(x)
     end
 end
 
+function generic_norm2(x::AbstractArray{<:Number})
+    T = _valeltype(x)
+    Tout = float(real(T))
+    !(Tout <: AbstractFloat) && return invoke(generic_norm2, Tuple{Any}, x)
+    Tsum = promote_type(Float64, T)
+    norm² = sum(abs2 ∘ Tsum, x)
+    if isfinite(norm²) && (norm² ≥ floatmin(norm²))
+        return convert(Tout, sqrt(norm²))  # fast path: no overflow/underflow or subnormals
+    else
+        scale = isinf(norm²) ? floatmin(norm²)*4 : inv(floatmin(norm²)*4)
+        res = sqrt(sum(x -> abs2(x * scale), x)) / scale
+        return convert(Tout, res)
+    end
+end
+
 # Compute L_p norm ‖x‖ₚ = sum(abs(x).^p)^(1/p)
 # (Not technically a "norm" for p < 1.)
 function generic_normp(x, p)
