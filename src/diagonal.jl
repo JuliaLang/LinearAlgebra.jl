@@ -1109,7 +1109,7 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
     if size(A, 1) == size(A, 2) && isdiag(A)
         return eigen(Diagonal(A), D; sortby)
     elseif all(isposdef, D.diag)
-        S = promote_type(eigtype(eltype(A)), eltype(D))
+        S = promote_type(eigtype(A), _valeltype(D))
         return eigen(A, cholesky(Diagonal{S}(D)); sortby)
     else
         return eigen!(D \ A; sortby)

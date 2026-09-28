@@ -819,4 +819,13 @@ end
     end
 end
 
+@testset "abstract eltypes are promoted according to the stored values (#287)" begin
+    A = Real[1.0 big(floatmax(Float64))+1; 1.0 big(1.0)]
+    F = qr(A)
+    @test F isa QR{BigFloat}
+    @test all(isfinite, F.R)
+    @test F.Q * F.R ≈ convert(Matrix{BigFloat}, A)
+    @test qr(Number[1 im; 1 2]).R ≈ qr(ComplexF64[1 im; 1 2]).R
+end
+
 end # module TestQR
