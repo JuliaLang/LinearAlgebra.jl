@@ -517,11 +517,9 @@ end
         # tall: the right-hand side must have exactly m rows
         A = randn(T, 5, 3)
         for F in (LinearAlgebra.qrfactUnblocked!(copy(A)), qr(A, ColumnNorm()))
-            if F isa QR # the LAPACK-backed QRPivoted method allows extra rows
-                @test_throws DimensionMismatch ldiv!(F, randn(T, 6))
-                @test_throws DimensionMismatch ldiv!(F, randn(T, 6, 2))
-            end
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 6))
             @test_throws DimensionMismatch ldiv!(F, randn(T, 4))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 6, 2))
             b = randn(T, 5)
             @test ldiv!(F, copy(b))[1:3] ≈ A \ b
         end

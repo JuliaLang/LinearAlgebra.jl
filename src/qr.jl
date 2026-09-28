@@ -576,8 +576,12 @@ function ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractMatrix{T}, rcond::Rea
     require_one_based_indexing(B)
     m, n = size(A)
 
-    if m > size(B, 1) || n > size(B, 1)
-        throw(DimensionMismatch(lazy"B has leading dimension $(size(B, 1)) but needs at least $(max(m, n))"))
+    if m < n
+        size(B, 1) >= n ||
+            throw(DimensionMismatch(lazy"B has leading dimension $(size(B, 1)) but needs at least $n"))
+    else
+        size(B, 1) == m ||
+            throw(DimensionMismatch(lazy"first dimension of B, $(size(B, 1)), must match first dimension of A, $m"))
     end
 
     if length(A.factors) == 0 || length(B) == 0
