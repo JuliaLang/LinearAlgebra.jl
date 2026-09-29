@@ -567,10 +567,10 @@ generic_normInf(x) = float(mapreduce(norm, max, x))
 
 generic_norm1(x) = mapreduce(float ∘ norm, +, x)
 function generic_norm1(x::AbstractArray{<:Number})
-    T = float(real(_valeltype(x)))
-    res = zero(T)
+    T = float(_valeltype(x))
+    res = zero(real(T))
     @simd for xᵢ ∈ x
-        res += abs(float(xᵢ))
+        res += abs(T(xᵢ))
     end
     return res
 end
