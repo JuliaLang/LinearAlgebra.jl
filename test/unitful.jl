@@ -133,6 +133,14 @@ end
     X = A0 \ [b b]
     @test X isa Matrix{<:Furlong{1}}
     @test map(getval, X) ≈ [x0 x0]
+    # the factorization is promoted to the numeric type of the solution (Float32 -> Float64)
+    # while keeping its (here trivial) units
+    F32 = lu(Float32.(A0))
+    x32 = F32 \ b
+    @test x32 isa Vector{Furlong{1,Float64}}
+    @test map(getval, x32) == LU{Float64}(F32) \ b0
+    @test F32 \ Float64.(b0) isa Vector{Float64}
+    @test F32 \ Float32.(b0) isa Vector{Float32}
     # numeric promotion of the matrix is unchanged
     @test [4 1; 1 5] \ [1.0, 2.0] isa Vector{Float64}
     @test [4 1; 1 5] \ [1, 2] isa Vector{Float64}
