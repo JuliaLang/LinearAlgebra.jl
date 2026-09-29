@@ -173,107 +173,92 @@ end
     end
 end
 
-@testset "gelsy! with preallocated workspace (#980)" begin
+@testset "gelsy!, gelsd!: B is not overwritten (#434, #980)" begin
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64), (m, n) in ((6, 4), (4, 6), (5, 5))
         A = rand(elty, m, n)
-        rtol = sqrt(eps(real(elty)))
-        for B in (rand(elty, m), rand(elty, m, 3))
-            X0 = A \ B
+        for B in (rand(elty, m), rand(elty, m, 3)), f! in (LAPACK.gelsy!, LAPACK.gelsd!)
             Bc = copy(B)
-            X, r = LAPACK.gelsy!(copy(A), B)
-            @test X ≈ X0 rtol=rtol
-            @test r == min(m, n)
-            @test B == Bc # B is not overwritten
-            @test size(X) == (n, size(B)[2:end]...)
-
-            Bwork = B isa AbstractVector ? similar(B, max(m, n)) : similar(B, max(m, n), size(B, 2))
-            jpvt = zeros(LinearAlgebra.BlasInt, n)
-            work = elty[]
-            kws = elty <: Complex ? (; rwork = Vector{real(elty)}(undef, 2n)) : (;)
-            X, r = LAPACK.gelsy!(copy(A), B, eps(real(elty)); Bwork, jpvt, work, kws...)
-            @test X ≈ X0 rtol=rtol
+            X, r = f!(copy(A), B)
+            @test X ≈ A \ B rtol=sqrt(eps(real(elty)))
             @test r == min(m, n)
             @test B == Bc
-            @test parent(X) === Bwork
-            @test sort(jpvt) == 1:n
-            @test !isempty(work)
-            # reuse workspace; jpvt contents on input must not matter
-            B2 = rand(elty, size(B)...)
-            X, r = LAPACK.gelsy!(copy(A), B2; Bwork, jpvt, work, kws...)
-            @test X ≈ A \ B2 rtol=rtol
-            if m >= n
-                # solve in place
-                B3 = copy(B2)
-                X, r = LAPACK.gelsy!(copy(A), B3; Bwork = B3)
-                @test X ≈ A \ B2 rtol=rtol
-                @test parent(X) === B3
-            end
-            @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), B; Bwork = similar(B, max(m, n) - 1, size(B, 2)))
-            @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), B; jpvt = zeros(LinearAlgebra.BlasInt, n + 1))
-            if elty <: Complex
-                @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), B; rwork = Vector{real(elty)}(undef, 2n - 1))
-            end
+            @test X isa typeof(B)
+            @test size(X) == (n, size(B)[2:end]...)
         end
-    end
-    @testset "rank-deficient, uninitialized Bwork" for elty in (Float32, Float64, ComplexF32, ComplexF64)
-        # rows of Bwork beyond size(A, 1) are not read on input
-        A = rand(elty, 3, 2) * rand(elty, 2, 5)
-        b = rand(elty, 3)
-        X, r = LAPACK.gelsy!(copy(A), b; Bwork = fill(elty(NaN), 7))
-        @test r == 2
-        @test length(X) == 5
-        @test X ≈ pinv(A) * b rtol=sqrt(eps(real(elty)))
     end
 end
 
-@testset "gelsd! with preallocated workspace (#434)" begin
+# measure allocations of the low-level methods inside a function (after warm-up)
+function _allocs_gelsy!(A, B, jpvt, rcond, work, rw...)
+    LAPACK.gelsy!(A, B, jpvt, rcond, work, length(work), rw...)
+    return @allocated LAPACK.gelsy!(A, B, jpvt, rcond, work, length(work), rw...)
+end
+function _allocs_gelsd!(A, B, s, rcond, work, rwiw...)
+    LAPACK.gelsd!(A, B, s, rcond, work, length(work), rwiw...)
+    return @allocated LAPACK.gelsd!(A, B, s, rcond, work, length(work), rwiw...)
+end
+
+@testset "non-allocating gelsy! and gelsd!" begin
+    BlasInt = LinearAlgebra.BlasInt
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64), (m, n) in ((6, 4), (4, 6), (5, 5))
+        relty = real(elty)
+        rtol = sqrt(eps(relty))
         A = rand(elty, m, n)
-        rtol = sqrt(eps(real(elty)))
+        cplx = elty <: Complex
         for B in (rand(elty, m), rand(elty, m, 3))
             X0 = A \ B
-            Bc = copy(B)
-            X, r = LAPACK.gelsd!(copy(A), B)
-            @test X ≈ X0 rtol=rtol
-            @test r == min(m, n)
-            @test B == Bc # B is not overwritten
-            @test size(X) == (n, size(B)[2:end]...)
+            buf = zeros(elty, max(m, n), size(B)[2:end]...)
+            copyto!(view(buf, 1:m, :), B)
+            sel(Y) = B isa AbstractVector ? Y[1:n] : Y[1:n, :]
 
-            Bwork = B isa AbstractVector ? similar(B, max(m, n)) : similar(B, max(m, n), size(B, 2))
-            sv = Vector{real(elty)}(undef, min(m, n))
-            work = elty[]
-            iwork = LinearAlgebra.BlasInt[]
-            kws = elty <: Complex ? (; rwork = real(elty)[]) : (;)
-            X, r = LAPACK.gelsd!(copy(A), B, -1; Bwork, s = sv, work, iwork, kws...)
-            @test X ≈ X0 rtol=rtol
+            # gelsy!
+            jpvt = zeros(BlasInt, n)
+            work = Vector{elty}(undef, 1)
+            rw = cplx ? (Vector{relty}(undef, 2n),) : ()
+            LAPACK.gelsy!(copy(A), copy(buf), jpvt, eps(relty), work, -1, rw...)
+            resize!(work, BlasInt(real(work[1])))
+            A1, B1 = copy(A), copy(buf)
+            Y, r = LAPACK.gelsy!(A1, B1, jpvt, eps(relty), work, length(work), rw...)
+            @test Y === B1 # B is overwritten
+            @test sel(Y) ≈ X0 rtol=rtol
             @test r == min(m, n)
-            @test B == Bc
-            @test parent(X) === Bwork
-            @test sv ≈ svdvals(A) rtol=rtol
-            @test !isempty(work) && !isempty(iwork)
-            elty <: Complex && @test !isempty(kws.rwork)
-            # reuse workspace
-            B2 = rand(elty, size(B)...)
-            X, r = LAPACK.gelsd!(copy(A), B2; Bwork, s = sv, work, iwork, kws...)
-            @test X ≈ A \ B2 rtol=rtol
-            if m >= n
-                # solve in place
-                B3 = copy(B2)
-                X, r = LAPACK.gelsd!(copy(A), B3; Bwork = B3)
-                @test X ≈ A \ B2 rtol=rtol
-                @test parent(X) === B3
+            @test sort(jpvt) == 1:n
+            # no allocations when reusing the workspace
+            @test _allocs_gelsy!(copy(A), copy(buf), jpvt, eps(relty), work, rw...) == 0
+            @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), copy(buf), zeros(BlasInt, n - 1), eps(relty), work, length(work), rw...)
+            @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), copy(buf), zeros(BlasInt, n), eps(relty), work, length(work) + 1, rw...)
+            if cplx
+                @test_throws DimensionMismatch LAPACK.gelsy!(copy(A), copy(buf), zeros(BlasInt, n), eps(relty), work, length(work), Vector{relty}(undef, 2n - 1))
             end
-            @test_throws DimensionMismatch LAPACK.gelsd!(copy(A), B; Bwork = similar(B, max(m, n) - 1, size(B, 2)))
-            @test_throws DimensionMismatch LAPACK.gelsd!(copy(A), B; s = Vector{real(elty)}(undef, min(m, n) + 1))
+
+            # gelsd!
+            s = Vector{relty}(undef, min(m, n))
+            work = Vector{elty}(undef, 1)
+            iwork = Vector{BlasInt}(undef, 1)
+            rw = cplx ? (Vector{relty}(undef, 1),) : ()
+            LAPACK.gelsd!(copy(A), copy(buf), s, -1, work, -1, rw..., iwork)
+            resize!(work, BlasInt(real(work[1])))
+            resize!(iwork, iwork[1])
+            cplx && resize!(rw[1], BlasInt(rw[1][1]))
+            A1, B1 = copy(A), copy(buf)
+            Y, r = LAPACK.gelsd!(A1, B1, s, -1, work, length(work), rw..., iwork)
+            @test Y === B1
+            @test sel(Y) ≈ X0 rtol=rtol
+            @test r == min(m, n)
+            @test s ≈ svdvals(A) rtol=rtol
+            @test _allocs_gelsd!(copy(A), copy(buf), s, -1, work, rw..., iwork) == 0
+            @test_throws DimensionMismatch LAPACK.gelsd!(copy(A), copy(buf), Vector{relty}(undef, min(m, n) - 1), -1, work, length(work), rw..., iwork)
+            @test_throws DimensionMismatch LAPACK.gelsd!(copy(A), copy(buf), s, -1, work, length(work) + 1, rw..., iwork)
+            @test_throws DimensionMismatch LAPACK.gelsd!(copy(A), copy(buf), s, -1, work, length(work), rw..., BlasInt[])
         end
     end
-    @testset "rank-deficient, uninitialized Bwork" for elty in (Float32, Float64, ComplexF32, ComplexF64)
+    @testset "rank-deficient, wide" for elty in (Float32, Float64, ComplexF32, ComplexF64)
         A = rand(elty, 3, 2) * rand(elty, 2, 5)
         b = rand(elty, 3)
-        X, r = LAPACK.gelsd!(copy(A), b, sqrt(eps(real(elty))); Bwork = fill(elty(NaN), 7))
-        @test r == 2
-        @test length(X) == 5
-        @test X ≈ pinv(A) * b rtol=sqrt(eps(real(elty)))
+        for (x, r) in (LAPACK.gelsy!(copy(A), b, sqrt(eps(real(elty)))), LAPACK.gelsd!(copy(A), b, sqrt(eps(real(elty)))))
+            @test r == 2
+            @test x ≈ pinv(A) * b rtol=sqrt(eps(real(elty)))
+        end
     end
 end
 
