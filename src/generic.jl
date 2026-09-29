@@ -1253,9 +1253,14 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(convert(AbstractArray{T}, A)) \ B
     end
-    return qr(convert(AbstractArray{T}, A), ColumnNorm()) \ B
+    # `T` is the type of the solution; promote the numeric type of `A` accordingly
+    # (e.g. `Int` -> `Float64`), but keep the units of `A` (`one(T)` is dimensionless)
+    TA = promote_type(eltype(A), typeof(oneunit(eltype(A)) * one(T)))
+    if m == n
+        return lu(convert(AbstractArray{TA}, A)) \ B
+    end
+    return qr(convert(AbstractArray{TA}, A), ColumnNorm()) \ B
 end
 
 function (\)(a::AbstractVector, b::AbstractArray)

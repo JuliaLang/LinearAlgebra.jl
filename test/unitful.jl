@@ -91,7 +91,54 @@ end
         @test Matrix(E) == Du
         @test vals isa AbstractVector{<:Furlong{1}}
         @test vecs isa AbstractMatrix{<:Union{Real,Complex}}
+        # default `sortby` (`eigsortby` needs a fallback for numbers that are neither `Real` nor `Complex`)
+        Es = eigen(Du)
+        p = sortperm(dd, by=LinearAlgebra.eigsortby)
+        @test Es.values == Furlong.(dd[p])
+        @test Es.values isa AbstractVector{<:Furlong{1}}
+        @test Es.vectors == Matrix(I, n, n)[:, p]
+        @test Du * Es.vectors == Es.vectors * Diagonal(Es.values)
+        @test eigvals(Du) == Es.values
     end
+end
+
+@testset "pinv with dimensionful matrices" begin
+    d = [3.0, 0.0, -2.0]
+    A = Matrix(Diagonal(Furlong.(d)))  # a `Matrix`, so that the generic `pinv(::AbstractMatrix)` is exercised
+    P = pinv(A)
+    @test P isa Matrix{<:Furlong{-1}}
+    @test P == Matrix(Diagonal([Furlong{-1}(inv(3.0)), Furlong{-1}(0.0), Furlong{-1}(inv(-2.0))]))
+    @test map(getval, A * P * A) ≈ map(getval, A)
+    # `rtol` is relative (dimensionless), `atol` defaults to a plain 0
+    @test pinv(A; rtol = 0.5) == P
+    @test pinv(A; rtol = 0.7) == Matrix(Diagonal([Furlong{-1}(inv(3.0)), Furlong{-1}(0.0), Furlong{-1}(0.0)]))
+    @test pinv(Matrix{Furlong{1,Float64}}(undef, 0, 2)) isa Matrix{<:Furlong{-1}}
+    @test pinv(Furlong(2.0)) == Furlong{-1}(0.5)
+    # dimensionless matrices are unaffected
+    @test pinv(Matrix(Diagonal(d))) == Matrix(Diagonal([inv(3.0), 0.0, inv(-2.0)]))
+    @test pinv(Matrix(Diagonal([2, 0]))) == [0.5 0.0; 0.0 0.0]
+    @test pinv(Matrix(Diagonal([2//1, 0//1]))) == [0.5 0.0; 0.0 0.0]
+end
+
+@testset "solves with a dimensionful right-hand side" begin
+    A0 = [4.0 1.0 0.0; 1.0 5.0 2.0; 0.0 2.0 6.0]
+    b0 = [1.0, 2.0, 3.0]
+    b = Furlong.(b0)
+    x0 = A0 \ b0
+    # a dimensionless matrix and a dimensionful right-hand side: the solution has the units of `b`
+    for x in (A0 \ b, lu(A0) \ b, cholesky(A0) \ b)
+        @test x isa Vector{<:Furlong{1}}
+        @test map(getval, x) ≈ x0
+    end
+    X = A0 \ [b b]
+    @test X isa Matrix{<:Furlong{1}}
+    @test map(getval, X) ≈ [x0 x0]
+    # numeric promotion of the matrix is unchanged
+    @test [4 1; 1 5] \ [1.0, 2.0] isa Vector{Float64}
+    @test [4 1; 1 5] \ [1, 2] isa Vector{Float64}
+    @test [4.0 1; 1 5] \ [1.0im, 2.0] isa Vector{ComplexF64}
+    # a dimensionful matrix still fails inside `ldiv` (the factors and the solution have different units)
+    @test_broken Furlong.(A0) \ b isa Vector{<:Furlong{0}}
 end
 
 # givens

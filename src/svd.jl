@@ -134,7 +134,7 @@ end
 # count positive singular values S ≥ given tolerances, S assumed sorted
 function _count_svdvals(S, atol::Real, rtol::Real)
     isempty(S) && return 0
-    tol = max(rtol * S[1], atol)
+    tol = _pinvtol(rtol * S[1], atol)
     return iszero(S[1]) ? 0 : searchsortedlast(S, tol, rev=true)
 end
 
@@ -293,7 +293,7 @@ The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest 
 !!! compat "Julia 1.13"
     The `atol` and `rtol` arguments require Julia 1.13 or later.
 """
-function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
+function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(real(float(one(T))))*min(size(F)...))*iszero(atol)) where T
     m, n = size(F)
     k = _count_svdvals(F.S, atol, rtol)
     if k == 0
@@ -306,7 +306,7 @@ function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(r
     return B
 end
 
-function pinv(F::SVD{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
+function pinv(F::SVD{T}; atol::Real=0, rtol::Real = (eps(real(float(one(T))))*min(size(F)...))*iszero(atol)) where T
     k = _count_svdvals(F.S, atol, rtol)
     @views SVD(copy(F.Vt[k:-1:1, :]'), inv.(F.S[k:-1:1]), copy(F.U[:,k:-1:1]'))
 end

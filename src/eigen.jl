@@ -134,6 +134,8 @@ end
 # as is the LAPACK default (for complex λ — LAPACK sorts by λ for the Hermitian/Symmetric case)
 eigsortby(λ::Real) = λ
 eigsortby(λ::Complex) = (real(λ),imag(λ))
+# generic fallback for other number types, e.g. dimensionful quantities
+eigsortby(λ::Number) = (real(λ),imag(λ))
 function sorteig!(λ::AbstractVector, X::AbstractMatrix, sortby::Union{Function,Nothing}=eigsortby)
     if sortby !== nothing && !issorted(λ, by=sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)

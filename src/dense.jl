@@ -1830,28 +1830,33 @@ true
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(one(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
-    Tout = typeof(zero(T)/sqrt(oneunit(T) + oneunit(T)))
+    # inverse units of `T`, numeric type promoted as by a `sqrt` (Int -> Float64)
+    Tout = typeof(inv(oneunit(T)) / sqrt(one(T) + one(T)))
     if m == 0 || n == 0
         return similar(A, Tout, (n, m))
     end
     if isdiag(A)
         dA = diagview(A)
         maxabsA = maximum(abs, dA)
-        tol = max(rtol * maxabsA, atol)
-        B = fill!(similar(A, Tout, (n, m)), 0)
-        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(x)).(dA)
+        tol = _pinvtol(rtol * maxabsA, atol)
+        B = fill!(similar(A, Tout, (n, m)), zero(Tout))
+        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(Tout)).(dA)
         return B
     end
     SVD         = svd(A)
-    tol2        = max(rtol*maximum(SVD.S), atol)
+    tol2        = _pinvtol(rtol*maximum(SVD.S), atol)
     Stype       = eltype(SVD.S)
     Sinv        = fill!(similar(A, Stype, length(SVD.S)), 0)
     index       = SVD.S .> tol2
     Sinv[index] .= pinv.(view(SVD.S, index))
     return SVD.Vt' * (Diagonal(Sinv) * SVD.U')
 end
+# threshold for singular values: `reltol` carries the units of the singular values, while the
+# default `atol = 0` is a plain number that cannot be compared with them
+_pinvtol(reltol, atol) = iszero(atol) ? max(reltol, zero(reltol)) : max(reltol, atol)
+
 function pinv(x::Number)
     xi = inv(x)
     return ifelse(isfinite(xi), xi, zero(xi))
@@ -1898,11 +1903,11 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)
-    tol = max(atol, SVD.S[1]*rtol)
+    tol = _pinvtol(SVD.S[1]*rtol, atol)
     indstart = sum(s -> s .> tol, SVD.S) + 1
     return copy((@view SVD.Vt[indstart:end,:])')
 end
