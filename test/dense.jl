@@ -413,7 +413,7 @@ end
 
                     # norm
                     for p in (-Inf, Inf, (-2:3)...)
-                        @test norm(A, p) ≈ norm(vec(A), p)
+                        @test norm(A, p) ≈ norm(vec(A), p) rtol=eps(float(elty))*8
                     end
                 end
             end
