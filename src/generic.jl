@@ -2041,8 +2041,6 @@ julia> LinearAlgebra.promote_leaf_eltypes(a)
 ComplexF64 (alias for Complex{Float64})
 ```
 """
-# The element type may only be used as a shortcut if it is concrete, since otherwise
-# (e.g. `Number[1.0]`) the leaf types may be narrower than the declared element type
 promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Number} =
     isconcretetype(T) ? T : _promote_leaf_eltypes(x)
 promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:NumberArray} =
