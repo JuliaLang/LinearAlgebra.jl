@@ -1840,23 +1840,19 @@ function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(o
     if isdiag(A)
         dA = diagview(A)
         maxabsA = maximum(abs, dA)
-        tol = _pinvtol(rtol * maxabsA, atol)
+        tol = _tolerance(atol, rtol * maxabsA)
         B = fill!(similar(A, Tout, (n, m)), zero(Tout))
         diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(Tout)).(dA)
         return B
     end
     SVD         = svd(A)
-    tol2        = _pinvtol(rtol*maximum(SVD.S), atol)
+    tol2        = _tolerance(atol, rtol*maximum(SVD.S))
     Stype       = eltype(SVD.S)
     Sinv        = fill!(similar(A, Stype, length(SVD.S)), 0)
     index       = SVD.S .> tol2
     Sinv[index] .= pinv.(view(SVD.S, index))
     return SVD.Vt' * (Diagonal(Sinv) * SVD.U')
 end
-# threshold for singular values: `reltol` carries the units of the singular values, while the
-# default `atol = 0` is a plain number that cannot be compared with them
-_pinvtol(reltol, atol) = iszero(atol) ? max(reltol, zero(reltol)) : max(reltol, atol)
-
 function pinv(x::Number)
     xi = inv(x)
     return ifelse(isfinite(xi), xi, zero(xi))
@@ -1907,7 +1903,7 @@ function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)
-    tol = _pinvtol(SVD.S[1]*rtol, atol)
+    tol = _tolerance(atol, SVD.S[1]*rtol)
     indstart = sum(s -> s .> tol, SVD.S) + 1
     return copy((@view SVD.Vt[indstart:end,:])')
 end

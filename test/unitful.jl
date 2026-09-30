@@ -120,6 +120,16 @@ end
     @test pinv(Matrix(Diagonal([2//1, 0//1]))) == [0.5 0.0; 0.0 0.0]
 end
 
+@testset "isapprox for dimensionful arrays" begin
+    x = Furlong.([1.0, 2.0])
+    # the default `atol = 0` must not be compared with the dimensionful `rtol*max(norm(x), norm(y))`
+    @test isapprox(x, Furlong.([1.0, 2.0 + 1e-10]); rtol=1e-8)
+    @test !isapprox(x, Furlong.([1.0, 2.0 + 1e-6]); rtol=1e-8)
+    @test isapprox(x, x; rtol=0)
+    @test !isapprox(x, Furlong.([1.0, 3.0]); rtol=0)
+    @test isapprox(Furlong.([0.0 1.0; 2.0 3.0]), Furlong.([0.0 1.0; 2.0 3.0 + 1e-10]); rtol=1e-8)
+end
+
 @testset "solves with a dimensionful right-hand side" begin
     A0 = [4.0 1.0 0.0; 1.0 5.0 2.0; 0.0 2.0 6.0]
     b0 = [1.0, 2.0, 3.0]

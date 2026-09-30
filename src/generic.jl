@@ -2068,13 +2068,24 @@ end
 # isapprox: approximate equality of arrays [like isapprox(Number,Number)]
 # Supports nested arrays; e.g., for `a = [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]`
 # `a ≈ a` is `true`.
+if isdefined(Base, :_tolerance)
+    using Base: _tolerance
+else
+    # TODO: remove once `Base._tolerance` is available
+    # The tolerance `max(atol, scaled_rtol)` used in approximate comparisons, where `scaled_rtol` is
+    # a relative tolerance already multiplied by the magnitude of the compared quantities and hence
+    # carries their units. The default `atol = 0` is a dimensionless number that cannot be compared
+    # with a dimensionful `scaled_rtol`; it is treated as `zero(scaled_rtol)`.
+    _tolerance(atol, scaled_rtol) = iszero(atol) ? max(scaled_rtol, zero(scaled_rtol)) : max(atol, scaled_rtol)
+end
+
 function isapprox(x::AbstractArray, y::AbstractArray;
     atol::Real=0,
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
     d = norm_x_minus_y(x, y, norm)
     if isfinite(d)
-        return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
+        return iszero(rtol) ? d <= atol : d <= _tolerance(atol, rtol*max(norm(x), norm(y)))
     else
         # Fall back to a component-wise approximate comparison
         # (mapreduce instead of all for greater generality [#44893])
