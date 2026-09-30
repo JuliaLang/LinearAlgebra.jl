@@ -1074,7 +1074,7 @@ dot(x::AbstractVector, transA::Transpose{<:Real}, y::AbstractVector) = adjoint(d
 ###########################################################################################
 
 """
-    rank(A::AbstractMatrix; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    rank(A::AbstractMatrix; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     rank(A::AbstractMatrix, rtol::Real)
 
 Compute the numerical rank of a matrix by counting how many outputs of
@@ -1116,7 +1116,7 @@ julia> rank(diagm(0 => [1, 0.001, 2]), atol=1.5)
 1
 ```
 """
-function rank(A::AbstractMatrix; atol::Real = 0.0, rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
+function rank(A::AbstractMatrix; atol::Number = zero(real(eltype(A))), rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
     isempty(A) && return 0 # 0-dimensional case
     s = svdvals(A)
     tol = max(atol, rtol*s[1])
@@ -2068,24 +2068,13 @@ end
 # isapprox: approximate equality of arrays [like isapprox(Number,Number)]
 # Supports nested arrays; e.g., for `a = [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]`
 # `a ≈ a` is `true`.
-if isdefined(Base, :_tolerance)
-    using Base: _tolerance
-else
-    # TODO: remove once `Base._tolerance` is available (JuliaLang/julia#63503)
-    # The tolerance `max(atol, scaled_rtol)` used in approximate comparisons, where `scaled_rtol` is
-    # a relative tolerance already multiplied by the magnitude of the compared quantities and hence
-    # carries their units. The default `atol = 0` is a dimensionless number that cannot be compared
-    # with a dimensionful `scaled_rtol`; it is treated as `zero(scaled_rtol)`.
-    _tolerance(atol, scaled_rtol) = iszero(atol) ? max(scaled_rtol, zero(scaled_rtol)) : max(atol, scaled_rtol)
-end
-
 function isapprox(x::AbstractArray, y::AbstractArray;
-    atol::Real=0,
+    atol::Number=zero(real(promote_leaf_eltypes(x))), # zero in the units of the elements
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
     d = norm_x_minus_y(x, y, norm)
     if isfinite(d)
-        return iszero(rtol) ? d <= _tolerance(atol, zero(d)) : d <= _tolerance(atol, rtol*max(norm(x), norm(y)))
+        return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
     else
         # Fall back to a component-wise approximate comparison
         # (mapreduce instead of all for greater generality [#44893])

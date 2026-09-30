@@ -1776,7 +1776,7 @@ end
 ## Moore-Penrose pseudoinverse
 
 """
-    pinv(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    pinv(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     pinv(M, rtol::Real) = pinv(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes the Moore-Penrose pseudoinverse.
@@ -1830,7 +1830,7 @@ true
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(one(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Number=zero(real(T)), rtol::Real = (eps(real(float(one(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
     # inverse units of `T`, numeric type promoted as by a `sqrt` (Int -> Float64)
     Tout = typeof(inv(oneunit(T)) / sqrt(one(T) + one(T)))
@@ -1840,13 +1840,13 @@ function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(o
     if isdiag(A)
         dA = diagview(A)
         maxabsA = maximum(abs, dA)
-        tol = _tolerance(atol, rtol * maxabsA)
+        tol = max(rtol * maxabsA, atol)
         B = fill!(similar(A, Tout, (n, m)), zero(Tout))
         diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(Tout)).(dA)
         return B
     end
     SVD         = svd(A)
-    tol2        = _tolerance(atol, rtol*maximum(SVD.S))
+    tol2        = max(rtol*maximum(SVD.S), atol)
     Stype       = eltype(SVD.S)
     Sinv        = fill!(similar(A, Stype, length(SVD.S)), 0)
     index       = SVD.S .> tol2
@@ -1861,7 +1861,7 @@ end
 ## Basis for null space
 
 """
-    nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    nullspace(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes a basis for the nullspace of `M` by including the singular
@@ -1899,11 +1899,11 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Number=zero(real(eltype(A))), rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)
-    tol = _tolerance(atol, SVD.S[1]*rtol)
+    tol = max(atol, SVD.S[1]*rtol)
     indstart = sum(s -> s .> tol, SVD.S) + 1
     return copy((@view SVD.Vt[indstart:end,:])')
 end

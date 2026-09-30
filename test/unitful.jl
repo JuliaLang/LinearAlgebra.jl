@@ -112,6 +112,9 @@ end
     # `rtol` is relative (dimensionless), `atol` defaults to a plain 0
     @test pinv(A; rtol = 0.5) == P
     @test pinv(A; rtol = 0.7) == Matrix(Diagonal([Furlong{-1}(inv(3.0)), Furlong{-1}(0.0), Furlong{-1}(0.0)]))
+    # the absolute tolerance has the units of the singular values
+    @test pinv(A; atol = Furlong(1.0)) == P
+    @test pinv(A; atol = Furlong(2.5)) == Matrix(Diagonal([Furlong{-1}(inv(3.0)), Furlong{-1}(0.0), Furlong{-1}(0.0)]))
     @test pinv(Matrix{Furlong{1,Float64}}(undef, 0, 2)) isa Matrix{<:Furlong{-1}}
     @test pinv(Furlong(2.0)) == Furlong{-1}(0.5)
     # dimensionless matrices are unaffected
@@ -128,6 +131,18 @@ end
     @test isapprox(x, x; rtol=0)
     @test !isapprox(x, Furlong.([1.0, 3.0]); rtol=0)
     @test isapprox(Furlong.([0.0 1.0; 2.0 3.0]), Furlong.([0.0 1.0; 2.0 3.0 + 1e-10]); rtol=1e-8)
+    # the absolute tolerance has the units of the compared arrays
+    @test isapprox(x, Furlong.([1.0, 2.0 + 1e-10]); atol=Furlong(1e-8), rtol=0)
+    @test !isapprox(x, Furlong.([1.0, 2.0 + 1e-6]); atol=Furlong(1e-8), rtol=0)
+    @test isapprox(x, Furlong.([1.0, 2.0 + 1e-6]); atol=Furlong(1e-8), rtol=1e-5)
+    # default tolerances need `Base.rtoldefault` for dimensionful eltypes (JuliaLang/julia#63503)
+    if hasmethod(Base.rtoldefault, Tuple{Type{Furlong{1,Float64}}})
+        @test x ≈ Furlong.([1.0, 2.0 + 1e-10])
+        @test x ≉ Furlong.([1.0, 2.0 + 1e-6])
+        @test isapprox(x, Furlong.([1.0, 2.0 + 1e-10]); atol=Furlong(1e-8))
+    else
+        @test_broken x ≈ Furlong.([1.0, 2.0 + 1e-10])
+    end
 end
 
 @testset "solves with a dimensionful right-hand side" begin
