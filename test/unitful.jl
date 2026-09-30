@@ -145,6 +145,45 @@ end
     end
 end
 
+@testset "SVD with dimensionful singular values" begin
+    # there is no generic `svd`, but an `SVD` with dimensionless `U`, `Vt` and dimensionful
+    # singular values is what e.g. `svd(::Diagonal)` produces; build one by hand
+    A0 = [2.0 0.0 1.0; 0.0 0.0 0.0; 1.0 0.0 2.0; 0.0 0.0 0.0] # singular values 3, 1, 0
+    F0 = svd(A0)
+    s = [3.0, 1.0, 0.0]
+    @test F0.S ≈ s atol=1e-12
+    F = SVD(F0.U, Furlong.(s), F0.Vt)
+    A = F0.U * Diagonal(Furlong.(s)) * F0.Vt
+    @test A isa Matrix{<:Furlong{1}}
+    @test map(getval, Matrix(F)) ≈ A0
+    @test svdvals(F) == Furlong.(s)
+    @test svdvals(F) isa Vector{<:Furlong{1}}
+    # rank: `atol` has the units of the singular values, `rtol` is relative
+    @test rank(F) == 2
+    @test rank(F; atol=Furlong(2.0)) == 1
+    @test rank(F; rtol=0.5) == 1
+    @test rank(F; atol=Furlong(0.5), rtol=0.5) == 1
+    # pinv: inverse units
+    P = pinv(F)
+    @test P isa SVD
+    @test P.S isa Vector{<:Furlong{-1}}
+    @test P.S == Furlong{-1}.([1.0, inv(3.0)])
+    @test map(getval, Matrix(P)) ≈ pinv(A0)
+    @test map(getval, Matrix(pinv(F; atol=Furlong(2.0)))) ≈ pinv(A0; atol=2.0)
+    @test map(getval, Matrix(pinv(F; rtol=0.5))) ≈ pinv(A0; rtol=0.5)
+    @test map(getval, Matrix(inv(SVD(F0.U[1:3, :], Furlong.([3.0, 2.0, 1.0]), F0.Vt)))) ≈ inv(F0.U[1:3, :] * Diagonal([3.0, 2.0, 1.0]) * F0.Vt)
+    # solving with a dimensionless factorization and a dimensionful right-hand side
+    b0 = [1.0, 2.0, 3.0, 4.0]
+    b = Furlong.(b0)
+    x = F0 \ b
+    @test x isa Vector{<:Furlong{1}}
+    @test map(getval, x) ≈ F0 \ b0
+    @test map(getval, ldiv!(F0, copy(b))[1:3]) ≈ F0 \ b0
+    # solving with dimensionful singular values needs the solution in different units than
+    # the right-hand side, which the in-place `ldiv!` cannot provide
+    @test_broken F \ b isa Vector{<:Furlong{0}}
+end
+
 @testset "solves with a dimensionful right-hand side" begin
     A0 = [4.0 1.0 0.0; 1.0 5.0 2.0; 0.0 2.0 6.0]
     b0 = [1.0, 2.0, 3.0]

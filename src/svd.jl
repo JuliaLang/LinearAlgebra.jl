@@ -272,7 +272,7 @@ and `ϵ` is the [`eps`](@ref) of the element type of `S`.
 !!! compat "Julia 1.12"
     The `rank(::SVD)` method requires at least Julia 1.12.
 """
-function rank(S::SVD{T}; atol::Number=zero(real(T)), rtol::Real = (min(size(S)...)*eps(real(float(eltype(S)))))) where {T}
+function rank(S::SVD; atol::Number=zero(eltype(S.S)), rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
     tol = max(atol, rtol*S.S[1])
     count(>(tol), S.S)
 end
@@ -293,7 +293,7 @@ The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest 
 !!! compat "Julia 1.13"
     The `atol` and `rtol` arguments require Julia 1.13 or later.
 """
-function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Number=zero(real(T)), rtol::Real = (eps(real(float(one(T))))*min(size(F)...))*iszero(atol)) where T
+function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Number=zero(eltype(F.S)), rtol::Real = (eps(real(float(one(T))))*min(size(F)...))*iszero(atol)) where T
     m, n = size(F)
     k = _count_svdvals(F.S, atol, rtol)
     if k == 0
@@ -306,7 +306,7 @@ function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Number=zero(real(T)), rtol:
     return B
 end
 
-function pinv(F::SVD{T}; atol::Number=zero(real(T)), rtol::Real = (eps(real(float(one(T))))*min(size(F)...))*iszero(atol)) where T
+function pinv(F::SVD{T}; atol::Number=zero(eltype(F.S)), rtol::Real = (eps(real(float(one(T))))*min(size(F)...))*iszero(atol)) where T
     k = _count_svdvals(F.S, atol, rtol)
     @views SVD(copy(F.Vt[k:-1:1, :]'), inv.(F.S[k:-1:1]), copy(F.U[:,k:-1:1]'))
 end
@@ -316,7 +316,7 @@ function inv(F::SVD)
     @inbounds for i in eachindex(F.S)
         iszero(F.S[i]) && throw(SingularException(i))
     end
-    k = _count_svdvals(F.S, 0, eps(real(eltype(F))))
+    k = _count_svdvals(F.S, zero(eltype(F.S)), eps(real(eltype(F))))
     return @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
 end
 
