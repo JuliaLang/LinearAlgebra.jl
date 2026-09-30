@@ -2071,7 +2071,7 @@ end
 if isdefined(Base, :_tolerance)
     using Base: _tolerance
 else
-    # TODO: remove once `Base._tolerance` is available
+    # TODO: remove once `Base._tolerance` is available (JuliaLang/julia#63503)
     # The tolerance `max(atol, scaled_rtol)` used in approximate comparisons, where `scaled_rtol` is
     # a relative tolerance already multiplied by the magnitude of the compared quantities and hence
     # carries their units. The default `atol = 0` is a dimensionless number that cannot be compared
