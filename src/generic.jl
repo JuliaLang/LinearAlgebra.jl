@@ -2085,7 +2085,7 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     nans::Bool=false, norm::Function=norm)
     d = norm_x_minus_y(x, y, norm)
     if isfinite(d)
-        return iszero(rtol) ? d <= atol : d <= _tolerance(atol, rtol*max(norm(x), norm(y)))
+        return iszero(rtol) ? d <= _tolerance(atol, zero(d)) : d <= _tolerance(atol, rtol*max(norm(x), norm(y)))
     else
         # Fall back to a component-wise approximate comparison
         # (mapreduce instead of all for greater generality [#44893])
