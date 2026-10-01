@@ -1083,7 +1083,7 @@ dot(x::AbstractVector, transA::Transpose{<:Real}, y::AbstractVector) = adjoint(d
 ###########################################################################################
 
 """
-    rank(A::AbstractMatrix; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    rank(A::AbstractMatrix; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     rank(A::AbstractMatrix, rtol::Real)
 
 Compute the numerical rank of a matrix by counting how many outputs of
@@ -1125,7 +1125,7 @@ julia> rank(diagm(0 => [1, 0.001, 2]), atol=1.5)
 1
 ```
 """
-function rank(A::AbstractMatrix; atol::Real = 0.0, rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
+function rank(A::AbstractMatrix; atol::Number = zero(real(eltype(A))), rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
     isempty(A) && return 0 # 0-dimensional case
     s = svdvals(A)
     tol = max(atol, rtol*s[1])
@@ -1262,9 +1262,14 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(convert(AbstractArray{T}, A)) \ B
     end
-    return qr(convert(AbstractArray{T}, A), ColumnNorm()) \ B
+    # `T` is the type of the solution; promote the numeric type of `A` accordingly
+    # (e.g. `Int` -> `Float64`), but keep the units of `A` (`one(T)` is dimensionless)
+    TA = promote_type(eltype(A), typeof(oneunit(eltype(A)) * one(T)))
+    if m == n
+        return lu(convert(AbstractArray{TA}, A)) \ B
+    end
+    return qr(convert(AbstractArray{TA}, A), ColumnNorm()) \ B
 end
 
 function (\)(a::AbstractVector, b::AbstractArray)
@@ -2071,7 +2076,7 @@ end
 # Supports nested arrays; e.g., for `a = [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]`
 # `a ≈ a` is `true`.
 function isapprox(x::AbstractArray, y::AbstractArray;
-    atol::Real=0,
+    atol::Number=zero(real(promote_leaf_eltypes(x))), # zero in the units of the elements
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
     d = norm_x_minus_y(x, y, norm)

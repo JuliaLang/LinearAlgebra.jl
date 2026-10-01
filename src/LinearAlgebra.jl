@@ -742,7 +742,10 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
     end
 
     TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(F)))
-    FF = Factorization{TFB}(F)
+    # promote the numeric type of the factorization to that of the solution (e.g. `Float32` ->
+    # `Float64`), but keep its units: `TFB` itself may carry different units than the factors
+    TF = typeof(oneunit(eltype(F)) * one(TFB))
+    FF = Factorization{TF}(F)
 
     # For wide problem we (often) compute a minimum norm solution. The solution
     # is larger than the right hand side so we use size(F, 2).

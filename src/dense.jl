@@ -1774,7 +1774,7 @@ end
 ## Moore-Penrose pseudoinverse
 
 """
-    pinv(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    pinv(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     pinv(M, rtol::Real) = pinv(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes the Moore-Penrose pseudoinverse.
@@ -1828,9 +1828,10 @@ true
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Number=zero(real(T)), rtol::Real = (eps(real(float(one(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
-    Tout = typeof(zero(T)/sqrt(oneunit(T) + oneunit(T)))
+    # inverse units of `T`, numeric type promoted as by a `sqrt` (Int -> Float64)
+    Tout = typeof(inv(oneunit(T)) / sqrt(one(T) + one(T)))
     if m == 0 || n == 0
         return similar(A, Tout, (n, m))
     end
@@ -1838,8 +1839,8 @@ function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(o
         dA = diagview(A)
         maxabsA = maximum(abs, dA)
         tol = max(rtol * maxabsA, atol)
-        B = fill!(similar(A, Tout, (n, m)), 0)
-        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(x)).(dA)
+        B = fill!(similar(A, Tout, (n, m)), zero(Tout))
+        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(Tout)).(dA)
         return B
     end
     SVD         = svd(A)
@@ -1858,7 +1859,7 @@ end
 ## Basis for null space
 
 """
-    nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    nullspace(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes a basis for the nullspace of `M` by including the singular
@@ -1896,7 +1897,7 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Number=zero(real(eltype(A))), rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)
