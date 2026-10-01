@@ -219,4 +219,59 @@ end
     end
 end
 
+@testset "cholesky with dimensionful matrices" begin
+    A0 = [4.0 1.0 0.0; 1.0 5.0 2.0; 0.0 2.0 6.0]
+    b0 = [1.0, 2.0, 3.0]
+    A = Furlong.(A0)
+    b = Furlong.(b0)
+    C0 = cholesky(A0)
+    @testset "$(nameof(typeof(M)))" for M in (A, Hermitian(A), Symmetric(A, :L))
+        C = cholesky(M)
+        @test C isa Cholesky{Furlong{1//2,Float64}}
+        @test map(getval, C.U) ≈ C0.U
+        @test C.uplo == cholesky(M isa Symmetric ? Symmetric(A0, :L) : A0).uplo
+        @test map(getval, Matrix(C)) ≈ A0
+        @test getval(det(C)) ≈ det(A0)
+        @test isposdef(C)
+        x = C \ b
+        @test x isa Vector{Furlong{0,Float64}}
+        @test map(getval, x) ≈ C0 \ b0
+        X = C \ [b b]
+        @test X isa Matrix{Furlong{0,Float64}}
+        @test map(getval, X) ≈ C0 \ [b0 b0]
+        @test C \ b0 isa Vector{Furlong{-1,Float64}}
+        @test map(getval, C \ b0) ≈ C0 \ b0
+        Ai = inv(C)
+        @test Ai isa Matrix{Furlong{-1,Float64}}
+        @test map(getval, Ai) ≈ inv(A0)
+    end
+    @test cholesky(Diagonal(Furlong.([4.0, 9.0]))).U == Diagonal(Furlong{1//2}.([2.0, 3.0]))
+    @test_throws PosDefException cholesky(Furlong.([1.0 2.0; 2.0 1.0]))
+    @test !issuccess(cholesky(Furlong.([1.0 2.0; 2.0 1.0]); check=false))
+    # pivoted
+    P0 = cholesky(A0, RowMaximum())
+    P = cholesky(A, RowMaximum())
+    @test P isa CholeskyPivoted{Furlong{1//2,Float64}}
+    @test P.p == P0.p && P.rank == 3
+    @test map(getval, P.U) ≈ P0.U
+    @test map(getval, (P.U'P.U)[invperm(P.p), invperm(P.p)]) ≈ A0
+    # a rank deficient matrix with a tolerance in the units of `A`
+    R0 = [1.0 1.0; 1.0 1.0]
+    @test cholesky(Furlong.(R0), RowMaximum(); check=false).rank == 1
+    @test cholesky(Furlong.(R0), RowMaximum(); tol=Furlong(0.5), check=false).rank == 1
+    @test cholesky(Furlong.(R0 + I), RowMaximum(); tol=Furlong(1.5), check=false).rank == 1
+    @test cholesky(Furlong.(R0 + I), RowMaximum(); tol=Furlong(0.5), check=false).rank == 2
+    # the in-place variant cannot store the factor in the array of `A`
+    @test_throws TypeError cholesky!(copy(A))
+end
+
+@testset "L and U of a dimensionful LU factorization" begin
+    A = Furlong.([4.0 1.0 0.0; 1.0 5.0 2.0; 0.0 2.0 6.0])
+    F = lu(A)
+    @test all(x -> x isa Furlong{0}, F.L)
+    @test all(x -> x isa Furlong{1}, F.U)
+    @test map(getval, Matrix(F)) ≈ map(getval, A)
+    @test map(getval, F.L * F.U) ≈ map(getval, A[F.p, :])
+end
+
 end # module TestUnitfulLinAlg
