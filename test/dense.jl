@@ -902,6 +902,8 @@ end
         @test exp(log(A8)) ≈ A8
         @test typeof(log(A8)) == Matrix{elty}
     end
+
+    @test log([1 2; 0 4]) == log(UpperTriangular(Float64[1 2; 0 4]))
 end
 
 @testset "Additional matrix square root tests" for elty in (Float64, ComplexF64)
@@ -1281,6 +1283,15 @@ Base.:+(x::TypeWithZero, ::TypeWithoutZero) = x
 
 @testset "diagm for type with no zero" begin
     @test diagm(0 => [TypeWithoutZero()]) isa Matrix{TypeWithZero}
+end
+
+# https://github.com/aviatesk/JET.jl/issues/790
+@testset "diagm inference with non-concrete eltype" begin
+    for kvtype in (Pair{Int, Vector{T}} where T<:Complex, Pair{Int, Vector{<:Real}})
+        @test Base.infer_return_type(LinearAlgebra.diagm_container, (Nothing, kvtype)) <: Matrix
+        @test Base.infer_return_type(LinearAlgebra.diagm_container, (Tuple{Int,Int}, kvtype)) <: Matrix
+        @test Base.infer_return_type(diagm, (kvtype,)) <: Matrix
+    end
 end
 
 @testset "cbrt(A::AbstractMatrix{T})" begin
