@@ -419,7 +419,9 @@ end
 function diagm_container(size, kv::Pair{<:Integer,<:AbstractVector}...)
     T = promote_type(map(x -> eltype(x.second), kv)...)
     # For some type `T`, `zero(T)` is not a `T` and `zeros(T, ...)` fails.
-    U = promote_type(T, typeof(zero(T)))
+    # The type assertion helps inference when `T` is not a constant type: otherwise `U`
+    # is inferred as `Any` and `zeros(U, ...)` may also dispatch to `zeros(dims::Integer...)`.
+    U = promote_type(T, typeof(zero(T)))::Type
     return zeros(U, diagm_size(size, kv...)...)
 end
 diagm_container(size, kv::Pair{<:Integer,<:BitVector}...) =
