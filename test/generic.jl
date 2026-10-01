@@ -509,6 +509,14 @@ end
     end
 end
 
+@testset "norm correctly promotes abstractly-typed vectors" begin
+    v = Real[1, randn(), 2f0, big(π)]
+    w = Number[1, randn(ComplexF64), 2f0, big(π)]
+    for p in (1, 2, Inf), x in (v, w)
+        @test norm(x, p) == norm(big.(x), p)
+    end
+end
+
 @testset "Issue 14657" begin
     @test det([true false; false true]) == det(Matrix(1I, 2, 2))
 end

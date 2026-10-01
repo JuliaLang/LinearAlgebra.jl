@@ -566,6 +566,14 @@ generic_normMinusInf(x) = float(mapreduce(norm, min, x))
 generic_normInf(x) = float(mapreduce(norm, max, x))
 
 generic_norm1(x) = mapreduce(float ∘ norm, +, x)
+function generic_norm1(x::AbstractArray{<:Number})
+    T = float(_valeltype(x))
+    res = zero(real(T))
+    @simd for xᵢ ∈ x
+        res += abs(T(xᵢ))
+    end
+    return res
+end
 
 # faster computation of norm(x)^2, avoiding overflow for integers
 norm_sqr(x) = norm(x)^2
