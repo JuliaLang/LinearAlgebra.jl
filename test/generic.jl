@@ -18,6 +18,7 @@ using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.Furlongs
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 Random.seed!(123)
 
@@ -624,6 +625,21 @@ LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
     @test x isa Vector{Furlong{1,Float64}}
     @test map(x -> x.val, x) ≈ A \ [1.0, 2.0]
     @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
+    # vector-valued right-hand side (#904): the elements of `b` are (static) vectors
+    b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
+    @test _scalartype(eltype(b)) === Float64
+    X = A \ [1.0 2.0; 3.0 4.0]   # the same system, component by component
+    for F in (lu(A), lu(Float32.(A)), cholesky(A))
+        x = F \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+        @test all(((y, z),) -> y.data ≈ z.data, zip(A * x, b))
+    end
+    @test ldiv!(lu(A), copy(b)) isa Vector{<:SizedArray{(2,),Float64}}
+    # not supported yet: the generic `\` promotes `A` with `one` of the solution eltype, and the
+    # QR solves require the same eltype for the factors and the right-hand side
+    @test_broken A \ b isa Vector{<:SizedArray{(2,),Float64}}
+    @test_broken qr(A) \ b isa Vector{<:SizedArray{(2,),Float64}}
 end
 
 @testset "Issue 22042" begin
