@@ -72,7 +72,7 @@ end
     # on complex plane
     J = UniformScaling(randn(ComplexF64))
     for f in ( exp,   log, cis,
-               sqrt,
+               sqrt,  abs,
                sin,   cos,   tan,
                asin,  acos,  atan,
                csc,   sec,   cot,
@@ -91,7 +91,7 @@ end
     # on real axis
     for (λ, fs) in (
         # functions defined for x ∈ ℝ
-        (()->randn(),           (exp,
+        (()->randn(),           (exp,   cbrt,
                                  sin,   cos,   tan,
                                  csc,   sec,   cot,
                                  atan,  acot,

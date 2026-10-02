@@ -162,9 +162,9 @@ isposdef(J::UniformScaling) = isposdef(J.λ)
 (-)(A::AbstractMatrix, J::UniformScaling)   = A + (-J)
 
 # matrix functions
-for f in ( :exp,   :log, :cis,
+for f in ( :exp,   :log,   :cis,
            :expm1, :log1p,
-           :sqrt,  :cbrt,
+           :sqrt,  :cbrt,  :abs,
            :sin,   :cos,   :tan,
            :asin,  :acos,  :atan,
            :csc,   :sec,   :cot,

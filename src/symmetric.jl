@@ -919,7 +919,7 @@ function ^(A::SymSymTri{<:Complex}, p::Real)
     return Symmetric(schurpow(A, p))
 end
 
-for func in (:cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :cbrt)
+for func in (:cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :cbrt, :abs)
     @eval begin
         function ($func)(A::SelfAdjoint)
             F = eigen(A)

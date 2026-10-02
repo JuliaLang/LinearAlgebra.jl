@@ -13,6 +13,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
 
 ## Test Julia fallbacks to BLAS routines
 
@@ -97,6 +98,43 @@ end
     @test Matrix{ComplexF64}(undef, 5, 0) |> t -> t't == zeros(0, 0)
     @test Matrix{ComplexF64}(undef, 5, 0) |> t -> t * t' == zeros(5, 5)
 end
+
+@testset "1x1 matmul" begin
+    AA = fill(3, 1, 1)
+    BB = fill(5, 1, 1)
+    AAi = AA .+ 2im
+    BBi = BB .- 1im
+    for A in (copy(AA), view(AA, 1:1, 1:1)), B in (copy(BB), view(BB, 1:1, 1:1))
+        @test A * B == fill(15, 1, 1)
+        @test transpose(A) * B == fill(15, 1, 1)
+        @test mul!(fill(1, 1, 1), A, B, 2, 3) == fill(33, 1, 1)
+        # length-1 vectors are treated as 1x1 matrices
+        @test vec(A) * B == fill(15, 1, 1)
+        @test mul!(fill(1, 1, 1), vec(A), transpose(B), 2, 3) == fill(33, 1, 1)
+    end
+    for A in (AAi, ComplexF64.(AAi)), B in (BBi, ComplexF64.(BBi))
+        @test A * B == fill((3 + 2im) * (5 - 1im), 1, 1)
+        @test A' * B == fill((3 - 2im) * (5 - 1im), 1, 1)
+        @test mul!(fill(1 + 0im, 1, 1), A, B', true, true) == fill(1 + (3 + 2im) * (5 + 1im), 1, 1)
+    end
+    for T in (Float64, ComplexF64)
+        # `α == 0` must not propagate NaNs from the factors
+        @test mul!(ones(T, 1, 1), fill(T(NaN), 1, 1), ones(T, 1, 1), false, true) == ones(T, 1, 1)
+        @test mul!(ones(T, 1, 1), fill(T(NaN), 1, 1), ones(T, 1, 1), 0.0, 1.0) == ones(T, 1, 1)
+    end
+    # BLAS eltypes reach the 1x1 kernel with Symmetric/Hermitian wrappers through the symm/hemm path
+    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+            wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
+        @test mul!(fill(one(eltype(A)), 1, 1), wrapper_a(A), wrapper_b(B), 2, 3) ==
+            2 * Array(wrapper_a(A)) * Array(wrapper_b(B)) .+ 3
+    end
+    @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 2, 2), AA, BB)
+    @test_throws "expected 1x1 matrices" LinearAlgebra.matmul1x1!(zeros(1, 1), 'N', 'N', zeros(1, 2), zeros(2, 1))
+    C = ones(1, 1)
+    @test_throws ArgumentError LinearAlgebra.matmul1x1!(C, 'N', 'N', C, ones(1, 1))
+end
+
 @testset "2x2 matmul" begin
     AA = [1 2; 3 4]
     BB = [5 6; 7 8]
@@ -115,8 +153,10 @@ end
         @test *(adjoint(Ai), adjoint(Bi)) == [-28.25-66im 9.75-58im; -26-89im 21-73im]
         @test_throws DimensionMismatch [1 2; 0 0; 0 0] * [1 2]
     end
-    for wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
-        @test wrapper_a(AA) * wrapper_b(BB) == Array(wrapper_a(AA)) * Array(wrapper_b(BB))
+    # BLAS eltypes reach the small-matrix kernels with Symmetric/Hermitian wrappers through the symm/hemm path
+    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+            wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
     end
     @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 3, 3), AA, BB)
 end
@@ -138,8 +178,10 @@ end
         @test *(adjoint(Ai), adjoint(Bi)) == [1+2im 20.75+9im -44.75+42im; 19.5+17.5im -54-36.5im 51-14.5im; 13+7.5im 11.25+31.5im -43.25-14.5im]
         @test_throws DimensionMismatch [1 2 3; 0 0 0; 0 0 0] * [1 2 3]
     end
-    for wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
-        @test wrapper_a(AA) * wrapper_b(BB) == Array(wrapper_a(AA)) * Array(wrapper_b(BB))
+    # BLAS eltypes reach the small-matrix kernels with Symmetric/Hermitian wrappers through the symm/hemm path
+    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+            wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
     end
     @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 4, 4), AA, BB)
 end
@@ -1326,6 +1368,41 @@ end
         @test M' * M' == Mod.(A' * A', 20)
         @test M * M[:, 1] == Mod.(A * A[:, 1], 20)
         @test M' * M[:, 1] == Mod.(A' * A[:, 1], 20)
+    end
+end
+
+@testset "generic matmul checks axes (issue #1670)" begin
+    @testset "n = $n, T = $T" for n in (2, 3, 4), T in (Float64, BigFloat, Int)
+        M1 = rand(T <: Integer ? (1:9) : T, n, n)
+        M2 = rand(T <: Integer ? (1:9) : T, n, n)
+        Or = OffsetArray(M1, -2, 0) # offset rows
+        Oc = OffsetArray(M1, 0, -2) # offset columns
+        @testset "mismatched axes" begin
+            for W in (identity, adjoint, transpose, Symmetric, Hermitian, UpperHessenberg)
+                @test_throws DimensionMismatch W(M2) * Or
+                @test_throws DimensionMismatch Oc * W(M2)
+            end
+            # the result of * is one-based, whereas the axes of the product are offset
+            @test_throws DimensionMismatch Or * M2
+            @test_throws DimensionMismatch M2 * Oc
+            @test_throws DimensionMismatch mul!(similar(M1), Or, M2)
+            @test_throws DimensionMismatch mul!(similar(M1), M2, Oc)
+            @test_throws DimensionMismatch mul!(similar(M1), M2, Or, 2, 3)
+            @test_throws DimensionMismatch mul!(OffsetArray(similar(M1), -2, 0), M1, M2)
+            @test_throws DimensionMismatch mul!(OffsetArray(similar(M1), 0, -2), M1, M2)
+            @test_throws DimensionMismatch mul!(OffsetArray(similar(M1), 0, -2), M1, M2, 2, 3)
+            @test_throws DimensionMismatch LinearAlgebra.generic_matmatmul!(similar(M1), 'N', 'N', Or, M2, true, false)
+        end
+        @testset "matching axes" begin
+            A = OffsetArray(M1, -2, 3)
+            B = OffsetArray(M2, 3, 1)
+            C = OffsetArray(zeros(T, n, n), -2, 1)
+            @test mul!(C, A, B) ≈ OffsetArray(M1 * M2, axes(C))
+            C .= 1
+            @test mul!(C, A, B, 2, 3) ≈ OffsetArray(2 * M1 * M2 .+ 3, axes(C))
+            C2 = OffsetArray(zeros(T, n, n), 3, 1)
+            @test mul!(C2, adjoint(A), OffsetArray(M2, -2, 1)) ≈ OffsetArray(M1' * M2, axes(C2))
+        end
     end
 end
 

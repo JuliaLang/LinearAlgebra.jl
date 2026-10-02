@@ -480,9 +480,34 @@ end
     )
 end
 
-# We may inline the matmul2x2! and matmul3x3! calls for `α == true`
+# The generic kernels index with the axes of the arrays within `@inbounds` loops,
+# so matching sizes are not sufficient, and the axes must match. Since matching axes
+# imply matching sizes, this also subsumes `matmul_size_check`.
+function matmul_axes_check(C::AbstractVecOrMat, A::AbstractVecOrMat, B::AbstractVecOrMat)
+    # we use two `axes` calls in case of `AbstractVector`
+    if axes(A, 1) != axes(C, 1) || axes(A, 2) != axes(B, 1) || axes(B, 2) != axes(C, 2)
+        matmul_axes_check_error(C, A, B)
+    end
+    return nothing
+end
+@noinline function matmul_axes_check_error(C::AbstractVecOrMat, A::AbstractVecOrMat, B::AbstractVecOrMat)
+    # report incompatible sizes with the more descriptive error messages
+    matmul_size_check(size(C), size(A), size(B))
+    AxM, AxK = axes(A, 1), axes(A, 2)
+    BxK, BxN = axes(B, 1), axes(B, 2)
+    CxM, CxN = axes(C, 1), axes(C, 2)
+    if AxM != CxM
+        throw(DimensionMismatch(lazy"incompatible axes for matrix multiplication: the first axis of A, $AxM, does not match the first axis of the destination C, $CxM"))
+    elseif AxK != BxK
+        throw(DimensionMismatch(lazy"incompatible axes for matrix multiplication: the second axis of A, $AxK, does not match the first axis of B, $BxK"))
+    else
+        throw(DimensionMismatch(lazy"incompatible axes for matrix multiplication: the second axis of B, $BxN, does not match the second axis of the destination C, $CxN"))
+    end
+end
+
+# We may inline the matmul1x1!, matmul2x2! and matmul3x3! calls for `α == true`
 # to simplify the @stable_muladdmul branches
-function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β)
+function matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β)
     if size(C) == size(A) == size(B) == (2,2)
         matmul2x2!(C, tA, tB, A, B, α, β)
         return true
@@ -491,9 +516,13 @@ function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β)
         matmul3x3!(C, tA, tB, A, B, α, β)
         return true
     end
+    if length(C) == length(A) == length(B) == 1
+        matmul1x1!(C, tA, tB, A, B, α, β)
+        return true
+    end
     return false
 end
-function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α::Bool, β)
+function matmul_small_nonzeroalpha!(C, tA, tB, A, B, α::Bool, β)
     if size(C) == size(A) == size(B) == (2,2)
         Aelements, Belements = _matmul2x2_elements(C, tA, tB, A, B)
         @stable_muladdmul _modify2x2!(Aelements, Belements, C, MulAddMul(true, β))
@@ -502,6 +531,11 @@ function matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α::Bool, β)
     if size(C) == size(A) == size(B) == (3,3)
         Aelements, Belements = _matmul3x3_elements(C, tA, tB, A, B)
         @stable_muladdmul _modify3x3!(Aelements, Belements, C, MulAddMul(true, β))
+        return true
+    end
+    if length(C) == length(A) == length(B) == 1
+        A11, B11 = _matmul1x1_elements(C, tA, tB, A, B)
+        @stable_muladdmul _modify1x1!(A11, B11, C, MulAddMul(true, β))
         return true
     end
     return false
@@ -553,7 +587,7 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
     if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
         return _rmul_or_fill!(C, β)
     end
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
     alpha, beta = promote(α, β, zero(T))
     blasfn = _valtypeparam(val)
     if alpha isa Union{Bool,T} && beta isa Union{Bool,T} && blasfn ∈ (BlasFlag.SYMM, BlasFlag.HEMM)
@@ -909,7 +943,7 @@ Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::Ab
     mB, nB = lapack_size(tB, B)
 
     matmul_size_check(size(C), (mA, nA), (mB, nB))
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
 
     if C === A || B === C
         throw(ArgumentError("output matrix must not be aliased with input matrix"))
@@ -932,7 +966,7 @@ gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
 Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::AbstractChar, tB::AbstractChar,
                        A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
                        α::Number, β::Number) where {T<:Number}
-    matmul2x2or3x3_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
     return _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
 end
 
@@ -1182,7 +1216,7 @@ _generic_matmatmul!(C::AbstractVecOrMat, A::AbstractVecOrMat, B::AbstractVecOrMa
 
 @noinline function _generic_matmatmul!(C::AbstractVecOrMat{R}, A::AbstractVecOrMat, B::AbstractVecOrMat,
                              alpha::Number, beta::Number) where {R}
-    matmul_size_check(size(C), size(A), size(B))
+    matmul_axes_check(C, A, B)
     __generic_matmatmul!(C, A, B, alpha, beta, Val(isbitstype(R) && sizeof(R) ≤ 16))
     return C
 end
@@ -1265,6 +1299,48 @@ function _generic_matmatmul_generic!(C, A, B, alpha, beta)
         end
         @stable_muladdmul _modify!(MulAddMul(alpha,beta), Ctmp, C, (i,j))
     end
+    C
+end
+
+# multiply 1x1 matrices; vectors of length 1 are treated as 1x1 matrices
+
+# separate function with the core of matmul1x1! that doesn't depend on a MulAddMul
+function _matmul1x1_elements(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat)
+    require_one_based_indexing(C, A, B)
+    if C === A || B === C
+        throw(ArgumentError("output matrix must not be aliased with input matrix"))
+    end
+    if !(length(C) == length(A) == length(B) == 1)
+        throw(DimensionMismatch(lazy"expected 1x1 matrices, but got sizes $(size(C)), $(size(A)) and $(size(B))"))
+    end
+    __matmul1x1_elements(tA, A), __matmul1x1_elements(tB, B)
+end
+function __matmul1x1_elements(tA, A::AbstractVecOrMat)
+    @inbounds begin
+    tA_uc = _uppercase(tA) # possibly unwrap a WrapperChar
+    if tA_uc == 'N'
+        A11 = A[1]
+    elseif tA_uc == 'T'
+        A11 = copy(transpose(A[1]))
+    elseif tA_uc == 'C'
+        A11 = copy(A[1]')
+    elseif tA_uc == 'S'
+        A11 = symmetric(A[1], _isuppercase(tA) ? :U : :L)
+    elseif tA_uc == 'H'
+        A11 = hermitian(A[1], _isuppercase(tA) ? :U : :L)
+    end
+    end # inbounds
+    A11
+end
+
+function _modify1x1!(A11, B11, C, _add)
+    @inbounds _modify!(_add, A11*B11, C, 1)
+    C
+end
+function matmul1x1!(C::AbstractVecOrMat, tA, tB, A::AbstractVecOrMat, B::AbstractVecOrMat,
+                    α = true, β = false)
+    A11, B11 = _matmul1x1_elements(C, tA, tB, A, B)
+    @stable_muladdmul _modify1x1!(A11, B11, C, MulAddMul(α, β))
     C
 end
 

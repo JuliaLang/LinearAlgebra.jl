@@ -314,7 +314,10 @@ julia> a = [1. 2.; 3. 4.]
 
 julia> qr!(a)
 LinearAlgebra.QRCompactWY{Float64, Matrix{Float64}, Matrix{Float64}}
-Q factor: 2×2 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}
+Q factor:
+2×2 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}:
+ -0.316228  -0.948683
+ -0.948683   0.316228
 R factor:
 2×2 Matrix{Float64}:
  -3.16228  -4.42719
@@ -339,6 +342,7 @@ qr!(A::AbstractMatrix) = qr!(A, NoPivot())
 @deprecate qr!(A::AbstractMatrix, ::Val{false}) qr!(A, NoPivot())
 
 _qreltype(::Type{T}) where T = typeof(zero(T)/sqrt(abs2(one(T))))
+_qreltype(A::AbstractArray) = _qreltype(_valeltype(A))
 
 """
     qr(A, pivot = NoPivot(); blocksize) -> F
@@ -403,7 +407,11 @@ julia> A = [3.0 -6.0; 4.0 -8.0; 0.0 1.0]
 
 julia> F = qr(A)
 LinearAlgebra.QRCompactWY{Float64, Matrix{Float64}, Matrix{Float64}}
-Q factor: 3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}
+Q factor:
+3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}:
+ -0.6   0.0   0.8
+ -0.8   0.0  -0.6
+  0.0  -1.0   0.0
 R factor:
 2×2 Matrix{Float64}:
  -5.0  10.0
@@ -419,9 +427,9 @@ true
     elementary reflectors, so that the `Q` and `R` matrices can be stored
     compactly rather than two separate dense matrices.
 """
-function qr(A::AbstractMatrix{T}, arg...; kwargs...) where T
+function qr(A::AbstractMatrix, arg...; kwargs...)
     require_one_based_indexing(A)
-    AA = copy_similar(A, _qreltype(T))
+    AA = copy_similar(A, _qreltype(A))
     return _qr(AA, arg...; kwargs...)
 end
 # TODO: remove in Julia v2.0
@@ -458,7 +466,7 @@ Array(F::QRPivoted) = Matrix(F)
 
 function show(io::IO, mime::MIME{Symbol("text/plain")}, F::Union{QR, QRCompactWY, QRPivoted})
     summary(io, F); println(io)
-    print(io, "Q factor: ")
+    println(io, "Q factor:")
     show(io, mime, F.Q)
     println(io, "\nR factor:")
     show(io, mime, F.R)

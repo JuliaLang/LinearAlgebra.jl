@@ -178,7 +178,7 @@ Base.iterate(C::CholeskyPivoted, ::Val{:done}) = nothing
 
 
 # make a copy that allow inplace Cholesky factorization
-choltype(A) = promote_type(typeof(sqrt(oneunit(eltype(A)))), Float32)
+choltype(A) = promote_type(typeof(sqrt(oneunit(_valeltype(A)))), Float32)
 cholcopy(A::AbstractMatrix) = eigencopy_oftype(A, choltype(A))
 
 # _chol!. Internal methods for calling unpivoted Cholesky
