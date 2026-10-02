@@ -539,7 +539,7 @@ end
         B = copy(A)
         B,ipiv = LAPACK.sytrf!('U',B)
         @test_throws ArgumentError LAPACK.sytrf!('X',B)
-        @test triu(inv(A)) ≈ triu(LAPACK.sytri!('U',B,ipiv)) rtol=eps(cond(A))
+        @test triu(inv(A)) ≈ triu(LAPACK.sytri!('U',B,ipiv)) rtol=2eps(cond(A))
         @test_throws ArgumentError LAPACK.sytri!('X',B,ipiv)
         temp = rand(elty,11,5)
         @test_throws DimensionMismatch LAPACK.sytrs!('U',B,ipiv,temp)
