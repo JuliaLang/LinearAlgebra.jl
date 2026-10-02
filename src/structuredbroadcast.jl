@@ -260,9 +260,19 @@ function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:LeftAbsorbingFuncs, <:T
 end
 
 function fzero(bc::Broadcast.Broadcasted{<:Union{Nothing, Broadcast.BroadcastStyle}, <:Any, <:ZeroAbsorbingFuncs})
-    args = map(x -> fzero(bc.f, x), bc.args)
+    args = map(fzero, bc.args)::Tuple
+    if any(isnothing, args)
+        # A structural zero lets us ignore the values of dense array arguments.
+        any(map(isstructuralzero, bc.args, args)) || return nothing
+        args = map((x, v) -> isnothing(v) ? fzero(bc.f, x) : v, bc.args, args)
+    end
     return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
 end
+function isstructuralzero(::Union{StructuredMatrix, Broadcast.Broadcasted}, v::Some)
+    z = something(v)
+    return iszerodefined(typeof(z)) ? iszero(z) : isequal(z, 0)
+end
+isstructuralzero(x, v) = false
 
 function fzero(bc::Broadcast.Broadcasted)
     # Type-assert to prevent inference from widening the result type to AbstractArray.
