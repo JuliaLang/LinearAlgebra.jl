@@ -86,12 +86,131 @@ end
         @test U isa AbstractMatrix{<:Union{Real,Complex}}
         @test V isa AbstractMatrix{<:Union{Real,Complex}}
         @test s isa AbstractVector{<:Furlong{1}}
-        E = eigen(Du)
+        E = eigen(Du; sortby=nothing)
         vals, vecs = E
         @test Matrix(E) == Du
         @test vals isa AbstractVector{<:Furlong{1}}
         @test vecs isa AbstractMatrix{<:Union{Real,Complex}}
+        # default `sortby` (`eigsortby` needs a fallback for numbers that are neither `Real` nor `Complex`)
+        Es = eigen(Du)
+        p = sortperm(dd, by=LinearAlgebra.eigsortby)
+        @test Es.values == Furlong.(dd[p])
+        @test Es.values isa AbstractVector{<:Furlong{1}}
+        @test Es.vectors == Matrix(I, n, n)[:, p]
+        @test Du * Es.vectors == Es.vectors * Diagonal(Es.values)
+        @test eigvals(Du) == Es.values
     end
+end
+
+@testset "pinv with dimensionful matrices" begin
+    d = [3.0, 0.0, -2.0]
+    A = Matrix(Diagonal(Furlong.(d)))  # a `Matrix`, so that the generic `pinv(::AbstractMatrix)` is exercised
+    P = pinv(A)
+    @test P isa Matrix{<:Furlong{-1}}
+    @test P == Matrix(Diagonal([Furlong{-1}(inv(3.0)), Furlong{-1}(0.0), Furlong{-1}(inv(-2.0))]))
+    @test map(getval, A * P * A) ≈ map(getval, A)
+    # `rtol` is relative (dimensionless), `atol` defaults to a plain 0
+    @test pinv(A; rtol = 0.5) == P
+    @test pinv(A; rtol = 0.7) == Matrix(Diagonal([Furlong{-1}(inv(3.0)), Furlong{-1}(0.0), Furlong{-1}(0.0)]))
+    # the absolute tolerance has the units of the singular values
+    @test pinv(A; atol = Furlong(1.0)) == P
+    @test pinv(A; atol = Furlong(2.5)) == Matrix(Diagonal([Furlong{-1}(inv(3.0)), Furlong{-1}(0.0), Furlong{-1}(0.0)]))
+    @test pinv(Matrix{Furlong{1,Float64}}(undef, 0, 2)) isa Matrix{<:Furlong{-1}}
+    @test pinv(Furlong(2.0)) == Furlong{-1}(0.5)
+    # dimensionless matrices are unaffected
+    @test pinv(Matrix(Diagonal(d))) == Matrix(Diagonal([inv(3.0), 0.0, inv(-2.0)]))
+    @test pinv(Matrix(Diagonal([2, 0]))) == [0.5 0.0; 0.0 0.0]
+    @test pinv(Matrix(Diagonal([2//1, 0//1]))) == [0.5 0.0; 0.0 0.0]
+end
+
+@testset "isapprox for dimensionful arrays" begin
+    x = Furlong.([1.0, 2.0])
+    # the default `atol = 0` must not be compared with the dimensionful `rtol*max(norm(x), norm(y))`
+    @test isapprox(x, Furlong.([1.0, 2.0 + 1e-10]); rtol=1e-8)
+    @test !isapprox(x, Furlong.([1.0, 2.0 + 1e-6]); rtol=1e-8)
+    @test isapprox(x, x; rtol=0)
+    @test !isapprox(x, Furlong.([1.0, 3.0]); rtol=0)
+    @test isapprox(Furlong.([0.0 1.0; 2.0 3.0]), Furlong.([0.0 1.0; 2.0 3.0 + 1e-10]); rtol=1e-8)
+    # the absolute tolerance has the units of the compared arrays
+    @test isapprox(x, Furlong.([1.0, 2.0 + 1e-10]); atol=Furlong(1e-8), rtol=0)
+    @test !isapprox(x, Furlong.([1.0, 2.0 + 1e-6]); atol=Furlong(1e-8), rtol=0)
+    @test isapprox(x, Furlong.([1.0, 2.0 + 1e-6]); atol=Furlong(1e-8), rtol=1e-5)
+    # default tolerances need `Base.rtoldefault` for dimensionful eltypes (JuliaLang/julia#63503)
+    if hasmethod(Base.rtoldefault, Tuple{Type{Furlong{1,Float64}}})
+        @test x ≈ Furlong.([1.0, 2.0 + 1e-10])
+        @test x ≉ Furlong.([1.0, 2.0 + 1e-6])
+        @test isapprox(x, Furlong.([1.0, 2.0 + 1e-10]); atol=Furlong(1e-8))
+    else
+        @test_broken x ≈ Furlong.([1.0, 2.0 + 1e-10])
+    end
+end
+
+@testset "SVD with dimensionful singular values" begin
+    # there is no generic `svd`, but an `SVD` with dimensionless `U`, `Vt` and dimensionful
+    # singular values is what e.g. `svd(::Diagonal)` produces; build one by hand
+    A0 = [2.0 0.0 1.0; 0.0 0.0 0.0; 1.0 0.0 2.0; 0.0 0.0 0.0] # singular values 3, 1, 0
+    F0 = svd(A0)
+    s = [3.0, 1.0, 0.0]
+    @test F0.S ≈ s atol=1e-12
+    F = SVD(F0.U, Furlong.(s), F0.Vt)
+    A = F0.U * Diagonal(Furlong.(s)) * F0.Vt
+    @test A isa Matrix{<:Furlong{1}}
+    @test map(getval, Matrix(F)) ≈ A0
+    @test svdvals(F) == Furlong.(s)
+    @test svdvals(F) isa Vector{<:Furlong{1}}
+    # rank: `atol` has the units of the singular values, `rtol` is relative
+    @test rank(F) == 2
+    @test rank(F; atol=Furlong(2.0)) == 1
+    @test rank(F; rtol=0.5) == 1
+    @test rank(F; atol=Furlong(0.5), rtol=0.5) == 1
+    # pinv: inverse units
+    P = pinv(F)
+    @test P isa SVD
+    @test P.S isa Vector{<:Furlong{-1}}
+    @test P.S == Furlong{-1}.([1.0, inv(3.0)])
+    @test map(getval, Matrix(P)) ≈ pinv(A0)
+    @test map(getval, Matrix(pinv(F; atol=Furlong(2.0)))) ≈ pinv(A0; atol=2.0)
+    @test map(getval, Matrix(pinv(F; rtol=0.5))) ≈ pinv(A0; rtol=0.5)
+    @test map(getval, Matrix(inv(SVD(F0.U[1:3, :], Furlong.([3.0, 2.0, 1.0]), F0.Vt)))) ≈ inv(F0.U[1:3, :] * Diagonal([3.0, 2.0, 1.0]) * F0.Vt)
+    # solving with a dimensionless factorization and a dimensionful right-hand side
+    b0 = [1.0, 2.0, 3.0, 4.0]
+    b = Furlong.(b0)
+    x = F0 \ b
+    @test x isa Vector{<:Furlong{1}}
+    @test map(getval, x) ≈ F0 \ b0
+    @test map(getval, ldiv!(F0, copy(b))[1:3]) ≈ F0 \ b0
+    # solving with dimensionful singular values needs the solution in different units than
+    # the right-hand side, which the in-place `ldiv!` cannot provide
+    @test_broken F \ b isa Vector{<:Furlong{0}}
+end
+
+@testset "solves with a dimensionful right-hand side" begin
+    A0 = [4.0 1.0 0.0; 1.0 5.0 2.0; 0.0 2.0 6.0]
+    b0 = [1.0, 2.0, 3.0]
+    b = Furlong.(b0)
+    x0 = A0 \ b0
+    # a dimensionless matrix and a dimensionful right-hand side: the solution has the units of `b`
+    for x in (A0 \ b, lu(A0) \ b, cholesky(A0) \ b)
+        @test x isa Vector{<:Furlong{1}}
+        @test map(getval, x) ≈ x0
+    end
+    X = A0 \ [b b]
+    @test X isa Matrix{<:Furlong{1}}
+    @test map(getval, X) ≈ [x0 x0]
+    # the factorization is promoted to the numeric type of the solution (Float32 -> Float64)
+    # while keeping its (here trivial) units
+    F32 = lu(Float32.(A0))
+    x32 = F32 \ b
+    @test x32 isa Vector{Furlong{1,Float64}}
+    @test map(getval, x32) == LU{Float64}(F32) \ b0
+    @test F32 \ Float64.(b0) isa Vector{Float64}
+    @test F32 \ Float32.(b0) isa Vector{Float32}
+    # numeric promotion of the matrix is unchanged
+    @test [4 1; 1 5] \ [1.0, 2.0] isa Vector{Float64}
+    @test [4 1; 1 5] \ [1, 2] isa Vector{Float64}
+    @test [4.0 1; 1 5] \ [1.0im, 2.0] isa Vector{ComplexF64}
+    # a dimensionful matrix still fails inside `ldiv` (the factors and the solution have different units)
+    @test_broken Furlong.(A0) \ b isa Vector{<:Furlong{0}}
 end
 
 # givens
@@ -200,6 +319,23 @@ end
     @test inv(D)::UnitLowerTriangular == Furlong{-1}.(UnitLowerTriangular([1 0; -4 1]))
     b = [Furlong(5), Furlong(8)]
     @test (C \ b)::Vector{<:Furlong{0}} == (D \ b)::Vector{<:Furlong{0}} == Furlong{0}.([5, -12])
+end
+
+@testset "unitful 3-arg *" begin
+    for n in (2, 3, 5)
+        λ = 5
+        A = rand(-10:10, n, n)
+        b = rand(-10:10, n)
+        λu = Furlong{1}(λ)
+        Au = Furlong{1}.(A)
+        bu = Furlong{1}.(b)
+        @test Furlong{3}.(A*A*λ) == Au*Au*λu
+        @test Furlong{3}.(A'*A*λ) == Au'*Au*λu
+        @test Furlong{3}.(A*A'*λ) == Au*Au'*λu
+        @test Furlong{3}.(A'*A'*λ) == Au'*Au'*λu
+        @test Furlong{3}.(A*b*λ) == Au*bu*λu
+        @test Furlong{3}.(A'*b*λ) == Au'*bu*λu
+    end
 end
 
 end # module TestUnitfulLinAlg

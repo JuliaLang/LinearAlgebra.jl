@@ -47,6 +47,8 @@ Random.seed!(1)
             # from vectors
             ubd = Bidiagonal(x, y, :U)
             lbd = Bidiagonal(x, y, :L)
+            @test LinearAlgebra.uplo(ubd) == :U
+            @test LinearAlgebra.uplo(lbd) == :L
             @test ubd != lbd || x === dv0
             @test ubd.dv === x
             @test lbd.ev === y
@@ -401,8 +403,8 @@ Random.seed!(1)
 
         @testset "Eigensystems" begin
             if relty <: AbstractFloat
-                d1, v1 = eigen(T)
-                d2, v2 = eigen(map(elty<:Complex ? ComplexF64 : Float64,Tfull), sortby=nothing)
+                d1, v1 = eigen(T; sortby=nothing)
+                d2, v2 = eigen(map(elty<:Complex ? ComplexF64 : Float64,Tfull); sortby=nothing)
                 @test (uplo === :U ? d1 : reverse(d1)) ≈ d2
                 if elty <: Real
                     test_approx_eq_modphase(v1, uplo === :U ? v2 : v2[:,n:-1:1])
@@ -796,6 +798,12 @@ end
     @test convert(AbstractMatrix{Float64}, Bu)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bu
     @test convert(AbstractArray{Float64}, Bl)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bl
     @test convert(AbstractMatrix{Float64}, Bl)::Bidiagonal{Float64,ImmutableArray{Float64,1,Array{Float64,1}}} == Bl
+
+    @testset "convert to Bidiagonal from same type" begin
+        @test convert(typeof(Bu), Bu) === Bu
+        @test convert(Bidiagonal{eltype(Bu)}, Bu) === Bu
+        @test convert(Bidiagonal, Bu) === Bu
+    end
 end
 
 @testset "block-bidiagonal matrix" begin
@@ -1149,7 +1157,9 @@ end
                 Bidiagonal([2], Int[], 'L'),
                 Bidiagonal([2], Int[], 'U'),
                 Bidiagonal([1,-2], [-4], 'U'),
-                Bidiagonal([1,-2], [-4], 'L')
+                Bidiagonal([1,-2], [-4], 'L'),
+                Bidiagonal([100, 2, 3], [1, 1], 'U'),  # first column dominates 1-norm
+                Bidiagonal([100, 2, 3], [1, 1], 'L'),  # first row dominates Inf-norm
             )
         @test opnorm(B, 1) == opnorm(Matrix(B), 1)
         @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
@@ -1283,6 +1293,28 @@ end
         @test B == B2
         LinearAlgebra.fillband!(B, 0, 10, 10)
         @test B == B2
+    end
+end
+
+@testset "eigenvalue sorting" begin
+    for T in (Float64, ComplexF64, Float16, ComplexF16)
+        B = Bidiagonal(randn(T, 4), randn(T, 3), :U)
+        @test eigvals(B; sortby=nothing) == diag(B)
+        F = eigen(B)
+        @test issorted(F.values, by=LinearAlgebra.eigsortby) #sort by default
+        @test B * F.vectors ≈ F.vectors * Diagonal(F.values)
+        @test F.values == sort!(diag(B), by=LinearAlgebra.eigsortby) == eigvals(B; sortby = LinearAlgebra.eigsortby)
+        @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
+    end
+end
+
+@testset "AdjOrTrans of Bidiagonal" begin
+    for t in (Transpose, Adjoint)
+        @test t(Bidiagonal(ones(5), ones(4), :L)) \ ones(5) ≈ [1.0, 0.0, 1.0, 0.0, 1.0]
+        @test ldiv!(t(Bidiagonal(ones(5), ones(4), :L)), ones(5)) ≈ [1.0, 0.0, 1.0, 0.0, 1.0]
+        @test ldiv!(zeros(5), t(Bidiagonal(ones(5), ones(4), :L)), ones(5)) ≈ [1.0, 0.0, 1.0, 0.0, 1.0]
+        @test ones(5, 5) / t(Bidiagonal(ones(5), ones(4), :L)) ≈ [float(isodd(j)) for i in 1:5, j in 1:5]
+        @test rdiv!(ones(5,5), t(Bidiagonal(ones(5), ones(4), :U))) ≈ [float(isodd(j)) for i in 1:5, j in 1:5]
     end
 end
 

@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.StridedArrays
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
@@ -436,6 +437,9 @@ end
     @test pinv(Transpose(realvec))::Vector{Float64} ≈ pinv(rowrealvec)
     @test pinv(Adjoint(complexvec))::Vector{ComplexF64} ≈ pinv(conj(rowcomplexvec))
     @test pinv(Transpose(complexvec))::Vector{ComplexF64} ≈ pinv(rowcomplexvec)
+    # test that tol is passed through for TransposeAbsVec
+    @test pinv(Transpose(realvec), 1e100) == zeros(4)
+    @test pinv(Adjoint(realvec), 1e100) == zeros(4)
 end
 
 @testset "Adjoint/Transpose-wrapped vector left-division" begin
@@ -568,12 +572,22 @@ end
     @test repr(transpose([1f0,2f0])) == "transpose(Float32[1.0, 2.0])"
 end
 
+struct SVector4{T} <: AbstractArray{T,1}
+    x::NTuple{4, T}
+end
+Base.getindex(A::SVector4, ind::Int) = A.x[ind]
+Base.size(::SVector4) = (4,)
+
 @testset "strided transposes" begin
     for t in (Adjoint, Transpose)
         @test strides(t(rand(3))) == (3, 1)
+        check_strided_get(t(rand(3)))
         @test strides(t(rand(3,2))) == (3, 1)
+        check_strided_get(t(rand(3,2)))
         @test strides(t(view(rand(3, 2), :))) == (6, 1)
+        check_strided_get(t(view(rand(3, 2), :)))
         @test strides(t(view(rand(3, 2), :, 1:2))) == (3, 1)
+        check_strided_get(t(view(rand(3, 2), :, 1:2)))
 
         A = rand(3)
         @test pointer(t(A)) === pointer(A)
@@ -584,6 +598,10 @@ end
     @test_throws MethodError strides(Adjoint(rand(3, 2) .+ rand(3, 2).*im))
     @test strides(Transpose(rand(3) .+ rand(3).*im)) == (3, 1)
     @test strides(Transpose(rand(3, 2) .+ rand(3, 2).*im)) == (3, 1)
+    static_matrix = reshape(SVector4((1,2,3,4)), 2, 2)
+    # `strides` should fail here since elements need to be transposed.
+    @test Transpose(fill(static_matrix, 2, 2))[1,1] != static_matrix
+    @test_throws MethodError strides(Transpose(fill(static_matrix, 2, 2)))
 
     C = rand(3) .+ rand(3).*im
     @test_throws ErrorException pointer(Adjoint(C))
@@ -790,7 +808,7 @@ end
 
 @testset "diagview" begin
     for A in (rand(4, 4), rand(ComplexF64,4,4),
-                fill([1 2; 3 4], 4, 4))
+                fill([1 2; 3 4], 4, 4), 1:4)
         for k in -3:3
             @test diagview(A', k) == diag(A', k)
             @test diagview(transpose(A), k) == diag(transpose(A), k)
@@ -820,7 +838,7 @@ end
         @test LinearAlgebra.fillstored!(op(U), 2im) == op(triu(fill(f(2im), size(U))))
     end
 end
-        
+
 @testset "lmul!/rmul! by numbers" begin
     @testset "$(eltype(A))" for A in (rand(4, 4), rand(ComplexF64,4,4),
                 fill([1 2; 3 4], 4, 4),

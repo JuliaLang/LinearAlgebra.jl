@@ -332,6 +332,30 @@ end
     @test allnames == ["L", "P", "U", "factors", "info", "ipiv", "p"]
 end
 
+struct TaggedArray{T,N} <: AbstractArray{T,N}
+    a::Array{T,N}
+end
+Base.size(A::TaggedArray) = size(A.a)
+Base.IndexStyle(::Type{<:TaggedArray}) = IndexLinear()
+Base.getindex(A::TaggedArray, i::Int) = A.a[i]
+Base.setindex!(A::TaggedArray, v, i::Int) = (A.a[i] = v; A)
+Base.similar(::TaggedArray, ::Type{T}, dims::Dims{N}) where {T,N} =
+    TaggedArray(Array{T,N}(undef, dims))
+
+@testset "Issue #1604. lu preserves the input array type" begin
+    A = TaggedArray(Rational{Int}[2 1 0; 1 2 1; 0 1 2])
+    F = lu(A)
+    @test F.factors isa TaggedArray{Rational{Int},2}
+    @test F.ipiv isa TaggedArray{LinearAlgebra.BlasInt,1}
+
+    T = Tridiagonal(TaggedArray([1.0, 1.0]),
+                    TaggedArray([4.0, 4.0, 4.0]),
+                    TaggedArray([1.0, 1.0]))
+    G = lu(T)
+    @test G.factors isa Tridiagonal{Float64,TaggedArray{Float64,1}}
+    @test G.ipiv isa TaggedArray{LinearAlgebra.BlasInt,1}
+end
+
 include("trickyarithmetic.jl")
 
 @testset "lu with type whose sum is another type" begin

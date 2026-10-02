@@ -369,16 +369,16 @@ convert(::Type{Transpose{T,S}}, A::Transpose) where {T,S} = Transpose{T,S}(conve
 
 # Strides and pointer for transposed strided arrays — but only if the elements are actually stored in memory
 Base.strides(A::Adjoint{<:Real, <:AbstractVector}) = (stride(A.parent, 2), stride(A.parent, 1))
-Base.strides(A::Transpose{<:Any, <:AbstractVector}) = (stride(A.parent, 2), stride(A.parent, 1))
+Base.strides(A::Transpose{<:Number, <:AbstractVector}) = (stride(A.parent, 2), stride(A.parent, 1))
 # For matrices it's slightly faster to use reverse and avoid calling stride twice
 Base.strides(A::Adjoint{<:Real, <:AbstractMatrix}) = reverse(strides(A.parent))
-Base.strides(A::Transpose{<:Any, <:AbstractMatrix}) = reverse(strides(A.parent))
+Base.strides(A::Transpose{<:Number, <:AbstractMatrix}) = reverse(strides(A.parent))
 
 Base.cconvert(::Type{Ptr{T}}, A::Adjoint{<:Real, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
-Base.cconvert(::Type{Ptr{T}}, A::Transpose{<:Any, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
+Base.cconvert(::Type{Ptr{T}}, A::Transpose{<:Number, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
 
 Base.elsize(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVecOrMat} = Base.elsize(P)
-Base.elsize(::Type{<:Transpose{<:Any, P}}) where {P<:AbstractVecOrMat} = Base.elsize(P)
+Base.elsize(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVecOrMat} = Base.elsize(P)
 
 # for vectors, the semantics of the wrapped and unwrapped types differ
 # so attempt to maintain both the parent and wrapper type insofar as possible
@@ -536,7 +536,7 @@ lmul!(s::Number, X::Adjoint) = (rmul!(parent(X), s'); X)
 
 ## pseudoinversion
 pinv(v::AdjointAbsVec, tol::Real = 0) = pinv(v.parent, tol).parent
-pinv(v::TransposeAbsVec, tol::Real = 0) = pinv(conj(v.parent)).parent
+pinv(v::TransposeAbsVec, tol::Real = 0) = pinv(conj(v.parent), tol).parent
 
 
 ## left-division \
@@ -575,8 +575,8 @@ Compute `vec(adjoint(A))`, but avoid an allocating reshape if possible
 _vecadjoint(A::AbstractVector) = vec(adjoint(A))
 _vecadjoint(A::Base.ReshapedArray{<:Any,1,<:AdjointAbsVec}) = adjoint(parent(A))
 
-diagview(A::Transpose, k::Integer = 0) = _vectranspose(diagview(parent(A), -k))
-diagview(A::Adjoint, k::Integer = 0) = _vecadjoint(diagview(parent(A), -k))
+diagview(A::TransposeAbsMat, k::Integer = 0) = _vectranspose(diagview(parent(A), -k))
+diagview(A::AdjointAbsMat, k::Integer = 0) = _vecadjoint(diagview(parent(A), -k))
 
 # triu and tril
 triu!(A::AdjOrTransAbsMat, k::Integer = 0) = wrapperop(A)(tril!(parent(A), -k))
