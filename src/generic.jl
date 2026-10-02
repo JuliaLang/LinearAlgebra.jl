@@ -1250,7 +1250,8 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
-    T = promote_op(\, eltype(A), eltype(B))
+    T = promote_op(\, _valeltype(A), _valeltype(B))
+    TA = promote_op(*, _valeltype(A), typeof(one(T)))
     if m == n
         if istril(A)
             if istriu(A)
@@ -1262,11 +1263,6 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-    end
-    # `T` is the type of the solution; promote the numeric type of `A` accordingly
-    # (e.g. `Int` -> `Float64`), but keep the units of `A` (`one(T)` is dimensionless)
-    TA = promote_type(eltype(A), typeof(oneunit(eltype(A)) * one(T)))
-    if m == n
         return lu(convert(AbstractArray{TA}, A)) \ B
     end
     return qr(convert(AbstractArray{TA}, A), ColumnNorm()) \ B
