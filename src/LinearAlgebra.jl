@@ -734,11 +734,14 @@ const LAPACKFactorizations{T,S} = Union{
 (\)(F::AdjointFactorization{<:Any,<:LAPACKFactorizations}, B::AbstractVecOrMat) = ldiv(F, B)
 (\)(F::TransposeFactorization{<:Any,<:LU}, B::AbstractVecOrMat) = ldiv(F, B)
 
-# return the "scalar" type for vector fields, if possible
+# the "scalar" type underlying an element type: for elements that are themselves vectors
+# (e.g. static vectors) their element type, recursively; otherwise (numbers, but also scalar
+# types that are not `Number`s, whose `eltype` is `Any`) the type itself
 _scalartype(::Type{T}) where {T<:Number} = T
-_scalartype(::Type{T}) where T = _scalartype(T, Base.IteratorEltype(T))
-_scalartype(::Type{T}, ::Base.HasEltype) where T = _scalartype(eltype(T))
-_scalartype(::Type{T}, ::Base.EltypeUnknown) where T = T
+function _scalartype(::Type{T}) where {T}
+    S = eltype(T)
+    return (S === Any || S === T) ? T : _scalartype(S)
+end
 
 function ldiv(F::Factorization, B::AbstractVecOrMat)
     require_one_based_indexing(B)

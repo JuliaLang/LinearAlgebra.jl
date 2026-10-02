@@ -609,6 +609,23 @@ Base.transpose(a::ModInt{n}) where {n} = a  # see Issue 20978
 LinearAlgebra.Adjoint(a::ModInt{n}) where {n} = adjoint(a)
 LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
 
+@testset "scalar type of the right-hand side in ldiv" begin
+    _scalartype = LinearAlgebra._scalartype
+    @test _scalartype(Float64) === Float64
+    @test _scalartype(Complex{Int}) === Complex{Int}
+    @test _scalartype(Furlong{1,Float64}) === Furlong{1,Float64}
+    @test _scalartype(ModInt{2}) === ModInt{2}          # a scalar type that is not a `Number`
+    @test _scalartype(Vector{Float64}) === Float64      # vector-valued elements
+    @test _scalartype(Vector{Vector{ComplexF32}}) === ComplexF32
+    @test _scalartype(Any) === Any
+    # the factorization is promoted to the scalar type of the solution, keeping its units
+    A = [4.0 1.0; 1.0 3.0]
+    x = lu(Float32.(A)) \ Furlong.([1.0, 2.0])
+    @test x isa Vector{Furlong{1,Float64}}
+    @test map(x -> x.val, x) ≈ A \ [1.0, 2.0]
+    @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
+end
+
 @testset "Issue 22042" begin
     A = [ModInt{2}(1) ModInt{2}(0); ModInt{2}(1) ModInt{2}(1)]
     b = [ModInt{2}(1), ModInt{2}(0)]
