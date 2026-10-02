@@ -146,6 +146,85 @@ end
     @test !isfinite(r)
 end
 
+# exceptional cases, see Bindel et al., "On Computing Givens Rotations Reliably and Efficiently"
+@testset "givensAlgorithm - non-finite inputs" begin
+    for T in (Float32, Float64, BigFloat)
+        for (f, g, cs, sn, r) in ((Inf, 2, 1, 0, Inf), (-Inf, 2, 1, 0, -Inf),
+                                  (2, Inf, 0, 1, Inf), (-2, -Inf, 0, -1, Inf))
+            res = givensAlgorithm(T(f), T(g))
+            @test res isa NTuple{3,T}
+            @test res == (cs, sn, r)
+        end
+        for (f, g) in ((Inf, Inf), (-Inf, Inf), (NaN, 1), (1, NaN), (NaN, Inf))
+            @test all(isnan, givensAlgorithm(T(f), T(g)))
+        end
+    end
+    for T in (Float32, Float64)
+        CT = Complex{T}
+        for (f, g, cs, sn, r) in ((CT(Inf, 1), CT(2, 3), 1, 0, CT(Inf, 1)),
+                                  (CT(-Inf, Inf), CT(0, 1), 1, 0, CT(-Inf, Inf)),
+                                  (CT(1, 2), CT(Inf, 0), 0, CT(1, 2)/sqrt(T(5)), CT(Inf, Inf)),
+                                  (CT(0, -3), CT(1, -Inf), 0, 1, CT(0, -Inf)),
+                                  (CT(-2, 0), CT(-Inf, -Inf), 0, CT(1, -1)/sqrt(T(2)), CT(-Inf, 0)),
+                                  (CT(0), CT(1, -Inf), 0, CT(0, 1), CT(Inf, 0)))
+            c, s, ρ = givensAlgorithm(f, g)
+            @test c isa T && s isa CT && ρ isa CT
+            @test c == cs && s ≈ sn && ρ == r
+        end
+        for (f, g) in ((CT(Inf), CT(0, Inf)), (CT(NaN), CT(1)), (CT(1), CT(1, NaN)))
+            c, s, r = givensAlgorithm(f, g)
+            @test isnan(c) && isnan(s) && isnan(r)
+        end
+    end
+end
+
+# The exceptional cases should be the limits of the finite cases: compare the result for
+# infinite inputs to the result where each infinite component is replaced by a huge value.
+@testset "givensAlgorithm - non-finite inputs are limits of large inputs" begin
+    # replace ±Inf components by ±M
+    finitize(x::Real, M) = isinf(x) ? copysign(M, x) : x
+    finitize(z::Complex, M) = complex(finitize(real(z), M), finitize(imag(z), M))
+    # does x (computed with huge values M) approximate the limit y (computed with Inf)?
+    # The finite inputs are O(1), so the finite results converge like O(1/M).
+    function islimit(x::Real, y::Real, M)
+        isinf(y) ? sign(x) == sign(y) && abs(x) >= M/10 :
+            isapprox(x, y; atol=sqrt(eps(typeof(x))) + 10/M)
+    end
+    islimit(x::Complex, y::Complex, M) =
+        islimit(real(x), real(y), M) && islimit(imag(x), imag(y), M)
+    islimit(x::Tuple, y::Tuple, M) = all(islimit(a, b, M) for (a, b) in zip(x, y))
+
+    function check(f, g, T)
+        res = givensAlgorithm(f, g)
+        for M in (T(1e10), sqrt(floatmax(T)), floatmax(T)/4)
+            if isinf(f) && isinf(g)
+                # no limit: the rotation for huge inputs depends on their ratio
+                @test all(isnan, res)
+                c1, = givensAlgorithm(finitize(f, M), finitize(g, M))
+                c2, = givensAlgorithm(finitize(f, M), finitize(g, M/2))
+                @test isfinite(c1) && isfinite(c2) && !(c1 ≈ c2)
+            else
+                resM = givensAlgorithm(finitize(f, M), finitize(g, M))
+                @test all(isfinite, resM)
+                @test islimit(resM, res, M)
+            end
+        end
+    end
+
+    vals = (Inf, -Inf, 3, -2, 0)
+    @testset for T in (Float32, Float64, BigFloat)
+        for f in vals, g in vals
+            (isinf(f) || isinf(g)) && check(T(f), T(g), T)
+        end
+    end
+    @testset for T in (Float32, Float64)
+        cvals = [complex(T(a), T(b)) for a in vals for b in vals]
+        for f in cvals, g in cvals
+            (isinf(f) || isinf(g)) && check(f, g, T)
+        end
+    end
+end
+
 # ordering of compositions
 @testset "givens compositions ordering" begin
     R1, R2 = givens(1.,1.,1,2)[1], givens(1.,1.,2,3)[1]
