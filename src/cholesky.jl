@@ -570,8 +570,8 @@ function ldiv(C::Cholesky, B::AbstractVecOrMat)
     require_one_based_indexing(B)
     size(C, 1) == size(B, 1) || throw(DimensionMismatch("arguments must have the same number of rows"))
     U = C.uplo == 'U' ? UpperTriangular(C.factors) : LowerTriangular(C.factors)'
-    TY = typeof(oneunit(eltype(B)) / oneunit(T))
-    TX = typeof(oneunit(TY) / oneunit(T))
+    TY = typeof(zero(eltype(B)) / oneunit(T))  # `zero`: the elements of `B` need only form a vector space (cf. #1446)
+    TX = typeof(zero(TY) / oneunit(T))
     Y = ldiv!(similar(B, TY), U', B)
     return ldiv!(similar(B, TX), U, Y)
 end
