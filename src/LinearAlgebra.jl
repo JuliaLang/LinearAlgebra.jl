@@ -750,7 +750,10 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
 
     # For wide problem we (often) compute a minimum norm solution. The solution
     # is larger than the right hand side so we use size(F, 2).
-    TBB = typeof(zero(eltype(B)) / oneunit(eltype(F)))
+    # The buffer holds the elements of `B` scaled by the inverse unit of the factors: for
+    # scalar elements that is `TFB`, which also covers abstract element types of `B`
+    TB = eltype(B)
+    TBB = TB <: Union{AbstractArray,Tuple} ? typeof(zero(TB) / oneunit(eltype(F))) : TFB
     BB = _zeros(TBB, B, n)
 
     if n > size(B, 1)

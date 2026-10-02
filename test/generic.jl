@@ -630,6 +630,19 @@ LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
     @test x isa Vector{Furlong{1,Float64}}
     @test map(x -> x.val, x) ≈ A \ [1.0, 2.0]
     @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
+    # abstract element types of the right-hand side are narrowed to the type of its leaves
+    @test lu(A) \ Any[1, 2.0] isa Vector{Float64}
+    @test lu(A) \ Any[1 2; 3 4] isa Matrix{Float64}
+    @test lu(A) \ Number[1, 2im] isa Vector{ComplexF64}
+    @test lu(Float32.(A)) \ Number[1, 2im] isa Vector{ComplexF32}
+    @test lu(A) \ Any[Furlong(1.0), Furlong(2.0)] isa Vector{Furlong{1,Float64}}
+    for F in (lu(A), cholesky(A), qr(A), qr(A, ColumnNorm()))
+        @test F \ Any[1, 2.0] ≈ A \ [1.0, 2.0]
+    end
+    @test A \ Any[1, 2.0] ≈ A \ [1.0, 2.0]
+    @test [A; 1.0 1.0] \ Any[1, 2.0, 3] ≈ [A; 1.0 1.0] \ [1.0, 2.0, 3.0]   # least squares
+    M = ModInt{2}.([1 0; 1 1])
+    @test lu(M) \ Any[ModInt{2}(1), ModInt{2}(0)] == M \ ModInt{2}.([1, 0])
     # vector-valued right-hand side (#904): the elements of `b` are (static) vectors
     b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
     @test P(b) === Float64
