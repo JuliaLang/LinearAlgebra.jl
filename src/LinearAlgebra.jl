@@ -734,15 +734,6 @@ const LAPACKFactorizations{T,S} = Union{
 (\)(F::AdjointFactorization{<:Any,<:LAPACKFactorizations}, B::AbstractVecOrMat) = ldiv(F, B)
 (\)(F::TransposeFactorization{<:Any,<:LU}, B::AbstractVecOrMat) = ldiv(F, B)
 
-# the "scalar" type underlying an element type: for elements that are themselves vectors
-# (e.g. static vectors) their element type, recursively; otherwise (numbers, but also scalar
-# types that are not `Number`s, whose `eltype` is `Any`) the type itself
-_scalartype(::Type{T}) where {T<:Number} = T
-function _scalartype(::Type{T}) where {T}
-    S = eltype(T)
-    return (S === Any || S === T) ? T : _scalartype(S)
-end
-
 function ldiv(F::Factorization, B::AbstractVecOrMat)
     require_one_based_indexing(B)
     m, n = size(F)
@@ -751,7 +742,7 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
     end
 
     # scalar type of the solution (the elements of `B` may themselves be vectors)
-    TFB = typeof(zero(_scalartype(eltype(B))) / oneunit(eltype(F)))
+    TFB = typeof(zero(promote_leaf_eltypes(B)) / oneunit(eltype(F)))
     # promote the numeric type of the factorization to that of the solution (e.g. `Float32` ->
     # `Float64`), but keep its units: `TFB` itself may carry different units than the factors
     TF = typeof(oneunit(eltype(F)) * one(TFB))

@@ -18,7 +18,6 @@ using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.Furlongs
-using Main.LinearAlgebraTestHelpers.SizedArrays
 
 Random.seed!(123)
 
@@ -611,14 +610,20 @@ LinearAlgebra.Adjoint(a::ModInt{n}) where {n} = adjoint(a)
 LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
 
 @testset "scalar type of the right-hand side in ldiv" begin
-    _scalartype = LinearAlgebra._scalartype
-    @test _scalartype(Float64) === Float64
-    @test _scalartype(Complex{Int}) === Complex{Int}
-    @test _scalartype(Furlong{1,Float64}) === Furlong{1,Float64}
-    @test _scalartype(ModInt{2}) === ModInt{2}          # a scalar type that is not a `Number`
-    @test _scalartype(Vector{Float64}) === Float64      # vector-valued elements
-    @test _scalartype(Vector{Vector{ComplexF32}}) === ComplexF32
-    @test _scalartype(Any) === Any
+    P = LinearAlgebra.promote_leaf_eltypes
+    @test P([1.0, 2.0]) === Float64
+    @test P(Complex{Int}[1, 2im]) === Complex{Int}
+    @test P(Furlong.([1.0, 2.0])) === Furlong{1,Float64}
+    @test P(Any[Furlong(1.0), Furlong(2.0)]) === Furlong{1,Float64}
+    # scalar types that are not `Number`s, with and without a concrete element type
+    @test P(ModInt{2}.([1, 0])) === ModInt{2}
+    @test P((ModInt{2}(1), ModInt{2}(0))) === ModInt{2}
+    @test P(Any[ModInt{2}(1), ModInt{2}(0)]) === ModInt{2}
+    @test P([[ModInt{2}(1)], [ModInt{2}(0)]]) === ModInt{2}
+    # vector-valued elements
+    @test P([[1.0, 2.0], [3.0, 4.0]]) === Float64
+    @test P([[[1.0f0+2im]]]) === ComplexF32
+    @test P(Any[[1.0], [2.0f0]]) === Float64
     # the factorization is promoted to the scalar type of the solution, keeping its units
     A = [4.0 1.0; 1.0 3.0]
     x = lu(Float32.(A)) \ Furlong.([1.0, 2.0])
@@ -627,7 +632,7 @@ LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
     @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
     # vector-valued right-hand side (#904): the elements of `b` are (static) vectors
     b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
-    @test _scalartype(eltype(b)) === Float64
+    @test P(b) === Float64
     X = A \ [1.0 2.0; 3.0 4.0]   # the same system, component by component
     for F in (lu(A), lu(Float32.(A)), cholesky(A))
         x = F \ b
