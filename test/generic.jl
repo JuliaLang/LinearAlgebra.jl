@@ -609,6 +609,62 @@ Base.transpose(a::ModInt{n}) where {n} = a  # see Issue 20978
 LinearAlgebra.Adjoint(a::ModInt{n}) where {n} = adjoint(a)
 LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
 
+@testset "scalar type of the right-hand side in ldiv" begin
+    P = LinearAlgebra.promote_leaf_eltypes
+    @test P([1.0, 2.0]) === Float64
+    @test P(Complex{Int}[1, 2im]) === Complex{Int}
+    @test P(Furlong.([1.0, 2.0])) === Furlong{1,Float64}
+    @test P(Any[Furlong(1.0), Furlong(2.0)]) === Furlong{1,Float64}
+    # scalar types that are not `Number`s, with and without a concrete element type
+    @test P(ModInt{2}.([1, 0])) === ModInt{2}
+    @test P((ModInt{2}(1), ModInt{2}(0))) === ModInt{2}
+    @test P(Any[ModInt{2}(1), ModInt{2}(0)]) === ModInt{2}
+    @test P([[ModInt{2}(1)], [ModInt{2}(0)]]) === ModInt{2}
+    # vector-valued elements
+    @test P([[1.0, 2.0], [3.0, 4.0]]) === Float64
+    @test P([[[1.0f0+2im]]]) === ComplexF32
+    @test P(Any[[1.0], [2.0f0]]) === Float64
+    # the factorization is promoted to the scalar type of the solution, keeping its units
+    A = [4.0 1.0; 1.0 3.0]
+    x = lu(Float32.(A)) \ Furlong.([1.0, 2.0])
+    @test x isa Vector{Furlong{1,Float64}}
+    @test map(x -> x.val, x) ≈ A \ [1.0, 2.0]
+    @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
+    # abstract element types of the right-hand side are narrowed to the type of its leaves
+    @test lu(A) \ Any[1, 2.0] isa Vector{Float64}
+    @test lu(A) \ Any[1 2; 3 4] isa Matrix{Float64}
+    @test lu(A) \ Number[1, 2im] isa Vector{ComplexF64}
+    @test lu(Float32.(A)) \ Number[1, 2im] isa Vector{ComplexF32}
+    @test lu(A) \ Any[Furlong(1.0), Furlong(2.0)] isa Vector{Furlong{1,Float64}}
+    for F in (lu(A), cholesky(A), qr(A), qr(A, ColumnNorm()))
+        @test F \ Any[1, 2.0] ≈ A \ [1.0, 2.0]
+    end
+    @test A \ Any[1, 2.0] ≈ A \ [1.0, 2.0]
+    @test [A; 1.0 1.0] \ Any[1, 2.0, 3] ≈ [A; 1.0 1.0] \ [1.0, 2.0, 3.0]   # least squares
+    M = ModInt{2}.([1 0; 1 1])
+    @test lu(M) \ Any[ModInt{2}(1), ModInt{2}(0)] == M \ ModInt{2}.([1, 0])
+    # vector-valued right-hand side (#904): the elements of `b` are (static) vectors
+    b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
+    @test P(b) === Float64
+    X = A \ [1.0 2.0; 3.0 4.0]   # the same system, component by component
+    for F in (lu(A), lu(Float32.(A)), cholesky(A), qr(A))
+        x = F \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+        @test all(((y, z),) -> y.data ≈ z.data, zip(A * x, b))
+    end
+    @test ldiv!(lu(A), copy(b)) isa Vector{<:SizedArray{(2,),Float64}}
+    # the generic `\` derives the solution type from the leaves of the right-hand side
+    for M in (A, Float32.(A), [4 1; 1 3])
+        x = M \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+    end
+    # not supported yet: the Householder kernel of the packed `QR` (used by the pivoted `qr`
+    # for least-squares problems) applies `dot` to the elements
+    @test_broken [A; 1.0 1.0] \ vcat(b, [b[1]]) isa Vector{<:SizedArray{(2,),Float64}}
+end
+
 @testset "Issue 22042" begin
     A = [ModInt{2}(1) ModInt{2}(0); ModInt{2}(1) ModInt{2}(1)]
     b = [ModInt{2}(1), ModInt{2}(0)]
