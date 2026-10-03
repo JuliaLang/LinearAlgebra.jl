@@ -572,14 +572,19 @@ function rank(A::QRPivoted; atol::Real=0, rtol::Real=min(size(A)...) * eps(real(
     return something(findfirst(i -> abs(A.factors[i,i]) <= tol, 1:m), m+1) - 1
 end
 
+# In-place solves store the right-hand side in the first m rows of B and overwrite
+# B with the n-row solution, so B must have exactly max(m, n) rows.
+function _check_qr_ldiv_rhs(A, B::AbstractVecOrMat)
+    m, n = size(A)
+    size(B, 1) == max(m, n) ||
+        throw(DimensionMismatch(lazy"B has $(size(B, 1)) rows, but needs exactly $(max(m, n))"))
+end
+
 # Julia implementation similar to xgelsy
 function ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractMatrix{T}, rcond::Real) where {T<:BlasFloat}
     require_one_based_indexing(B)
+    _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
-
-    if m > size(B, 1) || n > size(B, 1)
-        throw(DimensionMismatch(lazy"B has leading dimension $(size(B, 1)) but needs at least $(max(m, n))"))
-    end
 
     if length(A.factors) == 0 || length(B) == 0
         return B, 0
@@ -706,6 +711,8 @@ end
 
 
 function ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
+    require_one_based_indexing(B)
+    _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
     m < n && return _wide_qr_ldiv!(A, B)
 
