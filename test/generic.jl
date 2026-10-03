@@ -647,17 +647,15 @@ LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
     b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
     @test P(b) === Float64
     X = A \ [1.0 2.0; 3.0 4.0]   # the same system, component by component
-    for F in (lu(A), lu(Float32.(A)), cholesky(A))
+    for F in (lu(A), lu(Float32.(A)), cholesky(A), qr(A))
         x = F \ b
         @test x isa Vector{<:SizedArray{(2,),Float64}}
         @test all(i -> x[i].data ≈ X[i, :], 1:2)
         @test all(((y, z),) -> y.data ≈ z.data, zip(A * x, b))
     end
     @test ldiv!(lu(A), copy(b)) isa Vector{<:SizedArray{(2,),Float64}}
-    # not supported yet: the generic `\` promotes `A` with `one` of the solution eltype, and the
-    # QR solves require the same eltype for the factors and the right-hand side
+    # not supported yet: the generic `\` promotes `A` with `one` of the solution eltype
     @test_broken A \ b isa Vector{<:SizedArray{(2,),Float64}}
-    @test_broken qr(A) \ b isa Vector{<:SizedArray{(2,),Float64}}
 end
 
 @testset "Issue 22042" begin
