@@ -1250,7 +1250,8 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
-    T = promote_op(\, _valeltype(A), _valeltype(B))
+    # the scalar type of the solution: the elements of `B` may themselves be vectors
+    T = promote_op(\, _valeltype(A), promote_leaf_eltypes(B))
     TA = promote_op(*, _valeltype(A), typeof(one(T)))
     if m == n
         if istril(A)

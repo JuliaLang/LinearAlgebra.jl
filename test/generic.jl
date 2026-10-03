@@ -654,8 +654,15 @@ LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
         @test all(((y, z),) -> y.data ≈ z.data, zip(A * x, b))
     end
     @test ldiv!(lu(A), copy(b)) isa Vector{<:SizedArray{(2,),Float64}}
-    # not supported yet: the generic `\` promotes `A` with `one` of the solution eltype
-    @test_broken A \ b isa Vector{<:SizedArray{(2,),Float64}}
+    # the generic `\` derives the solution type from the leaves of the right-hand side
+    for M in (A, Float32.(A), [4 1; 1 3])
+        x = M \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+    end
+    # not supported yet: the Householder kernel of the packed `QR` (used by the pivoted `qr`
+    # for least-squares problems) applies `dot` to the elements
+    @test_broken [A; 1.0 1.0] \ vcat(b, [b[1]]) isa Vector{<:SizedArray{(2,),Float64}}
 end
 
 @testset "Issue 22042" begin
