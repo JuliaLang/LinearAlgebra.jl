@@ -5,8 +5,6 @@
 ## BLAS cutoff threshold constants
 
 #TODO const DOT_CUTOFF = 128
-const ASUM_CUTOFF = 32
-const NRM2_CUTOFF = 32
 
 # Generic cross-over constant based on benchmarking on a single thread with an i7 CPU @ 2.5GHz
 # L1 cache: 32K, L2 cache: 256K, L3 cache: 6144K
@@ -100,12 +98,6 @@ function norm(x::StridedVector{T}, rx::Union{UnitRange{TI},AbstractRange{TI}}) w
     end
     GC.@preserve x BLAS.nrm2(length(rx), pointer(x)+(first(rx)-1)*sizeof(T), step(rx))
 end
-
-norm1(x::Union{Array{T},StridedVector{T}}) where {T<:BlasReal} =
-    length(x) < ASUM_CUTOFF ? generic_norm1(x) : BLAS.asum(x)
-
-norm2(x::Union{Array{T},StridedVector{T}}) where {T<:BlasFloat} =
-    length(x) < NRM2_CUTOFF ? generic_norm2(x) : BLAS.nrm2(x)
 
 # Conservative assessment of types that have zero(T) defined for themselves
 """
@@ -235,22 +227,16 @@ function fillband!(A::AbstractMatrix{T}, x, l, u) where T
     return A
 end
 
-diagind(m::Integer, n::Integer, k::Integer=0) = diagind(IndexLinear(), m, n, k)
-diagind(::IndexLinear, m::Integer, n::Integer, k::Integer=0) =
-    k <= 0 ? range(1-k, step=m+1, length=min(m+k, n)) : range(k*m+1, step=m+1, length=min(m, n-k))
-
-function diagind(::IndexCartesian, m::Integer, n::Integer, k::Integer=0)
-    Cstart = CartesianIndex(1 + max(0,-k), 1 + max(0,k))
-    Cstep = CartesianIndex(1, 1)
-    length = max(0, k <= 0 ? min(m+k, n) : min(m, n-k))
-    StepRangeLen(Cstart, Cstep, length)
-end
+fillstored!(A::AbstractMatrix, v) = fill!(A, v)
 
 """
     diagind(M::AbstractMatrix, k::Integer = 0, indstyle::IndexStyle = IndexLinear())
     diagind(M::AbstractMatrix, indstyle::IndexStyle = IndexLinear())
+    diagind(::IndexStyle, m::Integer, n::Integer, k::Integer = 0)
+    diagind(m::Integer, n::Integer, k::Integer = 0)
 
-An `AbstractRange` giving the indices of the `k`th diagonal of the matrix `M`.
+An `AbstractRange` giving the indices of the `k`th diagonal of a matrix,
+specified either by the matrix `M` itself or by its dimensions `m` and `n`.
 Optionally, an index style may be specified which determines the type of the range returned.
 If `indstyle isa IndexLinear` (default), this returns an `AbstractRange{Integer}`.
 On the other hand, if `indstyle isa IndexCartesian`, this returns an `AbstractRange{CartesianIndex{2}}`.
@@ -260,6 +246,7 @@ If `k` is not provided, it is assumed to be `0` (corresponding to the main diago
 See also: [`diag`](@ref), [`diagm`](@ref), [`Diagonal`](@ref).
 
 # Examples
+The matrix itself may be passed to `diagind`:
 ```jldoctest
 julia> A = [1 2 3; 4 5 6; 7 8 9]
 3×3 Matrix{Int64}:
@@ -274,6 +261,18 @@ julia> diagind(A, IndexCartesian())
 StepRangeLen(CartesianIndex(1, 1), CartesianIndex(1, 1), 3)
 ```
 
+Alternatively, dimensions `m` and `n` may be passed to get the diagonal of an `m×n` matrix:
+```jldoctest
+julia> m, n = 5, 7
+(5, 7)
+
+julia> diagind(m, n, 2)
+11:6:35
+
+julia> diagind(IndexCartesian(), m, n)
+StepRangeLen(CartesianIndex(1, 1), CartesianIndex(1, 1), 5)
+```
+
 !!! compat "Julia 1.11"
      Specifying an `IndexStyle` requires at least Julia 1.11.
 """
@@ -283,6 +282,17 @@ function diagind(A::AbstractMatrix, k::Integer=0, indexstyle::IndexStyle = Index
 end
 
 diagind(A::AbstractMatrix, indexstyle::IndexStyle) = diagind(A, 0, indexstyle)
+
+function diagind(::IndexCartesian, m::Integer, n::Integer, k::Integer=0)
+    Cstart = CartesianIndex(1 + max(0,-k), 1 + max(0,k))
+    Cstep = CartesianIndex(1, 1)
+    length = max(0, k <= 0 ? min(m+k, n) : min(m, n-k))
+    StepRangeLen(Cstart, Cstep, length)
+end
+
+diagind(::IndexLinear, m::Integer, n::Integer, k::Integer=0) =
+    k <= 0 ? range(1-k, step=m+1, length=min(m+k, n)) : range(k*m+1, step=m+1, length=min(m, n-k))
+diagind(m::Integer, n::Integer, k::Integer=0) = diagind(IndexLinear(), m, n, k)
 
 """
     diag(M, k::Integer=0)
@@ -405,7 +415,9 @@ end
 function diagm_container(size, kv::Pair{<:Integer,<:AbstractVector}...)
     T = promote_type(map(x -> eltype(x.second), kv)...)
     # For some type `T`, `zero(T)` is not a `T` and `zeros(T, ...)` fails.
-    U = promote_type(T, typeof(zero(T)))
+    # The type assertion helps inference when `T` is not a constant type: otherwise `U`
+    # is inferred as `Any` and `zeros(U, ...)` may also dispatch to `zeros(dims::Integer...)`.
+    U = promote_type(T, typeof(zero(T)))::Type
     return zeros(U, diagm_size(size, kv...)...)
 end
 diagm_container(size, kv::Pair{<:Integer,<:BitVector}...) =
@@ -692,7 +704,7 @@ julia> exp(A)
  0.0      2.71828
 ```
 """
-exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(eltype(A))))
+exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(A)))
 exp(A::AdjointAbsMat) = adjoint(exp(parent(A)))
 exp(A::TransposeAbsMat) = transpose(exp(parent(A)))
 
@@ -978,7 +990,7 @@ log(A::AdjointAbsMat) = adjoint(log(parent(A)))
 log(A::TransposeAbsMat) = transpose(log(parent(A)))
 
 """
-    sqrt(A::AbstractMatrix)
+    sqrt(A::AbstractMatrix; check=true)
 
 If `A` has no negative real eigenvalues, compute the principal matrix square root of `A`,
 that is the unique matrix ``X`` with eigenvalues having positive real part such that
@@ -997,6 +1009,8 @@ Björck-Hammarling method [^BH83], which computes the complex Schur form ([`schu
 and then the complex square root of the triangular factor.
 If a real square root exists, then an extension of this method [^H87] that computes the real
 Schur form and then the real square root of the quasi-triangular factor is instead used.
+
+When a non-Hermitian matrix has two or more null eigenvalues, the square root may not exist. In this case, and when the `check` flag is true, the algorithm will verify `X^2≈A` and throw an error if not.
 
 [^BH83]:
 
@@ -1025,7 +1039,7 @@ julia> sqrt(A)
 """
 sqrt(::AbstractMatrix)
 
-function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
+function sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Real,Complex}}
     if checksquare(A) == 0
         return copy(float(A))
     elseif isdiag(A)
@@ -1035,33 +1049,33 @@ function sqrt(A::AbstractMatrix{T}) where {T<:Union{Real,Complex}}
             return applydiagonal(sqrt, A)
         end
     elseif ishermitian(A)
-        return _safe_parent(sqrt(Hermitian(A)))
+        return _safe_parent(sqrt(Hermitian(A); check))
     elseif istriu(A)
-        return triu!(parent(sqrt(UpperTriangular(A))))
+        return triu!(parent(sqrt(UpperTriangular(A); check)))
     elseif isreal(A)
         SchurF = schur(real(A))
         if istriu(SchurF.T)
-            sqrtA = SchurF.Z * sqrt(UpperTriangular(SchurF.T)) * SchurF.Z'
+            sqrtA = SchurF.Z * sqrt(UpperTriangular(SchurF.T); check) * SchurF.Z'
         else
             # real sqrt exists whenever no eigenvalues are negative
             is_sqrt_real = !any(x -> isreal(x) && real(x) < 0, SchurF.values)
             # sqrt_quasitriu uses LAPACK functions for non-triu inputs
             if typeof(sqrt(zero(T))) <: BlasFloat && is_sqrt_real
-                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T) * SchurF.Z'
+                sqrtA = SchurF.Z * sqrt_quasitriu(SchurF.T, SchurF.values; check) * SchurF.Z'
             else
                 SchurS = Schur{Complex}(SchurF)
-                sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T)) * SchurS.Z'
+                sqrtA = SchurS.Z * sqrt(UpperTriangular(SchurS.T); check) * SchurS.Z'
             end
         end
         return eltype(A) <: Complex ? complex(sqrtA) : sqrtA
     else
         SchurF = schur(A)
-        return SchurF.vectors * sqrt(UpperTriangular(SchurF.T)) * SchurF.vectors'
+        return SchurF.vectors * sqrt(UpperTriangular(SchurF.T); check) * SchurF.vectors'
     end
 end
 
-sqrt(A::AdjointAbsMat) = adjoint(sqrt(parent(A)))
-sqrt(A::TransposeAbsMat) = transpose(sqrt(parent(A)))
+sqrt(A::AdjointAbsMat; check::Bool=true) = adjoint(sqrt(parent(A); check))
+sqrt(A::TransposeAbsMat; check::Bool=true) = transpose(sqrt(parent(A); check))
 
 """
     cbrt(A::AbstractMatrix{<:Real})
@@ -1137,6 +1151,32 @@ end
 # otherwise, this performs an out-of-place broadcast
 @inline _broadcast!!(f, dest::StridedArray, args...) = broadcast!(f, dest, args...)
 @inline _broadcast!!(f, dest, args...) = broadcast(f, args...)
+
+"""
+    abs(A::AbstractMatrix)
+
+Compute the matrix absolute value `|A| = sqrt(A'A)`
+
+# Examples
+```jldoctest
+julia> A = [1.0 2.0; 3.0 4.0];
+
+julia> abs(A)
+2×2 Hermitian{Float64, Matrix{Float64}}:
+ 2.05798  2.40098
+ 2.40098  3.77297
+```
+"""
+function abs(A::AbstractMatrix{T}) where T
+    if isdiag(A)
+        f(x) = convert(AbstractMatrix{float(T)}, x) #preserves complexes and quaternions
+        return Hermitian(applydiagonal(f ∘ abs ∘ float, A))
+    elseif ishermitian(A)
+        return abs(Hermitian(A))
+    end
+    u, s, v = svd(A)
+    return Hermitian(v * Diagonal(s) * v')
+end
 
 """
     cos(A::AbstractMatrix)
@@ -1734,7 +1774,7 @@ end
 ## Moore-Penrose pseudoinverse
 
 """
-    pinv(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    pinv(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     pinv(M, rtol::Real) = pinv(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes the Moore-Penrose pseudoinverse.
@@ -1776,10 +1816,8 @@ julia> N = pinv(M)
   1.47287   -1.00775
  -0.930233   1.16279
 
-julia> M * N
-2×2 Matrix{Float64}:
- 1.0          -2.22045e-16
- 4.44089e-16   1.0
+julia> M * N ≈ I
+true
 ```
 
 [^pr1387]: PR 1387, "stable pinv least-squares", [LinearAlgebra.jl#1387](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387)
@@ -1790,9 +1828,10 @@ julia> M * N
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Number=zero(real(T)), rtol::Real = (eps(real(float(one(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
-    Tout = typeof(zero(T)/sqrt(oneunit(T) + oneunit(T)))
+    # inverse units of `T`, numeric type promoted as by a `sqrt` (Int -> Float64)
+    Tout = typeof(inv(oneunit(T)) / sqrt(one(T) + one(T)))
     if m == 0 || n == 0
         return similar(A, Tout, (n, m))
     end
@@ -1800,8 +1839,8 @@ function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(o
         dA = diagview(A)
         maxabsA = maximum(abs, dA)
         tol = max(rtol * maxabsA, atol)
-        B = fill!(similar(A, Tout, (n, m)), 0)
-        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(x)).(dA)
+        B = fill!(similar(A, Tout, (n, m)), zero(Tout))
+        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(Tout)).(dA)
         return B
     end
     SVD         = svd(A)
@@ -1820,7 +1859,7 @@ end
 ## Basis for null space
 
 """
-    nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    nullspace(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes a basis for the nullspace of `M` by including the singular
@@ -1858,7 +1897,7 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Number=zero(real(eltype(A))), rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)

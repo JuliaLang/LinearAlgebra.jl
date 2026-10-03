@@ -121,8 +121,8 @@ MulAddMul() = MulAddMul{true,true,Bool,Bool}(true, false)
 @inline (p::MulAddMul{false})(x) = x * p.alpha
 @inline (::MulAddMul{true, true})(x, _) = x
 @inline (p::MulAddMul{false, true})(x, _) = x * p.alpha
-@inline (p::MulAddMul{true, false})(x, y) = x + y * p.beta
-@inline (p::MulAddMul{false, false})(x, y) = x * p.alpha + y * p.beta
+@inline (p::MulAddMul{true, false})(x, y) = muladd(y, p.beta, x)
+@inline (p::MulAddMul{false, false})(x, y) = muladd(y, p.beta, x * p.alpha)
 
 _iszero_alpha(m::MulAddMul) = iszero(m.alpha)
 _iszero_alpha(m::MulAddMul{true}) = false
@@ -566,6 +566,14 @@ generic_normMinusInf(x) = float(mapreduce(norm, min, x))
 generic_normInf(x) = float(mapreduce(norm, max, x))
 
 generic_norm1(x) = mapreduce(float ∘ norm, +, x)
+function generic_norm1(x::AbstractArray{<:Number})
+    T = float(_valeltype(x))
+    res = zero(real(T))
+    @simd for xᵢ ∈ x
+        res += abs(T(xᵢ))
+    end
+    return res
+end
 
 # faster computation of norm(x)^2, avoiding overflow for integers
 norm_sqr(x) = norm(x)^2
@@ -579,24 +587,34 @@ function generic_norm2(x)
     T = typeof(maxabs)
     if isfinite(length(x)*maxabs*maxabs) && !iszero(maxabs*maxabs) # Scaling not necessary
         sum::promote_type(Float64, T) = norm_sqr(v)
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             sum += norm_sqr(v)
         end
         ismissing(sum) && return missing
         return convert(T, sqrt(sum))
     else
         sum = abs2(norm(v)/maxabs)
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             sum += (norm(v)/maxabs)^2
         end
         ismissing(sum) && return missing
         return convert(T, maxabs*sqrt(sum))
+    end
+end
+
+function generic_norm2(x::AbstractArray{<:Number})
+    T = _valeltype(x)
+    Tout = float(real(T))
+    !(Tout <: AbstractFloat) && return invoke(generic_norm2, Tuple{Any}, x)
+    Tsum = promote_type(Float64, T)
+    norm² = sum(abs2 ∘ Tsum, x)
+    if isfinite(norm²) && (norm² ≥ floatmin(norm²))
+        return convert(Tout, sqrt(norm²))  # fast path: no overflow/underflow or subnormals
+    else
+        k = exp2(floor(log2(floatmin(norm²))*3/4))
+        scale = isinf(norm²) ? k : inv(k)
+        res = sqrt(sum(x -> abs2(x * scale), x)) / scale
+        return convert(Tout, res)
     end
 end
 
@@ -614,10 +632,7 @@ function generic_normp(x, p)
     spp::promote_type(Float64, T) = p
     if -1 <= p <= 1 || (isfinite(length(x)*maxabs^spp) && !iszero(maxabs^spp)) # scaling not necessary
         sum::promote_type(Float64, T) = norm(v)^spp
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             ismissing(v) && return missing
             sum += norm(v)^spp
         end
@@ -625,10 +640,7 @@ function generic_normp(x, p)
     else # rescaling
         sum = (norm(v)/maxabs)^spp
         ismissing(sum) && return missing
-        while true
-            y = iterate(x, s)
-            y === nothing && break
-            (v, s) = y
+        for v in Iterators.rest(x, s)
             ismissing(v) && return missing
             sum += (norm(v)/maxabs)^spp
         end
@@ -938,7 +950,7 @@ vector is conjugated.
 `dot` also works on arbitrary iterable objects, including arrays of any dimension,
 as long as `dot` is defined on the elements.
 
-`dot` is semantically equivalent to `sum(dot(vx,vy) for (vx,vy) in zip(x, y))`,
+`dot` is semantically equivalent to `reduce(+, dot(vx,vy) for (vx,vy) in zip(x, y))`,
 with the added restriction that the arguments must have equal lengths.
 
 `x ⋅ y` (where `⋅` can be typed by tab-completing `\\cdot` in the REPL) is a synonym for
@@ -996,7 +1008,8 @@ function dot(x, y) # arbitrary iterables
     return s
 end
 
-dot(x::Number, y::Number) = conj(x) * y
+# the unary + is for type promotion in the Boolean case, mimicking the reduction in usual dot
+dot(x::Number, y::Number) = +(conj(x) * y)
 
 function dot(x::AbstractArray, y::AbstractArray)
     lx = length(x)
@@ -1004,7 +1017,8 @@ function dot(x::AbstractArray, y::AbstractArray)
         throw(DimensionMismatch(lazy"first array has length $(lx) which does not match the length of the second, $(length(y))."))
     end
     if lx == 0
-        return dot(zero(eltype(x)), zero(eltype(y)))
+        # make sure the returned result equals exactly the zero element
+        return zero(dot(zero(eltype(x)), zero(eltype(y))))
     end
     s = zero(dot(first(x), first(y)))
     for (Ix, Iy) in zip(eachindex(x), eachindex(y))
@@ -1045,6 +1059,8 @@ dot(x, A, y) = dot(x, A*y) # generic fallback for cases that are not covered by 
 
 function dot(x::AbstractVector, A::AbstractMatrix, y::AbstractVector)
     (axes(x)..., axes(y)...) == axes(A) || throw(DimensionMismatch())
+    # outermost zero call to avoid spurious sign ambiguity (like 0.0 - 0.0im)
+    any(isempty, (x, y)) && return zero(dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y))))
     T = typeof(dot(first(x), first(A), first(y)))
     s = zero(T)
     i₁ = first(eachindex(x))
@@ -1067,7 +1083,7 @@ dot(x::AbstractVector, transA::Transpose{<:Real}, y::AbstractVector) = adjoint(d
 ###########################################################################################
 
 """
-    rank(A::AbstractMatrix; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    rank(A::AbstractMatrix; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     rank(A::AbstractMatrix, rtol::Real)
 
 Compute the numerical rank of a matrix by counting how many outputs of
@@ -1109,7 +1125,7 @@ julia> rank(diagm(0 => [1, 0.001, 2]), atol=1.5)
 1
 ```
 """
-function rank(A::AbstractMatrix; atol::Real = 0.0, rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
+function rank(A::AbstractMatrix; atol::Number = zero(real(eltype(A))), rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
     isempty(A) && return 0 # 0-dimensional case
     s = svdvals(A)
     tol = max(atol, rtol*s[1])
@@ -1180,18 +1196,17 @@ end
 inv(A::Adjoint) = adjoint(inv(parent(A)))
 inv(A::Transpose) = transpose(inv(parent(A)))
 
-pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T<:Real} = _vectorpinv(transpose, v, tol)
-pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T<:Complex} = _vectorpinv(adjoint, v, tol)
-pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T} = _vectorpinv(adjoint, v, tol)
-function _vectorpinv(dualfn::Tf, v::AbstractVector{Tv}, tol) where {Tv,Tf}
-    res = dualfn(similar(v, typeof(zero(Tv) / (abs2(one(Tv)) + abs2(one(Tv))))))
+_pinvadjoint(v::AbstractVector{T}) where {T<:Real} = transpose(v)
+_pinvadjoint(v::AbstractVector) = adjoint(v)
+function pinv(v::AbstractVector{T}, tol::Real = real(zero(T))) where {T}
+    res = _pinvadjoint(similar(v, typeof(zero(T) / (abs2(one(T)) + abs2(one(T))))))
     den = sum(abs2, v)
     # as tol is the threshold relative to the maximum singular value, for a vector with
     # single singular value σ=√den, σ ≦ tol*σ is equivalent to den=0 ∨ tol≥1
     if iszero(den) || tol >= one(tol)
         fill!(res, zero(eltype(res)))
     else
-        res .= dualfn(v) ./ den
+        res .= _pinvadjoint(v) ./ den
     end
     return res
 end
@@ -1235,6 +1250,8 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
+    T = promote_op(\, _valeltype(A), _valeltype(B))
+    TA = promote_op(*, _valeltype(A), typeof(one(T)))
     if m == n
         if istril(A)
             if istriu(A)
@@ -1246,12 +1263,16 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(A) \ B
+        return lu(convert(AbstractArray{TA}, A)) \ B
     end
-    return qr(A, ColumnNorm()) \ B
+    return qr(convert(AbstractArray{TA}, A), ColumnNorm()) \ B
 end
 
-(\)(a::AbstractVector, b::AbstractArray) = pinv(a) * b
+function (\)(a::AbstractVector, b::AbstractArray)
+    den = sum(abs2, a)
+    goodden = den == 0 ? one(den) : den
+    return _pinvadjoint(a) * b / goodden
+end
 """
     A / B
 
@@ -1282,7 +1303,11 @@ function (/)(A::AbstractVecOrMat, B::AbstractVecOrMat)
 end
 # \(A::StridedMatrix,x::Number) = inv(A)*x Should be added at some point when the old elementwise version has been deprecated long enough
 # /(x::Number,A::StridedMatrix) = x*inv(A)
-/(x::Number, v::AbstractVector) = x*pinv(v)
+function (/)(x::Number, v::AbstractVector)
+    den = sum(abs2, v)
+    goodden = den == 0 ? one(den) : den
+    return (x / goodden) * _pinvadjoint(v)
+end
 
 cond(x::Number) = iszero(x) ? Inf : 1.0
 cond(x::Number, p) = cond(x)
@@ -1681,7 +1706,7 @@ end
     axpby!(α, x::AbstractArray, β, y::AbstractArray)
 
 Overwrite `y` with `x * α + y * β` and return `y`.
-If `x` and `y` have the same axes, it's equivalent with `y .= x .* a .+ y .* β`.
+If `x` and `y` have the same axes, it's equivalent with `y .= x .* α .+ y .* β`.
 
 # Examples
 ```jldoctest
@@ -1744,7 +1769,7 @@ function rotate!(x::AbstractVector, y::AbstractVector, c, s)
         @inbounds begin
             xi, yi = x[i], y[i]
             x[i] = s*yi +      c *xi
-            y[i] = c*yi - conj(s)*xi 
+            y[i] = c*yi - conj(s)*xi
         end
     end
     return x, y
@@ -1817,6 +1842,35 @@ Multiplies `A` in-place by a Householder reflection on the left. It is equivalen
 end
 
 """
+    reflectorApply!(A, x, τ)
+
+Multiplies `A` in-place by a Householder reflection on the right. It is equivalent to
+`A .= A * (I - [1; x[2:end]] * τ * [1; x[2:end]]')`.
+"""
+@inline function reflectorApply!(A::AbstractVecOrMat, x::AbstractVector, τ::Number)
+    require_one_based_indexing(A, x)
+    m, n = size(A, 1), size(A, 2)
+    if length(x) != n
+        throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the second dimension of matrix A, $n"))
+    end
+    n == 0 && return A
+    # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x` from
+    # the right, opposite to the left-applying method above
+    @inbounds for i in axes(A, 1)
+        Avi = A[i, 1]
+        for j in 2:n
+            Avi += A[i, j]*x[j]
+        end
+        Avi *= τ
+        A[i, 1] -= Avi
+        for j in 2:n
+            A[i, j] -= Avi*conj(x[j])
+        end
+    end
+    return A
+end
+
+"""
     det(M)
 
 Matrix determinant.
@@ -1845,15 +1899,19 @@ julia> det(BigInt[1 0; 2 2]) # exact integer determinant
 """
 function det(A::AbstractMatrix{T}) where {T}
     if istriu(A) || istril(A)
-        S = promote_type(T, typeof((one(T)*zero(T) + zero(T))/one(T)))
-        return prod(Base.Fix1(convert, S), @view A[diagind(A)]; init=one(S))
+        return det(UpperTriangular(A))
     end
     return det(lu(A; check = false))
 end
 det(x::Number) = x
 
 # Resolve Issue #40128
-det(A::AbstractMatrix{BigInt}) = det_bareiss(A)
+function det(A::AbstractMatrix{BigInt})
+    if istriu(A) || istril(A)
+        return det(UpperTriangular(A))
+    end
+    return det_bareiss(A)
+end
 
 """
     logabsdet(M)
@@ -1992,25 +2050,50 @@ julia> LinearAlgebra.promote_leaf_eltypes(a)
 ComplexF64 (alias for Complex{Float64})
 ```
 """
-promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Number} = T
-promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:NumberArray} = eltype(T)
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Number} =
+    isconcretetype(T) ? T : _promote_leaf_eltypes(x)
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:NumberArray} =
+    isconcretetype(eltype(T)) ? eltype(T) : _promote_leaf_eltypes(x)
+promote_leaf_eltypes(x::AbstractArray{Union{}}) = Bool
 promote_leaf_eltypes(x::T) where {T} = T
-promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = _promote_leaf_eltypes(x)
+_promote_leaf_eltypes(x::Tuple) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+function _promote_leaf_eltypes(x::AbstractArray)
+    # loop instead of mapreduce, to avoid a dynamic call to promote_type for every element
+    T = Bool
+    for el in x
+        S = el isa Number ? typeof(el) : promote_leaf_eltypes(el)
+        S === T || (T = promote_type(T, S))
+    end
+    return T
+end
 
 # isapprox: approximate equality of arrays [like isapprox(Number,Number)]
 # Supports nested arrays; e.g., for `a = [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]`
 # `a ≈ a` is `true`.
 function isapprox(x::AbstractArray, y::AbstractArray;
-    atol::Real=0,
+    atol::Number=zero(real(promote_leaf_eltypes(x))), # zero in the units of the elements
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
-    d = norm(x - y)
+    d = norm_x_minus_y(x, y, norm)
     if isfinite(d)
         return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
     else
         # Fall back to a component-wise approximate comparison
         # (mapreduce instead of all for greater generality [#44893])
         return mapreduce((a, b) -> isapprox(a, b; rtol=rtol, atol=atol, nans=nans), &, x, y)
+    end
+end
+
+norm_x_minus_y(x, y, nrm::F) where {F} = nrm(x - y)
+FastContiguousArrayView{T,N,P<:Array,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
+const ArrayOrFastContiguousArrayView = Union{Array, FastContiguousArrayView}
+function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView, ::typeof(norm))
+    Base.promote_shape(size(x), size(y)) # ensure compatible size
+    if isempty(x) && isempty(y)
+        norm(zero(eltype(x)) - zero(eltype(y)))
+    else
+        norm(Iterators.map(splat(-), zip(x,y)))
     end
 end
 
@@ -2021,21 +2104,12 @@ Normalize the array `a` in-place so that its `p`-norm equals unity,
 i.e. `norm(a, p) == 1`.
 See also [`normalize`](@ref) and [`norm`](@ref).
 """
-function normalize!(a::AbstractArray, p::Real=2)
+function normalize!(a::AbstractArray, p::Real=2) #logic equal to normalize, should be kept in sync
     nrm = norm(a, p)
-    __normalize!(a, nrm)
-end
-
-@inline function __normalize!(a::AbstractArray, nrm)
-    # The largest positive floating point number whose inverse is less than infinity
-    δ = inv(prevfloat(typemax(nrm)))
-    if nrm ≥ δ # Safe to multiply with inverse
-        invnrm = inv(nrm)
-        rmul!(a, invnrm)
-    else # scale elements to avoid overflow
-        εδ = eps(one(nrm))/δ
-        rmul!(a, εδ)
-        rmul!(a, inv(nrm*εδ))
+    if !issubnormal(nrm) # nrm is accurate and inverting won't overflow
+        rmul!(a, inv(nrm))
+    else # scale elements to be non-subnormal and re-normalize
+        normalize!(rmul!(a, inv(floatmin(nrm))), p)
     end
     return a
 end
@@ -2093,14 +2167,12 @@ julia> normalize(0, 1)
 NaN
 ```
 """
-function normalize(a::AbstractArray, p::Real = 2)
+function normalize(a::AbstractArray, p::Real = 2) #logic equal to normalize!, should be kept in sync
     nrm = norm(a, p)
-    if !isempty(a)
-        aa = copymutable_oftype(a, typeof(first(a)/nrm))
-        return __normalize!(aa, nrm)
+    if !issubnormal(nrm)
+        return a * inv(nrm)
     else
-        T = typeof(zero(eltype(a))/nrm)
-        return T[]
+        return normalize(a * inv(floatmin(nrm)), p)
     end
 end
 
@@ -2135,19 +2207,20 @@ function copytrito!(B::AbstractMatrix, A::AbstractMatrix, uplo::AbstractChar)
     BLAS.chkuplo(uplo)
     B === A && return B
     m,n = size(A)
+    d = min(m,n)
     A = Base.unalias(B, A)
     if uplo == 'U'
-        LAPACK.lacpy_size_check(size(B), (n < m ? n : m, n))
+        LAPACK.lacpy_size_check(size(B), (d, n))
         # extract the parents for UpperTriangular matrices
         Bv, Av = uppertridata(B), uppertridata(A)
         for j in axes(A,2), i in axes(A,1)[begin : min(j,end)]
             @inbounds Bv[i,j] = Av[i,j]
         end
     else # uplo == 'L'
-        LAPACK.lacpy_size_check(size(B), (m, m < n ? m : n))
+        LAPACK.lacpy_size_check(size(B), (m, d))
         # extract the parents for LowerTriangular matrices
         Bv, Av = lowertridata(B), lowertridata(A)
-        for j in axes(A,2), i in axes(A,1)[j:end]
+        for j in axes(A,2)[1:d], i in axes(A,1)[j:end]
             @inbounds Bv[i,j] = Av[i,j]
         end
     end

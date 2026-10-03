@@ -721,15 +721,18 @@ end
         @test BLAS.her!('L', real(elty(2)), x, A) isa WrappedArray{elty,2}
         @test A == WrappedArray(elty[5 2+2im; 11+3im 20])
     # Level 3
-        A = WrappedArray(elty[1+im 2+2im; 3+3im 4+4im])
+        # Hermitian matrices require real diagonal elements
+        A = WrappedArray(elty[1 2+2im; 2-2im 4])
         B = WrappedArray(elty[1+im 2+2im; 3+3im 4+4im])
-        C = WrappedArray(elty[1+im 2+2im; 3+3im 4+4im])
+        C = WrappedArray(elty[1 2+2im; 2-2im 4])
         @test BLAS.hemm!('L', 'U', elty(2), A, B, elty(1), C) isa WrappedArray{elty,2}
-        @test C == WrappedArray([3+27im 6+38im; 35+27im 52+36im])
+        @test C == WrappedArray([3+26im 6+38im; 34+22im 52+32im])
+        C = WrappedArray(elty[1 2+2im; 2-2im 4])  # reset C to Hermitian
         @test BLAS.herk!('U', 'N', real(elty(2)), A, real(elty(1)), C) isa WrappedArray{elty,2}
-        @test C == WrappedArray([23 50+38im; 35+27im 152])
+        @test C == WrappedArray([19 22+22im; 2-2im 52])
+        C = WrappedArray(elty[1 2+2im; 2-2im 4])  # reset C to Hermitian
         @test BLAS.her2k!('U', 'N', elty(2), A, B, real(elty(1)), C) isa WrappedArray{elty,2}
-        @test C == WrappedArray([63 138+38im; 35+27im 352])
+        @test C == WrappedArray([37 56+20im; 2-2im 68])
     end
 end
 
@@ -780,6 +783,20 @@ end
 @testset "libblas_name" begin
     dot_sym = dlsym(dlopen(BLAS.libblastrampoline), "cblas_ddot" * (Sys.WORD_SIZE == 64 ? "64_" : ""))
     @test 23.0 === @ccall $(dot_sym)(2::Int, [2.0, 3.0]::Ref{Cdouble}, 1::Int, [4.0, 5.0]::Ref{Cdouble}, 1::Int)::Cdouble
+end
+
+# Verify that `lbt_get_config()` reflects mutations to libblastrampoline state
+# even when those mutations bypass the `BLAS.lbt_forward` wrapper (e.g. raw
+# `ccall`s from JLL `__init__` blocks).
+@testset "lbt_get_config reflects raw-ccall mutations" begin
+    cfg0 = BLAS.lbt_get_config()
+    libpath = first(cfg0.loaded_libs).libname
+
+    # Mutation via raw ccall (bypassing the wrapper, as JLLs do).
+    ccall((:lbt_forward, BLAS.libblastrampoline), Int32,
+          (Cstring, Int32, Int32, Cstring),
+          libpath, Int32(0), Int32(0), C_NULL)
+    @test length(BLAS.lbt_get_config().loaded_libs) == length(cfg0.loaded_libs)
 end
 
 end # module TestBLAS

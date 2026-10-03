@@ -13,6 +13,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.OffsetArrays
 
 ## Test Julia fallbacks to BLAS routines
 
@@ -52,14 +53,31 @@ mul_wrappers = [
         @test LinearAlgebra.WrapperChar('c') == 'c'
         @test LinearAlgebra.WrapperChar('C') == 'C'
         @testset "constant propagation in uppercase/lowercase" begin
-            v = @inferred (() -> Val(uppercase(LinearAlgebra.WrapperChar('C'))))()
+            v = @inferred (() -> Val(LinearAlgebra._uppercase(LinearAlgebra.WrapperChar('C'))))()
             @test v isa Val{'C'}
-            v = @inferred (() -> Val(uppercase(LinearAlgebra.WrapperChar('s'))))()
+            v = @inferred (() -> Val(LinearAlgebra._uppercase(LinearAlgebra.WrapperChar('s'))))()
             @test v isa Val{'S'}
-            v = @inferred (() -> Val(lowercase(LinearAlgebra.WrapperChar('C'))))()
+            v = @inferred (() -> Val(LinearAlgebra._lowercase(LinearAlgebra.WrapperChar('C'))))()
             @test v isa Val{'c'}
-            v = @inferred (() -> Val(lowercase(LinearAlgebra.WrapperChar('s'))))()
+            v = @inferred (() -> Val(LinearAlgebra._lowercase(LinearAlgebra.WrapperChar('s'))))()
             @test v isa Val{'s'}
+        end
+        @testset "AbstractChar interface" begin
+            # `codepoint` and construction from a codepoint are required by the
+            # `AbstractChar` interface, functions like `uppercase` fail otherwise
+            WC = LinearAlgebra.WrapperChar
+            @test codepoint(WC('S', true)) == codepoint('S')
+            @test codepoint(WC('S', false)) == codepoint('s')
+            @test WC(UInt32('C')) == 'C'
+            for c in ('S', 'H'), isuppertri in (true, false)
+                w = WC(c, isuppertri)
+                @test isascii(w)
+                @test uppercase(w) == c
+                @test lowercase(w) == lowercase(c)
+                @test isuppercase(w) == isuppertri
+            end
+            @test uppercase(LinearAlgebra.wrapper_char(Symmetric(rand(2, 2), :L))) == 'S'
+            @test uppercase(LinearAlgebra.wrapper_char(Hermitian(rand(ComplexF64, 2, 2), :L))) == 'H'
         end
     end
 end
@@ -80,6 +98,43 @@ end
     @test Matrix{ComplexF64}(undef, 5, 0) |> t -> t't == zeros(0, 0)
     @test Matrix{ComplexF64}(undef, 5, 0) |> t -> t * t' == zeros(5, 5)
 end
+
+@testset "1x1 matmul" begin
+    AA = fill(3, 1, 1)
+    BB = fill(5, 1, 1)
+    AAi = AA .+ 2im
+    BBi = BB .- 1im
+    for A in (copy(AA), view(AA, 1:1, 1:1)), B in (copy(BB), view(BB, 1:1, 1:1))
+        @test A * B == fill(15, 1, 1)
+        @test transpose(A) * B == fill(15, 1, 1)
+        @test mul!(fill(1, 1, 1), A, B, 2, 3) == fill(33, 1, 1)
+        # length-1 vectors are treated as 1x1 matrices
+        @test vec(A) * B == fill(15, 1, 1)
+        @test mul!(fill(1, 1, 1), vec(A), transpose(B), 2, 3) == fill(33, 1, 1)
+    end
+    for A in (AAi, ComplexF64.(AAi)), B in (BBi, ComplexF64.(BBi))
+        @test A * B == fill((3 + 2im) * (5 - 1im), 1, 1)
+        @test A' * B == fill((3 - 2im) * (5 - 1im), 1, 1)
+        @test mul!(fill(1 + 0im, 1, 1), A, B', true, true) == fill(1 + (3 + 2im) * (5 + 1im), 1, 1)
+    end
+    for T in (Float64, ComplexF64)
+        # `α == 0` must not propagate NaNs from the factors
+        @test mul!(ones(T, 1, 1), fill(T(NaN), 1, 1), ones(T, 1, 1), false, true) == ones(T, 1, 1)
+        @test mul!(ones(T, 1, 1), fill(T(NaN), 1, 1), ones(T, 1, 1), 0.0, 1.0) == ones(T, 1, 1)
+    end
+    # BLAS eltypes reach the 1x1 kernel with Symmetric/Hermitian wrappers through the symm/hemm path
+    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+            wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
+        @test mul!(fill(one(eltype(A)), 1, 1), wrapper_a(A), wrapper_b(B), 2, 3) ==
+            2 * Array(wrapper_a(A)) * Array(wrapper_b(B)) .+ 3
+    end
+    @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 2, 2), AA, BB)
+    @test_throws "expected 1x1 matrices" LinearAlgebra.matmul1x1!(zeros(1, 1), 'N', 'N', zeros(1, 2), zeros(2, 1))
+    C = ones(1, 1)
+    @test_throws ArgumentError LinearAlgebra.matmul1x1!(C, 'N', 'N', C, ones(1, 1))
+end
+
 @testset "2x2 matmul" begin
     AA = [1 2; 3 4]
     BB = [5 6; 7 8]
@@ -98,8 +153,10 @@ end
         @test *(adjoint(Ai), adjoint(Bi)) == [-28.25-66im 9.75-58im; -26-89im 21-73im]
         @test_throws DimensionMismatch [1 2; 0 0; 0 0] * [1 2]
     end
-    for wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
-        @test wrapper_a(AA) * wrapper_b(BB) == Array(wrapper_a(AA)) * Array(wrapper_b(BB))
+    # BLAS eltypes reach the small-matrix kernels with Symmetric/Hermitian wrappers through the symm/hemm path
+    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+            wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
     end
     @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 3, 3), AA, BB)
 end
@@ -121,8 +178,10 @@ end
         @test *(adjoint(Ai), adjoint(Bi)) == [1+2im 20.75+9im -44.75+42im; 19.5+17.5im -54-36.5im 51-14.5im; 13+7.5im 11.25+31.5im -43.25-14.5im]
         @test_throws DimensionMismatch [1 2 3; 0 0 0; 0 0 0] * [1 2 3]
     end
-    for wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
-        @test wrapper_a(AA) * wrapper_b(BB) == Array(wrapper_a(AA)) * Array(wrapper_b(BB))
+    # BLAS eltypes reach the small-matrix kernels with Symmetric/Hermitian wrappers through the symm/hemm path
+    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+            wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
+        @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
     end
     @test_throws DimensionMismatch mul!(Matrix{Float64}(undef, 4, 4), AA, BB)
 end
@@ -292,6 +351,45 @@ end
     @test C == AB
     LinearAlgebra.generic_matmatmul!(C, 'N', 'N', A, B, LinearAlgebra.MulAddMul(2, -1))
     @test C == AB
+end
+
+# `generic_matvecmul!` and `generic_matmatmul!` are `public`. Each method must
+# be exercised by a direct call somewhere in the test suite, so that any
+# accidental change to a signature is caught here. The correctness of these
+# functions should already be well covered by other tests.
+@testset "`generic_matvecmul!` is public" begin
+    A = [1.0 2.0 3.0; 4.0 5.0 6.0]
+    x = [7.0, 8.0, 9.0]
+    # BlasFloat strided, alpha/beta
+    @test LinearAlgebra.generic_matvecmul!(zeros(2), 'N', A, x, 1.0, 0.0) ≈ A * x
+    # Real matrix, complex vector
+    xc = ComplexF64[7+1im, 8+2im, 9+3im]
+    @test LinearAlgebra.generic_matvecmul!(zeros(ComplexF64, 2), 'N', A, xc, 1.0, 0.0) ≈ A * xc
+    # Complex matrix, real vector
+    Ac = ComplexF64[1+1im 2 3; 4 5 6+1im]
+    @test LinearAlgebra.generic_matvecmul!(zeros(ComplexF64, 2), 'N', Ac, x, 1.0, 0.0) ≈ Ac * x
+    # Generic AbstractVector with MulAddMul (legacy)
+    Aq = Rational{Int}[1 2; 3 4]
+    xq = Rational{Int}[5, 6]
+    @test LinearAlgebra.generic_matvecmul!(zeros(Rational{Int}, 2), 'N', Aq, xq, LinearAlgebra.MulAddMul(2, 0)) == 2 * Aq * xq
+    # Generic AbstractVector with alpha/beta
+    @test LinearAlgebra.generic_matvecmul!(zeros(Rational{Int}, 2), 'T', Aq, xq, 1, 0) == transpose(Aq) * xq
+end
+
+@testset "`generic_matmatmul!` is public" begin
+    A = [1.0 2.0; 3.0 4.0]
+    B = [5.0 6.0; 7.0 8.0]
+    # BlasFloat strided with MulAddMul
+    @test LinearAlgebra.generic_matmatmul!(zeros(2, 2), 'N', 'N', A, B, LinearAlgebra.MulAddMul(2, 0)) ≈ 2 * A * B
+    # Complex C and A, real B (mixed-eltype) with MulAddMul
+    Ac = ComplexF64[1+1im 2; 3 4-1im]
+    @test LinearAlgebra.generic_matmatmul!(zeros(ComplexF64, 2, 2), 'N', 'N', Ac, B, LinearAlgebra.MulAddMul(1, 0)) ≈ Ac * B
+    # Generic AbstractVecOrMat with MulAddMul
+    Aq = Rational{Int}[1 2; 3 4]
+    Bq = Rational{Int}[5 6; 7 8]
+    @test LinearAlgebra.generic_matmatmul!(zeros(Rational{Int}, 2, 2), 'N', 'N', Aq, Bq, LinearAlgebra.MulAddMul(1, 0)) == Aq * Bq
+    # AbstractVecOrMat with alpha/beta
+    @test LinearAlgebra.generic_matmatmul!(zeros(2, 2), 'N', 'T', A, B, 1.0, 0.0) ≈ A * transpose(B)
 end
 
 @testset "fallbacks & such for BlasFloats" begin
@@ -696,23 +794,24 @@ end
     @test dot(Z, Z) == convert(elty, 34.0)
 end
 
-dot1(x, y) = invoke(dot, Tuple{Any,Any}, x, y)
-dot2(x, y) = invoke(dot, Tuple{AbstractArray,AbstractArray}, x, y)
 @testset "generic dot" begin
+    dot1(x, y) = invoke(dot, Tuple{Any,Any}, x, y)
+    dot2(x, y) = invoke(dot, Tuple{AbstractArray,AbstractArray}, x, y)
     AA = [1+2im 3+4im; 5+6im 7+8im]
     BB = [2+7im 4+1im; 3+8im 6+5im]
     for A in (copy(AA), view(AA, 1:2, 1:2)), B in (copy(BB), view(BB, 1:2, 1:2))
         @test dot(A, B) == dot(vec(A), vec(B)) == dot1(A, B) == dot2(A, B) == dot(float.(A), float.(B))
-        @test dot(Int[], Int[]) == 0 == dot1(Int[], Int[]) == dot2(Int[], Int[])
-        @test_throws MethodError dot(Any[], Any[])
-        @test_throws MethodError dot1(Any[], Any[])
-        @test_throws MethodError dot2(Any[], Any[])
-        for n1 = 0:2, n2 = 0:2, d in (dot, dot1, dot2)
-            if n1 != n2
-                @test_throws DimensionMismatch d(1:n1, 1:n2)
-            else
-                @test d(1:n1, 1:n2) ≈ norm(1:n1)^2
-            end
+    end
+    @test dot(Int[], Int[]) == 0 == dot1(Int[], Int[]) == dot2(Int[], Int[])
+    @test dot(ComplexF64[], Float64[]) === dot(ComplexF64[;;], Float64[;;]) === zero(ComplexF64)
+    @test_throws MethodError dot(Any[], Any[])
+    @test_throws MethodError dot1(Any[], Any[])
+    @test_throws MethodError dot2(Any[], Any[])
+    for n1 = 0:2, n2 = 0:2, d in (dot, dot1, dot2)
+        if n1 != n2
+            @test_throws DimensionMismatch d(1:n1, 1:n2)
+        else
+            @test d(1:n1, 1:n2) ≈ norm(1:n1)^2
         end
     end
 end
@@ -765,9 +864,6 @@ end
     @test LinearAlgebra.gemm_wrapper('N', 'N', I10x10, I10x10) == I10x10
     @test_throws DimensionMismatch LinearAlgebra.gemm_wrapper!(I10x10, 'N', 'N', I10x11, I10x10)
     @test_throws DimensionMismatch LinearAlgebra.gemm_wrapper!(I10x10, 'N', 'N', I0x0, I0x0)
-
-    A = rand(elty, 3, 3)
-    @test LinearAlgebra.matmul3x3('T', 'N', A, Matrix{elty}(I, 3, 3)) == transpose(A)
 end
 
 @testset "#13593, #13488" begin
@@ -1107,6 +1203,15 @@ end
     @test M44 * M42 * M24 ≈ (M44 * M42) * M24 ≈ M44 * (M42 * M24)
 end
 
+@testset "3-arg *, RealOrComplex * Matrix{Complex} * Matrix{Real}" begin
+    a = 0.5 + 2.5im
+    A = randn(ComplexF64, 5, 5)
+    B = randn(Float64, 5, 5)
+    b = randn(Float64, 5)
+    @test a*A*B ≈ real(a)*A*B + im*(imag(a)*A*B) ≈ A * (a*B)
+    @test a*A*b ≈ real(a)*A*b + im*(imag(a)*A*b) ≈ A * (a*b)
+end
+
 @testset "4-arg *, by type" begin
     y = [im, 20, 30 + 40im]
     z = [-1, 200 + im, -3]
@@ -1239,6 +1344,66 @@ end
     C1 = mul!(one(A), S, A, big(2), big(1))
     C2 = mul!(one(A), S, A, 2, 1)
     @test C1 ≈ C2
+end
+
+@testset "matmul with zero-less types" begin
+    struct Mod <: Real
+        val::Int
+        modulo::Int
+        Mod(x::Int, y::Int) = new(x % y, y)
+    end
+
+    Base.:+(x::Mod, y::Mod) = Mod(x.val + y.val, x.modulo)
+    Base.:*(x::Mod, y::Mod) = Mod(x.val * y.val, x.modulo)
+    Base.zero(x::Mod) = Mod(0, x.modulo)
+
+    m = Mod.(rand(0:19, 5, 0), 20)
+    @test_throws MethodError m * copy(m')
+    for n in (2, 3, 5)
+        A = rand(0:19, n, n)
+        M = Mod.(A, 20)
+        @test M * M == Mod.(A * A, 20)
+        @test M' * M == Mod.(A' * A, 20)
+        @test M * M' == Mod.(A * A', 20)
+        @test M' * M' == Mod.(A' * A', 20)
+        @test M * M[:, 1] == Mod.(A * A[:, 1], 20)
+        @test M' * M[:, 1] == Mod.(A' * A[:, 1], 20)
+    end
+end
+
+@testset "generic matmul checks axes (issue #1670)" begin
+    @testset "n = $n, T = $T" for n in (2, 3, 4), T in (Float64, BigFloat, Int)
+        M1 = rand(T <: Integer ? (1:9) : T, n, n)
+        M2 = rand(T <: Integer ? (1:9) : T, n, n)
+        Or = OffsetArray(M1, -2, 0) # offset rows
+        Oc = OffsetArray(M1, 0, -2) # offset columns
+        @testset "mismatched axes" begin
+            for W in (identity, adjoint, transpose, Symmetric, Hermitian, UpperHessenberg)
+                @test_throws DimensionMismatch W(M2) * Or
+                @test_throws DimensionMismatch Oc * W(M2)
+            end
+            # the result of * is one-based, whereas the axes of the product are offset
+            @test_throws DimensionMismatch Or * M2
+            @test_throws DimensionMismatch M2 * Oc
+            @test_throws DimensionMismatch mul!(similar(M1), Or, M2)
+            @test_throws DimensionMismatch mul!(similar(M1), M2, Oc)
+            @test_throws DimensionMismatch mul!(similar(M1), M2, Or, 2, 3)
+            @test_throws DimensionMismatch mul!(OffsetArray(similar(M1), -2, 0), M1, M2)
+            @test_throws DimensionMismatch mul!(OffsetArray(similar(M1), 0, -2), M1, M2)
+            @test_throws DimensionMismatch mul!(OffsetArray(similar(M1), 0, -2), M1, M2, 2, 3)
+            @test_throws DimensionMismatch LinearAlgebra.generic_matmatmul!(similar(M1), 'N', 'N', Or, M2, true, false)
+        end
+        @testset "matching axes" begin
+            A = OffsetArray(M1, -2, 3)
+            B = OffsetArray(M2, 3, 1)
+            C = OffsetArray(zeros(T, n, n), -2, 1)
+            @test mul!(C, A, B) ≈ OffsetArray(M1 * M2, axes(C))
+            C .= 1
+            @test mul!(C, A, B, 2, 3) ≈ OffsetArray(2 * M1 * M2 .+ 3, axes(C))
+            C2 = OffsetArray(zeros(T, n, n), 3, 1)
+            @test mul!(C2, adjoint(A), OffsetArray(M2, -2, 1)) ≈ OffsetArray(M1' * M2, axes(C2))
+        end
+    end
 end
 
 end # module TestMatmul

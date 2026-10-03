@@ -66,14 +66,16 @@ end
 
 @testset "matrix square root quasi-triangular blockwise" begin
     @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
-        A = schur(rand(T, 100, 100)^2).T
-        @test LinearAlgebra.sqrt_quasitriu(A; blockwidth=16)^2 ≈ A
+        schurA = schur(rand(T, 100, 100)^2)
+        A = schurA.T
+        @test LinearAlgebra.sqrt_quasitriu(A, schurA.values; blockwidth=16)^2 ≈ A
     end
     n = 256
     A = rand(ComplexF64, n, n)
-    U = schur(A).T
+    schurA = schur(A)
+    U = schurA.T
     Ubig = Complex{BigFloat}.(U)
-    @test LinearAlgebra.sqrt_quasitriu(U; blockwidth=64) ≈ LinearAlgebra.sqrt_quasitriu(Ubig; blockwidth=64)
+    @test LinearAlgebra.sqrt_quasitriu(U, schurA.values; blockwidth=64) ≈ LinearAlgebra.sqrt_quasitriu(Ubig, schurA.values; blockwidth=64)
 end
 
 @testset "sylvester quasi-triangular blockwise" begin
@@ -118,6 +120,14 @@ end
         @test typeof(log(complex(Au))) <: UpperTriangular{complex(elty)}
         @test isreal(log(complex(Au)))
         @test log(complex(Au)) ≈ log(Au)
+    end
+end
+
+@testset "matrix log for non-BlasFloat matrices" begin
+    for T in (Int,)
+        A = UpperTriangular(T[1 2; 0 4])
+        B = log(float(A))
+        @test log(A) ≈ log(complex(A)) ≈ B
     end
 end
 
@@ -260,7 +270,7 @@ const TESTDIR = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
     end
 end
 
-@testset "inplace mul of appropriate types should preserve triagular structure" begin
+@testset "inplace mul of appropriate types should preserve triangular structure" begin
     for elty1 in (Float64, ComplexF32), elty2 in (Float64, ComplexF32)
         T = promote_type(elty1, elty2)
         M1 = rand(elty1, 5, 5)
@@ -702,6 +712,7 @@ end
         V = eigvecs(U)
         λ = eigvals(U)
         @test U * V ≈ V * Diagonal(λ)
+        @test all(v -> norm(v) ≈ 1, eachcol(V))
 
         MU = MyTriangular(U)
         V = eigvecs(U)
@@ -915,8 +926,13 @@ end
     end
 end
 
-@testset "(l/r)mul! and (l/r)div! for non-contiguous matrices" begin
+@testset "(l/r)mul! and (l/r)div! for non-contiguous arrays" begin
     U = UpperTriangular(reshape(collect(3:27.0),5,5))
+    b = float.(1:10)
+    b2 = copy(b); b2v = view(b2, 1:2:9); b2vc = copy(b2v)
+    @test lmul!(U, b2v) == lmul!(U, b2vc)
+    b2 = copy(b); b2v = view(b2, 1:2:9); b2vc = copy(b2v)
+    @test ldiv!(U, b2v) ≈ ldiv!(U, b2vc)
     B = float.(collect(reshape(1:100, 10,10)))
     B2 = copy(B); B2v = view(B2, 1:2:9, 1:5); B2vc = copy(B2v)
     @test lmul!(U, B2v) == lmul!(U, B2vc)
@@ -1107,6 +1123,50 @@ end
         @test L == L2
         LinearAlgebra.fillband!(L, -10, -10, -10)
         @test L == L2
+    end
+end
+
+@testset "zero for triangular matrices" begin
+    A = rand(4, 4)
+    @test zero(UpperTriangular(A)) isa UpperTriangular
+    @test zero(LowerTriangular(A)) isa LowerTriangular
+    @test iszero(zero(UpperTriangular(A)))
+    @test iszero(zero(LowerTriangular(A)))
+    @test zero(UnitUpperTriangular(A)) isa UpperTriangular
+    @test zero(UnitLowerTriangular(A)) isa LowerTriangular
+    @test iszero(zero(UnitUpperTriangular(A)))
+    @test iszero(zero(UnitLowerTriangular(A)))
+    @test iszero(diag(zero(UnitUpperTriangular(A))))
+    @test iszero(diag(zero(UnitLowerTriangular(A))))
+
+        # non-strided case: zero forwards to parent
+    struct ZeroTestWrapTri{T} <: AbstractArray{T,2}
+        parent::Matrix{T}
+    end
+    Base.size(A::ZeroTestWrapTri) = size(A.parent)
+    Base.getindex(A::ZeroTestWrapTri, i, j) = A.parent[i,j]
+    Base.zero(A::ZeroTestWrapTri) = ZeroTestWrapTri(zero(A.parent))
+
+    for T in (UpperTriangular, LowerTriangular)
+        Z = zero(T(ZeroTestWrapTri([1.0 2.0; 3.0 4.0])))
+        @test Z isa T
+        @test parent(Z) isa ZeroTestWrapTri
+        @test iszero(Z)
+    end
+end
+
+@testset "eigenvalue sorting" begin
+    for T in (Float64, ComplexF64, Float16, ComplexF16)
+        A = randn(T, 4, 4)
+        for wrapper in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+            B = wrapper(A)
+            @test eigvals(B; sortby=nothing) == diag(B)
+            F = eigen(B)
+            @test issorted(F.values, by=LinearAlgebra.eigsortby) #sort by default
+            @test B * F.vectors ≈ F.vectors * Diagonal(F.values)
+            @test F.values ≈ eigvals(B; sortby = LinearAlgebra.eigsortby)
+            @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
+        end
     end
 end
 

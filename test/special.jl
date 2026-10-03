@@ -480,32 +480,8 @@ end
     end
 end
 
-@testset "Ops on SymTridiagonal ev has the same length as dv" begin
-    x = rand(3)
-    y = rand(3)
-    z = rand(2)
-
-    S = SymTridiagonal(x, y)
-    T = Tridiagonal(z, x, z)
-    Bu = Bidiagonal(x, z, :U)
-    Bl = Bidiagonal(x, z, :L)
-
-    Ms = Matrix(S)
-    Mt = Matrix(T)
-    Mbu = Matrix(Bu)
-    Mbl = Matrix(Bl)
-
-    @test S + T ≈ Ms + Mt
-    @test T + S ≈ Mt + Ms
-    @test S + Bu ≈ Ms + Mbu
-    @test Bu + S ≈ Mbu + Ms
-    @test S + Bl ≈ Ms + Mbl
-    @test Bl + S ≈ Mbl + Ms
-end
-
 @testset "Ensure Strided * (Sym)Tridiagonal is Dense" begin
     x = rand(3)
-    y = rand(3)
     z = rand(2)
 
     l = rand(12, 12)
@@ -514,7 +490,7 @@ end
     M_v = Matrix(v)
     m = rand(3, 3)
 
-    S = SymTridiagonal(x, y)
+    S = SymTridiagonal(x, z)
     T = Tridiagonal(z, x, z)
     M_S = Matrix(S)
     M_T = Matrix(T)
@@ -568,11 +544,9 @@ end
             end
         end
         @testset "to SymTridiagonal" begin
-            for du2 in (similar(du, BigInt), similar(d, BigInt))
-                S = SymTridiagonal(similar(d), du2)
-                copyto!(S, D)
-                @test S == D
-            end
+            S = SymTridiagonal(similar(d), similar(du, BigInt))
+            copyto!(S, D)
+            @test S == D
 
             @testset "mismatched size" begin
                 S = SymTridiagonal(zero(d), zero(du))
@@ -630,16 +604,14 @@ end
             end
         end
         @testset "to SymTridiagonal" begin
-            for du2 in (similar(du, BigInt), similar(d, BigInt))
-                S = SymTridiagonal(similar(d, BigInt), du2)
-                for B in (BL, BU)
-                    copyto!(S, B)
-                    @test S == B
-                end
-                errmsg = "cannot copy a non-symmetric Bidiagonal matrix to a SymTridiagonal"
-                @test_throws errmsg copyto!(S, BUones)
-                @test_throws errmsg copyto!(S, BLones)
+            S = SymTridiagonal(similar(d, BigInt), similar(du, BigInt))
+            for B in (BL, BU)
+                copyto!(S, B)
+                @test S == B
             end
+            errmsg = "cannot copy a non-symmetric Bidiagonal matrix to a SymTridiagonal"
+            @test_throws errmsg copyto!(S, BUones)
+            @test_throws errmsg copyto!(S, BLones)
 
             @testset "mismatched size" begin
                 S = SymTridiagonal(zero(d), zero(du))
@@ -709,46 +681,47 @@ end
     end
 
     @testset "from SymTridiagonal" begin
-        S2 = SymTridiagonal(d, ones(Int,size(d)))
-        for S in (SymTridiagonal(d, du), SymTridiagonal(d, zero(d)))
-            @testset "to Diagonal" begin
-                D = Diagonal(zero(d))
-                @test copyto!(D, S) == Diagonal(d)
+        S2 = SymTridiagonal(d, ones(Int,size(du)))
+        S = SymTridiagonal(d, du)
+
+        @testset "to Diagonal" begin
+            D = Diagonal(zero(d))
+            @test copyto!(D, S) == Diagonal(d)
+            D .= 0
+            errmsg = "cannot copy a SymTridiagonal with a non-zero off-diagonal band to a Diagonal"
+            @test_throws errmsg copyto!(D, S2)
+            @test iszero(D)
+
+            @testset "mismatched size" begin
                 D .= 0
-                errmsg = "cannot copy a SymTridiagonal with a non-zero off-diagonal band to a Diagonal"
-                @test_throws errmsg copyto!(D, S2)
+                copyto!(D, SymTridiagonal(Int[1], Int[]))
+                @test D[1,1] == 1
+                D[1,1] = 0
                 @test iszero(D)
-
-                @testset "mismatched size" begin
-                    D .= 0
-                    copyto!(D, SymTridiagonal(Int[1], Int[]))
-                    @test D[1,1] == 1
-                    D[1,1] = 0
-                    @test iszero(D)
-                end
             end
-            @testset "to Bidiagonal" begin
-                BU = Bidiagonal(zero(d), zero(du), :U)
-                BL = Bidiagonal(zero(d), zero(du), :L)
-                @test copyto!(BU, S) == Bidiagonal(d, du, :U)
-                @test copyto!(BL, S) == Bidiagonal(d, du, :L)
+        end
 
-                BU .= 0
-                BL .= 0
-                errmsg = "cannot copy a SymTridiagonal with a non-zero off-diagonal band to a Bidiagonal"
-                @test_throws errmsg copyto!(BU, S2)
-                @test iszero(BU)
-                @test_throws errmsg copyto!(BL, S2)
-                @test iszero(BL)
+        @testset "to Bidiagonal" begin
+            BU = Bidiagonal(zero(d), zero(du), :U)
+            BL = Bidiagonal(zero(d), zero(du), :L)
+            @test copyto!(BU, S) == Bidiagonal(d, du, :U)
+            @test copyto!(BL, S) == Bidiagonal(d, du, :L)
 
-                @testset "mismatched size" begin
-                    for B in (BU, BL)
-                        B .= 0
-                        copyto!(B, SymTridiagonal(Int[1], Int[]))
-                        @test B[1,1] == 1
-                        B[1,1] = 0
-                        @test iszero(B)
-                    end
+            BU .= 0
+            BL .= 0
+            errmsg = "cannot copy a SymTridiagonal with a non-zero off-diagonal band to a Bidiagonal"
+            @test_throws errmsg copyto!(BU, S2)
+            @test iszero(BU)
+            @test_throws errmsg copyto!(BL, S2)
+            @test iszero(BL)
+
+            @testset "mismatched size" begin
+                for B in (BU, BL)
+                    B .= 0
+                    copyto!(B, SymTridiagonal(Int[1], Int[]))
+                    @test B[1,1] == 1
+                    B[1,1] = 0
+                    @test iszero(B)
                 end
             end
         end
@@ -833,13 +806,13 @@ end
         BU = Bidiagonal(d, z, :U)
         BL = Bidiagonal(d, z, :L)
         T = Tridiagonal(z, d, z)
-        for ev in (fill(zero(m),3), fill(zero(m),4))
-            SD = SymTridiagonal(fill(m,4), ev)
-            @test SD == D == SD
-            @test SD == BU == SD
-            @test SD == BL == SD
-            @test SD == T == SD
-        end
+        ev = fill(zero(m),3)
+
+        SD = SymTridiagonal(fill(m,4), ev)
+        @test SD == D == SD
+        @test SD == BU == SD
+        @test SD == BL == SD
+        @test SD == T == SD
     end
 end
 

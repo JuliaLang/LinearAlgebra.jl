@@ -413,7 +413,7 @@ end
 
                     # norm
                     for p in (-Inf, Inf, (-2:3)...)
-                        @test norm(A, p) == norm(vec(A), p)
+                        @test norm(A, p) ≈ norm(vec(A), p) rtol=eps(float(elty))*8
                     end
                 end
             end
@@ -902,6 +902,8 @@ end
         @test exp(log(A8)) ≈ A8
         @test typeof(log(A8)) == Matrix{elty}
     end
+
+    @test log([1 2; 0 4]) == log(UpperTriangular(Float64[1 2; 0 4]))
 end
 
 @testset "Additional matrix square root tests" for elty in (Float64, ComplexF64)
@@ -1011,6 +1013,21 @@ end
 
     x6 = [1.0 1e200; -1e-200 1.0]
     @test sqrt(x6)^2 ≈ x6
+end
+
+@testset "issue #1548" begin
+    # check that error is thrown when matrix has no square root
+    A = [0 1; 0 0]
+    @test_throws DomainError sqrt(A)
+
+    # check that error is not thrown when algorithm works (even if there are many zero eigenvalues
+    X = randn(5,5)
+    A = X * Diagonal([0,0,0,1,2]) / X # should work fine b/c matrix is non-defective
+    @test sqrt(A)^2 ≈ A
+    X = randn(5,5)
+    A = X * Diagonal([0,0,0,0,3]) / X # should work fine b/c matrix is non-defective
+    @test sqrt(A)^2 ≈ A
+    @test iszero(sqrt(zeros(6,6)))
 end
 
 @testset "matrix logarithm block diagonal underflow/overflow" begin
@@ -1283,6 +1300,15 @@ Base.:+(x::TypeWithZero, ::TypeWithoutZero) = x
     @test diagm(0 => [TypeWithoutZero()]) isa Matrix{TypeWithZero}
 end
 
+# https://github.com/aviatesk/JET.jl/issues/790
+@testset "diagm inference with non-concrete eltype" begin
+    for kvtype in (Pair{Int, Vector{T}} where T<:Complex, Pair{Int, Vector{<:Real}})
+        @test Base.infer_return_type(LinearAlgebra.diagm_container, (Nothing, kvtype)) <: Matrix
+        @test Base.infer_return_type(LinearAlgebra.diagm_container, (Tuple{Int,Int}, kvtype)) <: Matrix
+        @test Base.infer_return_type(diagm, (kvtype,)) <: Matrix
+    end
+end
+
 @testset "cbrt(A::AbstractMatrix{T})" begin
     N = 10
 
@@ -1428,6 +1454,64 @@ end
     @test log(D) ≈ log(UpperTriangular(D))
     D = diagm([2.0, 2.0*im])
     @test log(D) ≈ log(UpperTriangular(D))
+end
+
+@testset "issue 1362" begin
+    A = zeros(2,2)
+    B = zeros(2,3)
+    C = zeros(2,2,1)
+    @test LinearAlgebra.checksquare(A) == 2
+    @test LinearAlgebra.checksquare(A,A) == [2, 2]
+    @test_throws DimensionMismatch LinearAlgebra.checksquare(B)
+    @test_throws DimensionMismatch LinearAlgebra.checksquare(C)
+    @test_throws DimensionMismatch LinearAlgebra.checksquare(A,B)
+end
+
+@testset "abs(A::AbstractMatrix{T})" begin
+    N = 10
+
+    # Real valued Non-square
+    A = randn(N, N+2)
+    H = @inferred abs(A)
+    @test H'H ≈ A'A
+    @test H isa Hermitian{Float64}
+
+    # Complex valued non-square
+    A = randn(ComplexF64, N, N+2)
+    H = @inferred abs(A)
+    @test H'H ≈ A'A
+    @test H isa Hermitian{ComplexF64}
+
+    # Dense diagonal matrix
+    D = diagm([1.0, -2.0, 3.0, -4.0])
+    @test (@inferred abs(D)) ≈ diagm([1.0, 2.0, 3.0, 4.0])
+    @test abs(D) isa Hermitian{Float64}
+
+    # Guard against integer overflow
+    D_int8 = diagm(Int8[-128, 127])
+    @test (@inferred abs(D_int8)) ≈ diagm([128.0, 127.0])
+    @test abs(D_int8) isa Hermitian{Float64}
+
+    # Dense complex diagonal matrix
+    Dc = diagm([3.0 + 4.0im, -1.0 + 2.0im, 0.0 - 5.0im])
+    @test (@inferred abs(Dc)) ≈ diagm([5.0, sqrt(5.0), 5.0])
+    @test abs(Dc) isa Hermitian{ComplexF64}
+
+    # Dense Hermitian matrix
+    A1 = randn(ComplexF64, N, N)
+    H_dense = A1 + A1'
+    @test (@inferred abs(H_dense)) ≈ abs(Hermitian(H_dense))
+    @test abs(H_dense) isa Hermitian{ComplexF64}
+
+    # Diagonal wrapper
+    D = Diagonal([1.0, -2.0, 3.0, -4.0])
+    @test (@inferred abs(D)) == Diagonal([1.0, 2.0, 3.0, 4.0])
+    @test abs(D) isa Diagonal
+
+    # Hermitian wrapper
+    H = Hermitian([1.0 2.0im; -2.0im 1.0])
+    @test (@inferred abs(H)) ≈ Hermitian([2.0 1.0im; -1.0im 2.0])
+    @test abs(H) isa Hermitian
 end
 
 end # module TestDense

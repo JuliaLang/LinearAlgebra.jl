@@ -68,6 +68,7 @@ n = 5
         end
         @test convert(Matrix, Q) ≈ Matrix(Q) ≈ Q[:,:] ≈ copyto!(zeros(T, size(Q)), Q) ≈ Q.Q*I
         @test convert(Matrix, Q') ≈ Matrix(Q') ≈ (Q')[:,:] ≈ copyto!(zeros(T, size(Q)), Q') ≈ Q.Q'*I
+        @test AbstractMatrix(Q) ≈ AbstractArray(Q) ≈ AbstractMatrix{T}(Q) ≈ AbstractArray{T}(Q)
         @test Q[1,:] == Q.Q[1,:] == view(Q, 1, :)
         @test Q[:,1] == Q.Q[:,1] == view(Q, :, 1)
         @test Q[1,1] == Q.Q[1,1]
@@ -157,6 +158,30 @@ n = 5
     @test q' / L ≈ MyQ(q') / L ≈ collect(q)' / L
     @test q / L ≈ Matrix(q) / L
     @test MyQ(q) / L ≈ collect(q) / L
+end
+
+@testset "REPL display" begin
+    # a Q is displayed like its matrix representation, with the entries computed columnwise
+    body(str) = split(str, '\n')[2:end]
+    for Q in (qr(rand(4, 3)).Q, qr(rand(4, 3), ColumnNorm()).Q, hessenberg(rand(4, 4)).Q,
+              lq(rand(3, 4)).Q, qr(rand(ComplexF64, 4, 4)).Q), P in (Q, Q')
+        str = sprint(show, "text/plain", P)
+        @test startswith(str, summary(P) * ":\n")
+        @test body(str) == body(sprint(show, "text/plain", P*I))
+    end
+    @test sprint(show, "text/plain", qr(zeros(0, 0)).Q) == summary(qr(zeros(0, 0)).Q)
+    # a large Q is displayed truncated, and only the displayed columns get computed
+    Q = qr(rand(100, 100)).Q
+    ctx = (:limit => true, :displaysize => (24, 80))
+    for P in (Q, Q')
+        str = sprint(show, "text/plain", P; context=ctx)
+        @test occursin("⋮", str) && occursin("…", str)
+        @test body(str) == body(sprint(show, "text/plain", P*I; context=ctx))
+        C = LinearAlgebra.QDisplayCache(P)
+        show(IOContext(devnull, ctx...), "text/plain", C)
+        @test 0 < length(C.columns) < 20
+        @test all(j -> C.columns[j] == P[:, j], keys(C.columns))
+    end
 end
 
 end # module
