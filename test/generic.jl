@@ -389,6 +389,30 @@ end
         @test B[1] ≈ C[1] ≈ A[1] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))
         @test B[2:end] ≈ C[2:end] ≈ A[2:end] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))*x[2:end]
     end
+    # the two kernels agree with each other and with the definition, also for non-commutative
+    # elements
+    for T in (Float64, ComplexF64, Quaternion{Float64})
+        x = randn(T, 6)
+        τ = randn(T)
+        A = randn(T, 6, 3)
+        v = [one(T); x[2:end]]
+        H = I - v*conj(τ)*v'
+        B = LinearAlgebra.reflectorApplyNumeric!(x, τ, copy(A))
+        C = LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+        @test B ≈ C ≈ H*A
+        @test LinearAlgebra.reflectorApply!(x, τ, copy(A)) == B   # numeric elements: `dot`-based kernel
+    end
+    # elements of `A` that are vectors: apply the reflector to each component
+    x = randn(6)
+    τ = randn()
+    A1, A2 = randn(6, 3), randn(6, 3)
+    A = [SizedArray{(2,)}([A1[i, j], A2[i, j]]) for i in axes(A1, 1), j in axes(A1, 2)]
+    B = LinearAlgebra.reflectorApply!(x, τ, copy(A))
+    @test B == LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+    @test all(b -> b isa SizedArray{(2,),Float64}, B)
+    B1, B2 = LinearAlgebra.reflectorApply!(x, τ, copy(A1)), LinearAlgebra.reflectorApply!(x, τ, copy(A2))
+    @test all(i -> B[i].data ≈ [B1[i], B2[i]], eachindex(B))
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApplyLoop!(x[1:5], τ, copy(A))
 end
 
 @testset "axp(b)y! for element type without commutative multiplication" begin
