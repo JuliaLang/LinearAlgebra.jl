@@ -530,8 +530,6 @@ size(F::Union{QR,QRCompactWY,QRPivoted}) = size(getfield(F, :factors))
 size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :factors), dim)
 
 
-# the element types of the factorization and of the right-hand side may differ, e.g. when the
-# right-hand side carries units or has vector-valued elements
 function ldiv!(A::QRCompactWY, b::AbstractVector)
     require_one_based_indexing(b)
     m, n = size(A)
