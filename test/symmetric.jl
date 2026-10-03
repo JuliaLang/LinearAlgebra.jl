@@ -314,6 +314,10 @@ end
                     d, v = eigen(aherm)
                     @test aherm*v[:,1] ≈ d[1]*v[:,1]
                     @test v*Diagonal(d)*v' ≈ aherm
+                    # eigenvalues of a complex matrix are complex unless it's wrapped in Hermitian (#974)
+                    @test eltype(d) == float(eltya)
+                    @test d ≈ eigvals(Hermitian(aherm))
+                    d = real(d)
                     @test isequal(eigvals(aherm[1]), eigvals(aherm[1:1,1:1])[1])
                     @test abs.(eigen(Hermitian(aherm), 1:2).vectors'v[:,1:2]) ≈ Matrix(I, 2, 2)
                     @test abs.(eigen(Hermitian(aherm), d[1] - 1, (d[2] + d[3])/2).vectors'v[:,1:2]) ≈ Matrix(I, 2, 2)
