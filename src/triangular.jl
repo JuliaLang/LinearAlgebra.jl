@@ -1168,6 +1168,17 @@ uplo_char(::UpperOrUnitUpperTriangular{<:Any,<:Adjoint{<:Any,<:Transpose}}) = 'U
 uplo_char(::LowerOrUnitLowerTriangular{<:Any,<:Adjoint{<:Any,<:Transpose}}) = 'L'
 uplo_char(::UpperOrUnitUpperTriangular{<:Any,<:Transpose{<:Any,<:Adjoint}}) = 'U'
 uplo_char(::LowerOrUnitLowerTriangular{<:Any,<:Transpose{<:Any,<:Adjoint}}) = 'L'
+# a wrapper applied twice is the identity, so neither the triangle nor the entries change
+const _TwiceAdjOrTrans = Union{Adjoint{<:Any,<:Adjoint},Transpose{<:Any,<:Transpose}}
+uplo_char(::UpperOrUnitUpperTriangular{<:Any,<:_TwiceAdjOrTrans}) = 'U'
+uplo_char(::LowerOrUnitLowerTriangular{<:Any,<:_TwiceAdjOrTrans}) = 'L'
+
+# the function and the matrix that, with `uplo_char`, describe a triangular matrix to the
+# kernels: the triangle `uplo_char(A)` of `_tridata(A)`, to which `_triop(A)` is applied
+_triop(A::UpperOrLowerTriangular) = _wrapperop(parent(A))
+_tridata(A::UpperOrLowerTriangular) = _unwrap_at(parent(A))
+_triop(::UpperOrLowerTriangular{<:Any,<:_TwiceAdjOrTrans}) = identity
+_tridata(A::UpperOrLowerTriangular{<:Any,<:_TwiceAdjOrTrans}) = parent(parent(parent(A)))
 
 isunit_char(::UpperTriangular) = 'N'
 isunit_char(::UnitUpperTriangular) = 'U'
@@ -1187,18 +1198,18 @@ _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractTriangular) =
     lmul!(A, copy!(C, B))
 # redirect for UpperOrLowerTriangular
 _trimul!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVector) =
-    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _triop(A), _tridata(A), B)
 _trimul!(C::AbstractMatrix, A::UpperOrLowerTriangular, B::AbstractMatrix) =
-    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _triop(A), _tridata(A), B)
 _trimul!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
-    generic_mattrimul!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
+    generic_mattrimul!(C, uplo_char(B), isunit_char(B), _triop(B), A, _tridata(B))
 _trimul!(C::AbstractMatrix, A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
-    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _triop(A), _tridata(A), B)
 # disambiguation with AbstractTriangular
 _trimul!(C::AbstractMatrix, A::UpperOrLowerTriangular, B::AbstractTriangular) =
-    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), _triop(A), _tridata(A), B)
 _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::UpperOrLowerTriangular) =
-    generic_mattrimul!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
+    generic_mattrimul!(C, uplo_char(B), isunit_char(B), _triop(B), A, _tridata(B))
 
 # methods for LinearAlgebra.jl's own triangular types, to avoid `istriu` checks
 lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _trimul!(B, A, B)
@@ -1259,9 +1270,9 @@ _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) =
     rdiv!(copy!(C, A), B)
 # redirect for UpperOrLowerTriangular to generic_*div!
 _ldiv!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
-    generic_trimatdiv!(C, uplo_char(A), isunit_char(A), _wrapperop(parent(A)), _unwrap_at(parent(A)), B)
+    generic_trimatdiv!(C, uplo_char(A), isunit_char(A), _triop(A), _tridata(A), B)
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
-    generic_mattridiv!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
+    generic_mattridiv!(C, uplo_char(B), isunit_char(B), _triop(B), A, _tridata(B))
 
 function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
     if istriu(A)
@@ -1850,7 +1861,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
                 for i in axes(B,1)[2:end]
                     C[i,k] = oA \ B[i,k] - _ustrip(conj(A[i,1])) * C1
                 end
-                for j in axes(A,2)
+                for j in axes(A,2)[2:end]
                     Cj = C[j,k]
                     for i in j+1:lastindex(A,1)
                         C[i,k] -= _ustrip(conj(A[i,j])) * Cj

@@ -1170,4 +1170,27 @@ end
     end
 end
 
+@testset "products and solves with a doubly wrapped parent (#1736)" begin
+    # the constructors are needed: `adjoint(adjoint(M))` unwraps
+    doubles = (M -> Adjoint(Adjoint(M)), M -> Transpose(Transpose(M)),
+               M -> Transpose(Adjoint(M)), M -> Adjoint(Transpose(M)))
+    # BLAS and generic kernels, with exact arithmetic for the latter
+    @testset for T in (Float64, ComplexF64, Rational{Int}, Complex{Rational{Int}}), W in doubles,
+            Tri in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+        M = T <: Complex ? T[complex(i + 2j, i - j + 1) for i in 1:3, j in 1:3] : T[i + 3j for i in 1:3, j in 1:3]
+        b = T[1, 2, 3]
+        B = T[i + j for i in 1:3, j in 1:2]
+        Y = permutedims(B)
+        X = Tri(W(M))
+        D = Matrix(X)
+        @test X * b ≈ D * b
+        @test X * B ≈ D * B
+        @test Y * X ≈ Y * D
+        @test X * X ≈ D * D
+        @test X \ b ≈ D \ b
+        @test X \ B ≈ D \ B
+        @test Y / X ≈ Y / D
+    end
+end
+
 end # module TestTriangular
