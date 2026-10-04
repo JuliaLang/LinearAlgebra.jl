@@ -668,9 +668,7 @@ LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
         @test x isa Vector{<:SizedArray{(2,),Float64}}
         @test all(i -> x[i].data ≈ X[i, :], 1:2)
     end
-    # not supported yet: the Householder kernel of the packed `QR` (used by the pivoted `qr`
-    # for least-squares problems) applies `dot` to the elements
-    @test_broken [A; 1.0 1.0] \ vcat(b, [b[1]]) isa Vector{<:SizedArray{(2,),Float64}}
+    @test [A; 1.0 1.0] \ vcat(b, [b[1]]) isa Vector{<:SizedArray{(2,),Float64}}
 end
 
 @testset "Issue 22042" begin
