@@ -1826,8 +1826,8 @@ end
 Multiplies `A` in-place by a Householder reflection on the left. It is equivalent to `A .= (I - [1; x[2:end]] * conj(τ) * [1; x[2:end]]') * A`.
 
 For `x` and `A` with numeric elements, the computation is carried out by
-[`reflectorApplyNumeric!`](@ref), which is based on `dot` and `axpy!`. Otherwise, e.g. if the
-elements of `A` are vectors, [`reflectorApplyLoop!`](@ref) is used, which treats the elements
+`reflectorApplyNumeric!`, which is based on `dot` and `axpy!`. Otherwise, e.g. if the
+elements of `A` are vectors, `reflectorApplyLoop!` is used, which treats the elements
 of `A` as opaque. Packages may add methods of `reflectorApply!` for their own types that
 dispatch to either kernel.
 """
