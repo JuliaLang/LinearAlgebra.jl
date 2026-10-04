@@ -342,6 +342,7 @@ qr!(A::AbstractMatrix) = qr!(A, NoPivot())
 @deprecate qr!(A::AbstractMatrix, ::Val{false}) qr!(A, NoPivot())
 
 _qreltype(::Type{T}) where T = typeof(zero(T)/sqrt(abs2(one(T))))
+_qreltype(A::AbstractArray) = _qreltype(_valeltype(A))
 
 """
     qr(A, pivot = NoPivot(); blocksize) -> F
@@ -426,9 +427,9 @@ true
     elementary reflectors, so that the `Q` and `R` matrices can be stored
     compactly rather than two separate dense matrices.
 """
-function qr(A::AbstractMatrix{T}, arg...; kwargs...) where T
+function qr(A::AbstractMatrix, arg...; kwargs...)
     require_one_based_indexing(A)
-    AA = copy_similar(A, _qreltype(T))
+    AA = copy_similar(A, _qreltype(A))
     return _qr(AA, arg...; kwargs...)
 end
 # TODO: remove in Julia v2.0
@@ -529,13 +530,13 @@ size(F::Union{QR,QRCompactWY,QRPivoted}) = size(getfield(F, :factors))
 size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :factors), dim)
 
 
-function ldiv!(A::QRCompactWY{T}, b::AbstractVector{T}) where {T}
+function ldiv!(A::QRCompactWY, b::AbstractVector)
     require_one_based_indexing(b)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), b), 1:size(A, 2)))
     return b
 end
-function ldiv!(A::QRCompactWY{T}, B::AbstractMatrix{T}) where {T}
+function ldiv!(A::QRCompactWY, B::AbstractMatrix)
     require_one_based_indexing(B)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), B), 1:size(A, 2), 1:size(B, 2)))
@@ -661,7 +662,7 @@ ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractVector{T}) where {T<:BlasFloat
 ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractMatrix{T}) where {T<:BlasFloat} =
     ldiv!(A, B, min(size(A)...)*eps(real(T)))[1]
 
-function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
+function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix) where T
     m, n = size(A)
     minmn = min(m,n)
     mB, nB = size(B)
@@ -689,7 +690,7 @@ function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
         end
         ldiv!(UpperTriangular(view(R, :, 1:minmn)), view(B, 1:minmn, :))
         if n > m # Apply elementary transformation to solution
-            B[m + 1:mB,1:nB] .= zero(T)
+            B[m + 1:mB,1:nB] .= zero(eltype(B))
             for j = 1:nB
                 for k = 1:m
                     vBj = B[k,j]'
@@ -709,7 +710,7 @@ function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
 end
 
 
-function ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
+function ldiv!(A::QR, B::AbstractMatrix)
     require_one_based_indexing(B)
     _check_qr_ldiv_rhs(A, B)
     m, n = size(A)

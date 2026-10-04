@@ -509,6 +509,14 @@ end
     end
 end
 
+@testset "norm correctly promotes abstractly-typed vectors" begin
+    v = Real[1, randn(), 2f0, big(π)]
+    w = Number[1, randn(ComplexF64), 2f0, big(π)]
+    for p in (1, 2, Inf), x in (v, w)
+        @test norm(x, p) == norm(big.(x), p)
+    end
+end
+
 @testset "Issue 14657" begin
     @test det([true false; false true]) == det(Matrix(1I, 2, 2))
 end
@@ -527,6 +535,47 @@ end
     @test [[1, 2], [3, 4]] ≈ [[1.0-eps(), 2.0+eps()], [3.0+2eps(), 4.0-1e8eps()]]
     @test [[1, 2], [3, 4]] ≉ [[1.0-eps(), 2.0+eps()], [3.0+2eps(), 4.0-1e9eps()]]
     @test [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]] ≈ [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]
+end
+
+@testset "promote_leaf_eltypes with non-concrete eltypes (issue #1083)" begin
+    P = LinearAlgebra.promote_leaf_eltypes
+    # abstract eltypes are narrowed to the promoted types of the leaves
+    for T in (Any, Number, Real, AbstractFloat, Union{Number,Missing}, Union{Real,Missing},
+              Union{AbstractFloat,Missing}, Union{AbstractFloat,Int}, Union{Float32,Float64},
+              Union{Int,Float64})
+        @test P(T[824.9999999999999]) === Float64
+        @test T[824.9999999999999] ≈ [825]
+        @test [825] ≈ T[824.9999999999999]
+        @test T[824.9999999999999] ≉ [825] rtol=0
+    end
+    @test P(Real[1, 2.0]) === Float64
+    @test P(Number[1, 2.0f0]) === Float32
+    @test P(Number[1, 2.0im]) === ComplexF64
+    @test P(Real[1, 2//3]) === Rational{Int}
+    @test P(Real[1.0f0, big(2.0)]) === BigFloat
+    @test P(Tuple{Real,Real}((1, 2.0))) === Float64
+    # nested arrays with abstract element types
+    @test P(Vector{Real}[[1, 2.0], [3]]) === Float64
+    @test P(AbstractVector{Real}[Real[1, 2.0f0], Int[3]]) === Float32
+    @test P(Vector{Number}[Number[1], Number[2, 3.0im]]) === ComplexF64
+    @test P(Vector{Any}[Any[1], Any[2, [3.0im]]]) === ComplexF64
+    @test Vector{Real}[Real[1.0, 2.0], Real[3.0]] ≈ [[1.0, 2.0], [3.0 + 1e-10]]
+    # empty arrays with abstract or bottom eltypes
+    @test P(Number[]) === Bool
+    @test P(Vector{Real}[]) === Bool
+    @test P(Union{}[]) === Bool
+    @test AbstractFloat[] ≈ Int[]
+    # concrete eltypes still short-circuit, and remain inferrable
+    @test @inferred(P([1.0, 2.0])) === Float64
+    @test @inferred(P([[1.0f0], [2.0f0]])) === Float32
+    @test @inferred(P((1.0, 2.0))) === Float64
+    @test @inferred(P((1, 2.0))) === Float64
+    @test @inferred(P((1, (2.0f0, 3)))) === Float32
+    @test @inferred(P(AbstractVector{Float64}[[1.0]])) === Float64
+    @test P(Complex{Real}[1 + 2im]) === Complex{Real}
+    # UniformScaling comparisons
+    @test Real[1.0 0; 0 1.0+1e-10] ≈ I
+    @test Real[1.0 0; 0 1.0+1e-10] ≉ I(2) rtol=0
 end
 
 @testset "Issue 40128" begin
@@ -1010,6 +1059,12 @@ end
             @test eltype(x) <: T
         end
     end
+end
+
+@testset "issue 1687" begin
+    A = rand(3, 3)
+    B = AbstractFloat[1.0, 2.0, 3.0]
+    @test A \ B isa Vector{Float64}
 end
 
 @testset "$fn requires square matrices" for fn in (det, logdet, logabsdet)

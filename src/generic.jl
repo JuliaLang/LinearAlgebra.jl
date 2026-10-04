@@ -566,6 +566,14 @@ generic_normMinusInf(x) = float(mapreduce(norm, min, x))
 generic_normInf(x) = float(mapreduce(norm, max, x))
 
 generic_norm1(x) = mapreduce(float ∘ norm, +, x)
+function generic_norm1(x::AbstractArray{<:Number})
+    T = float(_valeltype(x))
+    res = zero(real(T))
+    @simd for xᵢ ∈ x
+        res += abs(T(xᵢ))
+    end
+    return res
+end
 
 # faster computation of norm(x)^2, avoiding overflow for integers
 norm_sqr(x) = norm(x)^2
@@ -591,6 +599,22 @@ function generic_norm2(x)
         end
         ismissing(sum) && return missing
         return convert(T, maxabs*sqrt(sum))
+    end
+end
+
+function generic_norm2(x::AbstractArray{<:Number})
+    T = _valeltype(x)
+    Tout = float(real(T))
+    !(Tout <: AbstractFloat) && return invoke(generic_norm2, Tuple{Any}, x)
+    Tsum = promote_type(Float64, T)
+    norm² = sum(abs2 ∘ Tsum, x)
+    if isfinite(norm²) && (norm² ≥ floatmin(norm²))
+        return convert(Tout, sqrt(norm²))  # fast path: no overflow/underflow or subnormals
+    else
+        k = exp2(floor(log2(floatmin(norm²))*3/4))
+        scale = isinf(norm²) ? k : inv(k)
+        res = sqrt(sum(x -> abs2(x * scale), x)) / scale
+        return convert(Tout, res)
     end
 end
 
@@ -1059,7 +1083,7 @@ dot(x::AbstractVector, transA::Transpose{<:Real}, y::AbstractVector) = adjoint(d
 ###########################################################################################
 
 """
-    rank(A::AbstractMatrix; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    rank(A::AbstractMatrix; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     rank(A::AbstractMatrix, rtol::Real)
 
 Compute the numerical rank of a matrix by counting how many outputs of
@@ -1101,7 +1125,7 @@ julia> rank(diagm(0 => [1, 0.001, 2]), atol=1.5)
 1
 ```
 """
-function rank(A::AbstractMatrix; atol::Real = 0.0, rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
+function rank(A::AbstractMatrix; atol::Number = zero(real(eltype(A))), rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
     isempty(A) && return 0 # 0-dimensional case
     s = svdvals(A)
     tol = max(atol, rtol*s[1])
@@ -1226,7 +1250,8 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
-    T = promote_op(\, eltype(A), eltype(B))
+    T = promote_op(\, _valeltype(A), _valeltype(B))
+    TA = promote_op(*, _valeltype(A), typeof(one(T)))
     if m == n
         if istril(A)
             if istriu(A)
@@ -1238,9 +1263,9 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(convert(AbstractArray{T}, A)) \ B
+        return lu(convert(AbstractArray{TA}, A)) \ B
     end
-    return qr(convert(AbstractArray{T}, A), ColumnNorm()) \ B
+    return qr(convert(AbstractArray{TA}, A), ColumnNorm()) \ B
 end
 
 function (\)(a::AbstractVector, b::AbstractArray)
@@ -1829,13 +1854,18 @@ Multiplies `A` in-place by a Householder reflection on the right. It is equivale
         throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the second dimension of matrix A, $n"))
     end
     n == 0 && return A
-    for i in axes(A, 1)
-        Ai, xi = @inbounds view(A, i, 2:n), view(x, 2:n)
-        # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x`
-        # from the right, opposite to the left-applying method above
-        Avi = (@inbounds(A[i, 1]) + transpose(Ai)*xi)*τ
-        @inbounds A[i, 1] -= Avi
-        Ai .-= Avi .* conj.(xi)
+    # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x` from
+    # the right, opposite to the left-applying method above
+    @inbounds for i in axes(A, 1)
+        Avi = A[i, 1]
+        for j in 2:n
+            Avi += A[i, j]*x[j]
+        end
+        Avi *= τ
+        A[i, 1] -= Avi
+        for j in 2:n
+            A[i, j] -= Avi*conj(x[j])
+        end
     end
     return A
 end
@@ -2020,16 +2050,29 @@ julia> LinearAlgebra.promote_leaf_eltypes(a)
 ComplexF64 (alias for Complex{Float64})
 ```
 """
-promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Number} = T
-promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:NumberArray} = eltype(T)
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Number} =
+    isconcretetype(T) ? T : _promote_leaf_eltypes(x)
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:NumberArray} =
+    isconcretetype(eltype(T)) ? eltype(T) : _promote_leaf_eltypes(x)
+promote_leaf_eltypes(x::AbstractArray{Union{}}) = Bool
 promote_leaf_eltypes(x::T) where {T} = T
-promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = _promote_leaf_eltypes(x)
+_promote_leaf_eltypes(x::Tuple) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+function _promote_leaf_eltypes(x::AbstractArray)
+    # loop instead of mapreduce, to avoid a dynamic call to promote_type for every element
+    T = Bool
+    for el in x
+        S = el isa Number ? typeof(el) : promote_leaf_eltypes(el)
+        S === T || (T = promote_type(T, S))
+    end
+    return T
+end
 
 # isapprox: approximate equality of arrays [like isapprox(Number,Number)]
 # Supports nested arrays; e.g., for `a = [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]`
 # `a ≈ a` is `true`.
 function isapprox(x::AbstractArray, y::AbstractArray;
-    atol::Real=0,
+    atol::Number=zero(real(promote_leaf_eltypes(x))), # zero in the units of the elements
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
     d = norm_x_minus_y(x, y, norm)

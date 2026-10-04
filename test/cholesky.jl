@@ -712,4 +712,13 @@ end
     end
 end
 
+@testset "abstract eltypes are promoted according to the stored values (#287)" begin
+    A = Real[4 2; 2 big(3)]
+    C = cholesky(A)
+    @test C isa Cholesky{BigFloat}
+    @test C.U ≈ cholesky(BigFloat[4 2; 2 3]).U
+    @test cholesky(Real[4 2; 2 3f0]) isa Cholesky{Float32}
+    @test cholesky(Number[2 im; -im 2]).U ≈ cholesky(ComplexF64[2 im; -im 2]).U
+end
+
 end # module TestCholesky

@@ -413,7 +413,7 @@ end
 
                     # norm
                     for p in (-Inf, Inf, (-2:3)...)
-                        @test norm(A, p) == norm(vec(A), p)
+                        @test norm(A, p) ≈ norm(vec(A), p) rtol=eps(float(elty))*8
                     end
                 end
             end
@@ -1298,6 +1298,15 @@ Base.:+(x::TypeWithZero, ::TypeWithoutZero) = x
 
 @testset "diagm for type with no zero" begin
     @test diagm(0 => [TypeWithoutZero()]) isa Matrix{TypeWithZero}
+end
+
+# https://github.com/aviatesk/JET.jl/issues/790
+@testset "diagm inference with non-concrete eltype" begin
+    for kvtype in (Pair{Int, Vector{T}} where T<:Complex, Pair{Int, Vector{<:Real}})
+        @test Base.infer_return_type(LinearAlgebra.diagm_container, (Nothing, kvtype)) <: Matrix
+        @test Base.infer_return_type(LinearAlgebra.diagm_container, (Tuple{Int,Int}, kvtype)) <: Matrix
+        @test Base.infer_return_type(diagm, (kvtype,)) <: Matrix
+    end
 end
 
 @testset "cbrt(A::AbstractMatrix{T})" begin

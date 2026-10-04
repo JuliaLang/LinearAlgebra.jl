@@ -62,12 +62,12 @@ end
 
 # we dispatch on the eltype in an internal method to avoid ambiguities
 function _eigen(A::RealHermSymComplexHerm; alg::Algorithm, sortby)
-    S = eigtype(eltype(A))
+    S = eigtype(A)
     eigen!(eigencopy_oftype(A, S); alg, sortby)
 end
 
 function _eigen(A::RealHermSymComplexHerm{Float16}; alg::Algorithm, sortby::Union{Function,Nothing}=eigsortby)
-    S = eigtype(eltype(A))
+    S = eigtype(A)
     E = eigen!(eigencopy_oftype(A, S); alg, sortby)
     values = convert(AbstractVector{Float16}, E.values)
     vectors = convert(AbstractMatrix{isreal(E.vectors) ? Float16 : Complex{Float16}}, E.vectors)
@@ -95,8 +95,8 @@ The [`UnitRange`](@ref) `irange` specifies indices of the sorted eigenvalues to 
     will be a *truncated* factorization.
 """
 function eigen(A::RealHermSymComplexHerm, irange::UnitRange)
-    S = eigtype(eltype(A))
-    eigen!(eigencopy_oftype(A, S), irange)
+    S = eigtype(A)
+    _tohalf(eltype(A), eigen!(eigencopy_oftype(A, S), irange))
 end
 
 eigen!(A::RealHermSymComplexHerm{T,<:StridedMatrix}, vl::Real, vh::Real) where {T<:BlasReal} =
@@ -120,8 +120,8 @@ The following functions are available for `Eigen` objects: [`inv`](@ref), [`det`
     will be a *truncated* factorization.
 """
 function eigen(A::RealHermSymComplexHerm, vl::Real, vh::Real)
-    S = eigtype(eltype(A))
-    eigen!(eigencopy_oftype(A, S), vl, vh)
+    S = eigtype(A)
+    _tohalf(eltype(A), eigen!(eigencopy_oftype(A, S), vl, vh))
 end
 
 
@@ -159,8 +159,8 @@ The default `alg` used may change in the future.
 
 """
 function eigvals(A::RealHermSymComplexHerm; alg::Algorithm = default_eigen_alg(A), sortby::Union{Function,Nothing}=eigsortby)
-    S = eigtype(eltype(A))
-    eigvals!(eigencopy_oftype(A, S); alg, sortby)
+    S = eigtype(A)
+    _tohalf(eltype(A), eigvals!(eigencopy_oftype(A, S); alg, sortby))
 end
 
 
@@ -200,8 +200,8 @@ julia> eigvals(A)
 ```
 """
 function eigvals(A::RealHermSymComplexHerm, irange::UnitRange)
-    S = eigtype(eltype(A))
-    eigvals!(eigencopy_oftype(A, S), irange)
+    S = eigtype(A)
+    _tohalf(eltype(A), eigvals!(eigencopy_oftype(A, S), irange))
 end
 
 """
@@ -239,16 +239,16 @@ julia> eigvals(A)
 ```
 """
 function eigvals(A::RealHermSymComplexHerm, vl::Real, vh::Real)
-    S = eigtype(eltype(A))
-    eigvals!(eigencopy_oftype(A, S), vl, vh)
+    S = eigtype(A)
+    _tohalf(eltype(A), eigvals!(eigencopy_oftype(A, S), vl, vh))
 end
 
 eigmax(A::RealHermSymComplexHerm{<:Real}) = eigvals(A, size(A, 1):size(A, 1))[1]
 eigmin(A::RealHermSymComplexHerm{<:Real}) = eigvals(A, 1:1)[1]
 
 function eigen(A::HermOrSym{TA}, B::HermOrSym{TB}; kws...) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
-    return eigen!(eigencopy_oftype(A, S), eigencopy_oftype(B, S); kws...)
+    S = promote_type(eigtype(A), _valeltype(B))
+    return _tohalf(promote_type(TA, TB), eigen!(eigencopy_oftype(A, S), eigencopy_oftype(B, S); kws...))
 end
 
 function eigen!(A::HermOrSym{T,S}, B::HermOrSym{T,S}; sortby::Union{Function,Nothing}=nothing) where {T<:BlasReal,S<:StridedMatrix}
@@ -262,9 +262,9 @@ end
 
 function eigen(A::AbstractMatrix, C::Cholesky; sortby::Union{Function,Nothing}=nothing)
     if ishermitian(A)
-        eigen!(eigencopy_oftype(Hermitian(A), eigtype(eltype(A))), C; sortby)
+        eigen!(eigencopy_oftype(Hermitian(A), eigtype(A)), C; sortby)
     else
-        eigen!(copy_similar(A, eigtype(eltype(A))), C; sortby)
+        eigen!(copy_similar(A, eigtype(A)), C; sortby)
     end
 end
 function eigen!(A::AbstractMatrix, C::Cholesky; sortby::Union{Function,Nothing}=nothing)
@@ -324,8 +324,8 @@ UtiAUi!(A::Hermitian, U) = Hermitian(_UtiAUi!(copytri!(parent(A), A.uplo, true),
 _UtiAUi!(A, U) = rdiv!(ldiv!(U', A), U)
 
 function eigvals(A::HermOrSym{TA}, B::HermOrSym{TB}; kws...) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
-    return eigvals!(eigencopy_oftype(A, S), eigencopy_oftype(B, S); kws...)
+    S = promote_type(eigtype(A), _valeltype(B))
+    return _tohalf(promote_type(TA, TB), eigvals!(eigencopy_oftype(A, S), eigencopy_oftype(B, S); kws...))
 end
 
 function eigvals!(A::HermOrSym{T,S}, B::HermOrSym{T,S}; sortby::Union{Function,Nothing}=nothing) where {T<:BlasReal,S<:StridedMatrix}
@@ -348,9 +348,9 @@ end
 
 function eigvals(A::AbstractMatrix, C::Cholesky; sortby::Union{Function,Nothing}=nothing)
     if ishermitian(A)
-        eigvals!(eigencopy_oftype(Hermitian(A), eigtype(eltype(A))), C; sortby)
+        eigvals!(eigencopy_oftype(Hermitian(A), eigtype(A)), C; sortby)
     else
-        eigvals!(copy_similar(A, eigtype(eltype(A))), C; sortby)
+        eigvals!(copy_similar(A, eigtype(A)), C; sortby)
     end
 end
 function eigvals!(A::AbstractMatrix{T}, C::Cholesky{T, <:AbstractMatrix}; sortby::Union{Function,Nothing}=nothing) where {T<:Number}
@@ -427,5 +427,5 @@ end
 function eigvals(A::Hermitian{Complex{T}, <:Tridiagonal}; kwargs...) where {T}
     (; dl, d, du) = parent(A)
     Er = A.uplo == 'U' ? abs.(du) : abs.(dl)
-    eigvals(SymTridiagonal(float.(real.(d)), Er); kwargs...)
+    _tohalf(T, eigvals(SymTridiagonal(float.(real.(d)), Er); kwargs...))
 end

@@ -5,13 +5,15 @@ module TestQR
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
-using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, rmul!, lmul!
+using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, QRCompactWY, rmul!, lmul!
 using LinearAlgebra: QRCompactWYQ, QRPackedQ, _lqmul!, _rqmul!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.Furlongs
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 n = 10
 
@@ -841,6 +843,40 @@ end
         @test _rqmul!(copy(A), Q, Val(false)) ≈ A * Qref
         @test _rqmul!(copy(A), Q, Val(true)) ≈ A * Qref'
     end
+end
+
+@testset "abstract eltypes are promoted according to the stored values (#287)" begin
+    A = Real[1.0 big(floatmax(Float64))+1; 1.0 big(1.0)]
+    F = qr(A)
+    @test F isa QR{BigFloat}
+    @test all(isfinite, F.R)
+    @test F.Q * F.R ≈ convert(Matrix{BigFloat}, A)
+    @test qr(Number[1 im; 1 2]).R ≈ qr(ComplexF64[1 im; 1 2]).R
+end
+
+@testset "right-hand sides with a different eltype than the factorization" begin
+    A = [4.0 1.0 2.0; 1.0 3.0 0.5; 2.0 0.5 5.0]
+    b = [1.0, 2.0, 3.0]
+    B = [1.0 2.0; 3.0 4.0; 5.0 6.0]
+    # the right-hand side carries units, the factorization does not
+    for (M, rhs) in ((A, b), (A, B), (A[:, 1:2], b), (A[:, 1:2], B), (A[1:2, :], b[1:2]), (A[1:2, :], B[1:2, :]))
+        X = M \ rhs
+        for F in (qr(M), qr(M, ColumnNorm()), LinearAlgebra.qrfactUnblocked!(copy(M)))
+            # `qr` without pivoting does not support wide systems
+            F isa QRCompactWY && size(M, 1) < size(M, 2) && continue
+            x = F \ Furlong.(rhs)
+            @test x isa Array{Furlong{1,Float64},ndims(rhs)}
+            @test map(x -> x.val, x) ≈ X
+        end
+    end
+    # vector-valued elements of the right-hand side (#904)
+    bs = [SizedArray{(2,)}(B[i, :]) for i in axes(B, 1)]
+    X = A \ B
+    x = ldiv!(qr(A), copy(bs))
+    @test x isa Vector{<:SizedArray{(2,),Float64}}
+    @test all(i -> x[i].data ≈ X[i, :], axes(X, 1))
+    # the Householder kernel of the packed `QR` uses `dot`, which does not treat the elements as scalars
+    @test_broken ldiv!(LinearAlgebra.qrfactUnblocked!(copy(A)), copy(bs)) isa Vector{<:SizedArray{(2,),Float64}}
 end
 
 end # module TestQR

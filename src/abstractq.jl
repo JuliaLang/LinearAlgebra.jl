@@ -345,7 +345,7 @@ size(Q::Union{QRCompactWYQ,QRPackedQ}) = (n = size(Q.factors, 1); (n, n))
 # Generic counterparts of LAPACK's `ormqr!`. With `Q = H_1 ⋯ H_k` and `Hᵢ = I - vᵢτᵢvᵢ'`
 # stored in the columns of `Q.factors`, `Q` applies the reflectors in decreasing order,
 # `Q'` in increasing order and with `conj(τᵢ)` in place of `τᵢ`; `adj = true` selects the
-# latter. The loop bodies are those of the four methods this replaces.
+# latter. Each reflector is applied by `reflectorApply!`.
 function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
@@ -353,22 +353,9 @@ function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     if mQ != mB
         throw(DimensionMismatch(lazy"matrix Q has dimensions ($mQ,$nQ) but B has dimensions ($mB, $nB)"))
     end
-    Qfactors = Q.factors
-    @inbounds begin
-        for k in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
-            τk = adj ? conj(Q.τ[k]) : Q.τ[k]
-            for j = 1:nB
-                vBj = B[k,j]
-                for i = k+1:mB
-                    vBj += conj(Qfactors[i,k])*B[i,j]
-                end
-                vBj = τk*vBj
-                B[k,j] -= vBj
-                for i = k+1:mB
-                    B[i,j] -= Qfactors[i,k]*vBj
-                end
-            end
-        end
+    @inbounds for k in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
+        # `reflectorApply!` applies `I - vᵢ conj(τ)vᵢ'`, hence the conjugation for `Q`
+        reflectorApply!(view(Q.factors, k:mB, k), adj ? Q.τ[k] : conj(Q.τ[k]), view(B, k:mB, :))
     end
     B
 end
@@ -414,8 +401,8 @@ function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     B
 end
 
-# as `_lqmul!`, for `A*Q` resp. `A*Q'`, running over the reflectors the other way round and
-# multiplying by `τₖ` from the right rather than from the left
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, running over the reflectors the other way round;
+# `reflectorApply!` multiplies by `τₖ` from the right rather than from the left
 function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
     require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
@@ -423,22 +410,8 @@ function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
     if nA != mQ
         throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $nQ)"))
     end
-    Qfactors = Q.factors
-    @inbounds begin
-        for k in (adj ? (min(mQ,nQ):-1:1) : (1:1:min(mQ,nQ)))
-            τk = adj ? conj(Q.τ[k]) : Q.τ[k]
-            for i = 1:mA
-                vAi = A[i,k]
-                for j = k+1:mQ
-                    vAi += A[i,j]*Qfactors[j,k]
-                end
-                vAi = vAi*τk
-                A[i,k] -= vAi
-                for j = k+1:nA
-                    A[i,j] -= vAi*conj(Qfactors[j,k])
-                end
-            end
-        end
+    @inbounds for k in (adj ? (min(mQ,nQ):-1:1) : (1:1:min(mQ,nQ)))
+        reflectorApply!(view(A, :, k:nA), view(Q.factors, k:nA, k), adj ? conj(Q.τ[k]) : Q.τ[k])
     end
     A
 end
