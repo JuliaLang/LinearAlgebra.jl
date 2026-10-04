@@ -685,7 +685,7 @@ function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix) where T
         end
         ldiv!(UpperTriangular(view(R, :, 1:minmn)), view(B, 1:minmn, :))
         if n > m # Apply elementary transformation to solution
-            B[m + 1:mB,1:nB] .= zero(eltype(B))
+            fill!(view(B, m + 1:mB, 1:nB), zero(eltype(B)))
             for j = 1:nB
                 for k = 1:m
                     vBj = B[k,j]'

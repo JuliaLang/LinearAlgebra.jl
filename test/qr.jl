@@ -845,14 +845,31 @@ end
             @test map(x -> x.val, x) ≈ X
         end
     end
-    # vector-valued elements of the right-hand side (#904)
-    bs = [SizedArray{(2,)}(B[i, :]) for i in axes(B, 1)]
-    X = A \ B
-    x = ldiv!(qr(A), copy(bs))
-    @test x isa Vector{<:SizedArray{(2,),Float64}}
-    @test all(i -> x[i].data ≈ X[i, :], axes(X, 1))
-    # the Householder kernel of the packed `QR` uses `dot`, which does not treat the elements as scalars
-    @test_broken ldiv!(LinearAlgebra.qrfactUnblocked!(copy(A)), copy(bs)) isa Vector{<:SizedArray{(2,),Float64}}
+    # vector-valued elements of the right-hand side (#904): the solution is the solution for
+    # each component
+    for (M, rhs) in ((A, B), (A[:, 1:2], B), (A[1:2, :], B[1:2, :]))
+        m, n = size(M)
+        X = M \ rhs
+        bs = [SizedArray{(2,)}(rhs[i, :]) for i in 1:m]
+        Bs = [SizedArray{(2,)}([rhs[i, j], -rhs[i, j]]) for i in 1:m, j in axes(rhs, 2)]
+        for F in (qr(M), qr(M, ColumnNorm()), LinearAlgebra.qrfactUnblocked!(copy(M)))
+            F isa QRCompactWY && m < n && continue
+            # `ldiv!` needs a buffer of the size of the solution for wide systems
+            x = ldiv!(F, vcat(bs, fill(zero(bs[1]), max(n - m, 0))))
+            @test x isa Vector{<:SizedArray{(2,),Float64}}
+            @test map(x -> x.data[1], x[1:n]) ≈ X[:, 1]
+            @test map(x -> x.data[2], x[1:n]) ≈ X[:, 2]
+            Y = ldiv!(F, vcat(Bs, fill(zero(bs[1]), max(n - m, 0), size(Bs, 2))))
+            @test Y isa Matrix{<:SizedArray{(2,),Float64}}
+            @test map(y -> y.data[1], Y[1:n, :]) ≈ X
+            @test map(y -> y.data[2], Y[1:n, :]) ≈ -X
+            Q = F.Q
+            y = lmul!(Q, copy(bs))
+            @test all(i -> y[i].data ≈ (Q * rhs)[i, :], 1:m)
+            y = lmul!(Q', copy(bs))
+            @test all(i -> y[i].data ≈ (Q' * rhs)[i, :], 1:m)
+        end
+    end
 end
 
 end # module TestQR

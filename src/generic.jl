@@ -1824,19 +1824,65 @@ end
     reflectorApply!(x, τ, A)
 
 Multiplies `A` in-place by a Householder reflection on the left. It is equivalent to `A .= (I - [1; x[2:end]] * conj(τ) * [1; x[2:end]]') * A`.
+
+For `x` and `A` with numeric elements, the computation is carried out by
+`reflectorApplyNumeric!`, which is based on `dot` and `axpy!`. Otherwise, e.g. if the
+elements of `A` are vectors, `reflectorApplyLoop!` is used, which treats the elements
+of `A` as opaque. Packages may add methods of `reflectorApply!` for their own types that
+dispatch to either kernel.
 """
-@inline function reflectorApply!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
+reflectorApply!(x::AbstractVector{<:Number}, τ::Number, A::AbstractVecOrMat{<:Number}) =
+    reflectorApplyNumeric!(x, τ, A)
+reflectorApply!(x::AbstractVector, τ::Number, A::AbstractVecOrMat) =
+    reflectorApplyLoop!(x, τ, A)
+
+function _checkreflector(x::AbstractVector, A::AbstractVecOrMat)
     require_one_based_indexing(x, A)
-    m, n = size(A, 1), size(A, 2)
+    m = size(A, 1)
     if length(x) != m
         throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the first dimension of matrix A, $m"))
     end
+    return m
+end
+
+"""
+    reflectorApplyNumeric!(x, τ, A)
+
+Kernel of `reflectorApply!` for numeric elements of `x` and `A`, based on `dot` and
+`axpy!`, which dispatch to BLAS where possible.
+"""
+@inline function reflectorApplyNumeric!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
+    m = _checkreflector(x, A)
     m == 0 && return A
     for j in axes(A,2)
         Aj, xj = @inbounds view(A, 2:m, j), view(x, 2:m)
         vAj = conj(τ)*(@inbounds(A[1, j]) + dot(xj, Aj))
         @inbounds A[1, j] -= vAj
         axpy!(-vAj, xj, Aj)
+    end
+    return A
+end
+
+"""
+    reflectorApplyLoop!(x, τ, A)
+
+Kernel of `reflectorApply!` with explicit loops over the elements of `A`. The elements
+are only multiplied by the (scalar) entries of `x` and by `τ`, added and subtracted, so they
+may be vectors themselves, for instance.
+"""
+@inline function reflectorApplyLoop!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
+    m = _checkreflector(x, A)
+    m == 0 && return A
+    @inbounds for j in axes(A, 2)
+        vAj = A[1, j]
+        for i in 2:m
+            vAj += conj(x[i])*A[i, j]
+        end
+        vAj = conj(τ)*vAj
+        A[1, j] -= vAj
+        for i in 2:m
+            A[i, j] -= x[i]*vAj
+        end
     end
     return A
 end
