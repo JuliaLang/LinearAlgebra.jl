@@ -1848,7 +1848,7 @@ end
 """
     reflectorApplyNumeric!(x, τ, A)
 
-Kernel of [`reflectorApply!`](@ref) for numeric elements of `x` and `A`, based on `dot` and
+Kernel of `reflectorApply!` for numeric elements of `x` and `A`, based on `dot` and
 `axpy!`, which dispatch to BLAS where possible.
 """
 @inline function reflectorApplyNumeric!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
@@ -1866,7 +1866,7 @@ end
 """
     reflectorApplyLoop!(x, τ, A)
 
-Kernel of [`reflectorApply!`](@ref) with explicit loops over the elements of `A`. The elements
+Kernel of `reflectorApply!` with explicit loops over the elements of `A`. The elements
 are only multiplied by the (scalar) entries of `x` and by `τ`, added and subtracted, so they
 may be vectors themselves, for instance.
 """
