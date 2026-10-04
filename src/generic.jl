@@ -1251,8 +1251,7 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
     # the scalar type of the solution: the elements of `B` may themselves be vectors
-    T = promote_op(\, _valeltype(A), promote_leaf_eltypes(B))
-    TA = promote_op(*, _valeltype(A), typeof(one(T)))
+    T = promote_op(\, eltype(A), _scalartype(eltype(B)))
     if m == n
         if istril(A)
             if istriu(A)
@@ -1264,6 +1263,11 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
+    end
+    # `T` is the type of the solution; promote the numeric type of `A` accordingly
+    # (e.g. `Int` -> `Float64`), but keep the units of `A` (`one(T)` is dimensionless)
+    TA = promote_type(eltype(A), typeof(oneunit(eltype(A)) * one(T)))
+    if m == n
         return lu(convert(AbstractArray{TA}, A)) \ B
     end
     return qr(convert(AbstractArray{TA}, A), ColumnNorm()) \ B
@@ -2037,8 +2041,8 @@ det_bareiss(M) = det_bareiss!(copymutable(M))
 
 For an (possibly nested) iterable object `itr`, promote the types of leaf
 elements.  Equivalent to `promote_type(typeof(leaf1), typeof(leaf2), ...)`.
-Leaves are `Number`s, or elements of other scalar types (e.g. elements of a ring) that are
-neither arrays nor tuples. Homogeneous containers of a concrete leaf type are not iterated.
+Currently supports only numeric leaf elements. Homogeneous containers of a concrete leaf type
+are not iterated.
 
 # Examples
 ```jldoctest
@@ -2063,17 +2067,13 @@ promote_leaf_eltypes(x::T) where {T} = T
 promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T} =
     (isconcretetype(T) && !(T <: Union{AbstractArray,Tuple})) ? T : _promote_leaf_eltypes(x)
 promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = _promote_leaf_eltypes(x)
-_promote_leaf_eltypes(x::Tuple) =
-    isempty(x) ? Bool : mapreduce(promote_leaf_eltypes, promote_type, x)
+_promote_leaf_eltypes(x::Tuple) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
 function _promote_leaf_eltypes(x::AbstractArray)
     # loop instead of mapreduce, to avoid a dynamic call to promote_type for every element
-    isempty(x) && return Bool
-    # start from the type of the first leaf rather than from `Bool`, since the leaves need not
-    # be `Number`s, and would promote with `Bool` to `Any`
-    T = Union{}
+    T = Bool
     for el in x
         S = el isa Number ? typeof(el) : promote_leaf_eltypes(el)
-        S === T || (T = T === Union{} ? S : promote_type(T, S))
+        S === T || (T = promote_type(T, S))
     end
     return T
 end

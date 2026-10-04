@@ -734,6 +734,11 @@ const LAPACKFactorizations{T,S} = Union{
 (\)(F::AdjointFactorization{<:Any,<:LAPACKFactorizations}, B::AbstractVecOrMat) = ldiv(F, B)
 (\)(F::TransposeFactorization{<:Any,<:LU}, B::AbstractVecOrMat) = ldiv(F, B)
 
+# the scalar type underlying an element type: for array-valued elements (e.g. static vectors),
+# that of their elements, recursively; otherwise the type itself
+_scalartype(::Type{T}) where {T<:AbstractArray} = _scalartype(eltype(T))
+_scalartype(::Type{T}) where {T} = T
+
 function ldiv(F::Factorization, B::AbstractVecOrMat)
     require_one_based_indexing(B)
     m, n = size(F)
@@ -742,7 +747,7 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
     end
 
     # scalar type of the solution (the elements of `B` may themselves be vectors)
-    TFB = typeof(zero(promote_leaf_eltypes(B)) / oneunit(eltype(F)))
+    TFB = typeof(zero(_scalartype(eltype(B))) / oneunit(eltype(F)))
     # promote the numeric type of the factorization to that of the solution (e.g. `Float32` ->
     # `Float64`), but keep its units: `TFB` itself may carry different units than the factors
     TF = typeof(oneunit(eltype(F)) * one(TFB))
@@ -750,12 +755,7 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
 
     # For wide problem we (often) compute a minimum norm solution. The solution
     # is larger than the right hand side so we use size(F, 2).
-    # The buffer holds the elements of `B` scaled by the inverse unit of the factors. For
-    # vector-valued elements, these are scaled vectors; otherwise, the buffer has the scalar
-    # type of the solution, which is derived from the leaves of `B` and hence covers also
-    # abstract element types of `B`
-    TB = eltype(B)
-    TBB = TB <: AbstractArray ? typeof(zero(TB) / oneunit(eltype(F))) : TFB
+    TBB = typeof(zero(eltype(B)) / oneunit(eltype(F)))
     BB = _zeros(TBB, B, n)
 
     if n > size(B, 1)
