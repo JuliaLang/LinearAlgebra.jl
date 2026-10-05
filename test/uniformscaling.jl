@@ -607,13 +607,13 @@ end
         @test B == A + I
         @test B[0, 0] == B[1, 1] == 2
         @test B[0, 1] == B[1, 0] == 1
-        # same size, but different axes: the diagonal is where the indices are equal
-        A = OffsetArray(ones(2, 2), 0:1, 1:2)
-        B = A .+ I
-        @test axes(B) == axes(A)
-        @test B == A + I
-        @test B[1, 1] == 2
-        @test B[0, 1] == B[0, 2] == B[1, 2] == 1
+        B .= I
+        @test B[0, 0] == B[1, 1] == 1
+        @test B[0, 1] == B[1, 0] == 0
+        # the first two axes must be identical, not only of the same length
+        @test_throws DimensionMismatch OffsetArray(ones(2, 2), 0:1, 1:2) .+ I
+        @test_throws DimensionMismatch OffsetArray(Diagonal([1, 2, 3]), 2, 0) .+ I
+        @test_throws DimensionMismatch OffsetArray(ones(2, 2), 0:1, 1:2) .= I
         @test_throws DimensionMismatch OffsetArray(ones(2, 3), 0:1, 0:2) .+ I
     end
 

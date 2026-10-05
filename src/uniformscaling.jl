@@ -12,9 +12,10 @@ acts similarly to a matrix in many cases and includes support for some
 indexing. See also [`I`](@ref).
 
 In broadcasting, a `UniformScaling` acts like a square matrix whose size is
-determined by the other arguments: the first two dimensions of the result must
-have the same length `n`, and the `UniformScaling` then contributes the elements
-of the `n×n` matrix `λ*I(n)` (and is broadcast along any trailing dimensions).
+determined by the other arguments: the first two axes of the result must be
+identical, and the `UniformScaling` then contributes the elements of the square
+matrix `λ*I(n)` along these dimensions (and is broadcast along any trailing
+dimensions).
 Broadcasting only over `UniformScaling`s and scalars, as in `I .+ I`, yields a
 `UniformScaling` again, provided that the function maps the off-diagonal zeros
 to zero.
@@ -370,9 +371,9 @@ end
 # A `UniformScaling` has no size of its own, so it cannot take part in broadcasting
 # like an ordinary array. Instead, it behaves like a square matrix whose size is
 # determined by the other arguments: the result of the broadcast must have at
-# least two dimensions, the first two of which must have the same length `n`,
-# and `J` then acts as the `n×n` matrix `J(n)` along these dimensions (and is
-# broadcast along any trailing dimensions).
+# least two dimensions, the first two of which must have identical axes, and `J`
+# then acts as the square matrix `J(n)` along these dimensions (and is broadcast
+# along any trailing dimensions).
 #
 # This is implemented via a custom `BroadcastStyle`, `UniformScalingStyle`, which
 # takes precedence over every other style, and defers the decision on the actual
@@ -431,10 +432,11 @@ _combine_axes_ignoring_uniformscaling(A) = _axes_ignoring_uniformscaling(A)
 @inline Base.axes(bc::Broadcasted{UniformScalingStyle}) =
     bc.axes isa Nothing ? _combine_axes_ignoring_uniformscaling(bc.args...) : bc.axes
 
-# A `UniformScaling` can only be broadcast to a shape that is square in the first two dimensions
+# A `UniformScaling` can only be broadcast to a shape whose first two axes are identical, such that
+# the diagonal consists of the elements with equal indices (as for `I(n)`, which has one-based axes)
 function _check_uniformscaling_axes(ax::Tuple{Any,Any,Vararg{Any}})
-    if length(ax[1]) != length(ax[2])
-        throw(DimensionMismatch(lazy"cannot broadcast a UniformScaling to a shape that is not square in the first two dimensions; got axes $ax"))
+    if ax[1] != ax[2]
+        throw(DimensionMismatch(lazy"cannot broadcast a UniformScaling to a shape whose first two axes differ; got axes $ax"))
     end
     return nothing
 end

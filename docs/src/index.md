@@ -279,9 +279,9 @@ Stacktrace:
 ```
 
 A `UniformScaling` can also be used in broadcasting, where it behaves like a square matrix
-whose size is determined by the other arguments. That is, the first two dimensions of the
-result must have the same length `n`, and the `UniformScaling` then contributes the elements of
-the `n×n` matrix `U(n)`:
+whose size is determined by the other arguments. That is, the first two axes of the result
+must be identical, and the `UniformScaling` then contributes the elements of the square matrix
+`U(n)`:
 
 ```jldoctest
 julia> U = UniformScaling(2);
@@ -304,7 +304,7 @@ julia> a .+= U; a
  3  6
 
 julia> [1 2 3; 4 5 6] .+ U
-ERROR: DimensionMismatch: cannot broadcast a UniformScaling to a shape that is not square in the first two dimensions; got axes (Base.OneTo(2), Base.OneTo(3))
+ERROR: DimensionMismatch: cannot broadcast a UniformScaling to a shape whose first two axes differ; got axes (Base.OneTo(2), Base.OneTo(3))
 Stacktrace:
 [...]
 ```
