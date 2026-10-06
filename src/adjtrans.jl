@@ -64,7 +64,7 @@ end
 Adjoint(A) = Adjoint{Base.promote_op(adjoint,eltype(A)),typeof(A)}(A)
 Transpose(A) = Transpose{Base.promote_op(transpose,eltype(A)),typeof(A)}(A)
 Adjoint(::Adjoint) = throw(ArgumentError("constructing an Adjoint wrapper of Adjoint objects is not supported; consider using `adjoint` instead."))
-Transpose(::Transpose) = throw(ArgumentError("constructing an Transpose wrapper of Transpose objects is not supported; consider using `transpose` instead."))
+Transpose(::Transpose) = throw(ArgumentError("constructing a Transpose wrapper of Transpose objects is not supported; consider using `transpose` instead."))
 
 """
     inplace_adj_or_trans(::AbstractArray) -> adjoint!|transpose!|copyto!
