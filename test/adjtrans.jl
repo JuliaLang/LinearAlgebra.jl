@@ -74,10 +74,14 @@ end
 
 @testset "Adjoint and Transpose add additional layers to already-wrapped objects" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
-    @test (A = Adjoint(Adjoint(intvec))::Adjoint{Int,Adjoint{Int,Vector{Int}}}; A.parent.parent === intvec)
-    @test (A = Adjoint(Adjoint(intmat))::Adjoint{Int,Adjoint{Int,Matrix{Int}}}; A.parent.parent === intmat)
-    @test (A = Transpose(Transpose(intvec))::Transpose{Int,Transpose{Int,Vector{Int}}}; A.parent.parent === intvec)
-    @test (A = Transpose(Transpose(intmat))::Transpose{Int,Transpose{Int,Matrix{Int}}}; A.parent.parent === intmat)
+    @test_throws ArgumentError Adjoint(adjoint(intvec))
+    @test_throws ArgumentError Adjoint(adjoint(intmat))
+    @test_throws ArgumentError Transpose(transpose(intvec))
+    @test_throws ArgumentError Transpose(transpose(intmat))
+    @test (A = Adjoint(Transpose(intvec))::Adjoint{Int,Transpose{Int,Vector{Int}}}; A.parent.parent === intvec)
+    @test (A = Adjoint(Transpose(intmat))::Adjoint{Int,Transpose{Int,Matrix{Int}}}; A.parent.parent === intmat)
+    @test (A = Transpose(Adjoint(intvec))::Transpose{Int,Adjoint{Int,Vector{Int}}}; A.parent.parent === intvec)
+    @test (A = Transpose(Adjoint(intmat))::Transpose{Int,Adjoint{Int,Matrix{Int}}}; A.parent.parent === intmat)
 end
 
 @testset "Adjoint and Transpose basic AbstractArray functionality" begin
