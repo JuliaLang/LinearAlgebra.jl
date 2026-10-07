@@ -780,7 +780,7 @@ function (\)(A::Union{QR{T},QRCompactWY{T},QRPivoted{T}}, BIn::VecOrMat{Complex{
 #                                                 |x4|y4|
     B = reshape(copy(transpose(reinterpret(T, reshape(BIn, (1, length(BIn)))))), size(BIn, 1), 2*size(BIn, 2))
 
-    X = _zeros(T, B, n)
+    X = _zeros(T, B, A)
     X[1:size(B, 1), :] = B
 
     ldiv!(A, X)
