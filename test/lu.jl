@@ -510,4 +510,45 @@ end
     end
 end
 
+@testset "abstract eltypes are promoted according to the stored values (#287)" begin
+    A = Real[1.0 big(floatmax(Float64))+1; 1.0 big(1.0)]
+    F = lu(A)
+    @test F isa LU{BigFloat}
+    @test all(isfinite, F.U)
+    @test F.L * F.U ≈ convert(Matrix{BigFloat}, A)[F.p, :]
+    @test lu(Number[1 im; 1 2]).U ≈ lu(ComplexF64[1 im; 1 2]).U
+    # the operations routed through `lu`, including the generic `\`, follow
+    A0 = [4.0 1.0 0.5; 1.0 3.0 0.2; 0.3 0.5 5.0]
+    b = [1.0, 2.0, 3.0]
+    B = [1.0 2.0; 3.0 4.0; 5.0 6.0]
+    for T in (Any, Real, Number, AbstractFloat)
+        A = convert(Matrix{T}, A0)
+        @test lu(A) isa LU{Float64}
+        @test lu(A) \ b ≈ A0 \ b
+        x = A \ b
+        @test x isa Vector{Float64}
+        @test x ≈ A0 \ b
+        X = A \ B
+        @test X isa Matrix{Float64}
+        @test X ≈ A0 \ B
+        @test permutedims(b) / A ≈ permutedims(b) / A0
+        @test [A; A[1:1, :]] \ vcat(b, b[1]) ≈ [A0; A0[1:1, :]] \ vcat(b, b[1])   # least squares
+        Ai = inv(A)
+        @test Ai isa Matrix{Float64}
+        @test Ai ≈ inv(A0)
+        @test det(A) ≈ det(A0)
+        if T !== Any   # `Symmetric` and `Tridiagonal` with `Any` elements cannot even be built or indexed
+            @test Symmetric(A) \ b ≈ Symmetric(A0) \ b
+            @test Tridiagonal(A) \ b ≈ Tridiagonal(A0) \ b
+        end
+    end
+    # mixed stored types promote to a common concrete type
+    A = Real[4 1 0; 1 3 0; 0 0 5.0]
+    @test lu(A) isa LU{Float64}
+    @test A \ b ≈ Float64.(A) \ b
+    A = Number[4 im 0; -im 3 0; 0 0 5]
+    @test lu(A) isa LU{ComplexF64}
+    @test A \ b ≈ ComplexF64.(A) \ b
+end
+
 end # module TestLU
