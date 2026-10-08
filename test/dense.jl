@@ -413,7 +413,7 @@ end
 
                     # norm
                     for p in (-Inf, Inf, (-2:3)...)
-                        @test norm(A, p) == norm(vec(A), p)
+                        @test norm(A, p) ≈ norm(vec(A), p) rtol=eps(float(elty))*8
                     end
                 end
             end
@@ -1261,6 +1261,37 @@ end
     @test @inferred(inv(transpose(B)))*transpose(B) ≈ I
 end
 
+# A dense matrix whose `parent` is its backing storage, like FixedSizeArrays.jl
+struct VectorBackedMatrix{T} <: DenseMatrix{T}
+    data::Vector{T}
+    m::Int
+    n::Int
+end
+Base.size(A::VectorBackedMatrix) = (A.m, A.n)
+Base.IndexStyle(::Type{<:VectorBackedMatrix}) = IndexLinear()
+Base.getindex(A::VectorBackedMatrix, i::Int) = A.data[i]
+Base.setindex!(A::VectorBackedMatrix, v, i::Int) = setindex!(A.data, v, i)
+Base.parent(A::VectorBackedMatrix) = A.data
+Base.similar(::VectorBackedMatrix, ::Type{T}, dims::Dims{2}) where {T} =
+    VectorBackedMatrix(Vector{T}(undef, prod(dims)), dims...)
+Base.unsafe_convert(::Type{Ptr{T}}, A::VectorBackedMatrix{T}) where {T} = Base.unsafe_convert(Ptr{T}, A.data)
+Base.elsize(::Type{VectorBackedMatrix{T}}) where {T} = Base.elsize(Vector{T})
+
+@testset "inv of a dense matrix whose parent is its storage (#1740)" begin
+    for T in (Float64, ComplexF64, Rational{Int})
+        for M in (T[2 1; 1 3],  # LU
+                  T[2 0; 0 3],  # diagonal
+                  T[2 1; 0 3],  # upper triangular
+                  T[2 0; 1 3])  # lower triangular
+            A = VectorBackedMatrix(vec(M), size(M)...)
+            B = @inferred inv(A)
+            @test B isa VectorBackedMatrix{T}
+            @test B ≈ inv(M)
+            @test B * A ≈ I
+        end
+    end
+end
+
 @testset "Factorize fallback for Adjoint/Transpose" begin
     a = rand(Complex{Int8}, n, n)
     @test Array(transpose(factorize(Transpose(a)))) ≈ Array(factorize(a))
@@ -1298,6 +1329,15 @@ Base.:+(x::TypeWithZero, ::TypeWithoutZero) = x
 
 @testset "diagm for type with no zero" begin
     @test diagm(0 => [TypeWithoutZero()]) isa Matrix{TypeWithZero}
+end
+
+# https://github.com/aviatesk/JET.jl/issues/790
+@testset "diagm inference with non-concrete eltype" begin
+    for kvtype in (Pair{Int, Vector{T}} where T<:Complex, Pair{Int, Vector{<:Real}})
+        @test Base.infer_return_type(LinearAlgebra.diagm_container, (Nothing, kvtype)) <: Matrix
+        @test Base.infer_return_type(LinearAlgebra.diagm_container, (Tuple{Int,Int}, kvtype)) <: Matrix
+        @test Base.infer_return_type(diagm, (kvtype,)) <: Matrix
+    end
 end
 
 @testset "cbrt(A::AbstractMatrix{T})" begin

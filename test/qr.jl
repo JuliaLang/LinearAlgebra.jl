@@ -5,13 +5,15 @@ module TestQR
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
-using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, rmul!, lmul!
+using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, QRCompactWY, rmul!, lmul!
 using LinearAlgebra: QRCompactWYQ, QRPackedQ, _lqmul!, _rqmul!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.Furlongs
+using Main.LinearAlgebraTestHelpers.SizedArrays
 
 n = 10
 
@@ -826,6 +828,48 @@ end
     @test all(isfinite, F.R)
     @test F.Q * F.R ≈ convert(Matrix{BigFloat}, A)
     @test qr(Number[1 im; 1 2]).R ≈ qr(ComplexF64[1 im; 1 2]).R
+end
+
+@testset "right-hand sides with a different eltype than the factorization" begin
+    A = [4.0 1.0 2.0; 1.0 3.0 0.5; 2.0 0.5 5.0]
+    b = [1.0, 2.0, 3.0]
+    B = [1.0 2.0; 3.0 4.0; 5.0 6.0]
+    # the right-hand side carries units, the factorization does not
+    for (M, rhs) in ((A, b), (A, B), (A[:, 1:2], b), (A[:, 1:2], B), (A[1:2, :], b[1:2]), (A[1:2, :], B[1:2, :]))
+        X = M \ rhs
+        for F in (qr(M), qr(M, ColumnNorm()), LinearAlgebra.qrfactUnblocked!(copy(M)))
+            # `qr` without pivoting does not support wide systems
+            F isa QRCompactWY && size(M, 1) < size(M, 2) && continue
+            x = F \ Furlong.(rhs)
+            @test x isa Array{Furlong{1,Float64},ndims(rhs)}
+            @test map(x -> x.val, x) ≈ X
+        end
+    end
+    # vector-valued elements of the right-hand side (#904): the solution is the solution for
+    # each component
+    for (M, rhs) in ((A, B), (A[:, 1:2], B), (A[1:2, :], B[1:2, :]))
+        m, n = size(M)
+        X = M \ rhs
+        bs = [SizedArray{(2,)}(rhs[i, :]) for i in 1:m]
+        Bs = [SizedArray{(2,)}([rhs[i, j], -rhs[i, j]]) for i in 1:m, j in axes(rhs, 2)]
+        for F in (qr(M), qr(M, ColumnNorm()), LinearAlgebra.qrfactUnblocked!(copy(M)))
+            F isa QRCompactWY && m < n && continue
+            # `ldiv!` needs a buffer of the size of the solution for wide systems
+            x = ldiv!(F, vcat(bs, fill(zero(bs[1]), max(n - m, 0))))
+            @test x isa Vector{<:SizedArray{(2,),Float64}}
+            @test map(x -> x.data[1], x[1:n]) ≈ X[:, 1]
+            @test map(x -> x.data[2], x[1:n]) ≈ X[:, 2]
+            Y = ldiv!(F, vcat(Bs, fill(zero(bs[1]), max(n - m, 0), size(Bs, 2))))
+            @test Y isa Matrix{<:SizedArray{(2,),Float64}}
+            @test map(y -> y.data[1], Y[1:n, :]) ≈ X
+            @test map(y -> y.data[2], Y[1:n, :]) ≈ -X
+            Q = F.Q
+            y = lmul!(Q, copy(bs))
+            @test all(i -> y[i].data ≈ (Q * rhs)[i, :], 1:m)
+            y = lmul!(Q', copy(bs))
+            @test all(i -> y[i].data ≈ (Q' * rhs)[i, :], 1:m)
+        end
+    end
 end
 
 @testset "powers of Q from square, tall and wide matrices" begin

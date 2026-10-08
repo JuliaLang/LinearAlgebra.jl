@@ -691,8 +691,9 @@ _cut_B(x::AbstractVector, r::UnitRange) = length(x)  > length(r) ? x[r]   : x
 _cut_B(X::AbstractMatrix, r::UnitRange) = size(X, 1) > length(r) ? X[r,:] : X
 
 ## append right hand side with zeros if necessary
-_zeros(::Type{T}, b::AbstractVector, n::Integer) where {T} = zeros(T, max(length(b), n))
-_zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B, 1), n), size(B, 2))
+_zeros(::Type{T}, B::AbstractVecOrMat, F::Factorization) where {T} = zeros(T, _ret_size(F, B))
+# keep the array type of dense right hand sides
+_zeros(::Type{T}, B::StridedVecOrMat, F::Factorization) where {T} = fill!(similar(B, T, _ret_size(F, B)), zero(T))
 
 # destination type for matmul
 # diagonal is special, as it does not change the structure of the other matrix
@@ -742,11 +743,14 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
     end
 
     TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(F)))
-    FF = Factorization{TFB}(F)
+    # promote the numeric type of the factorization to that of the solution (e.g. `Float32` ->
+    # `Float64`), but keep its units: `TFB` itself may carry different units than the factors
+    TF = typeof(oneunit(eltype(F)) * one(TFB))
+    FF = Factorization{TF}(F)
 
     # For wide problem we (often) compute a minimum norm solution. The solution
     # is larger than the right hand side so we use size(F, 2).
-    BB = _zeros(TFB, B, n)
+    BB = _zeros(TFB, B, F)
 
     if n > size(B, 1)
         # Underdetermined
