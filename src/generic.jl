@@ -1254,7 +1254,8 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
-    T = promote_op(\, eltype(A), _rhs_eltype(B))
+    # the scalar type of the solution: the elements of `B` may themselves be vectors
+    T = promote_op(\, eltype(A), _scalartype(_rhs_eltype(B)))
     if m == n
         if istril(A)
             if istriu(A)
@@ -2090,7 +2091,8 @@ det_bareiss(M) = det_bareiss!(copymutable(M))
 
 For an (possibly nested) iterable object `itr`, promote the types of leaf
 elements.  Equivalent to `promote_type(typeof(leaf1), typeof(leaf2), ...)`.
-Currently supports only numeric leaf elements.
+Currently supports only numeric leaf elements. Homogeneous containers of a concrete leaf type
+are not iterated.
 
 # Examples
 ```jldoctest
@@ -2110,6 +2112,10 @@ promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Nu
     isconcretetype(eltype(T)) ? eltype(T) : _promote_leaf_eltypes(x)
 promote_leaf_eltypes(x::AbstractArray{Union{}}) = Bool
 promote_leaf_eltypes(x::T) where {T} = T
+# a homogeneous container of a concrete scalar type that is not a `Number` (e.g. of elements of
+# a ring): the elements need not be inspected
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T} =
+    (isconcretetype(T) && !(T <: Union{AbstractArray,Tuple})) ? T : _promote_leaf_eltypes(x)
 promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = _promote_leaf_eltypes(x)
 _promote_leaf_eltypes(x::Tuple) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
 function _promote_leaf_eltypes(x::AbstractArray)

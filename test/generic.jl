@@ -633,6 +633,49 @@ Base.transpose(a::ModInt{n}) where {n} = a  # see Issue 20978
 LinearAlgebra.Adjoint(a::ModInt{n}) where {n} = adjoint(a)
 LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
 
+@testset "scalar type of the right-hand side in ldiv" begin
+    _scalartype = LinearAlgebra._scalartype
+    @test _scalartype(Float64) === Float64
+    @test _scalartype(Complex{Int}) === Complex{Int}
+    @test _scalartype(Furlong{1,Float64}) === Furlong{1,Float64}
+    @test _scalartype(ModInt{2}) === ModInt{2}          # a scalar type that is not a `Number`
+    @test _scalartype(Vector{Float64}) === Float64      # vector-valued elements
+    @test _scalartype(Vector{Vector{ComplexF32}}) === ComplexF32
+    @test _scalartype(Any) === Any
+    # homogeneous containers of a concrete scalar type are not iterated by `promote_leaf_eltypes`
+    @test LinearAlgebra.promote_leaf_eltypes(ModInt{2}.([1, 0])) === ModInt{2}
+    @test LinearAlgebra.promote_leaf_eltypes((ModInt{2}(1), ModInt{2}(0))) === ModInt{2}
+    # the factorization is promoted to the scalar type of the solution, keeping its units
+    A = [4.0 1.0; 1.0 3.0]
+    x = lu(Float32.(A)) \ Furlong.([1.0, 2.0])
+    @test x isa Vector{Furlong{1,Float64}}
+    @test map(x -> x.val, x) ≈ A \ [1.0, 2.0]
+    @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
+    # vector-valued right-hand side (#904): the elements of `b` are (static) vectors
+    b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
+    @test _scalartype(eltype(b)) === Float64
+    X = A \ [1.0 2.0; 3.0 4.0]   # the same system, component by component
+    for F in (lu(A), lu(Float32.(A)), cholesky(A), qr(A))
+        x = F \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+        @test all(((y, z),) -> y.data ≈ z.data, zip(A * x, b))
+    end
+    @test ldiv!(lu(A), copy(b)) isa Vector{<:SizedArray{(2,),Float64}}
+    # the generic `\` derives the solution type from the scalar type of the right-hand side
+    for M in (A, Float32.(A), [4 1; 1 3], Tridiagonal(A), hessenberg(A))
+        x = M \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+    end
+    # least squares, through the pivoted QR
+    At = [A; 1.0 1.0]
+    Xt = At \ [1.0 2.0; 3.0 4.0; 1.0 2.0]
+    x = At \ vcat(b, [b[1]])
+    @test x isa Vector{<:SizedArray{(2,),Float64}}
+    @test all(i -> x[i].data ≈ Xt[i, :], 1:2)
+end
+
 @testset "abstractly typed right-hand sides" begin
     A = [4.0 1.0 0.5; 1.0 3.0 0.2; 0.3 0.5 5.0]
     b = [1.0, 2.0, 3.0]
