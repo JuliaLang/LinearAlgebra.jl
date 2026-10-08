@@ -1142,7 +1142,6 @@ function inv(A::StridedMatrix{T}) where T
         Ai = tril!(parent(inv(LowerTriangular(A))))
     else
         Ai = inv!(lu(A))
-        Ai = convert(typeof(parent(Ai)), Ai)
     end
     return Ai
 end
