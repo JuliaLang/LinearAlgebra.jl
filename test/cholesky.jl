@@ -390,6 +390,37 @@ Base.setindex!(v::WrappedVector, val, i::Integer) = setindex!(v.data, val, i)
     end
 end
 
+@testset "cholesky up- and downdates with a matrix" begin
+    A = complex.(randn(10,5), randn(10, 5))
+    V = complex.(randn(5, 3), randn(5, 3))
+    for uplo in (:U, :L)
+        AcA = Hermitian(A'*A, uplo)
+        BcB = hermitianpart!(AcA + V*V', uplo)
+        F = cholesky(AcA)
+        G = cholesky(BcB)
+        # The stored factor; the other triangle of `factors` is undefined
+        factor(C) = getproperty(C, uplo)
+        @test factor(lowrankupdate(F, V)) ≈ factor(G)
+        @test factor(lowrankdowndate(G, V)) ≈ factor(F)
+        # The same as updating with one column after the other
+        @test factor(lowrankupdate(F, V)) == factor(foldl(lowrankupdate, eachcol(V); init=F))
+        @test factor(lowrankdowndate(G, V)) == factor(foldl(lowrankdowndate, eachcol(V); init=G))
+        # A single column is a vector
+        @test factor(lowrankupdate(F, V[:, 1:1])) == factor(lowrankupdate(F, V[:, 1]))
+        @test factor(lowrankdowndate(G, V[:, 1:1])) == factor(lowrankdowndate(G, V[:, 1]))
+        # In place, with `V` destroyed
+        C, W = copy(F), copy(V)
+        @test lowrankupdate!(C, W) === C
+        @test factor(C) ≈ factor(G)
+        @test lowrankdowndate!(C, W .= V) === C
+        @test factor(C) ≈ factor(F)
+        @test factor(lowrankupdate(F, similar(V, 5, 0))) == factor(F)
+        @test_throws DimensionMismatch lowrankupdate(F, similar(V, 6, 3))
+        @test_throws DimensionMismatch lowrankdowndate(G, similar(V, 6, 3))
+        @test_throws PosDefException lowrankdowndate(F, 10 .* V)
+    end
+end
+
 @testset "issue #13243, unexpected nans in complex cholesky" begin
     apd = [5.8525753f0 + 0.0f0im -0.79540455f0 + 0.7066077f0im 0.98274714f0 + 1.3824869f0im 2.619998f0 + 1.8532984f0im -1.8306153f0 - 1.2336911f0im 0.32275113f0 + 0.015575029f0im 2.1968813f0 + 1.0640624f0im 0.27894387f0 + 0.97911835f0im 3.0476584f0 + 0.18548489f0im 0.3842994f0 + 0.7050991f0im
         -0.79540455f0 - 0.7066077f0im 8.313246f0 + 0.0f0im -1.8076122f0 - 0.8882447f0im 0.47806996f0 + 0.48494184f0im 0.5096429f0 - 0.5395974f0im -0.7285097f0 - 0.10360408f0im -1.1760061f0 - 2.7146957f0im -0.4271084f0 + 0.042899966f0im -1.7228563f0 + 2.8335886f0im 1.8942566f0 + 0.6389735f0im
