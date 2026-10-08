@@ -637,6 +637,41 @@ function bigfloat_wy_reflectors(m, n, nb)
     return QRCompactWYQ(factors, T), QRPackedQ(factors, τ)
 end
 
+@testset "conversion between QR and QRCompactWY" begin
+    for elty in (Float64, ComplexF64, BigFloat, Complex{BigFloat}), (m, n) in ((10, 6), (6, 10), (40, 40), (0, 3))
+        A = convert(Matrix{elty}, randn(elty <: Complex ? ComplexF64 : Float64, m, n))
+        F = LinearAlgebra.qrfactUnblocked!(copy(A))
+        for bs in (1, 3, 36, 50)
+            Fwy = @inferred QRCompactWY(F; blocksize=bs)
+            @test Fwy isa QRCompactWY{elty}
+            @test size(Fwy.T) == (min(bs, m, n), min(m, n))
+            @test Fwy.factors == F.factors && Fwy.factors !== F.factors
+            @test Matrix(Fwy) ≈ A
+            @test Matrix(Fwy.Q) ≈ Matrix(F.Q)
+            F2 = @inferred QR(Fwy)
+            @test F2.τ == F.τ
+            @test F2.factors == F.factors && F2.factors !== Fwy.factors
+            if elty <: BlasFloat && m*n > 0
+                # agrees with LAPACK's own compact WY representation
+                Fref = qr(A, NoPivot(); blocksize=bs)
+                @test all(map((X, Y) -> isapprox(X, Y; rtol=sqrt(eps(real(elty)))),
+                    LinearAlgebra._triuppers_qr(Fwy.T), LinearAlgebra._triuppers_qr(Fref.T)))
+                @test QR(Fref).τ ≈ F.τ
+            end
+            Q = QRCompactWYQ(F.Q; blocksize=bs)
+            @test Q isa QRCompactWYQ{elty}
+            @test Matrix(Q) ≈ Matrix(F.Q)
+            @test QRPackedQ(Q).τ == F.τ
+            @test Q.factors === F.factors
+        end
+        @test convert(QRCompactWY, F) isa QRCompactWY
+        @test convert(QR, convert(QRCompactWY, F)).τ == F.τ
+        @test convert(QRCompactWYQ, F.Q) isa QRCompactWYQ
+        @test convert(QRPackedQ, convert(QRCompactWYQ, F.Q)).τ == F.τ
+    end
+    @test_throws ArgumentError QRCompactWY(qr(big.(randn(3, 3))); blocksize=0)
+end
+
 @testset "generic lmul! with QRCompactWYQ and its adjoint" begin
     # the generic implementation must reproduce LAPACK's `gemqrt!`
     @testset "matches LAPACK: $elty, ($m,$n), blocksize=$bs" for
@@ -835,6 +870,10 @@ end
     if nb == k   # a single block: the WY identity can be checked directly
         @test Qref ≈ Matrix{Quaternion{Float64}}(I, m, m) - V * (T[1:k, 1:k] * V')
     end
+    # conversion between the packed and the compact WY representation
+    @test all(map(≈, LinearAlgebra._triuppers_qr(QRCompactWYQ(QRPackedQ(V, τ); blocksize=nb).T),
+                     LinearAlgebra._triuppers_qr(T)))
+    @test QRPackedQ(Q).τ == τ
     for p in (1, 3)
         B = [randn(Quaternion{Float64}) for _ in CartesianIndices((m, p))]
         @test _lqmul!(Q, copy(B), Val(false)) ≈ Qref * B
