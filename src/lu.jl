@@ -396,8 +396,8 @@ U factor (rank-deficient):
  0.0  0.0
 ```
 """
-lu(A::AbstractMatrix{T}, args...; kwargs...) where {T} =
-    _lu(_lucopy(A, lutype(T)), args...; kwargs...)
+lu(A::AbstractMatrix, args...; kwargs...) =
+    _lu(_lucopy(A, lutype(_valeltype(A))), args...; kwargs...)
 # TODO: remove for Julia v2.0
 @deprecate lu(A::AbstractMatrix, ::Val{true}; check::Bool = true) lu(A, RowMaximum(); check=check)
 @deprecate lu(A::AbstractMatrix, ::Val{false}; check::Bool = true) lu(A, NoPivot(); check=check)
