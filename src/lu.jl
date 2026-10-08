@@ -396,8 +396,6 @@ U factor (rank-deficient):
  0.0  0.0
 ```
 """
-# as for the other factorizations, an abstract `eltype(A)` is narrowed to the promoted type of the
-# stored values (see `_valeltype`)
 lu(A::AbstractMatrix, args...; kwargs...) =
     _lu(_lucopy(A, lutype(_valeltype(A))), args...; kwargs...)
 # TODO: remove for Julia v2.0
