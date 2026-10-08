@@ -523,6 +523,10 @@ factorizations when `eltype(A)` is abstract, e.g., `Real` or `Number`.
 _valeltype(A::AbstractArray{T}) where {T} =
     (isconcretetype(T) || isempty(A)) ? T : mapreduce(typeof, promote_type, A)
 
+# Integer types accepted as scalar indices by the getindex/setindex! methods of the
+# wrapper and structured matrix types. `Bool` is excluded, as it is not a valid index.
+const IntegerIndex = Union{Signed,Unsigned}
+
 """
     BandIndex(band, index)
 

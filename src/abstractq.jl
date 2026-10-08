@@ -99,20 +99,20 @@ end
 @inline getindex(Q::AbstractQ, ::Colon, ::Colon) = copy(Q)
 
 @inline _getindex(Q::AbstractQ, inds...) = @inbounds copymutable(Q)[inds...]
-@inline function _getindex(Q::AbstractQ, ::Colon, J::AbstractVector{<:Integer})
+@inline function _getindex(Q::AbstractQ, ::Colon, J::AbstractVector{<:IntegerIndex})
     Y = zeros(eltype(Q), size(Q, 2), length(J))
     @inbounds for (i,j) in enumerate(J)
         Y[j,i] = oneunit(eltype(Q))
     end
     lmul!(Q, Y)
 end
-@inline _getindex(Q::AbstractQ, I::AbstractVector{Int}, J::AbstractVector{Int}) = @inbounds Q[:,J][I,:]
-@inline function _getindex(Q::AbstractQ, ::Colon, j::Int)
+@inline _getindex(Q::AbstractQ, I::AbstractVector{<:IntegerIndex}, J::AbstractVector{<:IntegerIndex}) = @inbounds Q[:,J][I,:]
+@inline function _getindex(Q::AbstractQ, ::Colon, j::IntegerIndex)
     y = zeros(eltype(Q), size(Q, 2))
     y[j] = oneunit(eltype(Q))
     lmul!(Q, y)
 end
-@inline _getindex(Q::AbstractQ, i::Int, j::Int) = @inbounds Q[:,j][i]
+@inline _getindex(Q::AbstractQ, i::IntegerIndex, j::IntegerIndex) = @inbounds Q[:,j][i]
 
 # needed because AbstractQ does not subtype AbstractMatrix
 qr(Q::AbstractQ{T}, arg...; kwargs...) where {T} = qr!(Matrix{_qreltype(T)}(Q), arg...; kwargs...)
@@ -170,7 +170,7 @@ end
 QDisplayCache(Q::AbstractQ{T}) where {T} = QDisplayCache{T,typeof(Q)}(Q, Dict{Int,Vector{T}}())
 
 size(C::QDisplayCache) = size(C.Q)
-function getindex(C::QDisplayCache, i::Int, j::Int)
+function getindex(C::QDisplayCache, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(C, i, j)
     column = get!(() -> C.Q[:, j], C.columns, j)
     return column[i]

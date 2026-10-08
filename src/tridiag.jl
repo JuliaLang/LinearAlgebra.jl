@@ -489,7 +489,7 @@ end
 det(A::SymTridiagonal; shift::Number=false) = det_usmani(A.ev, A.dv, A.ev, shift)
 logabsdet(A::SymTridiagonal; shift::Number=false) = logabsdet(ldlt(A; shift=shift))
 
-@inline function Base.isassigned(A::SymTridiagonal, i::Int, j::Int)
+@inline function Base.isassigned(A::SymTridiagonal, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.dv, i)
@@ -502,7 +502,7 @@ logabsdet(A::SymTridiagonal; shift::Number=false) = logabsdet(ldlt(A; shift=shif
     end
 end
 
-@inline function Base.isstored(A::SymTridiagonal, i::Int, j::Int)
+@inline function Base.isstored(A::SymTridiagonal, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.dv, i)
@@ -515,7 +515,7 @@ end
     end
 end
 
-@inline function getindex(A::SymTridiagonal{T}, i::Int, j::Int) where T
+@inline function getindex(A::SymTridiagonal{T}, i::IntegerIndex, j::IntegerIndex) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return symmetric((@inbounds A.dv[i]), :U)::symmetric_type(eltype(A.dv))
@@ -545,7 +545,7 @@ Base._reverse(A::SymTridiagonal, dims) = reverse!(Matrix(A); dims)
 Base._reverse(A::SymTridiagonal, dims::Colon) = SymTridiagonal(reverse(A.dv), reverse(A.ev))
 Base._reverse!(A::SymTridiagonal, dims::Colon) = (reverse!(A.dv); reverse!(A.ev); A)
 
-@inline function setindex!(A::SymTridiagonal, x, i::Integer, j::Integer)
+@inline function setindex!(A::SymTridiagonal, x, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(A, i, j)
     if i == j
         issymmetric(x) || throw(ArgumentError("cannot set a diagonal entry of a SymTridiagonal to an asymmetric value"))
@@ -769,7 +769,7 @@ function diag(M::Tridiagonal, n::Integer=0)
     return v
 end
 
-@inline function Base.isassigned(A::Tridiagonal, i::Int, j::Int)
+@inline function Base.isassigned(A::Tridiagonal, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.d, i)
@@ -782,7 +782,7 @@ end
     end
 end
 
-@inline function Base.isstored(A::Tridiagonal, i::Int, j::Int)
+@inline function Base.isstored(A::Tridiagonal, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.d, i)
@@ -795,7 +795,7 @@ end
     end
 end
 
-@inline function getindex(A::Tridiagonal{T}, i::Int, j::Int) where T
+@inline function getindex(A::Tridiagonal{T}, i::IntegerIndex, j::IntegerIndex) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds A.d[i]
@@ -821,7 +821,7 @@ end
     end
 end
 
-@inline function setindex!(A::Tridiagonal, x, i::Integer, j::Integer)
+@inline function setindex!(A::Tridiagonal, x, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(A, i, j)
     if i == j
         @inbounds A.d[i] = x

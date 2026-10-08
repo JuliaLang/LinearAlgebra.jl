@@ -96,15 +96,15 @@ function Matrix{T}(H::UpperHessenberg) where T
     return triu!(copyto!(Matrix{T}(undef, m, n), H.data), -1)
 end
 
-Base.isassigned(H::UpperHessenberg, i::Int, j::Int) =
+Base.isassigned(H::UpperHessenberg, i::IntegerIndex, j::IntegerIndex) =
     i <= j+1 ? isassigned(H.data, i, j) : true
 
-Base.@propagate_inbounds getindex(H::UpperHessenberg{T}, i::Int, j::Int) where {T} =
+Base.@propagate_inbounds getindex(H::UpperHessenberg{T}, i::IntegerIndex, j::IntegerIndex) where {T} =
     i <= j+1 ? convert(T, H.data[i,j]) : zero(T)
 
 Base._reverse(A::UpperHessenberg, dims) = reverse!(Matrix(A); dims)
 
-Base.@propagate_inbounds function setindex!(A::UpperHessenberg, x, i::Integer, j::Integer)
+Base.@propagate_inbounds function setindex!(A::UpperHessenberg, x, i::IntegerIndex, j::IntegerIndex)
     if i > j+1
         iszero(x) || throw(ArgumentError(LazyString("cannot set index in the lower triangular part ",
             lazy"($i, $j) of an UpperHessenberg matrix to a nonzero value ($x)")))

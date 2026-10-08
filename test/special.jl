@@ -747,6 +747,38 @@ end
     end
 end
 
+@testset "indexing with non-Int integers" begin
+    A = reshape(1:16, 4, 4) .+ 0.0
+    v = [1.0:4;]
+    for M in (Diagonal(v), Bidiagonal(v, v[1:3], :U), Bidiagonal(v, v[1:3], :L),
+                Tridiagonal(v[1:3], v, v[2:4]), SymTridiagonal(v, v[1:3]),
+                Symmetric(A), Hermitian(A), UpperTriangular(A), LowerTriangular(A),
+                UnitUpperTriangular(A), UnitLowerTriangular(A), UpperHessenberg(A),
+                adjoint(A), transpose(A))
+        MM = Matrix(M)
+        for i in Int32(1):Int32(4), j in UInt8(1):UInt8(4)
+            @test (@inferred M[i, j]) == MM[i, j]
+            @test isassigned(M, i, j)
+        end
+        @test_throws BoundsError M[Int32(0), Int32(1)]
+        @test_throws "invalid index" M[true, true]
+        @test_throws "invalid index" M[2, true]
+    end
+    @test (@inferred v'[Int32(2)]) == v[2]
+    @test v'[:, Int32[1, 3]] == v'[:, [1, 3]]
+    D = Diagonal(copy(v))
+    D[Int32(2), Int32(2)] = 5
+    @test D[2, 2] == 5
+    vt = transpose(copy(v))
+    vt[Int32(3)] = 7
+    @test vt[3] == 7
+    Q = qr(A).Q
+    MQ = Matrix(Q)
+    @test Q[Int32(2), Int32(3)] ≈ MQ[2, 3]
+    @test Q[:, Int32(2)] ≈ MQ[:, 2]
+    @test Q[Int32[1, 2], Int32[2, 3]] ≈ MQ[1:2, 2:3]
+end
+
 @testset "Partly filled Hermitian and Diagonal algebra" begin
     D = Diagonal([1,2])
     for S in (Symmetric, Hermitian), uplo in (:U, :L)

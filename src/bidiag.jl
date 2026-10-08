@@ -124,7 +124,7 @@ uplo(B::Bidiagonal) = sym_uplo(B.uplo)
 
 _offdiagind(uplo) = uplo == 'U' ? 1 : -1
 
-@inline function Base.isassigned(A::Bidiagonal, i::Int, j::Int)
+@inline function Base.isassigned(A::Bidiagonal, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.dv, i)
@@ -135,7 +135,7 @@ _offdiagind(uplo) = uplo == 'U' ? 1 : -1
     end
 end
 
-@inline function Base.isstored(A::Bidiagonal, i::Int, j::Int)
+@inline function Base.isstored(A::Bidiagonal, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.dv, i)
@@ -146,7 +146,7 @@ end
     end
 end
 
-@inline function getindex(A::Bidiagonal{T}, i::Int, j::Int) where T
+@inline function getindex(A::Bidiagonal{T}, i::IntegerIndex, j::IntegerIndex) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds A.dv[i]
@@ -169,7 +169,7 @@ end
     end
 end
 
-@inline function setindex!(A::Bidiagonal, x, i::Integer, j::Integer)
+@inline function setindex!(A::Bidiagonal, x, i::IntegerIndex, j::IntegerIndex)
     @boundscheck checkbounds(A, i, j)
     if i == j
         @inbounds A.dv[i] = x
