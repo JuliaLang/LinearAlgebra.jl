@@ -470,10 +470,242 @@ end
     @test (I - LL')\[[0], [0], [1]] == (I - LL)'\[[0], [0], [1]] == fill([1], 3)
 end
 
-# Ensure broadcasting of I is an error (could be made to work in the future)
-@testset "broadcasting of I (#23197)" begin
-    @test_throws MethodError I .+ 1
-    @test_throws MethodError I .+ [1 1; 1 1]
+@testset "broadcasting (#23197)" begin
+    @testset "with dense arrays" begin
+        A = [1 2; 3 4]
+        @test @inferred(I .+ A) == @inferred(A .+ I) == A + I == [2 2; 3 5]
+        @test @inferred(I .- A) == I - A == [0 -2; -3 -3]
+        @test A .- I == A - I
+        @test A .* I == Diagonal([1, 4])
+        @test I .* A == Diagonal([1, 4])
+        @test A .+ 2I == A + 2I == [3 2; 3 6]
+        @test 2I .+ A == [3 2; 3 6]
+        @test A .+ 2 .* I == [3 2; 3 6]
+        @test I .- ones(4, 4) == Matrix(I, 4, 4) - ones(4, 4) # the motivating example
+        @test A .+ I .+ 1 == A .+ (I .+ 1) == [3 3; 4 6]
+        @test (I .+ A) .+ I == [3 2; 3 6]
+        @test (A .+ I) .* 2 == [4 4; 6 10]
+        @test (I .* 2) .+ (I .+ 1) .+ A == [5 3; 4 8]
+        @test I .+ A .+ A' == [3 5; 5 9]
+        @test I .+ [1 1; 1 1] == [2 1; 1 2]
+        @test max.(I, A) == [1 2; 3 4]
+        @test (x -> x^2).(A .+ I) == (A + I).^2
+        @test (I .+ A) isa Matrix{Int}
+        @test (1.0I .+ A) isa Matrix{Float64}
+        @test (I .+ [1.0 2.0; 3.0 4.0]) isa Matrix{Float64}
+        @test (I .+ complex(A)) isa Matrix{Complex{Int}}
+        @test @inferred(I .& trues(2, 2)) == [true false; false true]
+        @test @inferred(I .& trues(2, 2)) isa BitMatrix
+        # 1×1 matrices
+        @test I .+ ones(1, 1) == fill(2.0, 1, 1)
+    end
+
+    @testset "along trailing dimensions" begin
+        A = ones(2, 2, 3)
+        B = I .+ A
+        @test size(B) == (2, 2, 3)
+        for k in axes(A, 3)
+            @test B[:, :, k] == ones(2, 2) + I
+        end
+        @test I .* A == cat(fill(Matrix(I, 2, 2), 3)...; dims=3)
+    end
+
+    @testset "with only UniformScalings and scalars" begin
+        @test @inferred(I .+ I) === 2I
+        @test @inferred(.-I) === -I
+        @test I .- I === 0I
+        @test I .* I === I
+        @test I .* 2I === 2I
+        @test I .+ 2I .- I === 2I
+        @test 2 .* I === I .* 2 === 2I
+        @test 2 .* I .+ I === 3I
+        @test 2 .* I === Broadcast.broadcast(*, 2, I)
+        @test I .* 2.0 === 2.0I
+        @test I ./ 2 === 0.5I
+        @test 2 .\ I === 0.5I
+        @test I .^ 2 === I
+        @test (2I) .^ 2 === 4I
+        @test (2I) .^ 2.0 === 4.0I
+        @test sqrt.(4I) === 2.0I
+        @test abs.(-I) === UniformScaling(1)
+        @test float.(2I) === 2.0I
+        @test (x -> 2x).(I) === 2I
+        @test (2I) .* Ref(2) === 4I
+        @test (2I) .* fill(2) === 4I
+        @test Base.literal_pow.(^, 2I, Val(3)) === 8I
+        @test identity.(I) === I
+        @test 3.0I .* (I .+ I) === 6.0I
+        # functions that don't map the off-diagonal zeros to zero
+        @test_throws ArgumentError I .+ 1
+        @test_throws ArgumentError 1 .+ I
+        @test_throws ArgumentError exp.(I)
+        @test_throws ArgumentError I .- 2
+        @test_throws ArgumentError (I .+ 1) .* 2
+        @test (I .+ 1) .* I === 2I # the off-diagonal elements are (0 + 1) * 0 == 0
+        # the same expressions are fine once a shape is provided
+        @test (I .+ 1) .+ zeros(2, 2) == [2 1; 1 2]
+        @test exp.(I) .* ones(2, 2) == [ℯ 1; 1 ℯ]
+    end
+
+    @testset "in-place broadcasting" begin
+        A = [1 2; 3 4]
+        B = copy(A)
+        @test (B .+= I) === B
+        @test B == A + I
+        B = copy(A)
+        @test (B .-= 2I) === B
+        @test B == A - 2I
+        B = copy(A)
+        @test (B .*= I) === B
+        @test B == Diagonal(A)
+        B = zeros(Int, 3, 3)
+        @test (B .= I) === B
+        @test B == Matrix(I, 3, 3)
+        B .= 2I .+ 1
+        @test B == [3 1 1; 1 3 1; 1 1 3]
+        B .= I .+ B .+ 1
+        @test B == [5 2 2; 2 5 2; 2 2 5]
+        B = zeros(2, 2, 2)
+        B .= I
+        @test B == cat(fill(Matrix(I, 2, 2), 2)...; dims=3)
+        B = zeros(3, 3)
+        @test Broadcast.broadcast!(+, B, I, 1) === B
+        @test B == [2 1 1; 1 2 1; 1 1 2]
+        B = zeros(3, 3)
+        @test @inferred(Broadcast.broadcast!(-, B, I, ones(3, 3))) == I - ones(3, 3)
+        # non-square destinations
+        @test_throws DimensionMismatch zeros(2, 3) .= I
+        @test_throws DimensionMismatch zeros(2, 3) .+= I
+        @test_throws DimensionMismatch zeros(2, 3) .= I .+ 1
+        @test_throws DimensionMismatch zeros(3) .= I
+        @test_throws DimensionMismatch zeros(3) .= 2 .* I
+        @test_throws DimensionMismatch zeros(3) .= I .+ I
+        @test_throws DimensionMismatch fill(1) .= I
+        @test_throws DimensionMismatch fill(1) .= I .+ I
+    end
+
+    @testset "shape mismatches" begin
+        @test_throws DimensionMismatch I .+ ones(2, 3)
+        @test_throws DimensionMismatch ones(2, 3) .+ I
+        @test_throws DimensionMismatch I .+ ones(3, 1)
+        @test_throws DimensionMismatch I .+ ones(1, 3)
+        @test_throws DimensionMismatch I .+ ones(3)
+        @test_throws DimensionMismatch ones(3) .+ I
+        @test_throws DimensionMismatch I .+ ones(2, 3, 2)
+        @test_throws DimensionMismatch I .+ (1, 2)
+        @test_throws DimensionMismatch (I .+ 1) .+ ones(2, 3)
+        @test_throws DimensionMismatch (I .* 2) .+ ones(3)
+        @test_throws DimensionMismatch ones(2, 2) .+ I .+ ones(2, 3)
+        @test_throws DimensionMismatch ones(2, 2) .+ I .+ ones(3, 3)
+        @test_throws DimensionMismatch Broadcast.broadcast(+, I, ones(3))
+    end
+
+    @testset "with offset arrays" begin
+        A = OffsetArray(ones(2, 2), 0:1, 0:1)
+        B = A .+ I
+        @test axes(B) == axes(A)
+        @test B == A + I
+        @test B[0, 0] == B[1, 1] == 2
+        @test B[0, 1] == B[1, 0] == 1
+        B .= I
+        @test B[0, 0] == B[1, 1] == 1
+        @test B[0, 1] == B[1, 0] == 0
+        # the first two axes must be identical, not only of the same length
+        @test_throws DimensionMismatch OffsetArray(ones(2, 2), 0:1, 1:2) .+ I
+        @test_throws DimensionMismatch OffsetArray(Diagonal([1, 2, 3]), 2, 0) .+ I
+        @test_throws DimensionMismatch OffsetArray(ones(2, 2), 0:1, 1:2) .= I
+        @test_throws DimensionMismatch OffsetArray(ones(2, 3), 0:1, 0:2) .+ I
+    end
+
+    @testset "with structured matrices" begin
+        D = Diagonal([1, 2])
+        @test @inferred(D .+ I) == D + I
+        @test @inferred(D .+ I) isa Diagonal
+        @test @inferred(I .+ D) isa Diagonal
+        @test @inferred(D .* I) == Diagonal([1, 2])
+        @test (D .* I) isa Diagonal
+        @test D .+ I .+ 1 isa Matrix
+        @test D .+ I .+ 1 == D + I .+ 1
+        @test D .+ 2I .- I == D + I
+        @test D ./ I isa Matrix # division by the zeros
+        @test isequal(D ./ I, [1.0 NaN; NaN 2.0])
+        D2 = copy(D)
+        @test (D2 .+= I) === D2
+        @test D2 == D + I
+        D2 .= D .* I .+ 2I
+        @test D2 == Diagonal([3, 4])
+        @test_throws ArgumentError D2 .= I .+ 1
+        # mixed dense and structured
+        @test D .+ I .+ ones(2, 2) == [3 1; 1 4]
+        @test (D .+ I .+ ones(2, 2)) isa Matrix
+        B = Bidiagonal([1, 2, 3], [4, 5], :U)
+        @test @inferred(B .+ I) == B + I
+        @test (B .+ I) isa Bidiagonal
+        @test @inferred(I .- B) == I - B
+        @test (I .- B) isa Bidiagonal
+        T = Tridiagonal([1, 2], [3, 4, 5], [6, 7])
+        @test @inferred(T .+ I) == T + I
+        @test (T .+ I) isa Tridiagonal
+        S = SymTridiagonal([1, 2, 3], [4, 5])
+        @test @inferred(S .+ I) == S + I
+        @test (S .+ I) isa SymTridiagonal
+        S2 = copy(S)
+        @test (S2 .= I) === S2
+        @test S2 == I(3)
+        S2 .= S .+ 2I
+        @test S2 == S + 2I
+        S2 .+= I
+        @test S2 == S + 3I
+        A = [1 2; 3 4]
+        for TT in (UpperTriangular, LowerTriangular, UpperHessenberg, Symmetric, Hermitian)
+            M = TT(A)
+            @test @inferred(M .+ I) == M + I
+            @test (M .+ I) isa TT
+            @test M .+ I .+ 1 == M + I .+ 1
+            # adding a scalar preserves symmetry, but not the triangular structures
+            @test M .+ I .+ 1 isa (TT <: Union{Symmetric,Hermitian} ? TT : Matrix)
+        end
+        @test (UnitUpperTriangular(A) .+ I) == UnitUpperTriangular(A) + I
+        @test (UnitUpperTriangular(A) .+ I) isa UpperTriangular
+        @test (UnitLowerTriangular(A) .+ I) == UnitLowerTriangular(A) + I
+        @test (UnitLowerTriangular(A) .+ I) isa LowerTriangular
+        @test Hermitian(A) .+ im*I == Hermitian(A) + im*I
+        @test (Hermitian(A) .+ im*I) isa Matrix
+        @test (Hermitian(A) .+ (1+0im)*I) isa Matrix
+        @test (Hermitian(complex(A)) .+ I) isa Hermitian
+        @test (Symmetric(A) .+ im*I) isa Symmetric
+    end
+
+    @testset "lazy Broadcasted objects" begin
+        A = [1 2; 3 4]
+        bc = Broadcast.broadcasted(+, I, A)
+        @test axes(bc) == axes(A)
+        @test size(bc) == size(A)
+        @test bc[1, 1] == 2 && bc[1, 2] == 2 && bc[2, 1] == 3 && bc[2, 2] == 5
+        @test collect(bc) == A + I
+        bci = Broadcast.instantiate(bc)
+        @test axes(bci) == axes(A)
+        @test copy(bci) == A + I
+        @test Broadcast.materialize(bc) == A + I
+        bc = Broadcast.broadcasted(+, I, 2I)
+        @test axes(bc) == ()
+        @test copy(bc) === 3I
+        @test Broadcast.materialize(bc) === 3I
+        @test Broadcast.materialize(I) === I
+        @test Broadcast.broadcastable(I) === I
+    end
+
+    @testset "with other number types" begin
+        A = fill(1//2, 2, 2)
+        @test @inferred(A .+ I) == A + I
+        @test (A .+ I) isa Matrix{Rational{Int}}
+        @test (A .+ (1//3)I) == A + (1//3)I
+        J = Quaternion(1.0, 2.0, 3.0, 4.0) * I
+        A = fill(Quaternion(1.0, 1.0, 1.0, 1.0), 2, 2)
+        @test A .+ J == A + J
+        @test J .+ J === Quaternion(2.0, 4.0, 6.0, 8.0) * I
+        @test_throws ArgumentError J .+ Quaternion(1.0, 2.0, 3.0, 4.0)
+    end
 end
 
 @testset "in-place mul! and div! methods" begin

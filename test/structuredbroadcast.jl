@@ -219,6 +219,35 @@ end
     end
 end
 
+@testset "broadcast! into Symmetric/Hermitian destinations" begin
+    n = 3
+    D = Diagonal([1, 2, 3])
+    for uplo in (:U, :L)
+        S = Symmetric(zeros(Int, n, n), uplo)
+        S .= D
+        @test S == D
+        S .= S .+ Symmetric(ones(Int, n, n), uplo == :U ? :L : :U)
+        @test S == D + ones(n, n)
+        H = Hermitian(zeros(ComplexF64, n, n), uplo)
+        H .= D
+        @test H == D
+        @test_throws ArgumentError H .= Diagonal([1+2im, 1, 1])
+        # nested broadcasts
+        S .= S .+ 1 .+ 2 .* S
+        @test S == 3 * (D + ones(n, n)) .+ 1
+        @test (S .+ 1 .+ 2 .* S) isa Symmetric
+        H .= H .+ 1 .+ 2 .* H
+        @test H == 3D .+ 1
+        @test (H .+ 1 .+ 2 .* H) isa Hermitian
+        @test (H .+ 1 .+ 2 .* conj.(H)) isa Hermitian
+        @test (H .+ 1 .+ 2 .* imag.(H)) isa Matrix
+        @test_throws ArgumentError H .= H .+ 1 .+ 2 .* imag.(H)
+    end
+    S = SymTridiagonal([1, 2, 3], [4, 5])
+    @test (S .+ 1 .* S) isa SymTridiagonal
+    @test (S .+ 1 .* (S .+ Tridiagonal(S))) isa Tridiagonal
+end
+
 @testset "map[!] over combinations of structured matrices" begin
     N = 3
     fA = rand(N, N)
@@ -501,6 +530,106 @@ end
         @test fH == broadcast(f, Matrix(H), 2im)
     end
     @test_throws ArgumentError H .*= im
+end
+
+@testset "broadcasting with UniformScaling (#23197)" begin
+    n = 4
+    D = Diagonal(rand(n))
+    Bu = Bidiagonal(rand(n), rand(n-1), :U)
+    Bl = Bidiagonal(rand(n), rand(n-1), :L)
+    T = Tridiagonal(rand(n-1), rand(n), rand(n-1))
+    S = SymTridiagonal(rand(n), rand(n-1))
+    U = UpperTriangular(rand(n, n))
+    L = LowerTriangular(rand(n, n))
+    Uu = UnitUpperTriangular(rand(n, n))
+    Lu = UnitLowerTriangular(rand(n, n))
+    H = UpperHessenberg(rand(n, n))
+    Sy = Symmetric(rand(n, n))
+    He = Hermitian(rand(ComplexF64, n, n))
+    structuredarrays = (D, Bu, Bl, T, S, U, L, Uu, Lu, H, Sy, He)
+    for (X, TX) in zip(structuredarrays, (Diagonal, Bidiagonal, Bidiagonal, Tridiagonal, SymTridiagonal,
+                                          UpperTriangular, LowerTriangular, UpperTriangular, LowerTriangular,
+                                          UpperHessenberg, Symmetric, Hermitian))
+        M = Matrix(X)
+        for J in (I, 2I, 0.5I, -I)
+            @test @inferred(X .+ J) == M .+ Matrix(J, n, n) == M + J
+            @test (X .+ J) isa TX
+            @test @inferred(J .+ X) == M + J
+            @test (J .+ X) isa TX
+            @test @inferred(X .- J) == M - J
+            @test (X .- J) isa TX
+            @test @inferred(J .- X) == J - M
+            @test (J .- X) isa TX
+            @test @inferred(X .* J) == M .* Matrix(J, n, n)
+            @test (X .* J) isa TX
+            @test X .+ J .+ 1 == M .+ Matrix(J, n, n) .+ 1
+            # adding a scalar preserves symmetry, but not the other structures
+            @test (X .+ J .+ 1) isa (X isa Union{Symmetric,Hermitian} ? TX : Matrix)
+            @test X .+ J .+ ones(n, n) == M .+ Matrix(J, n, n) .+ 1
+            @test (X .+ J .+ ones(n, n)) isa Matrix
+            # in-place
+            Y = X .+ J
+            Y .= X .+ J .+ X .* J
+            @test Y == M .+ Matrix(J, n, n) .+ M .* Matrix(J, n, n)
+            Y .= J
+            @test Y == Matrix(J, n, n)
+            Y .= 0
+            Y .+= J
+            @test Y == Matrix(J, n, n)
+            Y .= 0
+            Y .= 2 .* J .+ J .* Y
+            @test Y == Matrix(2J, n, n)
+        end
+        Y = X .+ I
+        @test_throws ArgumentError Y .= I .+ 1
+        @test_throws ArgumentError Y .= X .+ ones(n, n)
+        # complex scaling
+        J = (1+2im)I
+        Y = X .+ J
+        @test Y == M + J
+        if X isa Hermitian
+            @test Y isa Matrix
+        else
+            @test Y isa TX
+        end
+    end
+    # mixing structured matrices
+    @test (D .+ Bu .+ I) isa Bidiagonal
+    @test D .+ Bu .+ I == D + Bu + I
+    @test (D .+ Bl .* I) isa Bidiagonal
+    @test (Bu .+ Bl .+ I) isa Tridiagonal
+    @test Bu .+ Bl .+ I == Bu + Bl + I
+    @test (T .+ S .+ I) isa Tridiagonal
+    @test (U .+ L .+ I) isa Matrix
+    @test U .+ L .+ I == U + L + I
+    @test (U .+ D .+ 2I) isa UpperTriangular
+    @test (Uu .+ Lu .+ I) isa Matrix
+    @test Uu .+ Lu .+ I == Uu + Lu + I
+    # sizes must match
+    @test_throws DimensionMismatch Diagonal(rand(3)) .+ I .+ Diagonal(rand(4))
+    # destination that doesn't fit the result
+    @test_throws ArgumentError copy(D) .= I .+ 1
+    @test_throws ArgumentError copy(Bu) .= I .* 2 .+ 1
+    @test_throws ArgumentError copy(He) .= (1+2im)I
+    @test_throws ArgumentError copy(He) .= He .+ (1+2im)I
+    Y = UnitUpperTriangular(rand(n, n))
+    @test (Y .= I) == I(n)
+    @test_throws ArgumentError Y .= 2I
+    # destinations with the other uplo
+    Sl = Symmetric(rand(n, n), :L)
+    Y = Sl .+ I
+    @test Y isa Symmetric && Y.uplo == 'L'
+    @test Y == Sl + I
+    Y .= I
+    @test Y == I(n)
+    Y .= Sl .+ 2I
+    @test Y == Sl + 2I
+    Hl = Hermitian(rand(ComplexF64, n, n), :L)
+    Y = Hl .+ I
+    @test Y isa Hermitian && Y.uplo == 'L'
+    @test Y == Hl + I
+    Y .= Hl .- 2I
+    @test Y == Hl - 2I
 end
 
 @testset "Symmetric/Hermitian broadcasting matrix" begin
