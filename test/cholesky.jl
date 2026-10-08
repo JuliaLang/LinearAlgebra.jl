@@ -394,11 +394,10 @@ end
     A = complex.(randn(10,5), randn(10, 5))
     V = complex.(randn(5, 3), randn(5, 3))
     for uplo in (:U, :L)
-        AcA = A'*A
-        BcB = AcA + V*V'
-        BcB = (BcB + BcB')/2
-        F = cholesky(Hermitian(AcA, uplo))
-        G = cholesky(Hermitian(BcB, uplo))
+        AcA = Hermitian(A'*A, uplo)
+        BcB = hermitianpart!(AcA + V*V', uplo)
+        F = cholesky(AcA)
+        G = cholesky(BcB)
         # The stored factor; the other triangle of `factors` is undefined
         factor(C) = getproperty(C, uplo)
         @test factor(lowrankupdate(F, V)) ≈ factor(G)
