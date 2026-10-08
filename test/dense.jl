@@ -1261,6 +1261,37 @@ end
     @test @inferred(inv(transpose(B)))*transpose(B) ≈ I
 end
 
+# A dense matrix whose `parent` is its backing storage, like FixedSizeArrays.jl
+struct VectorBackedMatrix{T} <: DenseMatrix{T}
+    data::Vector{T}
+    m::Int
+    n::Int
+end
+Base.size(A::VectorBackedMatrix) = (A.m, A.n)
+Base.IndexStyle(::Type{<:VectorBackedMatrix}) = IndexLinear()
+Base.getindex(A::VectorBackedMatrix, i::Int) = A.data[i]
+Base.setindex!(A::VectorBackedMatrix, v, i::Int) = setindex!(A.data, v, i)
+Base.parent(A::VectorBackedMatrix) = A.data
+Base.similar(::VectorBackedMatrix, ::Type{T}, dims::Dims{2}) where {T} =
+    VectorBackedMatrix(Vector{T}(undef, prod(dims)), dims...)
+Base.unsafe_convert(::Type{Ptr{T}}, A::VectorBackedMatrix{T}) where {T} = Base.unsafe_convert(Ptr{T}, A.data)
+Base.elsize(::Type{VectorBackedMatrix{T}}) where {T} = Base.elsize(Vector{T})
+
+@testset "inv of a dense matrix whose parent is its storage (#1740)" begin
+    for T in (Float64, ComplexF64, Rational{Int})
+        for M in (T[2 1; 1 3],  # LU
+                  T[2 0; 0 3],  # diagonal
+                  T[2 1; 0 3],  # upper triangular
+                  T[2 0; 1 3])  # lower triangular
+            A = VectorBackedMatrix(vec(M), size(M)...)
+            B = @inferred inv(A)
+            @test B isa VectorBackedMatrix{T}
+            @test B ≈ inv(M)
+            @test B * A ≈ I
+        end
+    end
+end
+
 @testset "Factorize fallback for Adjoint/Transpose" begin
     a = rand(Complex{Int8}, n, n)
     @test Array(transpose(factorize(Transpose(a)))) ≈ Array(factorize(a))
