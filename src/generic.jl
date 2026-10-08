@@ -1250,8 +1250,10 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
+    # an abstract `eltype(A)` is narrowed to the promoted type of the stored values, as in the factorizations
     # the scalar type of the solution: the elements of `B` may themselves be vectors
-    T = promote_op(\, eltype(A), _scalartype(eltype(B)))
+    TA0 = _valeltype(A)
+    T = promote_op(\, TA0, _scalartype(eltype(B)))
     if m == n
         if istril(A)
             if istriu(A)
@@ -1266,7 +1268,7 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     end
     # `T` is the type of the solution; promote the numeric type of `A` accordingly
     # (e.g. `Int` -> `Float64`), but keep the units of `A` (`one(T)` is dimensionless)
-    TA = promote_type(eltype(A), typeof(oneunit(eltype(A)) * one(T)))
+    TA = promote_type(TA0, typeof(oneunit(TA0) * one(T)))
     if m == n
         return lu(convert(AbstractArray{TA}, A)) \ B
     end
