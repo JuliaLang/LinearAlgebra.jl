@@ -1303,6 +1303,10 @@ for (cty, aty, bty) in ((:UpperTriangular, :UpperTriangular, :UpperTriangular),
     end
 end
 
+# inverse is generally dense: only strided parents keep their array type
+_inv_identity(A::UpperOrLowerTriangularStrided, ::Type{S}) where {S} = copyto!(similar(A, S, size(A)), I)
+_inv_identity(A::AbstractTriangular, ::Type{S}) where {S} = Matrix{S}(I, size(A))
+
 for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
                             (:UnitLowerTriangular, 'L', 'U'),
                             (:UpperTriangular, 'U', 'N'),
@@ -1315,7 +1319,7 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
         function inv(A::$t{T}) where {T}
             S = typeof(inv(oneunit(T)))
             if S <: BlasFloat || S === T # i.e. A is unitless
-                $t(ldiv!(convert(AbstractArray{S}, A), Matrix{S}(I, size(A))))
+                $t(ldiv!(convert(AbstractArray{S}, A), _inv_identity(A, S)))
             else
                 J = (one(T)*I)(size(A, 1))
                 $t(ldiv!(similar(A, S, size(A)), A, J))
