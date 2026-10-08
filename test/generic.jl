@@ -324,6 +324,14 @@ end
     @test @inferred(opnorm(fill(1,2,2))) ≈ 2
 end
 
+@testset "norm > opnorm" begin
+    X = [1 0; 0 1]; Y = X + [1 0; 0 2]*1e-3
+    @test !isapprox(X, Y, atol=0.0021) # norm(X - Y) > opnorm(X - Y)
+    for (X, Y) in ((X, Y), (Diagonal(X), Diagonal(Y)))
+        @test isapprox(X, Y, atol=0.0021, norm=opnorm) && !isapprox(X, Y, atol=0.00199, norm=opnorm)
+    end
+end
+
 @testset "generic norm for arrays of arrays" begin
     x = Vector{Int}[[1,2], [3,4]]
     @test @inferred(norm(x)) ≈ sqrt(30)
@@ -381,6 +389,30 @@ end
         @test B[1] ≈ C[1] ≈ A[1] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))
         @test B[2:end] ≈ C[2:end] ≈ A[2:end] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))*x[2:end]
     end
+    # the two kernels agree with each other and with the definition, also for non-commutative
+    # elements
+    for T in (Float64, ComplexF64, Quaternion{Float64})
+        x = randn(T, 6)
+        τ = randn(T)
+        A = randn(T, 6, 3)
+        v = [one(T); x[2:end]]
+        H = I - v*conj(τ)*v'
+        B = LinearAlgebra.reflectorApplyNumeric!(x, τ, copy(A))
+        C = LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+        @test B ≈ C ≈ H*A
+        @test LinearAlgebra.reflectorApply!(x, τ, copy(A)) == B   # numeric elements: `dot`-based kernel
+    end
+    # elements of `A` that are vectors: apply the reflector to each component
+    x = randn(6)
+    τ = randn()
+    A1, A2 = randn(6, 3), randn(6, 3)
+    A = [SizedArray{(2,)}([A1[i, j], A2[i, j]]) for i in axes(A1, 1), j in axes(A1, 2)]
+    B = LinearAlgebra.reflectorApply!(x, τ, copy(A))
+    @test B == LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+    @test all(b -> b isa SizedArray{(2,),Float64}, B)
+    B1, B2 = LinearAlgebra.reflectorApply!(x, τ, copy(A1)), LinearAlgebra.reflectorApply!(x, τ, copy(A2))
+    @test all(i -> B[i].data ≈ [B1[i], B2[i]], eachindex(B))
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApplyLoop!(x[1:5], τ, copy(A))
 end
 
 @testset "axp(b)y! for element type without commutative multiplication" begin
@@ -443,6 +475,11 @@ end
             @test isempty(normalize!(T[]))
         end
     end
+    a = [[1,2], [3,4]]
+    na = @inferred normalize(a)
+    @test norm(na) ≈ 1
+    @test na isa Vector{Vector{Float64}}
+    @test normalize!(convert(Vector{Vector{Float64}}, a)) ≈ na
 end
 
 @testset "normalize for multidimensional arrays" begin
@@ -478,21 +515,30 @@ end
 end
 
 @testset "potential overflow in normalize!" begin
-    δ = inv(prevfloat(typemax(Float64)))
+    δ = nextfloat(0.0)
     v = [δ, -δ]
 
-    @test norm(v) === 7.866824069956793e-309
+    @test norm(v) === 5.0e-324
     w = normalize(v)
     @test w ≈ [1/√2, -1/√2]
-    @test norm(w) === 1.0
     @test norm(normalize!(v) - w, Inf) < eps()
 end
 
 @testset "normalize with Infs. Issue 29681." begin
-    @test all(isequal.(normalize([1, -1, Inf]),
-                       [0.0, -0.0, NaN]))
-    @test all(isequal.(normalize([complex(1), complex(0, -1), complex(Inf, -Inf)]),
-                       [0.0 + 0.0im, 0.0 - 0.0im, NaN + NaN*im]))
+    for f in (normalize, normalize!)
+        @test all(isequal.(f([1, -1, Inf]),
+                           [0.0, -0.0, NaN]))
+        @test all(isequal.(f([complex(1), complex(0, -1), complex(Inf, -Inf)]),
+                           [0.0 + 0.0im, 0.0 - 0.0im, NaN + NaN*im]))
+    end
+end
+
+@testset "norm correctly promotes abstractly-typed vectors" begin
+    v = Real[1, randn(), 2f0, big(π)]
+    w = Number[1, randn(ComplexF64), 2f0, big(π)]
+    for p in (1, 2, Inf), x in (v, w)
+        @test norm(x, p) == norm(big.(x), p)
+    end
 end
 
 @testset "Issue 14657" begin
@@ -515,9 +561,51 @@ end
     @test [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]] ≈ [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]
 end
 
+@testset "promote_leaf_eltypes with non-concrete eltypes (issue #1083)" begin
+    P = LinearAlgebra.promote_leaf_eltypes
+    # abstract eltypes are narrowed to the promoted types of the leaves
+    for T in (Any, Number, Real, AbstractFloat, Union{Number,Missing}, Union{Real,Missing},
+              Union{AbstractFloat,Missing}, Union{AbstractFloat,Int}, Union{Float32,Float64},
+              Union{Int,Float64})
+        @test P(T[824.9999999999999]) === Float64
+        @test T[824.9999999999999] ≈ [825]
+        @test [825] ≈ T[824.9999999999999]
+        @test T[824.9999999999999] ≉ [825] rtol=0
+    end
+    @test P(Real[1, 2.0]) === Float64
+    @test P(Number[1, 2.0f0]) === Float32
+    @test P(Number[1, 2.0im]) === ComplexF64
+    @test P(Real[1, 2//3]) === Rational{Int}
+    @test P(Real[1.0f0, big(2.0)]) === BigFloat
+    @test P(Tuple{Real,Real}((1, 2.0))) === Float64
+    # nested arrays with abstract element types
+    @test P(Vector{Real}[[1, 2.0], [3]]) === Float64
+    @test P(AbstractVector{Real}[Real[1, 2.0f0], Int[3]]) === Float32
+    @test P(Vector{Number}[Number[1], Number[2, 3.0im]]) === ComplexF64
+    @test P(Vector{Any}[Any[1], Any[2, [3.0im]]]) === ComplexF64
+    @test Vector{Real}[Real[1.0, 2.0], Real[3.0]] ≈ [[1.0, 2.0], [3.0 + 1e-10]]
+    # empty arrays with abstract or bottom eltypes
+    @test P(Number[]) === Bool
+    @test P(Vector{Real}[]) === Bool
+    @test P(Union{}[]) === Bool
+    @test AbstractFloat[] ≈ Int[]
+    # concrete eltypes still short-circuit, and remain inferrable
+    @test @inferred(P([1.0, 2.0])) === Float64
+    @test @inferred(P([[1.0f0], [2.0f0]])) === Float32
+    @test @inferred(P((1.0, 2.0))) === Float64
+    @test @inferred(P((1, 2.0))) === Float64
+    @test @inferred(P((1, (2.0f0, 3)))) === Float32
+    @test @inferred(P(AbstractVector{Float64}[[1.0]])) === Float64
+    @test P(Complex{Real}[1 + 2im]) === Complex{Real}
+    # UniformScaling comparisons
+    @test Real[1.0 0; 0 1.0+1e-10] ≈ I
+    @test Real[1.0 0; 0 1.0+1e-10] ≉ I(2) rtol=0
+end
+
 @testset "Issue 40128" begin
     @test det(BigInt[9 1 8 0; 0 0 8 7; 7 6 8 3; 2 9 7 7])::BigInt == -1
     @test det(BigInt[1 big(2)^65+1; 3 4])::BigInt == (4 - 3*(big(2)^65+1))
+    @test det(BigInt[big(2)^65+1 1; 0 big(2)^65-1])::BigInt == big(2)^130 - 1
 end
 
 # Minimal modulo number type - but not subtyping Number
@@ -544,6 +632,49 @@ Base.adjoint(a::ModInt{n}) where {n} = ModInt{n}(conj(a))
 Base.transpose(a::ModInt{n}) where {n} = a  # see Issue 20978
 LinearAlgebra.Adjoint(a::ModInt{n}) where {n} = adjoint(a)
 LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
+
+@testset "scalar type of the right-hand side in ldiv" begin
+    _scalartype = LinearAlgebra._scalartype
+    @test _scalartype(Float64) === Float64
+    @test _scalartype(Complex{Int}) === Complex{Int}
+    @test _scalartype(Furlong{1,Float64}) === Furlong{1,Float64}
+    @test _scalartype(ModInt{2}) === ModInt{2}          # a scalar type that is not a `Number`
+    @test _scalartype(Vector{Float64}) === Float64      # vector-valued elements
+    @test _scalartype(Vector{Vector{ComplexF32}}) === ComplexF32
+    @test _scalartype(Any) === Any
+    # homogeneous containers of a concrete scalar type are not iterated by `promote_leaf_eltypes`
+    @test LinearAlgebra.promote_leaf_eltypes(ModInt{2}.([1, 0])) === ModInt{2}
+    @test LinearAlgebra.promote_leaf_eltypes((ModInt{2}(1), ModInt{2}(0))) === ModInt{2}
+    # the factorization is promoted to the scalar type of the solution, keeping its units
+    A = [4.0 1.0; 1.0 3.0]
+    x = lu(Float32.(A)) \ Furlong.([1.0, 2.0])
+    @test x isa Vector{Furlong{1,Float64}}
+    @test map(x -> x.val, x) ≈ A \ [1.0, 2.0]
+    @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
+    # vector-valued right-hand side (#904): the elements of `b` are (static) vectors
+    b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
+    @test _scalartype(eltype(b)) === Float64
+    X = A \ [1.0 2.0; 3.0 4.0]   # the same system, component by component
+    for F in (lu(A), lu(Float32.(A)), cholesky(A), qr(A))
+        x = F \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+        @test all(((y, z),) -> y.data ≈ z.data, zip(A * x, b))
+    end
+    @test ldiv!(lu(A), copy(b)) isa Vector{<:SizedArray{(2,),Float64}}
+    # the generic `\` derives the solution type from the scalar type of the right-hand side
+    for M in (A, Float32.(A), [4 1; 1 3], Tridiagonal(A), hessenberg(A))
+        x = M \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+    end
+    # least squares, through the pivoted QR
+    At = [A; 1.0 1.0]
+    Xt = At \ [1.0 2.0; 3.0 4.0; 1.0 2.0]
+    x = At \ vcat(b, [b[1]])
+    @test x isa Vector{<:SizedArray{(2,),Float64}}
+    @test all(i -> x[i].data ≈ Xt[i, :], 1:2)
+end
 
 @testset "Issue 22042" begin
     A = [ModInt{2}(1) ModInt{2}(0); ModInt{2}(1) ModInt{2}(1)]
@@ -784,6 +915,10 @@ end
         @test dot(x, B', y) ≈ dot(B*x, y)
         elty <: Real && @test dot(x, transpose(B), y) ≈ dot(x, transpose(B)*y)
     end
+    for (m, n) in ((0, 0), (1, 0), (0, 1))
+        v = zeros(ComplexF64, m); a = zeros(ComplexF64, m, n); w = zeros(Float64, n)
+        @test dot(v, a, w) === zero(ComplexF64)
+    end
 end
 
 @testset "condskeel #34512" begin
@@ -952,6 +1087,24 @@ end
     n = @allocated isapprox(A, A)
     @test n == 0
     @test Int[] ≈ Int[]
+
+    @testset "norm keyword (issue #1675)" begin
+        x = [0.057618841449997994, -0.055947092101983294, 0.7492941853741162]
+        y = [0.057618841449997994, -0.055947092101983335, 0.7492941853741162]
+        # if the specified norm isn't finite, fall back to an elementwise comparison
+        for nonfinitenorm in (v -> NaN, v -> Inf)
+            @test isapprox(x, y; norm=nonfinitenorm, rtol=4e-11, atol=4e-11)
+            @test !isapprox(x, y .+ 1; norm=nonfinitenorm, rtol=4e-11, atol=4e-11)
+            @test isapprox(Diagonal(x), Diagonal(y); norm=nonfinitenorm, rtol=4e-11, atol=4e-11)
+            @test isapprox(view(x, :), view(y, :); norm=nonfinitenorm, rtol=4e-11, atol=4e-11)
+        end
+        # the specified norm is used to evaluate the distance
+        @test isapprox(x, y; norm=v -> 0.0, atol=0, rtol=0)
+        @test !isapprox(x, x; norm=v -> 1.0, atol=0, rtol=0)
+        @test !isapprox(Diagonal(x), Diagonal(x); norm=v -> 1.0, atol=0, rtol=0)
+        @test !isapprox(view(x, :), view(x, :); norm=v -> 1.0, atol=0, rtol=0)
+        @test isapprox(x, y; norm=v -> 1.0, atol=2)
+    end
 end
 
 @testset "issue 930" begin
@@ -973,6 +1126,17 @@ end
             @test eltype(x) <: T
         end
     end
+end
+
+@testset "$fn requires square matrices" for fn in (det, logdet, logabsdet)
+    # general rectangular matrix, G
+    @test_throws DimensionMismatch fn(ones(3, 2))
+    @test_throws DimensionMismatch fn(ones(BigInt, 3, 2))
+    # rectangular matrices where istriu(A) or istril(A) is true
+    @test_throws DimensionMismatch fn([I ones(2, 1)])
+    @test_throws DimensionMismatch fn([I; ones(1, 2)])
+    @test_throws DimensionMismatch fn([I ones(BigInt, 2, 1)])
+    @test_throws DimensionMismatch fn([I; ones(BigInt, 1, 2)])
 end
 
 end # module TestGeneric

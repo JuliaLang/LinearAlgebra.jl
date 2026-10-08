@@ -208,7 +208,7 @@ Stacktrace:
 """
 lu!(A::AbstractMatrix, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(eltype(A));
     check::Bool = true, allowsingular::Bool = false) = generic_lufact!(A, pivot; check, allowsingular)
-function generic_lufact!(A::AbstractMatrix{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(T), ipiv::AbstractVector{BlasInt} = Vector{BlasInt}(undef,min(size(A)...));
+function generic_lufact!(A::AbstractMatrix{T}, pivot::Union{RowMaximum,NoPivot,RowNonZero} = lupivottype(T), ipiv::AbstractVector{BlasInt} = similar(A, BlasInt, min(size(A)...));
                          check::Bool = true, allowsingular::Bool = false) where {T}
     check && LAPACK.chkfinite(A)
     # Extract values
@@ -396,8 +396,8 @@ U factor (rank-deficient):
  0.0  0.0
 ```
 """
-lu(A::AbstractMatrix{T}, args...; kwargs...) where {T} =
-    _lu(_lucopy(A, lutype(T)), args...; kwargs...)
+lu(A::AbstractMatrix, args...; kwargs...) =
+    _lu(_lucopy(A, lutype(_valeltype(A))), args...; kwargs...)
 # TODO: remove for Julia v2.0
 @deprecate lu(A::AbstractMatrix, ::Val{true}; check::Bool = true) lu(A, RowMaximum(); check=check)
 @deprecate lu(A::AbstractMatrix, ::Val{false}; check::Bool = true) lu(A, NoPivot(); check=check)
@@ -633,7 +633,7 @@ function lu!(A::Tridiagonal{T,V}, pivot::Union{RowMaximum,NoPivot} = RowMaximum(
     else
         du2 = similar(A.d, max(0, n-2))::V
     end
-    _lu_tridiag!(A.dl, A.d, A.du, du2, Vector{BlasInt}(undef, n), pivot, check, allowsingular)
+    _lu_tridiag!(A.dl, A.d, A.du, du2, similar(A.d, BlasInt, n), pivot, check, allowsingular)
 end
 function lu!(F::LU{<:Any,<:Tridiagonal}, A::Tridiagonal, pivot::Union{RowMaximum,NoPivot} = RowMaximum();
         check::Bool = true, allowsingular::Bool = false)

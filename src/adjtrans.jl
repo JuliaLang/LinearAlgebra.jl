@@ -63,6 +63,8 @@ end
 # basic outer constructors
 Adjoint(A) = Adjoint{Base.promote_op(adjoint,eltype(A)),typeof(A)}(A)
 Transpose(A) = Transpose{Base.promote_op(transpose,eltype(A)),typeof(A)}(A)
+Adjoint(::Adjoint) = throw(ArgumentError("constructing an Adjoint wrapper of Adjoint objects is not supported; consider using `adjoint` instead."))
+Transpose(::Transpose) = throw(ArgumentError("constructing a Transpose wrapper of Transpose objects is not supported; consider using `transpose` instead."))
 
 """
     inplace_adj_or_trans(::AbstractArray) -> adjoint!|transpose!|copyto!
@@ -123,10 +125,9 @@ true
 julia> adjoint(B) === A # the adjoint of an adjoint unwraps the parent
 true
 
-julia> Adjoint(B) # however, the constructor always wraps its argument
-2×2 adjoint(adjoint(::Matrix{Complex{Int64}})) with eltype Complex{Int64}:
- 3+2im  9+2im
- 0+0im  0+0im
+julia> Adjoint(B) # however, the constructor would always wrap its argument, doubling is, however, disallowed
+ERROR: ArgumentError: constructing an Adjoint wrapper of Adjoint objects is not supported; consider using `adjoint` instead.
+[...]
 
 julia> B[1,2] = 4 + 5im; # modifying B will modify A automatically
 
@@ -216,10 +217,9 @@ true
 julia> transpose(B) === A # the transpose of a transpose unwraps the parent
 true
 
-julia> Transpose(B) # however, the constructor always wraps its argument
-2×2 transpose(transpose(::Matrix{Int64})) with eltype Int64:
- 3  2
- 0  0
+julia> Transpose(B) # however, the constructor would always wrap its argument, doubling is, however, disallowed
+ERROR: ArgumentError: constructing a Transpose wrapper of Transpose objects is not supported; consider using `transpose` instead.
+[...]
 
 julia> B[1,2] = 4; # modifying B will modify A automatically
 
@@ -369,16 +369,16 @@ convert(::Type{Transpose{T,S}}, A::Transpose) where {T,S} = Transpose{T,S}(conve
 
 # Strides and pointer for transposed strided arrays — but only if the elements are actually stored in memory
 Base.strides(A::Adjoint{<:Real, <:AbstractVector}) = (stride(A.parent, 2), stride(A.parent, 1))
-Base.strides(A::Transpose{<:Any, <:AbstractVector}) = (stride(A.parent, 2), stride(A.parent, 1))
+Base.strides(A::Transpose{<:Number, <:AbstractVector}) = (stride(A.parent, 2), stride(A.parent, 1))
 # For matrices it's slightly faster to use reverse and avoid calling stride twice
 Base.strides(A::Adjoint{<:Real, <:AbstractMatrix}) = reverse(strides(A.parent))
-Base.strides(A::Transpose{<:Any, <:AbstractMatrix}) = reverse(strides(A.parent))
+Base.strides(A::Transpose{<:Number, <:AbstractMatrix}) = reverse(strides(A.parent))
 
 Base.cconvert(::Type{Ptr{T}}, A::Adjoint{<:Real, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
-Base.cconvert(::Type{Ptr{T}}, A::Transpose{<:Any, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
+Base.cconvert(::Type{Ptr{T}}, A::Transpose{<:Number, <:AbstractVecOrMat}) where {T} = Base.cconvert(Ptr{T}, A.parent)
 
 Base.elsize(::Type{<:Adjoint{<:Real, P}}) where {P<:AbstractVecOrMat} = Base.elsize(P)
-Base.elsize(::Type{<:Transpose{<:Any, P}}) where {P<:AbstractVecOrMat} = Base.elsize(P)
+Base.elsize(::Type{<:Transpose{<:Number, P}}) where {P<:AbstractVecOrMat} = Base.elsize(P)
 
 # for vectors, the semantics of the wrapped and unwrapped types differ
 # so attempt to maintain both the parent and wrapper type insofar as possible
@@ -536,7 +536,7 @@ lmul!(s::Number, X::Adjoint) = (rmul!(parent(X), s'); X)
 
 ## pseudoinversion
 pinv(v::AdjointAbsVec, tol::Real = 0) = pinv(v.parent, tol).parent
-pinv(v::TransposeAbsVec, tol::Real = 0) = pinv(conj(v.parent)).parent
+pinv(v::TransposeAbsVec, tol::Real = 0) = pinv(conj(v.parent), tol).parent
 
 
 ## left-division \
@@ -575,8 +575,8 @@ Compute `vec(adjoint(A))`, but avoid an allocating reshape if possible
 _vecadjoint(A::AbstractVector) = vec(adjoint(A))
 _vecadjoint(A::Base.ReshapedArray{<:Any,1,<:AdjointAbsVec}) = adjoint(parent(A))
 
-diagview(A::Transpose, k::Integer = 0) = _vectranspose(diagview(parent(A), -k))
-diagview(A::Adjoint, k::Integer = 0) = _vecadjoint(diagview(parent(A), -k))
+diagview(A::TransposeAbsMat, k::Integer = 0) = _vectranspose(diagview(parent(A), -k))
+diagview(A::AdjointAbsMat, k::Integer = 0) = _vecadjoint(diagview(parent(A), -k))
 
 # triu and tril
 triu!(A::AdjOrTransAbsMat, k::Integer = 0) = wrapperop(A)(tril!(parent(A), -k))

@@ -8,9 +8,9 @@
 # Generic real type. Any real number type should able to approximate
 # real numbers, and thus be closed under arithmetic operations.
 # Therefore so Int, Complex{Int}, etc. are excluded.
-ClosedReal = T where T <: Union{AbstractFloat, Rational}
+const ClosedReal = T where T <: Union{AbstractFloat, Rational}
 # Similarly, we also use a closed scalar type
-ClosedScalar = Union{T, Complex{T}} where T <: ClosedReal
+const ClosedScalar = Union{T, Complex{T}} where T <: ClosedReal
 ##--------------------------------------------------------------------------------
 
 """
@@ -1341,8 +1341,8 @@ to `0`.
     `rank` by pushing one or more eigenvalues across the threshold. These
     variations can even occur due to changes in floating-point errors between
     different Julia versions, architectures, compilers, or operating systems.
-    In particular, the size of the entries of the tringular factor directly
-    influende the scale of the eigenvalues of the diagonal factor, so it is
+    In particular, the size of the entries of the triangular factor directly
+    influence the scale of the eigenvalues of the diagonal factor, so it is
     strongly recommended to use rook pivoting is the inertia is going to be
     computed.
     On the other hand, if the matrix has rational entries, the inertia

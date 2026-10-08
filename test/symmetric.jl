@@ -470,6 +470,10 @@ end
                 @test dot(symblockmu, symblockml) ≈ dot(msymblockmu, msymblockml)
                 @test dot(symblockml, symblockmu) ≈ dot(msymblockml, msymblockmu)
                 @test dot(symblockml, symblockml) ≈ dot(msymblockml, msymblockml)
+
+                # empty matrices
+                @test dot(mtype(ComplexF64[;;], :U), mtype(Float64[;;], :U)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
+                @test dot(mtype(ComplexF64[;;], :L), mtype(Float64[;;], :L)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
             end
         end
 
@@ -874,6 +878,21 @@ end
     @test det(Hermitian(A))::Float64 == det(A) == 0.0
 end
 
+@testset "issue #1437: inverse of Symmetric|Hermitian{<:Any,<:Diagonal} returns of Symmetric|Hermitian{<:Any,<:Diagonal}" begin
+    Dreal    = Diagonal(randn(3))
+    Dcomplex = Diagonal(randn(ComplexF64, 3))
+    # without wrapper
+    invDreal = inv(Dreal)
+    invDcomplex = inv(real(Dcomplex)) # because Hermitian implies a real diagonal
+    # with wrapper
+    SDreal = Symmetric(Dreal)
+    HDcomplex = Hermitian(Dcomplex)
+    @test inv(SDreal)::Symmetric{Float64,typeof(Dreal)} ≈ invDreal
+    @test inv(HDcomplex)::Hermitian{Float64,typeof(Dreal)} ≈ invDcomplex
+    Dcomplex[2,2] = 0
+    @test_throws SingularException inv(HDcomplex)
+end
+
 @testset "symmetric()/hermitian() for Numbers" begin
     @test LinearAlgebra.symmetric(1) == LinearAlgebra.symmetric(1, :U) == 1
     @test LinearAlgebra.symmetric_type(Int) == Int
@@ -1035,6 +1054,12 @@ end
         @test Aherm isa Hermitian
         @test Aherm.uplo == LinearAlgebra.char_uplo(uplo)
     end
+    @testset "hermitianpart for numbers" begin
+        @test hermitianpart(3 + 4im) == 3
+        @test hermitianpart(5) == 5.0
+        @test hermitianpart(2.5 + 4.3im) == 2.5
+        @test hermitianpart(-1 + 0im) == -1
+    end
 end
 
 @testset "Structured display" begin
@@ -1184,7 +1209,7 @@ end
     end
 end
 
-@testset "partly iniitalized matrices" begin
+@testset "partly initialized matrices" begin
     a = Matrix{BigFloat}(undef, 2,2)
     a[1] = 1; a[3] = 1; a[4] = 1
     h = Hermitian(a)
@@ -1292,16 +1317,17 @@ end
             end
         end
         #nice functions
-        for f in (x->x^2, exp, cos, sin, tan, cosh, sinh, tanh, atan, asinh, cbrt)
+        for f in (x->x^2, exp, cos, sin, tan, cosh, sinh, tanh, atan, asinh, cbrt, abs)
             if T <: Real
-                @test @inferred(f(a)) isa Matrix{T}
+                f != abs && @test @inferred(f(a)) isa Matrix{T}
                 @test @inferred(f(syma)) isa Symmetric{T}
                 @test @inferred(f(symtria)) isa Symmetric{T}
                 @test @inferred(f(herma)) isa Hermitian{T}
             else
-                f != cbrt && @test @inferred(f(a)) isa Matrix{T}
+                f != cbrt && f != abs && @test @inferred(f(a)) isa Matrix{T}
                 @test @inferred(f(herma)) isa Hermitian{T}
             end
+            f == abs && @test @inferred(f(a)) isa Hermitian{T}
         end
         #special case cis
         if T <: Real
@@ -1354,6 +1380,28 @@ end
     @test LinearAlgebra.uplo(S) == :U
     H = Hermitian([1 2; 3 4], :L)
     @test LinearAlgebra.uplo(H) == :L
+end
+
+# For testing zero forwarding to parent array type
+struct ZeroTestWrap{T} <: AbstractArray{T,2}
+    parent::Matrix{T}
+end
+Base.size(A::ZeroTestWrap) = size(A.parent)
+Base.getindex(A::ZeroTestWrap, i, j) = A.parent[i,j]
+Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
+
+@testset "zero forwarding" begin
+    for T in (Symmetric, Hermitian)
+        Z = zero(T(ZeroTestWrap([1 2; 2 3])))
+        @test Z isa T
+        @test parent(Z) isa ZeroTestWrap
+        @test iszero(Z)
+    end
+    # strided case uses fill!
+    @test iszero(zero(Symmetric(rand(4, 4))))
+    @test zero(Symmetric(rand(4, 4))) isa Symmetric
+    @test iszero(zero(Hermitian(rand(ComplexF64, 4, 4))))
+    @test zero(Hermitian(rand(ComplexF64, 4, 4))) isa Hermitian
 end
 
 end # module TestSymmetric

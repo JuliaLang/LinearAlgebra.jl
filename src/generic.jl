@@ -121,8 +121,8 @@ MulAddMul() = MulAddMul{true,true,Bool,Bool}(true, false)
 @inline (p::MulAddMul{false})(x) = x * p.alpha
 @inline (::MulAddMul{true, true})(x, _) = x
 @inline (p::MulAddMul{false, true})(x, _) = x * p.alpha
-@inline (p::MulAddMul{true, false})(x, y) = x + y * p.beta
-@inline (p::MulAddMul{false, false})(x, y) = x * p.alpha + y * p.beta
+@inline (p::MulAddMul{true, false})(x, y) = muladd(y, p.beta, x)
+@inline (p::MulAddMul{false, false})(x, y) = muladd(y, p.beta, x * p.alpha)
 
 _iszero_alpha(m::MulAddMul) = iszero(m.alpha)
 _iszero_alpha(m::MulAddMul{true}) = false
@@ -566,6 +566,14 @@ generic_normMinusInf(x) = float(mapreduce(norm, min, x))
 generic_normInf(x) = float(mapreduce(norm, max, x))
 
 generic_norm1(x) = mapreduce(float ∘ norm, +, x)
+function generic_norm1(x::AbstractArray{<:Number})
+    T = float(_valeltype(x))
+    res = zero(real(T))
+    @simd for xᵢ ∈ x
+        res += abs(T(xᵢ))
+    end
+    return res
+end
 
 # faster computation of norm(x)^2, avoiding overflow for integers
 norm_sqr(x) = norm(x)^2
@@ -591,6 +599,22 @@ function generic_norm2(x)
         end
         ismissing(sum) && return missing
         return convert(T, maxabs*sqrt(sum))
+    end
+end
+
+function generic_norm2(x::AbstractArray{<:Number})
+    T = _valeltype(x)
+    Tout = float(real(T))
+    !(Tout <: AbstractFloat) && return invoke(generic_norm2, Tuple{Any}, x)
+    Tsum = promote_type(Float64, T)
+    norm² = sum(abs2 ∘ Tsum, x)
+    if isfinite(norm²) && (norm² ≥ floatmin(norm²))
+        return convert(Tout, sqrt(norm²))  # fast path: no overflow/underflow or subnormals
+    else
+        k = exp2(floor(log2(floatmin(norm²))*3/4))
+        scale = isinf(norm²) ? k : inv(k)
+        res = sqrt(sum(x -> abs2(x * scale), x)) / scale
+        return convert(Tout, res)
     end
 end
 
@@ -926,7 +950,7 @@ vector is conjugated.
 `dot` also works on arbitrary iterable objects, including arrays of any dimension,
 as long as `dot` is defined on the elements.
 
-`dot` is semantically equivalent to `sum(dot(vx,vy) for (vx,vy) in zip(x, y))`,
+`dot` is semantically equivalent to `reduce(+, dot(vx,vy) for (vx,vy) in zip(x, y))`,
 with the added restriction that the arguments must have equal lengths.
 
 `x ⋅ y` (where `⋅` can be typed by tab-completing `\\cdot` in the REPL) is a synonym for
@@ -993,7 +1017,8 @@ function dot(x::AbstractArray, y::AbstractArray)
         throw(DimensionMismatch(lazy"first array has length $(lx) which does not match the length of the second, $(length(y))."))
     end
     if lx == 0
-        return dot(zero(eltype(x)), zero(eltype(y)))
+        # make sure the returned result equals exactly the zero element
+        return zero(dot(zero(eltype(x)), zero(eltype(y))))
     end
     s = zero(dot(first(x), first(y)))
     for (Ix, Iy) in zip(eachindex(x), eachindex(y))
@@ -1034,6 +1059,8 @@ dot(x, A, y) = dot(x, A*y) # generic fallback for cases that are not covered by 
 
 function dot(x::AbstractVector, A::AbstractMatrix, y::AbstractVector)
     (axes(x)..., axes(y)...) == axes(A) || throw(DimensionMismatch())
+    # outermost zero call to avoid spurious sign ambiguity (like 0.0 - 0.0im)
+    any(isempty, (x, y)) && return zero(dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y))))
     T = typeof(dot(first(x), first(A), first(y)))
     s = zero(T)
     i₁ = first(eachindex(x))
@@ -1056,7 +1083,7 @@ dot(x::AbstractVector, transA::Transpose{<:Real}, y::AbstractVector) = adjoint(d
 ###########################################################################################
 
 """
-    rank(A::AbstractMatrix; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    rank(A::AbstractMatrix; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     rank(A::AbstractMatrix, rtol::Real)
 
 Compute the numerical rank of a matrix by counting how many outputs of
@@ -1098,7 +1125,7 @@ julia> rank(diagm(0 => [1, 0.001, 2]), atol=1.5)
 1
 ```
 """
-function rank(A::AbstractMatrix; atol::Real = 0.0, rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
+function rank(A::AbstractMatrix; atol::Number = zero(real(eltype(A))), rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
     isempty(A) && return 0 # 0-dimensional case
     s = svdvals(A)
     tol = max(atol, rtol*s[1])
@@ -1223,7 +1250,10 @@ true
 function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
-    T = promote_op(\, eltype(A), eltype(B))
+    # an abstract `eltype(A)` is narrowed to the promoted type of the stored values, as in the factorizations
+    # the scalar type of the solution: the elements of `B` may themselves be vectors
+    TA0 = _valeltype(A)
+    T = promote_op(\, TA0, _scalartype(eltype(B)))
     if m == n
         if istril(A)
             if istriu(A)
@@ -1235,9 +1265,14 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
         if istriu(A)
             return UpperTriangular(A) \ B
         end
-        return lu(convert(AbstractArray{T}, A)) \ B
     end
-    return qr(convert(AbstractArray{T}, A), ColumnNorm()) \ B
+    # `T` is the type of the solution; promote the numeric type of `A` accordingly
+    # (e.g. `Int` -> `Float64`), but keep the units of `A` (`one(T)` is dimensionless)
+    TA = promote_type(TA0, typeof(oneunit(TA0) * one(T)))
+    if m == n
+        return lu(convert(AbstractArray{TA}, A)) \ B
+    end
+    return qr(convert(AbstractArray{TA}, A), ColumnNorm()) \ B
 end
 
 function (\)(a::AbstractVector, b::AbstractArray)
@@ -1678,7 +1713,7 @@ end
     axpby!(α, x::AbstractArray, β, y::AbstractArray)
 
 Overwrite `y` with `x * α + y * β` and return `y`.
-If `x` and `y` have the same axes, it's equivalent with `y .= x .* a .+ y .* β`.
+If `x` and `y` have the same axes, it's equivalent with `y .= x .* α .+ y .* β`.
 
 # Examples
 ```jldoctest
@@ -1741,7 +1776,7 @@ function rotate!(x::AbstractVector, y::AbstractVector, c, s)
         @inbounds begin
             xi, yi = x[i], y[i]
             x[i] = s*yi +      c *xi
-            y[i] = c*yi - conj(s)*xi 
+            y[i] = c*yi - conj(s)*xi
         end
     end
     return x, y
@@ -1796,19 +1831,94 @@ end
     reflectorApply!(x, τ, A)
 
 Multiplies `A` in-place by a Householder reflection on the left. It is equivalent to `A .= (I - [1; x[2:end]] * conj(τ) * [1; x[2:end]]') * A`.
+
+For `x` and `A` with numeric elements, the computation is carried out by
+`reflectorApplyNumeric!`, which is based on `dot` and `axpy!`. Otherwise, e.g. if the
+elements of `A` are vectors, `reflectorApplyLoop!` is used, which treats the elements
+of `A` as opaque. Packages may add methods of `reflectorApply!` for their own types that
+dispatch to either kernel.
 """
-@inline function reflectorApply!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
+reflectorApply!(x::AbstractVector{<:Number}, τ::Number, A::AbstractVecOrMat{<:Number}) =
+    reflectorApplyNumeric!(x, τ, A)
+reflectorApply!(x::AbstractVector, τ::Number, A::AbstractVecOrMat) =
+    reflectorApplyLoop!(x, τ, A)
+
+function _checkreflector(x::AbstractVector, A::AbstractVecOrMat)
     require_one_based_indexing(x, A)
-    m, n = size(A, 1), size(A, 2)
+    m = size(A, 1)
     if length(x) != m
         throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the first dimension of matrix A, $m"))
     end
+    return m
+end
+
+"""
+    reflectorApplyNumeric!(x, τ, A)
+
+Kernel of `reflectorApply!` for numeric elements of `x` and `A`, based on `dot` and
+`axpy!`, which dispatch to BLAS where possible.
+"""
+@inline function reflectorApplyNumeric!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
+    m = _checkreflector(x, A)
     m == 0 && return A
     for j in axes(A,2)
         Aj, xj = @inbounds view(A, 2:m, j), view(x, 2:m)
         vAj = conj(τ)*(@inbounds(A[1, j]) + dot(xj, Aj))
         @inbounds A[1, j] -= vAj
         axpy!(-vAj, xj, Aj)
+    end
+    return A
+end
+
+"""
+    reflectorApplyLoop!(x, τ, A)
+
+Kernel of `reflectorApply!` with explicit loops over the elements of `A`. The elements
+are only multiplied by the (scalar) entries of `x` and by `τ`, added and subtracted, so they
+may be vectors themselves, for instance.
+"""
+@inline function reflectorApplyLoop!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
+    m = _checkreflector(x, A)
+    m == 0 && return A
+    @inbounds for j in axes(A, 2)
+        vAj = A[1, j]
+        for i in 2:m
+            vAj += conj(x[i])*A[i, j]
+        end
+        vAj = conj(τ)*vAj
+        A[1, j] -= vAj
+        for i in 2:m
+            A[i, j] -= x[i]*vAj
+        end
+    end
+    return A
+end
+
+"""
+    reflectorApply!(A, x, τ)
+
+Multiplies `A` in-place by a Householder reflection on the right. It is equivalent to
+`A .= A * (I - [1; x[2:end]] * τ * [1; x[2:end]]')`.
+"""
+@inline function reflectorApply!(A::AbstractVecOrMat, x::AbstractVector, τ::Number)
+    require_one_based_indexing(A, x)
+    m, n = size(A, 1), size(A, 2)
+    if length(x) != n
+        throw(DimensionMismatch(lazy"reflector has length $(length(x)), which must match the second dimension of matrix A, $n"))
+    end
+    n == 0 && return A
+    # the leading entry of the reflector is an implicit one, and `τ` multiplies `A*x` from
+    # the right, opposite to the left-applying method above
+    @inbounds for i in axes(A, 1)
+        Avi = A[i, 1]
+        for j in 2:n
+            Avi += A[i, j]*x[j]
+        end
+        Avi *= τ
+        A[i, 1] -= Avi
+        for j in 2:n
+            A[i, j] -= Avi*conj(x[j])
+        end
     end
     return A
 end
@@ -1842,15 +1952,19 @@ julia> det(BigInt[1 0; 2 2]) # exact integer determinant
 """
 function det(A::AbstractMatrix{T}) where {T}
     if istriu(A) || istril(A)
-        S = promote_type(T, typeof((one(T)*zero(T) + zero(T))/one(T)))
-        return prod(Base.Fix1(convert, S), @view A[diagind(A)]; init=one(S))
+        return det(UpperTriangular(A))
     end
     return det(lu(A; check = false))
 end
 det(x::Number) = x
 
 # Resolve Issue #40128
-det(A::AbstractMatrix{BigInt}) = det_bareiss(A)
+function det(A::AbstractMatrix{BigInt})
+    if istriu(A) || istril(A)
+        return det(UpperTriangular(A))
+    end
+    return det_bareiss(A)
+end
 
 """
     logabsdet(M)
@@ -1975,7 +2089,8 @@ det_bareiss(M) = det_bareiss!(copymutable(M))
 
 For an (possibly nested) iterable object `itr`, promote the types of leaf
 elements.  Equivalent to `promote_type(typeof(leaf1), typeof(leaf2), ...)`.
-Currently supports only numeric leaf elements.
+Currently supports only numeric leaf elements. Homogeneous containers of a concrete leaf type
+are not iterated.
 
 # Examples
 ```jldoctest
@@ -1989,19 +2104,36 @@ julia> LinearAlgebra.promote_leaf_eltypes(a)
 ComplexF64 (alias for Complex{Float64})
 ```
 """
-promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Number} = T
-promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:NumberArray} = eltype(T)
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:Number} =
+    isconcretetype(T) ? T : _promote_leaf_eltypes(x)
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T<:NumberArray} =
+    isconcretetype(eltype(T)) ? eltype(T) : _promote_leaf_eltypes(x)
+promote_leaf_eltypes(x::AbstractArray{Union{}}) = Bool
 promote_leaf_eltypes(x::T) where {T} = T
-promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+# a homogeneous container of a concrete scalar type that is not a `Number` (e.g. of elements of
+# a ring): the elements need not be inspected
+promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T} =
+    (isconcretetype(T) && !(T <: Union{AbstractArray,Tuple})) ? T : _promote_leaf_eltypes(x)
+promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = _promote_leaf_eltypes(x)
+_promote_leaf_eltypes(x::Tuple) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+function _promote_leaf_eltypes(x::AbstractArray)
+    # loop instead of mapreduce, to avoid a dynamic call to promote_type for every element
+    T = Bool
+    for el in x
+        S = el isa Number ? typeof(el) : promote_leaf_eltypes(el)
+        S === T || (T = promote_type(T, S))
+    end
+    return T
+end
 
 # isapprox: approximate equality of arrays [like isapprox(Number,Number)]
 # Supports nested arrays; e.g., for `a = [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]`
 # `a ≈ a` is `true`.
 function isapprox(x::AbstractArray, y::AbstractArray;
-    atol::Real=0,
+    atol::Number=zero(real(promote_leaf_eltypes(x))), # zero in the units of the elements
     rtol::Real=Base.rtoldefault(promote_leaf_eltypes(x),promote_leaf_eltypes(y),atol),
     nans::Bool=false, norm::Function=norm)
-    d = norm_x_minus_y(x, y)
+    d = norm_x_minus_y(x, y, norm)
     if isfinite(d)
         return iszero(rtol) ? d <= atol : d <= max(atol, rtol*max(norm(x), norm(y)))
     else
@@ -2011,10 +2143,10 @@ function isapprox(x::AbstractArray, y::AbstractArray;
     end
 end
 
-norm_x_minus_y(x, y) = norm(x - y)
+norm_x_minus_y(x, y, nrm::F) where {F} = nrm(x - y)
 FastContiguousArrayView{T,N,P<:Array,I<:Tuple{AbstractUnitRange, Vararg{Any}}} = Base.SubArray{T,N,P,I,true}
 const ArrayOrFastContiguousArrayView = Union{Array, FastContiguousArrayView}
-function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView)
+function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContiguousArrayView, ::typeof(norm))
     Base.promote_shape(size(x), size(y)) # ensure compatible size
     if isempty(x) && isempty(y)
         norm(zero(eltype(x)) - zero(eltype(y)))
@@ -2030,21 +2162,12 @@ Normalize the array `a` in-place so that its `p`-norm equals unity,
 i.e. `norm(a, p) == 1`.
 See also [`normalize`](@ref) and [`norm`](@ref).
 """
-function normalize!(a::AbstractArray, p::Real=2)
+function normalize!(a::AbstractArray, p::Real=2) #logic equal to normalize, should be kept in sync
     nrm = norm(a, p)
-    __normalize!(a, nrm)
-end
-
-@inline function __normalize!(a::AbstractArray, nrm)
-    # The largest positive floating point number whose inverse is less than infinity
-    δ = inv(prevfloat(typemax(nrm)))
-    if nrm ≥ δ # Safe to multiply with inverse
-        invnrm = inv(nrm)
-        rmul!(a, invnrm)
-    else # scale elements to avoid overflow
-        εδ = eps(one(nrm))/δ
-        rmul!(a, εδ)
-        rmul!(a, inv(nrm*εδ))
+    if !issubnormal(nrm) # nrm is accurate and inverting won't overflow
+        rmul!(a, inv(nrm))
+    else # scale elements to be non-subnormal and re-normalize
+        normalize!(rmul!(a, inv(floatmin(nrm))), p)
     end
     return a
 end
@@ -2102,14 +2225,12 @@ julia> normalize(0, 1)
 NaN
 ```
 """
-function normalize(a::AbstractArray, p::Real = 2)
+function normalize(a::AbstractArray, p::Real = 2) #logic equal to normalize!, should be kept in sync
     nrm = norm(a, p)
-    if !isempty(a)
-        aa = copymutable_oftype(a, typeof(first(a)/nrm))
-        return __normalize!(aa, nrm)
+    if !issubnormal(nrm)
+        return a * inv(nrm)
     else
-        T = typeof(zero(eltype(a))/nrm)
-        return T[]
+        return normalize(a * inv(floatmin(nrm)), p)
     end
 end
 
@@ -2144,19 +2265,20 @@ function copytrito!(B::AbstractMatrix, A::AbstractMatrix, uplo::AbstractChar)
     BLAS.chkuplo(uplo)
     B === A && return B
     m,n = size(A)
+    d = min(m,n)
     A = Base.unalias(B, A)
     if uplo == 'U'
-        LAPACK.lacpy_size_check(size(B), (n < m ? n : m, n))
+        LAPACK.lacpy_size_check(size(B), (d, n))
         # extract the parents for UpperTriangular matrices
         Bv, Av = uppertridata(B), uppertridata(A)
         for j in axes(A,2), i in axes(A,1)[begin : min(j,end)]
             @inbounds Bv[i,j] = Av[i,j]
         end
     else # uplo == 'L'
-        LAPACK.lacpy_size_check(size(B), (m, m < n ? m : n))
+        LAPACK.lacpy_size_check(size(B), (m, d))
         # extract the parents for LowerTriangular matrices
         Bv, Av = lowertridata(B), lowertridata(A)
-        for j in axes(A,2), i in axes(A,1)[j:end]
+        for j in axes(A,2)[1:d], i in axes(A,1)[j:end]
             @inbounds Bv[i,j] = Av[i,j]
         end
     end

@@ -314,7 +314,10 @@ julia> a = [1. 2.; 3. 4.]
 
 julia> qr!(a)
 LinearAlgebra.QRCompactWY{Float64, Matrix{Float64}, Matrix{Float64}}
-Q factor: 2×2 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}
+Q factor:
+2×2 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}:
+ -0.316228  -0.948683
+ -0.948683   0.316228
 R factor:
 2×2 Matrix{Float64}:
  -3.16228  -4.42719
@@ -339,6 +342,7 @@ qr!(A::AbstractMatrix) = qr!(A, NoPivot())
 @deprecate qr!(A::AbstractMatrix, ::Val{false}) qr!(A, NoPivot())
 
 _qreltype(::Type{T}) where T = typeof(zero(T)/sqrt(abs2(one(T))))
+_qreltype(A::AbstractArray) = _qreltype(_valeltype(A))
 
 """
     qr(A, pivot = NoPivot(); blocksize) -> F
@@ -403,7 +407,11 @@ julia> A = [3.0 -6.0; 4.0 -8.0; 0.0 1.0]
 
 julia> F = qr(A)
 LinearAlgebra.QRCompactWY{Float64, Matrix{Float64}, Matrix{Float64}}
-Q factor: 3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}
+Q factor:
+3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}:
+ -0.6   0.0   0.8
+ -0.8   0.0  -0.6
+  0.0  -1.0   0.0
 R factor:
 2×2 Matrix{Float64}:
  -5.0  10.0
@@ -419,9 +427,9 @@ true
     elementary reflectors, so that the `Q` and `R` matrices can be stored
     compactly rather than two separate dense matrices.
 """
-function qr(A::AbstractMatrix{T}, arg...; kwargs...) where T
+function qr(A::AbstractMatrix, arg...; kwargs...)
     require_one_based_indexing(A)
-    AA = copy_similar(A, _qreltype(T))
+    AA = copy_similar(A, _qreltype(A))
     return _qr(AA, arg...; kwargs...)
 end
 # TODO: remove in Julia v2.0
@@ -458,7 +466,7 @@ Array(F::QRPivoted) = Matrix(F)
 
 function show(io::IO, mime::MIME{Symbol("text/plain")}, F::Union{QR, QRCompactWY, QRPivoted})
     summary(io, F); println(io)
-    print(io, "Q factor: ")
+    println(io, "Q factor:")
     show(io, mime, F.Q)
     println(io, "\nR factor:")
     show(io, mime, F.R)
@@ -522,13 +530,13 @@ size(F::Union{QR,QRCompactWY,QRPivoted}) = size(getfield(F, :factors))
 size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :factors), dim)
 
 
-function ldiv!(A::QRCompactWY{T}, b::AbstractVector{T}) where {T}
+function ldiv!(A::QRCompactWY, b::AbstractVector)
     require_one_based_indexing(b)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), b), 1:size(A, 2)))
     return b
 end
-function ldiv!(A::QRCompactWY{T}, B::AbstractMatrix{T}) where {T}
+function ldiv!(A::QRCompactWY, B::AbstractMatrix)
     require_one_based_indexing(B)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), B), 1:size(A, 2), 1:size(B, 2)))
@@ -564,14 +572,19 @@ function rank(A::QRPivoted; atol::Real=0, rtol::Real=min(size(A)...) * eps(real(
     return something(findfirst(i -> abs(A.factors[i,i]) <= tol, 1:m), m+1) - 1
 end
 
+# In-place solves store the right-hand side in the first m rows of B and overwrite
+# B with the n-row solution, so B must have exactly max(m, n) rows.
+function _check_qr_ldiv_rhs(A, B::AbstractVecOrMat)
+    m, n = size(A)
+    size(B, 1) == max(m, n) ||
+        throw(DimensionMismatch(lazy"B has $(size(B, 1)) rows, but needs exactly $(max(m, n))"))
+end
+
 # Julia implementation similar to xgelsy
 function ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractMatrix{T}, rcond::Real) where {T<:BlasFloat}
     require_one_based_indexing(B)
+    _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
-
-    if m > size(B, 1) || n > size(B, 1)
-        throw(DimensionMismatch(lazy"B has leading dimension $(size(B, 1)) but needs at least $(max(m, n))"))
-    end
 
     if length(A.factors) == 0 || length(B) == 0
         return B, 0
@@ -649,7 +662,7 @@ ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractVector{T}) where {T<:BlasFloat
 ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractMatrix{T}) where {T<:BlasFloat} =
     ldiv!(A, B, min(size(A)...)*eps(real(T)))[1]
 
-function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
+function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix) where T
     m, n = size(A)
     minmn = min(m,n)
     mB, nB = size(B)
@@ -677,7 +690,7 @@ function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
         end
         ldiv!(UpperTriangular(view(R, :, 1:minmn)), view(B, 1:minmn, :))
         if n > m # Apply elementary transformation to solution
-            B[m + 1:mB,1:nB] .= zero(T)
+            fill!(view(B, m + 1:mB, 1:nB), zero(eltype(B)))
             for j = 1:nB
                 for k = 1:m
                     vBj = B[k,j]'
@@ -697,7 +710,9 @@ function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
 end
 
 
-function ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
+function ldiv!(A::QR, B::AbstractMatrix)
+    require_one_based_indexing(B)
+    _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
     m < n && return _wide_qr_ldiv!(A, B)
 
@@ -772,7 +787,7 @@ function (\)(A::Union{QR{T},QRCompactWY{T},QRPivoted{T}}, BIn::VecOrMat{Complex{
 #                                                 |x4|y4|
     B = reshape(copy(transpose(reinterpret(T, reshape(BIn, (1, length(BIn)))))), size(BIn, 1), 2*size(BIn, 2))
 
-    X = _zeros(T, B, n)
+    X = _zeros(T, B, A)
     X[1:size(B, 1), :] = B
 
     ldiv!(A, X)

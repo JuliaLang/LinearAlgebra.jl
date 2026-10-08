@@ -70,7 +70,7 @@ export
 
 # Functions
     adjoint!,
-    adjoint,
+    # adjoint, # exported by Base
     axpby!,
     axpy!,
     bunchkaufman!,
@@ -81,7 +81,7 @@ export
     condskeel,
     copy_adjoint!,
     copy_transpose!,
-    copyto!,
+    # copyto!, # exported by Base
     copytrito!,
     cross,
     det,
@@ -111,8 +111,8 @@ export
     issymmetric,
     istril,
     istriu,
-    kron!,
-    kron,
+    # kron!, # exported by Base
+    # kron, # exported by Base
     ldiv!,
     ldlt!,
     ldlt,
@@ -153,7 +153,7 @@ export
     sylvester,
     tr,
     transpose!,
-    transpose,
+    # transpose, # exported by Base
     tril!,
     tril,
     triu!,
@@ -161,8 +161,8 @@ export
 
 
 # Operators
-    \,
-    /,
+    # \, # exported by Base
+    # /, # exported by Base
 
 # Constants
     I
@@ -175,11 +175,13 @@ public AbstractTriangular,
         hermitian,
         hermitian_type,
         isbanded,
+        nonzeroinds,
+        nzcols,
+        nzrows,
         peakflops,
         symmetric,
         symmetric_type,
         zeroslike,
-        matprod_dest,
         fillstored!,
         fillband!,
         uplo
@@ -509,6 +511,19 @@ See also: `copymutable_oftype`.
 copy_similar(A::AbstractArray, ::Type{T}) where {T} = copyto!(similar(A, T, size(A)), A)
 
 """
+    _valeltype(A)
+
+Return `eltype(A)` if it is concrete (or `A` is empty). Otherwise, return the type obtained
+by promoting the types of all values stored in `A`, as seen through `getindex`, such that
+elements that are not referenced by a wrapper like `Symmetric` are ignored.
+
+This is used to determine the element type of the copy of `A` that is passed to in-place
+factorizations when `eltype(A)` is abstract, e.g., `Real` or `Number`.
+"""
+_valeltype(A::AbstractArray{T}) where {T} =
+    (isconcretetype(T) || isempty(A)) ? T : mapreduce(typeof, promote_type, A)
+
+"""
     BandIndex(band, index)
 
 Represent a Cartesian index as a linear index along a band.
@@ -551,6 +566,7 @@ include("exceptions.jl")
 include("generic.jl")
 
 include("blas.jl")
+include("sparse_interface.jl")
 include("matmul.jl")
 include("lapack.jl")
 
@@ -585,6 +601,25 @@ const ⋅ = dot
 const × = cross
 export ⋅, ×
 
+function _uppercase(c::Char)
+    if c ∈ ('N', 'T', 'C', 'H', 'S')
+        return c
+    elseif c ∈ ('n', 't', 'c', 'h', 's')
+        return c - 32
+    else
+        throw(ArgumentError("Unsupported character."))
+    end
+end
+_isuppercase(c::Char) = c ∈ ('N', 'T', 'C', 'H', 'S')
+function _lowercase(c::Char)
+    if c ∈ ('n', 't', 'c', 'h', 's')
+        return c
+    elseif c ∈ ('N', 'T', 'C', 'H', 'S')
+        return c + 32
+    else
+        throw(ArgumentError("Unsupported character."))
+    end
+end
 # Separate the char corresponding to the wrapper from that corresponding to the uplo
 # In most cases, the former may be constant-propagated, while the latter usually can't be.
 # This improves type-inference in wrap for Symmetric/Hermitian matrices
@@ -598,18 +633,22 @@ function Base.Char(w::WrapperChar)
     if T ∈ ('N', 'T', 'C') # known cases where isuppertri is true
         T
     else
-        _isuppertri(w) ? uppercase(T) : lowercase(T)
+        _isuppertri(w) ? _uppercase(T) : _lowercase(T)
     end
 end
+WrapperChar(c::Char) = WrapperChar(c, _isuppercase(c))
+# The `AbstractChar` interface requires `codepoint` and construction from `UInt32`;
+# generic char operations are built on top of these — e.g. `Base.uppercase`, which
+# SparseArrays applies to the wrapper chars we pass to `generic_matvecmul!`.
 Base.codepoint(w::WrapperChar) = codepoint(Char(w))
 WrapperChar(n::UInt32) = WrapperChar(Char(n))
-WrapperChar(c::Char) = WrapperChar(c, isuppercase(c))
 # We extract the wrapperchar so that the result may be constant-propagated
 # This doesn't return a value of the same type on purpose
-Base.uppercase(w::WrapperChar) = uppercase(w.wrapperchar)
-Base.lowercase(w::WrapperChar) = lowercase(w.wrapperchar)
+_uppercase(w::WrapperChar) = _uppercase(w.wrapperchar)
+_lowercase(w::WrapperChar) = _lowercase(w.wrapperchar)
+_isuppercase(w::WrapperChar) = w.isuppertri
 _isuppertri(w::WrapperChar) = w.isuppertri
-_isuppertri(x::AbstractChar) = isuppercase(x) # compatibility with earlier Char-based implementation
+_isuppertri(x::AbstractChar) = _isuppercase(x) # compatibility with earlier Char-based implementation
 _uplosym(x) = _isuppertri(x) ? (:U) : (:L)
 
 wrapper_char(::AbstractArray) = 'N'
@@ -620,7 +659,7 @@ wrapper_char(A::Hermitian) =  WrapperChar('H', A.uplo == 'U')
 wrapper_char(A::Hermitian{<:Real}) = WrapperChar('S', A.uplo == 'U')
 wrapper_char(A::Symmetric) = WrapperChar('S', A.uplo == 'U')
 
-wrapper_char_NTC(A::AbstractArray) = uppercase(wrapper_char(A)) == 'N'
+wrapper_char_NTC(A::AbstractArray) = _uppercase(wrapper_char(A)) == 'N'
 wrapper_char_NTC(A::Union{StridedArray, Adjoint, Transpose}) = true
 wrapper_char_NTC(A::Union{Symmetric, Hermitian}) = false
 
@@ -628,7 +667,7 @@ Base.@constprop :aggressive function wrap(A::AbstractVecOrMat, tA::AbstractChar)
     # merge the result of this before return, so that we can type-assert the return such
     # that even if the tmerge is inaccurate, inference can still identify that the
     # `_generic_matmatmul` signature still matches and doesn't require missing backedges
-    tA_uc = uppercase(tA)
+    tA_uc = _uppercase(tA)
     B = if tA_uc == 'N'
         A
     elseif tA_uc == 'T'
@@ -651,43 +690,30 @@ _unwrap(A::AbstractVecOrMat) = A
 _cut_B(x::AbstractVector, r::UnitRange) = length(x)  > length(r) ? x[r]   : x
 _cut_B(X::AbstractMatrix, r::UnitRange) = size(X, 1) > length(r) ? X[r,:] : X
 
-# SymTridiagonal ev can be the same length as dv, but the last element is
-# ignored. However, some methods can fail if they read the entire ev
-# rather than just the meaningful elements. This is a helper function
-# for getting only the meaningful elements of ev. See #41089
-_evview(S::SymTridiagonal) = @view S.ev[begin:begin + length(S.dv) - 2]
-
 ## append right hand side with zeros if necessary
-_zeros(::Type{T}, b::AbstractVector, n::Integer) where {T} = zeros(T, max(length(b), n))
-_zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B, 1), n), size(B, 2))
-
-# append a zero element / drop the last element
-_pushzero(A) = (B = similar(A, length(A)+1); @inbounds B[begin:end-1] .= A; @inbounds B[end] = zero(eltype(B)); B)
-_droplast!(A) = deleteat!(A, lastindex(A))
+_zeros(::Type{T}, B::AbstractVecOrMat, F::Factorization) where {T} = zeros(T, _ret_size(F, B))
+# keep the array type of dense right hand sides
+_zeros(::Type{T}, B::StridedVecOrMat, F::Factorization) where {T} = fill!(similar(B, T, _ret_size(F, B)), zero(T))
 
 # destination type for matmul
-matprod_dest(A::StructuredMatrix, B::StructuredMatrix, TS) = similar(B, TS, size(B))
-matprod_dest(A, B::StructuredMatrix, TS) = similar(A, TS, size(A))
-matprod_dest(A::StructuredMatrix, B, TS) = similar(B, TS, size(B))
 # diagonal is special, as it does not change the structure of the other matrix
 # we call similar without a size to preserve the type of the matrix wherever possible
-# reroute through _matprod_dest_diag to allow speicalizing on the type of the StructuredMatrix
+# reroute through _matprod_dest_diag to allow specializing on the type of the StructuredMatrix
 # without defining methods for both the orderings
-matprod_dest(A::StructuredMatrix, B::Diagonal, TS) = _matprod_dest_diag(A, TS)
-matprod_dest(A::Diagonal, B::StructuredMatrix, TS) = _matprod_dest_diag(B, TS)
-matprod_dest(A::Diagonal, B::Diagonal, TS) = _matprod_dest_diag(B, TS)
+_matprod_type(A, B) = promote_op(matprod, eltype(A), eltype(B))
+matop_dest(::typeof(*), A, B::Diagonal) = _matprod_dest_diag(A, _matprod_type(A, B))
+matop_dest(::typeof(*), A::Diagonal, B) = _matprod_dest_diag(B, _matprod_type(A, B))
+matop_dest(::typeof(*), A::Diagonal, B::Diagonal) = similar(B, _matprod_type(A, B))
+matop_dest(::typeof(*), A::Diagonal, B::AbstractVector) = similar(B, _matprod_type(A, B))
 _matprod_dest_diag(A, TS) = similar(A, TS)
-_matprod_dest_diag(A::UnitUpperTriangular, TS) = UpperTriangular(similar(parent(A), TS))
-_matprod_dest_diag(A::UnitLowerTriangular, TS) = LowerTriangular(similar(parent(A), TS))
+_matprod_dest_diag(A::HermOrSym, TS) = similar(parent(A), TS)
+_matprod_dest_diag(A::UpperOrUnitUpperTriangular, TS) = UpperTriangular(similar(parent(A), TS))
+_matprod_dest_diag(A::LowerOrUnitLowerTriangular, TS) = LowerTriangular(similar(parent(A), TS))
 function _matprod_dest_diag(A::SymTridiagonal, TS)
-    n = size(A, 1)
-    ev = similar(A, TS, max(0, n-1))
-    dv = similar(A, TS, n)
+    ev = similar(A.ev, TS)
+    dv = similar(A.dv, TS)
     Tridiagonal(ev, dv, similar(ev))
 end
-
-# Special handling for adj/trans vec
-matprod_dest(A::Diagonal, B::AdjOrTransAbsVec, TS) = similar(B, TS)
 
 # General fallback definition for handling under- and overdetermined system as well as square problems
 # While this definition is pretty general, it does e.g. promote to common element type of lhs and rhs
@@ -709,6 +735,11 @@ const LAPACKFactorizations{T,S} = Union{
 (\)(F::AdjointFactorization{<:Any,<:LAPACKFactorizations}, B::AbstractVecOrMat) = ldiv(F, B)
 (\)(F::TransposeFactorization{<:Any,<:LU}, B::AbstractVecOrMat) = ldiv(F, B)
 
+# the scalar type underlying an element type: for array-valued elements (e.g. static vectors),
+# that of their elements, recursively; otherwise the type itself
+_scalartype(::Type{T}) where {T<:AbstractArray} = _scalartype(eltype(T))
+_scalartype(::Type{T}) where {T} = T
+
 function ldiv(F::Factorization, B::AbstractVecOrMat)
     require_one_based_indexing(B)
     m, n = size(F)
@@ -716,12 +747,17 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
         throw(DimensionMismatch("arguments must have the same number of rows"))
     end
 
-    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(F)))
-    FF = Factorization{TFB}(F)
+    # scalar type of the solution (the elements of `B` may themselves be vectors)
+    TFB = typeof(zero(_scalartype(eltype(B))) / oneunit(eltype(F)))
+    # promote the numeric type of the factorization to that of the solution (e.g. `Float32` ->
+    # `Float64`), but keep its units: `TFB` itself may carry different units than the factors
+    TF = typeof(oneunit(eltype(F)) * one(TFB))
+    FF = Factorization{TF}(F)
 
     # For wide problem we (often) compute a minimum norm solution. The solution
     # is larger than the right hand side so we use size(F, 2).
-    BB = _zeros(TFB, B, n)
+    TBB = typeof(zero(eltype(B)) / oneunit(eltype(F)))
+    BB = _zeros(TBB, B, F)
 
     if n > size(B, 1)
         # Underdetermined
@@ -832,6 +868,55 @@ function versioninfo(io::IO=stdout)
     return nothing
 end
 
+@static if Sys.isapple() && Sys.ARCH === :aarch64
+    @noinline function _sysctl_str(name)
+        size = Ref{Csize_t}()
+        err = @ccall sysctlbyname(name::Cstring, C_NULL::Ptr{Cvoid}, size::Ref{Csize_t},
+                                  C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
+        Base.systemerror("sysctlbyname", err != 0)
+
+        str = Base._string_n(size[] - 1) # implicitly allocates trailing NUL byte
+        err = @ccall sysctlbyname(name::Cstring, str::Ptr{UInt8}, size::Ptr{Csize_t},
+                                    C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
+        Base.systemerror("sysctlbyname", err != 0)
+
+        return str
+    end
+
+    @noinline function _sysctl_int32(name)
+        value = Ref{Int32}(0)
+        size = Ref{Csize_t}(sizeof(Int32))
+        err = @ccall sysctlbyname(name::Cstring, value::Ptr{Cvoid}, size::Ref{Csize_t},
+                                  C_NULL::Ptr{Cvoid}, 0::Csize_t)::Cint
+        Base.systemerror("sysctlbyname", err != 0)
+        return value[]
+    end
+
+    # When the cpu has efficiency cores, count all but those.
+    # When the cpu does not, count all cores but 1
+    const cpus_to_use = OncePerProcess{Int32}() do
+        try
+            # offset defaults to 1 to leave one core
+            # free on devices without efficiency cores
+            offset = Int32(1)
+            # hw.nperflevels/hw.perflevel* only exist on Darwin ≥ 21 (macOS ≥ 12)
+            count = _sysctl_int32("hw.physicalcpu")
+            if parse(VersionNumber, _sysctl_str("kern.osrelease")) >= v"21"
+                for i in 0:_sysctl_int32("hw.nperflevels")-1
+                    _sysctl_str("hw.perflevel$i.name") == "Efficiency" || continue
+                    offset = _sysctl_int32("hw.perflevel$i.physicalcpu")
+                    break
+                end
+            elseif count > 1 && _sysctl_int32("hw.cpufamily") == 0x1b588bb3  # CPUFAMILY_ARM_FIRESTORM_ICESTORM (Apple M1)
+                offset = Int32(4)  # the M1 has 4 efficiency cores
+            end
+            return min(Sys.EFFECTIVE_CPU_THREADS, count - offset)
+        catch
+            return Sys.EFFECTIVE_CPU_THREADS - 1
+        end
+    end
+end
+
 function lbt_openblas_onload_callback()
     # We don't use `BLAS.lbt_forward()` here because we don't want to take a lock on the config cache.
     verbose = parse(Bool, get(ENV, "LBT_VERBOSE", "false"))
@@ -843,19 +928,22 @@ function lbt_openblas_onload_callback()
 
     # https://github.com/xianyi/OpenBLAS/blob/c43ec53bdd00d9423fc609d7b7ecb35e7bf41b85/README.md#setting-the-number-of-threads-using-environment-variables
     if !haskey(ENV, "OPENBLAS_NUM_THREADS") && !haskey(ENV, "GOTO_NUM_THREADS") && !haskey(ENV, "OMP_NUM_THREADS")
-        @static if Sys.isapple() && Base.BinaryPlatforms.arch(Base.BinaryPlatforms.HostPlatform()) == "aarch64"
-            nthreads = max(1, @ccall(jl_effective_threads()::Cint))
+        @static if Sys.isapple() && Sys.ARCH === :aarch64
+            nthreads = max(1, cpus_to_use())
         else
-            nthreads = max(1, @ccall(jl_effective_threads()::Cint) ÷ 2)
+            nthreads = max(1, Sys.EFFECTIVE_CPU_THREADS ÷ 2)
         end
         BLAS.lbt_set_num_threads(nthreads)
     end
 end
 
 function __init__()
-    # If users want to lazily load a different BLAS, they'd need to either change this call, or
-    # clear the datastructures modified by this call and call it again with their own.
-    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, lbt_openblas_onload_callback)
+    @static if isdefined(Libdl, :LazyLibrary) && hasfield(Libdl.LazyLibrary, :_on_load_c_callback)
+        callback = @cfunction(lbt_openblas_onload_callback, Cvoid, ())
+    else
+        callback = lbt_openblas_onload_callback
+    end
+    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, callback)
 end
 
 end # module LinearAlgebra

@@ -194,7 +194,7 @@ as well as whether hooks to various optimized methods for them in LAPACK are ava
 | [`UnitUpperTriangular`](@ref) |     |     | MV  | MV  | [`inv`](@ref), [`det`](@ref), [`logdet`](@ref)                                |
 | [`LowerTriangular`](@ref)     |     |     | MV  | MV  | [`inv`](@ref), [`det`](@ref), [`logdet`](@ref)                                |
 | [`UnitLowerTriangular`](@ref) |     |     | MV  | MV  | [`inv`](@ref), [`det`](@ref), [`logdet`](@ref)                                |
-| [`UpperHessenberg`](@ref)     |     |     |     | MM  | [`inv`](@ref), [`det`](@ref)                                |
+| [`UpperHessenberg`](@ref)     |     |     |     | MV  | [`inv`](@ref), [`det`](@ref), [`logdet`](@ref)                                |
 | [`SymTridiagonal`](@ref)      | M   | M   | MS  | MV  | [`eigmax`](@ref), [`eigmin`](@ref)                          |
 | [`Tridiagonal`](@ref)         | M   | M   | MS  | MV  |                                                             |
 | [`Bidiagonal`](@ref)          | M   | M   | MS  | MV  |                                                             |
@@ -337,7 +337,10 @@ depending on context:
 julia> using LinearAlgebra
 
 julia> Q = qr(rand(3,2)).Q
-3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}
+3×3 LinearAlgebra.QRCompactWYQ{Float64, Matrix{Float64}, Matrix{Float64}}:
+ -0.320597   0.865734  -0.384346
+ -0.765834  -0.475694  -0.432683
+ -0.557419   0.155628   0.815514
 
 julia> Matrix(Q)
 3×2 Matrix{Float64}:
@@ -546,38 +549,38 @@ LinearAlgebra.pinv
 LinearAlgebra.nullspace
 Base.kron
 Base.kron!
-LinearAlgebra.exp(::StridedMatrix{<:LinearAlgebra.BlasFloat})
+LinearAlgebra.exp(::AbstractMatrix)
 Base.cis(::AbstractMatrix)
 Base.:^(::AbstractMatrix, ::Number)
 Base.:^(::Number, ::AbstractMatrix)
-LinearAlgebra.log(::StridedMatrix)
-LinearAlgebra.sqrt(::StridedMatrix)
+LinearAlgebra.log(::AbstractMatrix)
+LinearAlgebra.sqrt(::AbstractMatrix)
 LinearAlgebra.cbrt(::AbstractMatrix{<:Real})
-LinearAlgebra.cos(::StridedMatrix{<:Real})
-LinearAlgebra.sin(::StridedMatrix{<:Real})
-LinearAlgebra.sincos(::StridedMatrix{<:Real})
-LinearAlgebra.tan(::StridedMatrix{<:Real})
-LinearAlgebra.sec(::StridedMatrix)
-LinearAlgebra.csc(::StridedMatrix)
-LinearAlgebra.cot(::StridedMatrix)
-LinearAlgebra.cosh(::StridedMatrix)
-LinearAlgebra.sinh(::StridedMatrix)
-LinearAlgebra.tanh(::StridedMatrix)
-LinearAlgebra.sech(::StridedMatrix)
-LinearAlgebra.csch(::StridedMatrix)
-LinearAlgebra.coth(::StridedMatrix)
-LinearAlgebra.acos(::StridedMatrix)
-LinearAlgebra.asin(::StridedMatrix)
-LinearAlgebra.atan(::StridedMatrix)
-LinearAlgebra.asec(::StridedMatrix)
-LinearAlgebra.acsc(::StridedMatrix)
-LinearAlgebra.acot(::StridedMatrix)
-LinearAlgebra.acosh(::StridedMatrix)
-LinearAlgebra.asinh(::StridedMatrix)
-LinearAlgebra.atanh(::StridedMatrix)
-LinearAlgebra.asech(::StridedMatrix)
-LinearAlgebra.acsch(::StridedMatrix)
-LinearAlgebra.acoth(::StridedMatrix)
+LinearAlgebra.cos(::AbstractMatrix{<:Real})
+LinearAlgebra.sin(::AbstractMatrix{<:Real})
+LinearAlgebra.sincos(::AbstractMatrix{<:Real})
+LinearAlgebra.tan(::AbstractMatrix)
+LinearAlgebra.sec(::AbstractMatrix)
+LinearAlgebra.csc(::AbstractMatrix)
+LinearAlgebra.cot(::AbstractMatrix)
+LinearAlgebra.cosh(::AbstractMatrix)
+LinearAlgebra.sinh(::AbstractMatrix)
+LinearAlgebra.tanh(::AbstractMatrix)
+LinearAlgebra.sech(::AbstractMatrix)
+LinearAlgebra.csch(::AbstractMatrix)
+LinearAlgebra.coth(::AbstractMatrix)
+LinearAlgebra.acos(::AbstractMatrix)
+LinearAlgebra.asin(::AbstractMatrix)
+LinearAlgebra.atan(::AbstractMatrix)
+LinearAlgebra.asec(::AbstractMatrix)
+LinearAlgebra.acsc(::AbstractMatrix)
+LinearAlgebra.acot(::AbstractMatrix)
+LinearAlgebra.acosh(::AbstractMatrix)
+LinearAlgebra.asinh(::AbstractMatrix)
+LinearAlgebra.atanh(::AbstractMatrix)
+LinearAlgebra.asech(::AbstractMatrix)
+LinearAlgebra.acsch(::AbstractMatrix)
+LinearAlgebra.acoth(::AbstractMatrix)
 LinearAlgebra.lyap
 LinearAlgebra.sylvester
 LinearAlgebra.issuccess
@@ -895,7 +898,6 @@ LinearAlgebra.LAPACK.hseqr!
 ## Developer Documentation
 
 ```@docs
-LinearAlgebra.matprod_dest
 LinearAlgebra.haszero
 ```
 

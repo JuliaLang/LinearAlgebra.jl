@@ -221,7 +221,9 @@ for (S, H) in ((:Symmetric, :Hermitian), (:Hermitian, :Symmetric))
         end
     end
 end
-
+# zero should forward to the parent array type
+zero(A::Union{Symmetric{T,<:StridedMatrix},Hermitian{T,<:StridedMatrix}}) where {T<:Number} = fill!(similar(A, typeof(zero(T))), zero(T))
+zero(A::Union{Symmetric,Hermitian}) = wrappertype(A)(zero(parent(A)), _sym_uplo(A.uplo))
 convert(::Type{T}, m::Union{Symmetric,Hermitian}) where {T<:Symmetric} = m isa T ? m : T(m)::T
 convert(::Type{T}, m::Union{Symmetric,Hermitian}) where {T<:Hermitian} = m isa T ? m : T(m)::T
 
@@ -573,7 +575,7 @@ for (T, trans, real) in [(:Symmetric, :transpose, :identity), (:(Hermitian{<:Uni
             if n != size(B, 2)
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)) but B has dimensions $(size(B))"))
             end
-
+            iszero(n) && return $real(zero(dot(zero(eltype(A)), zero(eltype(B)))))
             dotprod = $real(zero(dot(first(A), first(B))))
             @inbounds if A.uplo == 'U' && B.uplo == 'U'
                 for j in 1:n
@@ -774,6 +776,7 @@ function dot(x::AbstractVector, A::HermOrSym, y::AbstractVector)
     require_one_based_indexing(x, y)
     n = length(x)
     (n == length(y) == size(A, 1)) || throw(DimensionMismatch())
+    iszero(n) && return zero(dot(zero(eltype(x)), zero(eltype(A)), zero(eltype(y))))
     data = A.data
     s = dot(first(x), first(A), first(y))
     r = zero(s+s)
@@ -916,7 +919,7 @@ function ^(A::SymSymTri{<:Complex}, p::Real)
     return Symmetric(schurpow(A, p))
 end
 
-for func in (:cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :cbrt)
+for func in (:cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :cbrt, :abs)
     @eval begin
         function ($func)(A::SelfAdjoint)
             F = eigen(A)
@@ -988,7 +991,9 @@ function log(A::SelfAdjoint)
 end
 
 # sqrt has rtol kwarg to handle matrices that are semidefinite up to roundoff errors
-function sqrt(A::SelfAdjoint; rtol = eps(real(float(eltype(A)))) * size(A, 1))
+# note a `check` keyword argument is accepted for consistency with the generic `sqrt` function,
+# but it is not used here, as a self-adjoint matrix is diagonalizable and hence always has a sqrt.
+function sqrt(A::SelfAdjoint; check::Bool=true, rtol = eps(real(float(eltype(A)))) * size(A, 1))
     F = eigen(A)
     λ₀ = -maximum(abs, F.values) * rtol # treat λ ≥ λ₀ as "zero" eigenvalues up to roundoff
     if all(λ -> λ ≥ λ₀, F.values)
@@ -1003,6 +1008,7 @@ end
 
 """
     hermitianpart(A::AbstractMatrix, uplo::Symbol=:U) -> Hermitian
+    hermitianpart(x::Number) -> Number
 
 Return the Hermitian part of the square matrix `A`, defined as `(A + A') / 2`, as a
 [`Hermitian`](@ref) matrix. For real matrices `A`, this is also known as the symmetric part
@@ -1016,6 +1022,7 @@ See also [`hermitianpart!`](@ref) for the corresponding in-place operation.
     This function requires Julia 1.10 or later.
 """
 hermitianpart(A::AbstractMatrix, uplo::Symbol=:U) = Hermitian(_hermitianpart(A), uplo)
+hermitianpart(x::Number) = real(x)
 
 """
     hermitianpart!(A::AbstractMatrix, uplo::Symbol=:U) -> Hermitian
