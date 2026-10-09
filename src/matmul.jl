@@ -1077,9 +1077,10 @@ end
 # legacy method, retained for backward compatibility
 _generic_matvecmul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector, _add::MulAddMul = MulAddMul()) =
     _generic_matvecmul!(C, tA, A, B, _add.alpha, _add.beta)
-# Preserve integer widening without requiring promotion for custom arithmetic.
+# `muladd`'s generic fallback promotes its arguments, which fails for types whose product
+# changes type (e.g. scalars times vector values); use it only where it can return.
 _matvec_muladd(a, b, c) =
-    isconcretetype(promote_type(typeof(a), typeof(b), typeof(c))) ? muladd(a, b, c) : c + a*b
+    isconcretetype(promote_op(muladd, typeof(a), typeof(b), typeof(c))) ? muladd(a, b, c) : c + a*b
 function __generic_matvecmul!(f::F, C::AbstractVector, A::AbstractVecOrMat, B::AbstractVector,
                             alpha::Number, beta::Number) where {F}
     Astride = size(A, 1)

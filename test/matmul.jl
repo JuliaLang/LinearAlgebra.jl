@@ -294,6 +294,26 @@ Base.zero(::ScaledPair) = ScaledPair(0, 0)
     @test mul!(similar(b), transpose(A), b) == [ScaledPair(10, 14), ScaledPair(14, 20)]
 end
 
+# like ScaledPair, but with its own `muladd`, as Unitful's quantities have
+struct FusedPair <: Number
+    x::Float64
+    y::Float64
+end
+const fusedpair_muladds = Ref(0)
+Base.:*(a::Float64, v::FusedPair) = FusedPair(a*v.x, a*v.y)
+Base.:+(a::FusedPair, b::FusedPair) = FusedPair(a.x+b.x, a.y+b.y)
+Base.muladd(a::Float64, v::FusedPair, c::FusedPair) = (fusedpair_muladds[] += 1; a*v + c)
+Base.zero(::Type{FusedPair}) = FusedPair(0, 0)
+Base.zero(::FusedPair) = FusedPair(0, 0)
+
+@testset "generic_matvecmul uses muladd methods of eltypes that do not promote" begin
+    A = [1.0 2; 3 4]
+    b = [FusedPair(1, 2), FusedPair(3, 4)]
+    fusedpair_muladds[] = 0
+    @test mul!(similar(b), A, b) == [FusedPair(7, 10), FusedPair(15, 22)]
+    @test fusedpair_muladds[] > 0
+end
+
 @testset "generic_matvecmul accumulates in the destination eltype" begin
     A = fill(Int8(100), 2, 2)
     b = fill(Int8(100), 2)
