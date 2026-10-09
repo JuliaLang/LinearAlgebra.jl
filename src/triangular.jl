@@ -232,13 +232,13 @@ _shouldforwardindex(U::LowerTriangular, row::Integer, col::Integer) = row >= col
 _shouldforwardindex(U::UnitUpperTriangular, row::Integer, col::Integer) = row < col
 _shouldforwardindex(U::UnitLowerTriangular, row::Integer, col::Integer) = row > col
 
-Base.isassigned(A::UpperOrLowerTriangular, i::IntegerIndex, j::IntegerIndex) =
+Base.isassigned(A::UpperOrLowerTriangular, i::Signed, j::Signed) =
     _shouldforwardindex(A, i, j) ? isassigned(A.data, i, j) : true
 
-Base.isstored(A::UpperOrLowerTriangular, i::IntegerIndex, j::IntegerIndex) =
+Base.isstored(A::UpperOrLowerTriangular, i::Signed, j::Signed) =
     _shouldforwardindex(A, i, j) ? Base.isstored(A.data, i, j) : false
 
-@propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::IntegerIndex, j::IntegerIndex) where {T}
+@propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Signed, j::Signed) where {T}
     if _shouldforwardindex(A, i, j)
         A.data[i,j]
     else
@@ -246,7 +246,7 @@ Base.isstored(A::UpperOrLowerTriangular, i::IntegerIndex, j::IntegerIndex) =
         ifelse(i == j, oneunit(T), zero(T))
     end
 end
-@propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, i::IntegerIndex, j::IntegerIndex)
+@propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j]
     else
@@ -293,7 +293,7 @@ end
         lazy"cannot set index ($i, $j) on the diagonal of a $Tn matrix to a non-unit value ($x)"))
 end
 
-@propagate_inbounds function setindex!(A::UpperTriangular, x, i::IntegerIndex, j::IntegerIndex)
+@propagate_inbounds function setindex!(A::UpperTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -307,7 +307,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::IntegerIndex, j::IntegerIndex)
+@propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -325,7 +325,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::LowerTriangular, x, i::IntegerIndex, j::IntegerIndex)
+@propagate_inbounds function setindex!(A::LowerTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -339,7 +339,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::IntegerIndex, j::IntegerIndex)
+@propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else

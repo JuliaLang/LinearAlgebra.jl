@@ -124,33 +124,33 @@ uplo(B::Bidiagonal) = sym_uplo(B.uplo)
 
 _offdiagind(uplo) = uplo == 'U' ? 1 : -1
 
-@inline function Base.isassigned(A::Bidiagonal, i::IntegerIndex, j::IntegerIndex)
+@inline function Base.isassigned(A::Bidiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.dv, i)
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         return @inbounds isassigned(A.ev, A.uplo == 'U' ? i : j)
     else
         return true
     end
 end
 
-@inline function Base.isstored(A::Bidiagonal, i::IntegerIndex, j::IntegerIndex)
+@inline function Base.isstored(A::Bidiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.dv, i)
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         return @inbounds Base.isstored(A.ev, A.uplo == 'U' ? i : j)
     else
         return false
     end
 end
 
-@inline function getindex(A::Bidiagonal{T}, i::IntegerIndex, j::IntegerIndex) where T
+@inline function getindex(A::Bidiagonal{T}, i::Signed, j::Signed) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds A.dv[i]
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         return @inbounds A.ev[A.uplo == 'U' ? i : j]
     else
         return diagzero(A, i, j)
@@ -169,11 +169,11 @@ end
     end
 end
 
-@inline function setindex!(A::Bidiagonal, x, i::IntegerIndex, j::IntegerIndex)
+@inline function setindex!(A::Bidiagonal, x, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         @inbounds A.dv[i] = x
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         @inbounds A.ev[A.uplo == 'U' ? i : j] = x
     elseif !iszero(x)
         throw(ArgumentError(LazyString(lazy"cannot set entry ($i, $j) off the ",

@@ -145,7 +145,7 @@ size(D::Diagonal) = (n = length(D.diag); (n,n))
 
 axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
 
-@inline function Base.isassigned(D::Diagonal, i::IntegerIndex, j::IntegerIndex)
+@inline function Base.isassigned(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, D, i, j) || return false
     if i == j
         @inbounds r = isassigned(D.diag, i)
@@ -155,7 +155,7 @@ axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
     r
 end
 
-@inline function Base.isstored(D::Diagonal, i::IntegerIndex, j::IntegerIndex)
+@inline function Base.isstored(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = Base.isstored(D.diag, i)
@@ -177,7 +177,7 @@ function Base.maximum(D::Diagonal{T}) where T <: Number
     return maxdiag
 end
 
-@inline function getindex(D::Diagonal, i::IntegerIndex, j::IntegerIndex)
+@inline function getindex(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = D.diag[i]
@@ -219,7 +219,7 @@ zeroslike(::Type{M}, sz::Tuple{Integer, Vararg{Integer}}) where {M<:AbstractMatr
     r
 end
 
-@inline function setindex!(D::Diagonal, v, i::IntegerIndex, j::IntegerIndex)
+@inline function setindex!(D::Diagonal, v, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds D.diag[i] = v

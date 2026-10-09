@@ -747,6 +747,14 @@ end
     end
 end
 
+# an array that only accepts `Int32` indices, to check that wrappers do not promote them
+struct Int32Indexed{T,N} <: AbstractArray{T,N}
+    data::Array{T,N}
+end
+Base.size(A::Int32Indexed) = size(A.data)
+Base.getindex(A::Int32Indexed{<:Any,N}, I::Vararg{Int32,N}) where {N} = A.data[I...]
+Base.setindex!(A::Int32Indexed{<:Any,N}, x, I::Vararg{Int32,N}) where {N} = (A.data[I...] = x; A)
+
 @testset "indexing with non-Int integers" begin
     A = reshape(1:16, 4, 4) .+ 0.0
     v = [1.0:4;]
@@ -756,9 +764,11 @@ end
                 UnitUpperTriangular(A), UnitLowerTriangular(A), UpperHessenberg(A),
                 adjoint(A), transpose(A))
         MM = Matrix(M)
-        for i in Int32(1):Int32(4), j in UInt8(1):UInt8(4)
+        for i in Int32(1):Int32(4), j in Int16(1):Int16(4)
             @test (@inferred M[i, j]) == MM[i, j]
             @test isassigned(M, i, j)
+            # unsigned indices are converted by Base
+            @test M[UInt8(i), UInt8(j)] == MM[i, j]
         end
         @test_throws BoundsError M[Int32(0), Int32(1)]
         @test_throws "invalid index" M[true, true]
@@ -777,6 +787,21 @@ end
     @test Q[Int32(2), Int32(3)] ≈ MQ[2, 3]
     @test Q[:, Int32(2)] ≈ MQ[:, 2]
     @test Q[Int32[1, 2], Int32[2, 3]] ≈ MQ[1:2, 2:3]
+    # the index type is preserved when indexing into the parent arrays
+    for mk in (W -> Diagonal(W(v)), W -> Bidiagonal(W(v), W(v[1:3]), :U),
+                W -> Bidiagonal(W(v), W(v[1:3]), :L), W -> Tridiagonal(W(v[1:3]), W(v), W(v[2:4])),
+                W -> SymTridiagonal(W(v), W(v[1:3])), W -> Symmetric(W(A)), W -> Hermitian(W(A)),
+                W -> UpperTriangular(W(A)), W -> UnitLowerTriangular(W(A)),
+                W -> UpperHessenberg(W(A)), W -> adjoint(W(A)))
+        M, MM = mk(Int32Indexed), Matrix(mk(identity))
+        for i in Int32(1):Int32(4), j in Int32(1):Int32(4)
+            @test M[i, j] == MM[i, j]
+        end
+    end
+    vi = transpose(Int32Indexed(copy(v)))
+    @test vi[Int32(3)] == v[3]
+    vi[Int32(3)] = 9
+    @test vi[Int32(3)] == 9
 end
 
 @testset "Partly filled Hermitian and Diagonal algebra" begin

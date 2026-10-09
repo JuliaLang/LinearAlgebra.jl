@@ -489,39 +489,39 @@ end
 det(A::SymTridiagonal; shift::Number=false) = det_usmani(A.ev, A.dv, A.ev, shift)
 logabsdet(A::SymTridiagonal; shift::Number=false) = logabsdet(ldlt(A; shift=shift))
 
-@inline function Base.isassigned(A::SymTridiagonal, i::IntegerIndex, j::IntegerIndex)
+@inline function Base.isassigned(A::SymTridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.dv, i)
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds isassigned(A.ev, j)
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds isassigned(A.ev, i)
     else
         return true
     end
 end
 
-@inline function Base.isstored(A::SymTridiagonal, i::IntegerIndex, j::IntegerIndex)
+@inline function Base.isstored(A::SymTridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.dv, i)
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds Base.isstored(A.ev, j)
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds Base.isstored(A.ev, i)
     else
         return false
     end
 end
 
-@inline function getindex(A::SymTridiagonal{T}, i::IntegerIndex, j::IntegerIndex) where T
+@inline function getindex(A::SymTridiagonal{T}, i::Signed, j::Signed) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return symmetric((@inbounds A.dv[i]), :U)::symmetric_type(eltype(A.dv))
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return copy(transpose(@inbounds A.ev[j])) # materialized for type stability
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds A.ev[i]
     else
         return diagzero(A, i, j)
@@ -545,7 +545,7 @@ Base._reverse(A::SymTridiagonal, dims) = reverse!(Matrix(A); dims)
 Base._reverse(A::SymTridiagonal, dims::Colon) = SymTridiagonal(reverse(A.dv), reverse(A.ev))
 Base._reverse!(A::SymTridiagonal, dims::Colon) = (reverse!(A.dv); reverse!(A.ev); A)
 
-@inline function setindex!(A::SymTridiagonal, x, i::IntegerIndex, j::IntegerIndex)
+@inline function setindex!(A::SymTridiagonal, x, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         issymmetric(x) || throw(ArgumentError("cannot set a diagonal entry of a SymTridiagonal to an asymmetric value"))
@@ -769,39 +769,39 @@ function diag(M::Tridiagonal, n::Integer=0)
     return v
 end
 
-@inline function Base.isassigned(A::Tridiagonal, i::IntegerIndex, j::IntegerIndex)
+@inline function Base.isassigned(A::Tridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.d, i)
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds isassigned(A.dl, j)
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds isassigned(A.du, i)
     else
         return true
     end
 end
 
-@inline function Base.isstored(A::Tridiagonal, i::IntegerIndex, j::IntegerIndex)
+@inline function Base.isstored(A::Tridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.d, i)
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds Base.isstored(A.dl, j)
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds Base.isstored(A.du, i)
     else
         return false
     end
 end
 
-@inline function getindex(A::Tridiagonal{T}, i::IntegerIndex, j::IntegerIndex) where T
+@inline function getindex(A::Tridiagonal{T}, i::Signed, j::Signed) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds A.d[i]
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds A.dl[j]
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds A.du[i]
     else
         return diagzero(A, i, j)
@@ -821,13 +821,13 @@ end
     end
 end
 
-@inline function setindex!(A::Tridiagonal, x, i::IntegerIndex, j::IntegerIndex)
+@inline function setindex!(A::Tridiagonal, x, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         @inbounds A.d[i] = x
-    elseif i - j == 1
+    elseif isone(i - j)
         @inbounds A.dl[j] = x
-    elseif j - i == 1
+    elseif isone(j - i)
         @inbounds A.du[i] = x
     elseif !iszero(x)
         throw(ArgumentError(LazyString(lazy"cannot set entry ($i, $j) off ",
