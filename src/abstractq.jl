@@ -336,6 +336,11 @@ Matrix(Q::Union{QRCompactWYQ{S},QRPackedQ{S}}) where {S} = Matrix{S}(Q)
 
 convert(::Type{AbstractQ{T}}, Q::QRPackedQ) where {T} = QRPackedQ{T}(Q)
 convert(::Type{AbstractQ{T}}, Q::QRCompactWYQ) where {T} = QRCompactWYQ{T}(Q)
+QRPackedQ(Q::QRCompactWYQ) = QRPackedQ(Q.factors, _wy_to_tau(Q.T))
+QRCompactWYQ(Q::QRPackedQ; blocksize::Integer=36) =
+    QRCompactWYQ(Q.factors, _tau_to_wy(Q.factors, Q.τ, blocksize))
+convert(::Type{QRPackedQ}, Q::QRCompactWYQ) = QRPackedQ(Q)
+convert(::Type{QRCompactWYQ}, Q::QRPackedQ) = QRCompactWYQ(Q)
 
 size(Q::Union{QRCompactWYQ,QRPackedQ}, dim::Integer) =
     size(Q.factors, dim == 2 ? 1 : dim)
