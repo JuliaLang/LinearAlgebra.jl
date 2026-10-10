@@ -1111,6 +1111,10 @@ end
 # legacy method, retained for backward compatibility
 _generic_matvecmul!(C::AbstractVector, tA, A::AbstractVecOrMat, B::AbstractVector, _add::MulAddMul = MulAddMul()) =
     _generic_matvecmul!(C, tA, A, B, _add.alpha, _add.beta)
+# `muladd`'s generic fallback promotes its arguments, which fails for types whose product
+# changes type (e.g. scalars times vector values); use it only where it can return.
+_matvec_muladd(a, b, c) =
+    isconcretetype(promote_op(muladd, typeof(a), typeof(b), typeof(c))) ? muladd(a, b, c) : c + a*b
 function __generic_matvecmul!(f::F, C::AbstractVector, A::AbstractVecOrMat, B::AbstractVector,
                             alpha::Number, beta::Number) where {F}
     Astride = size(A, 1)
@@ -1126,7 +1130,7 @@ function __generic_matvecmul!(f::F, C::AbstractVector, A::AbstractVecOrMat, B::A
                 z = zero(firstterm + firstterm)
                 s = convert(promote_type(eltype(C), typeof(z)), z)
                 for i in nonzeroinds(B)
-                    s = muladd(f(A[aoffs+i]), B[i], s)
+                    s = _matvec_muladd(f(A[aoffs+i]), B[i], s)
                 end
                 @stable_muladdmul _modify!(MulAddMul(alpha,beta), s, C, k)
             end
@@ -1152,7 +1156,7 @@ function __generic_matvecmul!(::typeof(identity), C::AbstractVector, A::Abstract
                 aoffs = (k-1)*Astride
                 b = @stable_muladdmul MulAddMul(alpha,false)(B[k])
                 for i = eachindex(C)
-                    C[i] = muladd(A[aoffs + i], b, C[i])
+                    C[i] = _matvec_muladd(A[aoffs + i], b, C[i])
                 end
             end
         end
