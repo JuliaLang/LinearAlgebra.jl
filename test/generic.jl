@@ -676,6 +676,31 @@ LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
     @test all(i -> x[i].data ≈ Xt[i, :], 1:2)
 end
 
+@testset "abstractly typed right-hand sides" begin
+    A = [4.0 1.0 0.5; 1.0 3.0 0.2; 0.3 0.5 5.0]
+    b = [1.0, 2.0, 3.0]
+    for rhs in (Any[1.0, 2.0, 3.0], Real[1, 2, 3], Number[1, 2im, 3], AbstractFloat[1.0, 2.0, 3.0])
+        # dense `\` and solves with (LAPACK) factorizations promote `A` to the solution type, which
+        # requires a concrete element type of the right-hand side
+        @test_throws ArgumentError A \ rhs
+        @test_throws "abstract element type $(eltype(rhs))" A \ rhs
+        @test_throws ArgumentError [A; 1.0 1.0 1.0] \ vcat(rhs, rhs[1])   # least squares
+        @test_throws ArgumentError A \ permutedims(rhs)                   # matrix right-hand side
+        @test_throws ArgumentError permutedims(rhs) / A                    # right division
+        @test_throws ArgumentError Tridiagonal(A) \ rhs                    # through `lu`
+        for F in (lu(A), qr(A), qr(A, ColumnNorm()), cholesky(A'A), svd(A), lq(A), bunchkaufman(Symmetric(A)))
+            @test_throws ArgumentError F \ rhs
+        end
+        # the right-hand side is only read in the structured solves, whose result type is inferred
+        rhsc = convert(AbstractVector{mapreduce(typeof, promote_type, rhs)}, rhs)
+        for M in (UpperTriangular(A), LowerTriangular(A), Diagonal(A), Bidiagonal(A, :U), SymTridiagonal(Symmetric(A)), UpperHessenberg(A), 2I)
+            @test M \ rhs ≈ M \ rhsc
+            @test permutedims(rhs) / M ≈ permutedims(rhsc) / M
+        end
+    end
+    @test A \ convert(AbstractVector{Float64}, Any[1.0, 2.0, 3.0]) ≈ A \ b
+end
+
 @testset "Issue 22042" begin
     A = [ModInt{2}(1) ModInt{2}(0); ModInt{2}(1) ModInt{2}(1)]
     b = [ModInt{2}(1), ModInt{2}(0)]
