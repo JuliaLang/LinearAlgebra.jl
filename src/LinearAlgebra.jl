@@ -937,13 +937,17 @@ function lbt_openblas_onload_callback()
     end
 end
 
+@static if isdefined(Libdl, :LazyLibraryCallback)
+    # a `LazyLibraryCallback` is compiled by `--trim`, unlike a plain function
+    struct LBTOpenBLASCallback <: Libdl.LazyLibraryCallback end
+else
+    struct LBTOpenBLASCallback <: Function end
+end
+
+(::LBTOpenBLASCallback)() = lbt_openblas_onload_callback()
+
 function __init__()
-    @static if isdefined(Libdl, :LazyLibrary) && hasfield(Libdl.LazyLibrary, :_on_load_c_callback)
-        callback = @cfunction(lbt_openblas_onload_callback, Cvoid, ())
-    else
-        callback = lbt_openblas_onload_callback
-    end
-    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, callback)
+    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, LBTOpenBLASCallback())
 end
 
 end # module LinearAlgebra
