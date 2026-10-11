@@ -1177,12 +1177,8 @@ end
     for P in (transpose(M'), adjoint(transpose(M)), transpose(M), M')
         for W in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
             A = W(P)
-            # consistency with the materialized (unwrapped) triangular solve
-            @test A \ b ≈ Matrix(A) \ b
-            @test A \ B ≈ Matrix(A) \ B
-            # compare against an independent (non-triangular) solver
-            @test A \ b ≈ lu(Matrix(A)) \ b
-            @test A \ B ≈ lu(Matrix(A)) \ B
+            @test A \ b ≈ Matrix(A) \ b ≈ lu(Matrix(A)) \ b
+            @test A \ B ≈ Matrix(A) \ B ≈ lu(Matrix(A)) \ B
         end
     end
 end
