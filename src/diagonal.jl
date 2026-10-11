@@ -342,7 +342,12 @@ function (*)(D::Diagonal, V::AbstractVector)
     return D.diag .* V
 end
 
+_wrapperop_reverses_products(::Adjoint, ::Diagonal) = true
+_wrapperop_reverses_products(::Transpose{<:Union{Real,Complex}}, ::Diagonal{<:Union{Real,Complex}}) = true
+_wrapperop_reverses_products(A, D) = false
+
 function mul(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(D) * adj(A)))
 end
@@ -350,6 +355,7 @@ function mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Numbe
     @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
 end
 function mul(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(D::AbstractMatrix, A::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(A) * adj(D)))
 end
@@ -370,6 +376,7 @@ end
 # A' = A' * D => A = D' * A
 # This uses the fact that D' is a Diagonal
 function rmul!(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke rmul!(A::AbstractMatrix, D::Diagonal)
     f = _wrapperop(A)
     lmul!(f(D), f(A))
     A
@@ -420,6 +427,7 @@ end
 # A' = D * A' => A = A * D'
 # This uses the fact that D' is a Diagonal
 function lmul!(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke lmul!(D::Diagonal, A::AbstractVecOrMat)
     f = _wrapperop(A)
     rmul!(f(A), f(D))
     A
