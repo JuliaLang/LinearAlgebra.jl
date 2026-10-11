@@ -346,9 +346,6 @@ function (*)(D::Diagonal, V::AbstractVector)
     return D.diag .* V
 end
 
-# The methods below compute products involving A = op(P) as op(op(D) * P) or op(P * op(D)).
-# This relies on op(a * b) == op(b) * op(a) for the elements, which holds for adjoint,
-# but holds for transpose only if the elements commute (e.g. not for quaternions).
 _wrapperop_reverses_products(::Adjoint, ::Diagonal) = true
 _wrapperop_reverses_products(::Transpose{<:Union{Real,Complex}}, ::Diagonal{<:Union{Real,Complex}}) = true
 _wrapperop_reverses_products(A, D) = false
