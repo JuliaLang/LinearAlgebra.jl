@@ -19,7 +19,7 @@ transpose(Q::AbstractQ{<:Real}) = AdjointQ(Q)
 transpose(Q::AbstractQ) = error("transpose not implemented for $(typeof(Q)). Consider using adjoint instead of transpose.")
 adjoint(adjQ::AdjointQ) = adjQ.Q
 
-(^)(Q::AbstractQ, p::Integer) = p < 0 ? power_by_squaring(inv(Q), -p) : power_by_squaring(Q, p)
+(^)(Q::AbstractQ, p::Integer) = p < 0 ? power_by_squaring(inv(Q)*I, -p) : power_by_squaring(Q*I, p)
 @inline Base.literal_pow(::typeof(^), Q::AbstractQ, ::Val{1}) = Q
 @inline Base.literal_pow(::typeof(^), Q::AbstractQ, ::Val{-1}) = inv(Q)
 
@@ -49,7 +49,8 @@ AbstractMatrix(Q::AbstractQ) = Q*I
 AbstractArray(Q::AbstractQ) = AbstractMatrix(Q)
 AbstractMatrix{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
 AbstractArray{T}(Q::AbstractQ) where {T} = AbstractMatrix{T}(Q)
-convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray} = T(Q)
+# an `AbstractQ` is not an array; use `Matrix(Q)`, `Array(Q)` or `AbstractMatrix(Q)` instead
+@deprecate(convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray}, T(Q), false)
 # legacy
 @deprecate(convert(::Type{AbstractMatrix{T}}, Q::AbstractQ) where {T},
     convert(LinearAlgebra.AbstractQ{T}, Q), false)
@@ -98,20 +99,20 @@ end
 @inline getindex(Q::AbstractQ, ::Colon, ::Colon) = copy(Q)
 
 @inline _getindex(Q::AbstractQ, inds...) = @inbounds copymutable(Q)[inds...]
-@inline function _getindex(Q::AbstractQ, ::Colon, J::AbstractVector{<:Integer})
+@inline function _getindex(Q::AbstractQ, ::Colon, J::AbstractVector{<:Signed})
     Y = zeros(eltype(Q), size(Q, 2), length(J))
     @inbounds for (i,j) in enumerate(J)
         Y[j,i] = oneunit(eltype(Q))
     end
     lmul!(Q, Y)
 end
-@inline _getindex(Q::AbstractQ, I::AbstractVector{Int}, J::AbstractVector{Int}) = @inbounds Q[:,J][I,:]
-@inline function _getindex(Q::AbstractQ, ::Colon, j::Int)
+@inline _getindex(Q::AbstractQ, I::AbstractVector{<:Signed}, J::AbstractVector{<:Signed}) = @inbounds Q[:,J][I,:]
+@inline function _getindex(Q::AbstractQ, ::Colon, j::Signed)
     y = zeros(eltype(Q), size(Q, 2))
     y[j] = oneunit(eltype(Q))
     lmul!(Q, y)
 end
-@inline _getindex(Q::AbstractQ, i::Int, j::Int) = @inbounds Q[:,j][i]
+@inline _getindex(Q::AbstractQ, i::Signed, j::Signed) = @inbounds Q[:,j][i]
 
 # needed because AbstractQ does not subtype AbstractMatrix
 qr(Q::AbstractQ{T}, arg...; kwargs...) where {T} = qr!(Matrix{_qreltype(T)}(Q), arg...; kwargs...)
@@ -169,7 +170,7 @@ end
 QDisplayCache(Q::AbstractQ{T}) where {T} = QDisplayCache{T,typeof(Q)}(Q, Dict{Int,Vector{T}}())
 
 size(C::QDisplayCache) = size(C.Q)
-function getindex(C::QDisplayCache, i::Int, j::Int)
+function getindex(C::QDisplayCache, i::Signed, j::Signed)
     @boundscheck checkbounds(C, i, j)
     column = get!(() -> C.Q[:, j], C.columns, j)
     return column[i]

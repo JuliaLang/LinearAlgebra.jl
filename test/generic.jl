@@ -389,6 +389,30 @@ end
         @test B[1] ≈ C[1] ≈ A[1] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))
         @test B[2:end] ≈ C[2:end] ≈ A[2:end] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))*x[2:end]
     end
+    # the two kernels agree with each other and with the definition, also for non-commutative
+    # elements
+    for T in (Float64, ComplexF64, Quaternion{Float64})
+        x = randn(T, 6)
+        τ = randn(T)
+        A = randn(T, 6, 3)
+        v = [one(T); x[2:end]]
+        H = I - v*conj(τ)*v'
+        B = LinearAlgebra.reflectorApplyNumeric!(x, τ, copy(A))
+        C = LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+        @test B ≈ C ≈ H*A
+        @test LinearAlgebra.reflectorApply!(x, τ, copy(A)) == B   # numeric elements: `dot`-based kernel
+    end
+    # elements of `A` that are vectors: apply the reflector to each component
+    x = randn(6)
+    τ = randn()
+    A1, A2 = randn(6, 3), randn(6, 3)
+    A = [SizedArray{(2,)}([A1[i, j], A2[i, j]]) for i in axes(A1, 1), j in axes(A1, 2)]
+    B = LinearAlgebra.reflectorApply!(x, τ, copy(A))
+    @test B == LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+    @test all(b -> b isa SizedArray{(2,),Float64}, B)
+    B1, B2 = LinearAlgebra.reflectorApply!(x, τ, copy(A1)), LinearAlgebra.reflectorApply!(x, τ, copy(A2))
+    @test all(i -> B[i].data ≈ [B1[i], B2[i]], eachindex(B))
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApplyLoop!(x[1:5], τ, copy(A))
 end
 
 @testset "axp(b)y! for element type without commutative multiplication" begin
@@ -509,6 +533,14 @@ end
     end
 end
 
+@testset "norm correctly promotes abstractly-typed vectors" begin
+    v = Real[1, randn(), 2f0, big(π)]
+    w = Number[1, randn(ComplexF64), 2f0, big(π)]
+    for p in (1, 2, Inf), x in (v, w)
+        @test norm(x, p) == norm(big.(x), p)
+    end
+end
+
 @testset "Issue 14657" begin
     @test det([true false; false true]) == det(Matrix(1I, 2, 2))
 end
@@ -600,6 +632,49 @@ Base.adjoint(a::ModInt{n}) where {n} = ModInt{n}(conj(a))
 Base.transpose(a::ModInt{n}) where {n} = a  # see Issue 20978
 LinearAlgebra.Adjoint(a::ModInt{n}) where {n} = adjoint(a)
 LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
+
+@testset "scalar type of the right-hand side in ldiv" begin
+    _scalartype = LinearAlgebra._scalartype
+    @test _scalartype(Float64) === Float64
+    @test _scalartype(Complex{Int}) === Complex{Int}
+    @test _scalartype(Furlong{1,Float64}) === Furlong{1,Float64}
+    @test _scalartype(ModInt{2}) === ModInt{2}          # a scalar type that is not a `Number`
+    @test _scalartype(Vector{Float64}) === Float64      # vector-valued elements
+    @test _scalartype(Vector{Vector{ComplexF32}}) === ComplexF32
+    @test _scalartype(Any) === Any
+    # homogeneous containers of a concrete scalar type are not iterated by `promote_leaf_eltypes`
+    @test LinearAlgebra.promote_leaf_eltypes(ModInt{2}.([1, 0])) === ModInt{2}
+    @test LinearAlgebra.promote_leaf_eltypes((ModInt{2}(1), ModInt{2}(0))) === ModInt{2}
+    # the factorization is promoted to the scalar type of the solution, keeping its units
+    A = [4.0 1.0; 1.0 3.0]
+    x = lu(Float32.(A)) \ Furlong.([1.0, 2.0])
+    @test x isa Vector{Furlong{1,Float64}}
+    @test map(x -> x.val, x) ≈ A \ [1.0, 2.0]
+    @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
+    # vector-valued right-hand side (#904): the elements of `b` are (static) vectors
+    b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
+    @test _scalartype(eltype(b)) === Float64
+    X = A \ [1.0 2.0; 3.0 4.0]   # the same system, component by component
+    for F in (lu(A), lu(Float32.(A)), cholesky(A), qr(A))
+        x = F \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+        @test all(((y, z),) -> y.data ≈ z.data, zip(A * x, b))
+    end
+    @test ldiv!(lu(A), copy(b)) isa Vector{<:SizedArray{(2,),Float64}}
+    # the generic `\` derives the solution type from the scalar type of the right-hand side
+    for M in (A, Float32.(A), [4 1; 1 3], Tridiagonal(A), hessenberg(A))
+        x = M \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+    end
+    # least squares, through the pivoted QR
+    At = [A; 1.0 1.0]
+    Xt = At \ [1.0 2.0; 3.0 4.0; 1.0 2.0]
+    x = At \ vcat(b, [b[1]])
+    @test x isa Vector{<:SizedArray{(2,),Float64}}
+    @test all(i -> x[i].data ≈ Xt[i, :], 1:2)
+end
 
 @testset "Issue 22042" begin
     A = [ModInt{2}(1) ModInt{2}(0); ModInt{2}(1) ModInt{2}(1)]

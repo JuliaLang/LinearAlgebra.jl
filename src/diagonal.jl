@@ -145,7 +145,7 @@ size(D::Diagonal) = (n = length(D.diag); (n,n))
 
 axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
 
-@inline function Base.isassigned(D::Diagonal, i::Int, j::Int)
+@inline function Base.isassigned(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, D, i, j) || return false
     if i == j
         @inbounds r = isassigned(D.diag, i)
@@ -155,7 +155,7 @@ axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
     r
 end
 
-@inline function Base.isstored(D::Diagonal, i::Int, j::Int)
+@inline function Base.isstored(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = Base.isstored(D.diag, i)
@@ -177,7 +177,7 @@ function Base.maximum(D::Diagonal{T}) where T <: Number
     return maxdiag
 end
 
-@inline function getindex(D::Diagonal, i::Int, j::Int)
+@inline function getindex(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = D.diag[i]
@@ -219,7 +219,7 @@ zeroslike(::Type{M}, sz::Tuple{Integer, Vararg{Integer}}) where {M<:AbstractMatr
     r
 end
 
-@inline function setindex!(D::Diagonal, v, i::Int, j::Int)
+@inline function setindex!(D::Diagonal, v, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds D.diag[i] = v
@@ -346,7 +346,12 @@ function (*)(D::Diagonal, V::AbstractVector)
     return D.diag .* V
 end
 
+_wrapperop_reverses_products(::Adjoint, ::Diagonal) = true
+_wrapperop_reverses_products(::Transpose{<:Union{Real,Complex}}, ::Diagonal{<:Union{Real,Complex}}) = true
+_wrapperop_reverses_products(A, D) = false
+
 function mul(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(D) * adj(A)))
 end
@@ -354,6 +359,7 @@ function mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Numbe
     @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
 end
 function mul(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(D::AbstractMatrix, A::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(A) * adj(D)))
 end
@@ -374,6 +380,7 @@ end
 # A' = A' * D => A = D' * A
 # This uses the fact that D' is a Diagonal
 function rmul!(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke rmul!(A::AbstractMatrix, D::Diagonal)
     f = _wrapperop(A)
     lmul!(f(D), f(A))
     A
@@ -421,6 +428,7 @@ end
 # A' = D * A' => A = A * D'
 # This uses the fact that D' is a Diagonal
 function lmul!(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke lmul!(D::Diagonal, A::AbstractVecOrMat)
     f = _wrapperop(A)
     rmul!(f(A), f(D))
     A
@@ -1113,9 +1121,11 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
         return eigen(Diagonal(A), D; sortby)
     elseif all(isposdef, D.diag)
         S = promote_type(eigtype(A), _valeltype(D))
-        return eigen(A, cholesky(Diagonal{S}(D)); sortby)
+        return _tohalf(promote_type(eltype(A), eltype(D)), eigen(A, cholesky(Diagonal{S}(D)); sortby))
     else
-        return eigen!(D \ A; sortby)
+        B = D \ A
+        # `eigen!` only exists for BLAS element types
+        return eltype(B) <: BlasFloat ? eigen!(B; sortby) : eigen(B; sortby)
     end
 end
 
