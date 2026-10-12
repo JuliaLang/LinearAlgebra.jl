@@ -511,6 +511,19 @@ See also: `copymutable_oftype`.
 copy_similar(A::AbstractArray, ::Type{T}) where {T} = copyto!(similar(A, T, size(A)), A)
 
 """
+    _valeltype(A)
+
+Return `eltype(A)` if it is concrete (or `A` is empty). Otherwise, return the type obtained
+by promoting the types of all values stored in `A`, as seen through `getindex`, such that
+elements that are not referenced by a wrapper like `Symmetric` are ignored.
+
+This is used to determine the element type of the copy of `A` that is passed to in-place
+factorizations when `eltype(A)` is abstract, e.g., `Real` or `Number`.
+"""
+_valeltype(A::AbstractArray{T}) where {T} =
+    (isconcretetype(T) || isempty(A)) ? T : mapreduce(typeof, promote_type, A)
+
+"""
     BandIndex(band, index)
 
 Represent a Cartesian index as a linear index along a band.
@@ -678,8 +691,9 @@ _cut_B(x::AbstractVector, r::UnitRange) = length(x)  > length(r) ? x[r]   : x
 _cut_B(X::AbstractMatrix, r::UnitRange) = size(X, 1) > length(r) ? X[r,:] : X
 
 ## append right hand side with zeros if necessary
-_zeros(::Type{T}, b::AbstractVector, n::Integer) where {T} = zeros(T, max(length(b), n))
-_zeros(::Type{T}, B::AbstractMatrix, n::Integer) where {T} = zeros(T, max(size(B, 1), n), size(B, 2))
+_zeros(::Type{T}, B::AbstractVecOrMat, F::Factorization) where {T} = zeros(T, _ret_size(F, B))
+# keep the array type of dense right hand sides
+_zeros(::Type{T}, B::StridedVecOrMat, F::Factorization) where {T} = fill!(similar(B, T, _ret_size(F, B)), zero(T))
 
 # destination type for matmul
 # diagonal is special, as it does not change the structure of the other matrix
@@ -721,6 +735,11 @@ const LAPACKFactorizations{T,S} = Union{
 (\)(F::AdjointFactorization{<:Any,<:LAPACKFactorizations}, B::AbstractVecOrMat) = ldiv(F, B)
 (\)(F::TransposeFactorization{<:Any,<:LU}, B::AbstractVecOrMat) = ldiv(F, B)
 
+# the scalar type underlying an element type: for array-valued elements (e.g. static vectors),
+# that of their elements, recursively; otherwise the type itself
+_scalartype(::Type{T}) where {T<:AbstractArray} = _scalartype(eltype(T))
+_scalartype(::Type{T}) where {T} = T
+
 function ldiv(F::Factorization, B::AbstractVecOrMat)
     require_one_based_indexing(B)
     m, n = size(F)
@@ -728,12 +747,17 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
         throw(DimensionMismatch("arguments must have the same number of rows"))
     end
 
-    TFB = typeof(oneunit(eltype(B)) / oneunit(eltype(F)))
-    FF = Factorization{TFB}(F)
+    # scalar type of the solution (the elements of `B` may themselves be vectors)
+    TFB = typeof(zero(_scalartype(eltype(B))) / oneunit(eltype(F)))
+    # promote the numeric type of the factorization to that of the solution (e.g. `Float32` ->
+    # `Float64`), but keep its units: `TFB` itself may carry different units than the factors
+    TF = typeof(oneunit(eltype(F)) * one(TFB))
+    FF = Factorization{TF}(F)
 
     # For wide problem we (often) compute a minimum norm solution. The solution
     # is larger than the right hand side so we use size(F, 2).
-    BB = _zeros(TFB, B, n)
+    TBB = typeof(zero(eltype(B)) / oneunit(eltype(F)))
+    BB = _zeros(TBB, B, F)
 
     if n > size(B, 1)
         # Underdetermined
@@ -913,13 +937,17 @@ function lbt_openblas_onload_callback()
     end
 end
 
+@static if isdefined(Libdl, :LazyLibraryCallback)
+    # a `LazyLibraryCallback` is compiled by `--trim`, unlike a plain function
+    struct LBTOpenBLASCallback <: Libdl.LazyLibraryCallback end
+else
+    struct LBTOpenBLASCallback <: Function end
+end
+
+(::LBTOpenBLASCallback)() = lbt_openblas_onload_callback()
+
 function __init__()
-    @static if isdefined(Libdl, :LazyLibrary) && hasfield(Libdl.LazyLibrary, :_on_load_c_callback)
-        callback = @cfunction(lbt_openblas_onload_callback, Cvoid, ())
-    else
-        callback = lbt_openblas_onload_callback
-    end
-    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, callback)
+    libblastrampoline_jll.add_dependency!(OpenBLAS_jll, libopenblas, LBTOpenBLASCallback())
 end
 
 end # module LinearAlgebra

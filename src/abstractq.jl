@@ -19,7 +19,7 @@ transpose(Q::AbstractQ{<:Real}) = AdjointQ(Q)
 transpose(Q::AbstractQ) = error("transpose not implemented for $(typeof(Q)). Consider using adjoint instead of transpose.")
 adjoint(adjQ::AdjointQ) = adjQ.Q
 
-(^)(Q::AbstractQ, p::Integer) = p < 0 ? power_by_squaring(inv(Q), -p) : power_by_squaring(Q, p)
+(^)(Q::AbstractQ, p::Integer) = p < 0 ? power_by_squaring(inv(Q)*I, -p) : power_by_squaring(Q*I, p)
 @inline Base.literal_pow(::typeof(^), Q::AbstractQ, ::Val{1}) = Q
 @inline Base.literal_pow(::typeof(^), Q::AbstractQ, ::Val{-1}) = inv(Q)
 
@@ -49,7 +49,8 @@ AbstractMatrix(Q::AbstractQ) = Q*I
 AbstractArray(Q::AbstractQ) = AbstractMatrix(Q)
 AbstractMatrix{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
 AbstractArray{T}(Q::AbstractQ) where {T} = AbstractMatrix{T}(Q)
-convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray} = T(Q)
+# an `AbstractQ` is not an array; use `Matrix(Q)`, `Array(Q)` or `AbstractMatrix(Q)` instead
+@deprecate(convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray}, T(Q), false)
 # legacy
 @deprecate(convert(::Type{AbstractMatrix{T}}, Q::AbstractQ) where {T},
     convert(LinearAlgebra.AbstractQ{T}, Q), false)
@@ -98,20 +99,20 @@ end
 @inline getindex(Q::AbstractQ, ::Colon, ::Colon) = copy(Q)
 
 @inline _getindex(Q::AbstractQ, inds...) = @inbounds copymutable(Q)[inds...]
-@inline function _getindex(Q::AbstractQ, ::Colon, J::AbstractVector{<:Integer})
+@inline function _getindex(Q::AbstractQ, ::Colon, J::AbstractVector{<:Signed})
     Y = zeros(eltype(Q), size(Q, 2), length(J))
     @inbounds for (i,j) in enumerate(J)
         Y[j,i] = oneunit(eltype(Q))
     end
     lmul!(Q, Y)
 end
-@inline _getindex(Q::AbstractQ, I::AbstractVector{Int}, J::AbstractVector{Int}) = @inbounds Q[:,J][I,:]
-@inline function _getindex(Q::AbstractQ, ::Colon, j::Int)
+@inline _getindex(Q::AbstractQ, I::AbstractVector{<:Signed}, J::AbstractVector{<:Signed}) = @inbounds Q[:,J][I,:]
+@inline function _getindex(Q::AbstractQ, ::Colon, j::Signed)
     y = zeros(eltype(Q), size(Q, 2))
     y[j] = oneunit(eltype(Q))
     lmul!(Q, y)
 end
-@inline _getindex(Q::AbstractQ, i::Int, j::Int) = @inbounds Q[:,j][i]
+@inline _getindex(Q::AbstractQ, i::Signed, j::Signed) = @inbounds Q[:,j][i]
 
 # needed because AbstractQ does not subtype AbstractMatrix
 qr(Q::AbstractQ{T}, arg...; kwargs...) where {T} = qr!(Matrix{_qreltype(T)}(Q), arg...; kwargs...)
@@ -169,7 +170,7 @@ end
 QDisplayCache(Q::AbstractQ{T}) where {T} = QDisplayCache{T,typeof(Q)}(Q, Dict{Int,Vector{T}}())
 
 size(C::QDisplayCache) = size(C.Q)
-function getindex(C::QDisplayCache, i::Int, j::Int)
+function getindex(C::QDisplayCache, i::Signed, j::Signed)
     @boundscheck checkbounds(C, i, j)
     column = get!(() -> C.Q[:, j], C.columns, j)
     return column[i]
@@ -345,7 +346,7 @@ size(Q::Union{QRCompactWYQ,QRPackedQ}) = (n = size(Q.factors, 1); (n, n))
 # Generic counterparts of LAPACK's `ormqr!`. With `Q = H_1 ⋯ H_k` and `Hᵢ = I - vᵢτᵢvᵢ'`
 # stored in the columns of `Q.factors`, `Q` applies the reflectors in decreasing order,
 # `Q'` in increasing order and with `conj(τᵢ)` in place of `τᵢ`; `adj = true` selects the
-# latter. The loop bodies are those of the four methods this replaces.
+# latter. Each reflector is applied by `reflectorApply!`.
 function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
@@ -353,22 +354,9 @@ function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     if mQ != mB
         throw(DimensionMismatch(lazy"matrix Q has dimensions ($mQ,$nQ) but B has dimensions ($mB, $nB)"))
     end
-    Qfactors = Q.factors
-    @inbounds begin
-        for k in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
-            τk = adj ? conj(Q.τ[k]) : Q.τ[k]
-            for j = 1:nB
-                vBj = B[k,j]
-                for i = k+1:mB
-                    vBj += conj(Qfactors[i,k])*B[i,j]
-                end
-                vBj = τk*vBj
-                B[k,j] -= vBj
-                for i = k+1:mB
-                    B[i,j] -= Qfactors[i,k]*vBj
-                end
-            end
-        end
+    @inbounds for k in (adj ? (1:1:min(mQ,nQ)) : (min(mQ,nQ):-1:1))
+        # `reflectorApply!` applies `I - vᵢ conj(τ)vᵢ'`, hence the conjugation for `Q`
+        reflectorApply!(view(Q.factors, k:mB, k), adj ? Q.τ[k] : conj(Q.τ[k]), view(B, k:mB, :))
     end
     B
 end
@@ -414,8 +402,8 @@ function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     B
 end
 
-# as `_lqmul!`, for `A*Q` resp. `A*Q'`, running over the reflectors the other way round and
-# multiplying by `τₖ` from the right rather than from the left
+# as `_lqmul!`, for `A*Q` resp. `A*Q'`, running over the reflectors the other way round;
+# `reflectorApply!` multiplies by `τₖ` from the right rather than from the left
 function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
     require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
@@ -423,22 +411,8 @@ function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
     if nA != mQ
         throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($mQ, $nQ)"))
     end
-    Qfactors = Q.factors
-    @inbounds begin
-        for k in (adj ? (min(mQ,nQ):-1:1) : (1:1:min(mQ,nQ)))
-            τk = adj ? conj(Q.τ[k]) : Q.τ[k]
-            for i = 1:mA
-                vAi = A[i,k]
-                for j = k+1:mQ
-                    vAi += A[i,j]*Qfactors[j,k]
-                end
-                vAi = vAi*τk
-                A[i,k] -= vAi
-                for j = k+1:nA
-                    A[i,j] -= vAi*conj(Qfactors[j,k])
-                end
-            end
-        end
+    @inbounds for k in (adj ? (min(mQ,nQ):-1:1) : (1:1:min(mQ,nQ)))
+        reflectorApply!(view(A, :, k:nA), view(Q.factors, k:nA, k), adj ? conj(Q.τ[k]) : Q.τ[k])
     end
     A
 end

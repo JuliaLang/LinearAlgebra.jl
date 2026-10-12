@@ -16,6 +16,7 @@ using Main.LinearAlgebraTestHelpers.InfiniteArrays
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
 
 const n=12 # Size of matrix problem to test
 Random.seed!(1)
@@ -1609,6 +1610,40 @@ end
         test_isapprox_and_type(norm(D, Inf), norm(A, Inf))
         test_isapprox_and_type(norm(D, -Inf), norm(A, -Inf))
         test_isapprox_and_type(norm(D, 0), norm(A, 0))
+    end
+end
+
+@testset "tr and det of empty Diagonal (issue #1707)" begin
+    for T in (Int, Float32, ComplexF64, BigInt)
+        D = Diagonal(T[])
+        @test @inferred(tr(D)) == zero(T)
+        @test @inferred(det(D)) == one(T)
+        @test typeof(tr(D)) == typeof(tr(Diagonal(T[1]))) == T
+        @test typeof(det(D)) == typeof(det(Diagonal(T[1]))) == T
+    end
+    @test tr(Diagonal(Number[])) == 0
+    @test det(Diagonal(Number[])) == 1
+    # block-diagonal: result type matches the nonempty case
+    for B in (Matrix{Int}, Matrix{Float32}, Matrix{BigInt})
+        E = Diagonal(B[])
+        N = Diagonal([B(I, 2, 2), B(I, 2, 2)])
+        @test @inferred(tr(E)) == 0
+        @test @inferred(det(E)) == 1
+        @test typeof(tr(E)) == typeof(tr(N))
+        @test typeof(det(E)) == typeof(det(N))
+    end
+end
+
+@testset "products of Diagonal with transposed non-commutative matrices (issue #1750)" begin
+    i, j, k = Quaternion(0.0,1,0,0), Quaternion(0.0,0,1,0), Quaternion(0.0,0,0,1)
+    M = [i j; zero(i) k]
+    A = view(M, [1, 2], :)
+    D = Diagonal([j, k])
+    for op in (transpose, adjoint)
+        @test op(A) * D == Matrix(op(A)) * D
+        @test D * op(A) == D * Matrix(op(A))
+        @test rmul!(op(copy(M)), D) == Matrix(op(M)) * D
+        @test lmul!(D, op(copy(M))) == D * Matrix(op(M))
     end
 end
 
