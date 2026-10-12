@@ -1861,7 +1861,7 @@ end
     nullspace(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
 
-Computes a basis for the nullspace of `M` by including the singular
+Computes a basis for the nullspace of `M` by returning the (orthonormal) singular
 vectors of `M` whose singular values have magnitudes smaller than `max(atol, rtol*σ₁)`,
 where `σ₁` is `M`'s largest singular value.
 
