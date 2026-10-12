@@ -169,9 +169,10 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
         end
 
         @testset "zero absorbing functions nested in other operations" begin
-            for X in (D, B, U, L)
+            for X in (D, B, T, U, L, UH)
                 fX = Array(X)
                 @test (Q = 2 .* M .+ X; Q isa Matrix && Q == 2 .* M .+ fX)
+                @test (Q = M .* 2 .+ X; Q isa Matrix && Q == M .* 2 .+ fX)
                 @test (Q = X .* (Inf .* 2.0); Q isa Matrix && isequal(Q, fX .* (Inf .* 2.0)))
                 @test (Q = X .+ (0.0 .* 2.0); Q isa typeof(X) && Q == fX .+ (0.0 .* 2.0))
                 @test (Q = M .* M .+ X; Q isa Matrix && Q == M .* M .+ fX)
@@ -180,6 +181,10 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
                 @test X .* (2 .* M) == fX .* (2 .* M)
                 @test (Q = X .* (1.0 ./ zero(M)); Q isa Matrix && isequal(Q, fX .* (1.0 ./ zero(M))))
                 @test (Q = (X .* M) .+ X; Q isa typeof(X) && Q == fX .* M .+ fX)
+            end
+            for (X, fX) in zip((S, unittriangulars...), (fS, funittriangulars...))
+                @test (Q = 2 .* M .+ X; Q isa Matrix && Q == 2 .* M .+ fX)
+                @test (Q = M .* M .+ X; Q isa Matrix && Q == M .* M .+ fX)
             end
         end
     end
@@ -230,6 +235,14 @@ end
             @test_throws ArgumentError broadcast!(+, copy(◥), ◥, A)
             @test_throws ArgumentError broadcast!(*, copy(◥), ◣, 2)
             @test_throws ArgumentError broadcast!(*, copy(Bu), Bl, 2)
+            # products of dense arrays are not zero, even inside a zero-absorbing function
+            for X in (D, Bu, Bl, T, ◣, ◥, UH)
+                @test_throws ArgumentError copy(X) .= 2 .* A .+ X
+                @test_throws ArgumentError copy(X) .= A .* A .+ X
+            end
+        end
+        for X in (D, Bu, Bl, T, ◣, ◥, UH)
+            @test (Q = copy(X) .= 2 .* X .* A; Q isa typeof(X) && Q == 2 .* Array(X) .* A)
         end
     end
 end
