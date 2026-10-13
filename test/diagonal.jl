@@ -689,15 +689,23 @@ end
             for (T, rtype) in zip(Tmats, restypes)
                 adjtype = (rtype == LowerTriangular) ? UpperTriangular : LowerTriangular
 
-                # Triangular * Diagonal
+                # Triangular mul/ldiv Diagonal
                 R = T * D
                 TA = Array(T)
                 @test R ≈ TA * M
                 @test isa(R, rtype)
+                R = T \ D
+                TA = Array(T)
+                @test R ≈ TA \ M
+                @test isa(R, rtype)
 
-                # Diagonal * Triangular
+                # Diagonal mul/rdiv Triangular
                 R = D * T
                 @test R ≈ M * TA
+                @test isa(R, rtype)
+                R = D / T
+                TA = Array(T)
+                @test R ≈ M / TA
                 @test isa(R, rtype)
 
                 # Adjoint of Triangular * Diagonal
