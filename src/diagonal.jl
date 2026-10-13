@@ -335,10 +335,10 @@ Base.literal_pow(::typeof(^), D::Diagonal, ::Val{-1}) = inv(D) # for disambiguat
 postop_proc(::MulOrDiv, C, _, ::Diagonal) = C
 postop_proc(::MulOrDiv, C, ::Diagonal, _) = C
 postop_proc(::MulOrDiv, C, ::Diagonal, ::Diagonal) = C
-postop_proc(::typeof{\}, C, ::LowerOrUnitLowerTriangular, ::Diagonal) = LowerTriangular(C)
-postop_proc(::typeof{\}, C, ::UpperOrUnitUpperTriangular, ::Diagonal) = UpperTriangular(C)
-postop_proc(::typeof{/}, C, ::Diagonal, ::LowerOrUnitLowerTriangular) = LowerTriangular(C)
-postop_proc(::typeof{/}, C, ::Diagonal, ::UpperOrUnitUpperTriangular) = UpperTriangular(C)
+postop_proc(::typeof(\), C, ::LowerOrUnitLowerTriangular, ::Diagonal) = LowerTriangular(C)
+postop_proc(::typeof(\), C, ::UpperOrUnitUpperTriangular, ::Diagonal) = UpperTriangular(C)
+postop_proc(::typeof(/), C, ::Diagonal, ::LowerOrUnitLowerTriangular) = LowerTriangular(C)
+postop_proc(::typeof(/), C, ::Diagonal, ::UpperOrUnitUpperTriangular) = UpperTriangular(C)
 
 function mul(Da::Diagonal, Db::Diagonal)
     matmul_size_check(size(Da), size(Db))
