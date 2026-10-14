@@ -689,4 +689,3 @@ function nullspace(F::SVD; atol::Real=0, rtol::Real = (min(size(F.U, 1), size(F.
     indstart = r + 1 # nullspace starts after the numerical rank + 1
     return copy((@view F.Vt[indstart:end,:])')
 end
-

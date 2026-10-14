@@ -1840,7 +1840,6 @@ end
 """
     nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
-    nullspace(S::SVD{<:Any, T}; atol::Real=0, rtol::Real=min(n,m)*ϵ) where {T}
 
 Computes a basis for the nullspace of `M` by including the singular
 vectors of `M` whose singular values have magnitudes smaller than `max(atol, rtol*σ₁)`,
@@ -1850,7 +1849,8 @@ By default, the relative tolerance `rtol` is `n*ϵ`, where `n`
 is the size of the smallest dimension of `M`, and `ϵ` is the [`eps`](@ref) of
 the element type of `M`.
 
-If a specific svd algorithm is required, the function may be called passing an SVD object rather than a matrix. 
+If a specific svd algorithm is required, pass an accordingly computed SVD object directly,
+see [`nullspace(::SVD)`](@ref).
 
 # Examples
 ```jldoctest
