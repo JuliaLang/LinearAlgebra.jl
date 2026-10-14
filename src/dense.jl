@@ -1630,17 +1630,18 @@ verify/rule out each property. It will short-circuit as soon as it can rule out
 symmetry/triangular structure. The return value can be reused for efficient solving
 of multiple systems. For example: `A=factorize(A); x=A\\b; y=A\\C`.
 
-| Properties of `A`          | type of factorization                          |
-|:---------------------------|:-----------------------------------------------|
+| Properties of `A`          | type of factorization                      |
+|:---------------------------|:-------------------------------------------|
 | Dense Symmetric/Hermitian  | Bunch-Kaufman (see [`bunchkaufman`](@ref)) |
-| Sparse Symmetric/Hermitian | LDLt (see [`ldlt`](@ref))      |
-| Triangular                 | Triangular                                     |
-| Diagonal                   | Diagonal                                       |
-| Bidiagonal                 | Bidiagonal                                     |
-| Tridiagonal                | LU (see [`lu`](@ref))            |
-| Symmetric real tridiagonal | LDLt (see [`ldlt`](@ref))      |
-| General square             | LU (see [`lu`](@ref))            |
-| General non-square         | QR (see [`qr`](@ref))            |
+| Sparse Symmetric/Hermitian | LDLt (see [`ldlt`](@ref))                  |
+| Triangular                 | Triangular                                 |
+| Diagonal                   | Diagonal                                   |
+| Bidiagonal                 | Bidiagonal                                 |
+| UniformScaling             | UniformScaling                             |
+| Tridiagonal                | LU (see [`lu`](@ref))                      |
+| Symmetric real tridiagonal | LDLt (see [`ldlt`](@ref))                  |
+| General square             | LU (see [`lu`](@ref))                      |
+| General non-square         | QR (see [`qr`](@ref))                      |
 
 # Examples
 ```jldoctest
