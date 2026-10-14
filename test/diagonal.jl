@@ -17,6 +17,7 @@ using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 const n=12 # Size of matrix problem to test
 Random.seed!(1)
@@ -32,7 +33,8 @@ LinearAlgebra.ishermitian(N::NotDiagonal) = ishermitian(N.a)
 LinearAlgebra.istriu(N::NotDiagonal) = istriu(N.a)
 LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
 
-@testset for relty in (Float32, Float64, BigFloat), elty in (relty, Complex{relty})
+@testset for (relty, elty) in ((Float64, Float64), (Float64, ComplexF64), (BigFloat, BigFloat),
+        (@static COMPREHENSIVE ? ((Float32, Float32), (Float32, ComplexF32), (BigFloat, Complex{BigFloat})) : ())...)
     dd=convert(Vector{elty}, randn(n))
     vv=convert(Vector{elty}, randn(n))
     UU=convert(Matrix{elty}, randn(n,n))
@@ -678,7 +680,7 @@ end
             return randn(type, sz...)
         end
     end
-    types = (Float64, Int, ComplexF64)
+    types = (Float64, ComplexF64, (@static COMPREHENSIVE ? (Int,) : ())...)
     for ta in types
         D = Diagonal(_randomarray(ta, Val(1)))
         M = Matrix(D)
@@ -999,7 +1001,7 @@ end
 
 @testset "Triangular division by Diagonal #27989" begin
     K = 5
-    for elty in (Float32, Float64, ComplexF32, ComplexF64)
+    for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         U = UpperTriangular(randn(elty, K, K))
         L = LowerTriangular(randn(elty, K, K))
         D = Diagonal(randn(elty, K))
