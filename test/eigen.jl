@@ -445,6 +445,8 @@ end
         @test eigmax(H) ≈ eigmax(Hermitian(H))
         @test eigmin(eigen(H)) === minimum(eigvals(Hermitian(H)))
         @test eigmax(eigen(H, P)) ≈ maximum(eigvals(Hermitian(H), Hermitian(P)))
+        # non-Hermitian complex matrices throw even if their computed eigenvalues happen to
+        # be real (G's are), as whether they are exactly real is subject to rounding
         @test_throws DomainError eigmax(G)
         @test_throws DomainError eigmin(G)
     end

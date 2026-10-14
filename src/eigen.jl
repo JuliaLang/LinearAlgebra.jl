@@ -439,7 +439,7 @@ Stacktrace:
 function eigmax(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
     v = eigvals(A; permute, scale, sortby=nothing)
     if eltype(v) <: Complex
-        isreal(v) || throw(DomainError(A, "`A` cannot have complex eigenvalues."))
+        ishermitian(A) || throw(DomainError(A, "`A` cannot have complex eigenvalues."))
         return maximum(real, v)
     end
     return maximum(v)
@@ -476,7 +476,7 @@ Stacktrace:
 function eigmin(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
     v = eigvals(A; permute, scale, sortby=nothing)
     if eltype(v) <: Complex
-        isreal(v) || throw(DomainError(A, "`A` cannot have complex eigenvalues."))
+        ishermitian(A) || throw(DomainError(A, "`A` cannot have complex eigenvalues."))
         return minimum(real, v)
     end
     return minimum(v)
