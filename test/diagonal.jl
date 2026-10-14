@@ -696,7 +696,7 @@ end
                 R = T \ D
                 @test R::rtype ≈ TA \ M
                 R = T / D
-                @test R::rtype ≈ TA / M                
+                @test R::rtype ≈ TA / M
 
                 # Diagonal mul/rdiv Triangular
                 R = D * T
