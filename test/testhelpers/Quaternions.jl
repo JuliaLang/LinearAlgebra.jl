@@ -35,6 +35,7 @@ LinearAlgebra.choltype(::AbstractArray{Quaternion{T}}) where T = Quaternion{prom
 
 Base.:(+)(ql::Quaternion, qr::Quaternion) =
  Quaternion(ql.s + qr.s, ql.v1 + qr.v1, ql.v2 + qr.v2, ql.v3 + qr.v3)
+Base.:(-)(q::Quaternion) = Quaternion(-q.s, -q.v1, -q.v2, -q.v3)
 Base.:(-)(ql::Quaternion, qr::Quaternion) =
  Quaternion(ql.s - qr.s, ql.v1 - qr.v1, ql.v2 - qr.v2, ql.v3 - qr.v3)
 Base.:(*)(q::Quaternion, w::Quaternion) = Quaternion(q.s*w.s - q.v1*w.v1 - q.v2*w.v2 - q.v3*w.v3,

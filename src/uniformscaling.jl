@@ -162,9 +162,9 @@ isposdef(J::UniformScaling) = isposdef(J.λ)
 (-)(A::AbstractMatrix, J::UniformScaling)   = A + (-J)
 
 # matrix functions
-for f in ( :exp,   :log, :cis,
+for f in ( :exp,   :log,   :cis,
            :expm1, :log1p,
-           :sqrt,  :cbrt,
+           :sqrt,  :cbrt,  :abs,
            :sin,   :cos,   :tan,
            :asin,  :acos,  :atan,
            :csc,   :sec,   :cot,
@@ -276,7 +276,7 @@ end
 *(J::UniformScaling, B::BitArray{2}) = *(J::UniformScaling, Array(B))
 *(A::AbstractMatrix, J::UniformScaling) = A*J.λ
 *(v::AbstractVector, J::UniformScaling) = reshape(v, length(v), 1) * J
-*(J::UniformScaling, A::AbstractVecOrMat) = J.λ*A
+*(J::UniformScaling, A::AbstractArray) = J.λ*A
 *(x::Number, J::UniformScaling) = UniformScaling(x*J.λ)
 *(J::UniformScaling, x::Number) = UniformScaling(J.λ*x)
 

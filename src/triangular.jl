@@ -232,13 +232,13 @@ _shouldforwardindex(U::LowerTriangular, row::Integer, col::Integer) = row >= col
 _shouldforwardindex(U::UnitUpperTriangular, row::Integer, col::Integer) = row < col
 _shouldforwardindex(U::UnitLowerTriangular, row::Integer, col::Integer) = row > col
 
-Base.isassigned(A::UpperOrLowerTriangular, i::Int, j::Int) =
+Base.isassigned(A::UpperOrLowerTriangular, i::Signed, j::Signed) =
     _shouldforwardindex(A, i, j) ? isassigned(A.data, i, j) : true
 
-Base.isstored(A::UpperOrLowerTriangular, i::Int, j::Int) =
+Base.isstored(A::UpperOrLowerTriangular, i::Signed, j::Signed) =
     _shouldforwardindex(A, i, j) ? Base.isstored(A.data, i, j) : false
 
-@propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Int, j::Int) where {T}
+@propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Signed, j::Signed) where {T}
     if _shouldforwardindex(A, i, j)
         A.data[i,j]
     else
@@ -246,7 +246,7 @@ Base.isstored(A::UpperOrLowerTriangular, i::Int, j::Int) =
         ifelse(i == j, oneunit(T), zero(T))
     end
 end
-@propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, i::Int, j::Int)
+@propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j]
     else
@@ -293,7 +293,7 @@ end
         lazy"cannot set index ($i, $j) on the diagonal of a $Tn matrix to a non-unit value ($x)"))
 end
 
-@propagate_inbounds function setindex!(A::UpperTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::UpperTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -307,7 +307,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -325,7 +325,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::LowerTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::LowerTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -339,7 +339,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -1044,6 +1044,11 @@ end
 +(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) = full(A) + full(B)
 +(A::AbstractTriangular, B::AbstractTriangular) = copyto!(similar(parent(A), size(A)), A) + copyto!(similar(parent(B), size(B)), B)
 
+zero(A::UpperTriangular) = UpperTriangular(zero(parent(A)))
+zero(A::LowerTriangular) = LowerTriangular(zero(parent(A)))
+zero(A::UnitUpperTriangular) = zero(UpperTriangular(parent(A)))
+zero(A::UnitLowerTriangular) = zero(LowerTriangular(parent(A)))
+
 function -(A::UpperTriangular, B::UpperTriangular)
     (parent(A) isa StridedMatrix || parent(B) isa StridedMatrix) && return A .- B
     UpperTriangular(A.data - B.data)
@@ -1237,7 +1242,7 @@ for (TA, TB) in ((:AbstractTriangular, :AbstractMatrix),
     end
 end
 
-generic_matmatmul_NN!(C, A, B, alpha, beta) = generic_matmatmul!(C, 'N', 'N', A, B, alpha, beta)
+generic_matmatmul_NN!(C, A, B, alpha, beta) = mul!(C, 'N', 'N', A, B, alpha, beta)
 # Optimization for strided matrices, where we know that _generic_matmatmul! will be taken
 for (TA, TB) in ((:UpperOrLowerTriangularStrided, :StridedMatrix),
                     (:StridedMatrix, :UpperOrLowerTriangularStrided),
@@ -1298,6 +1303,10 @@ for (cty, aty, bty) in ((:UpperTriangular, :UpperTriangular, :UpperTriangular),
     end
 end
 
+# inverse is generally dense: only strided parents keep their array type
+_inv_identity(A::UpperOrLowerTriangularStrided, ::Type{S}) where {S} = copyto!(similar(A, S, size(A)), I)
+_inv_identity(A::AbstractTriangular, ::Type{S}) where {S} = Matrix{S}(I, size(A))
+
 for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
                             (:UnitLowerTriangular, 'L', 'U'),
                             (:UpperTriangular, 'U', 'N'),
@@ -1310,7 +1319,7 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
         function inv(A::$t{T}) where {T}
             S = typeof(inv(oneunit(T)))
             if S <: BlasFloat || S === T # i.e. A is unitless
-                $t(ldiv!(convert(AbstractArray{S}, A), Matrix{S}(I, size(A))))
+                $t(ldiv!(convert(AbstractArray{S}, A), _inv_identity(A, S)))
             else
                 J = (one(T)*I)(size(A, 1))
                 $t(ldiv!(similar(A, S, size(A)), A, J))
@@ -1353,11 +1362,13 @@ function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function,
     end
 end
 # division
-function generic_trimatdiv!(C::StridedVecOrMat{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVecOrMat) where {T<:BlasFloat}
+generic_trimatdiv!(C::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVector) where {T<:BlasFloat} =
+    BLAS.trsv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : copyto!(C, B))
+function generic_trimatdiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1
-        LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : _copy_or_copyto!(C, B))
+        BLAS.trsm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : _copy_or_copyto!(C, B))
     else # incompatible with LAPACK
-        @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
+        @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
 function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat}
@@ -1843,7 +1854,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
                 for i in axes(B,1)[2:end]
                     C[i,k] = oA \ B[i,k] - _ustrip(conj(A[i,1])) * C1
                 end
-                for j in axes(A,2)
+                for j in axes(A,2)[2:end]
                     Cj = C[j,k]
                     for i in j+1:lastindex(A,1)
                         C[i,k] -= _ustrip(conj(A[i,j])) * Cj
@@ -2109,8 +2120,8 @@ powm(A::LowerTriangular, p::Real) = copy(transpose(powm!(copy(transpose(A)), p::
 # Based on the code available at http://eprints.ma.man.ac.uk/1851/02/logm.zip,
 # Copyright (c) 2011, Awad H. Al-Mohy and Nicholas J. Higham
 # Julia version relicensed with permission from original authors
-log(A::UpperTriangular{T}) where {T<:BlasFloat} = log_quasitriu(A)
-log(A::UnitUpperTriangular{T}) where {T<:BlasFloat} = log_quasitriu(A)
+log(A::UpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(A))
+log(A::UnitUpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(A))
 log(A::LowerTriangular) = copy(transpose(log(copy(transpose(A)))))
 log(A::UnitLowerTriangular) = copy(transpose(log(copy(transpose(A)))))
 
@@ -3003,8 +3014,11 @@ logdet(A::UnitUpperTriangular{T}) where {T} = zero(T)
 logdet(A::UnitLowerTriangular{T}) where {T} = zero(T)
 logabsdet(A::UnitUpperTriangular{T}) where {T} = zero(T), one(T)
 logabsdet(A::UnitLowerTriangular{T}) where {T} = zero(T), one(T)
-det(A::UpperTriangular) = prod(diag(A.data))
-det(A::LowerTriangular) = prod(diag(A.data))
+function det(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
+    S = promote_type(T, typeof((one(T) * zero(T) + zero(T)) / one(T)))
+    return prod(Base.Fix1(convert, S), diagview(A.data); init=one(S))
+end
+det(A::Union{UpperTriangular{BigInt},LowerTriangular{BigInt}}) = prod(diagview(A.data))
 function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     sgn = one(T)
     abs_det = zero(real(T))

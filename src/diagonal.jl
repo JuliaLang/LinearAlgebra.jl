@@ -145,7 +145,7 @@ size(D::Diagonal) = (n = length(D.diag); (n,n))
 
 axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
 
-@inline function Base.isassigned(D::Diagonal, i::Int, j::Int)
+@inline function Base.isassigned(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, D, i, j) || return false
     if i == j
         @inbounds r = isassigned(D.diag, i)
@@ -155,7 +155,7 @@ axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
     r
 end
 
-@inline function Base.isstored(D::Diagonal, i::Int, j::Int)
+@inline function Base.isstored(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = Base.isstored(D.diag, i)
@@ -177,7 +177,7 @@ function Base.maximum(D::Diagonal{T}) where T <: Number
     return maxdiag
 end
 
-@inline function getindex(D::Diagonal, i::Int, j::Int)
+@inline function getindex(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = D.diag[i]
@@ -219,7 +219,7 @@ zeroslike(::Type{M}, sz::Tuple{Integer, Vararg{Integer}}) where {M<:AbstractMatr
     r
 end
 
-@inline function setindex!(D::Diagonal, v, i::Int, j::Int)
+@inline function setindex!(D::Diagonal, v, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds D.diag[i] = v
@@ -346,7 +346,12 @@ function (*)(D::Diagonal, V::AbstractVector)
     return D.diag .* V
 end
 
+_wrapperop_reverses_products(::Adjoint, ::Diagonal) = true
+_wrapperop_reverses_products(::Transpose{<:Union{Real,Complex}}, ::Diagonal{<:Union{Real,Complex}}) = true
+_wrapperop_reverses_products(A, D) = false
+
 function mul(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(D) * adj(A)))
 end
@@ -354,6 +359,7 @@ function mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Numbe
     @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
 end
 function mul(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(D::AbstractMatrix, A::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(A) * adj(D)))
 end
@@ -374,6 +380,7 @@ end
 # A' = A' * D => A = D' * A
 # This uses the fact that D' is a Diagonal
 function rmul!(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke rmul!(A::AbstractMatrix, D::Diagonal)
     f = _wrapperop(A)
     lmul!(f(D), f(A))
     A
@@ -390,23 +397,20 @@ function rmul!(T::Tridiagonal, D::Diagonal)
     end
     return T
 end
-for T in [:UpperTriangular, :UnitUpperTriangular,
-        :LowerTriangular, :UnitLowerTriangular]
+for T in (:UpperTriangular, :LowerTriangular)
     @eval rmul!(A::$T{<:Any, <:StridedMatrix}, D::Diagonal) = _rmul!(A, D)
     @eval lmul!(D::Diagonal, A::$T{<:Any, <:StridedMatrix}) = _lmul!(D, A)
 end
 function _rmul!(A::UpperOrLowerTriangular, D::Diagonal)
     P = parent(A)
-    isunit = A isa UnitUpperOrUnitLowerTriangular
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
-        rowstart = isupper ? firstindex(A,1) : col+isunit
-        rowstop = isupper ? col-isunit : lastindex(A,1)
+        rowstart = isupper ? firstindex(A,1) : col
+        rowstop = isupper ? col : lastindex(A,1)
         for row in rowstart:rowstop
             P[row, col] *= D.diag[col]
         end
     end
-    isunit && _setdiag!(P, identity, D.diag)
     TriWrapper = isupper ? UpperTriangular : LowerTriangular
     return TriWrapper(P)
 end
@@ -424,6 +428,7 @@ end
 # A' = D * A' => A = A * D'
 # This uses the fact that D' is a Diagonal
 function lmul!(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke lmul!(D::Diagonal, A::AbstractVecOrMat)
     f = _wrapperop(A)
     rmul!(f(A), f(D))
     A
@@ -444,16 +449,14 @@ function lmul!(D::Diagonal, T::Tridiagonal)
 end
 function _lmul!(D::Diagonal, A::UpperOrLowerTriangular)
     P = parent(A)
-    isunit = A isa UnitUpperOrUnitLowerTriangular
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
-        rowstart = isupper ? firstindex(A,1) : col+isunit
-        rowstop = isupper ? col-isunit : lastindex(A,1)
+        rowstart = isupper ? firstindex(A,1) : col
+        rowstop = isupper ? col : lastindex(A,1)
         for row in rowstart:rowstop
             P[row, col] = D.diag[row] * P[row, col]
         end
     end
-    isunit && _setdiag!(P, identity, D.diag)
     TriWrapper = isupper ? UpperTriangular : LowerTriangular
     return TriWrapper(P)
 end
@@ -768,20 +771,24 @@ end
 for Tri in (:UpperTriangular, :LowerTriangular)
     UTri = Symbol(:Unit, Tri)
     # 2 args
-    for (fun, f) in zip((:mul, :rmul!, :rdiv!, :/), (:identity, :identity, :inv, :inv))
+    for (fun, f) in zip((:mul, :/), (:identity, :inv))
         g = fun == :mul ? :* : fun
         @eval $fun(A::$Tri, D::Diagonal) = $Tri($g(A.data, D))
         @eval $fun(A::$UTri, D::Diagonal) = $Tri(_setdiag!($g(A.data, D), $f, D.diag))
     end
+    @eval rmul!(A::$Tri, D::Diagonal) = $Tri(rmul!(A.data, D))
+    @eval rdiv!(A::$Tri, D::Diagonal) = $Tri(rdiv!(A.data, D))
     @eval mul(A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
             @invoke mul(A::AbstractMatrix, D::Diagonal)
     @eval mul(A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
             @invoke mul(A::AbstractMatrix, D::Diagonal)
-    for (fun, f) in zip((:mul, :lmul!, :ldiv!, :\), (:identity, :identity, :inv, :inv))
+    for (fun, f) in zip((:mul, :\), (:identity, :inv))
         g = fun == :mul ? :* : fun
         @eval $fun(D::Diagonal, A::$Tri) = $Tri($g(D, A.data))
         @eval $fun(D::Diagonal, A::$UTri) = $Tri(_setdiag!($g(D, A.data), $f, D.diag))
     end
+    @eval lmul!(D::Diagonal, A::$Tri) = $Tri(lmul!(D, A.data))
+    @eval ldiv!(D::Diagonal, A::$Tri) = $Tri(ldiv!(D, A.data))
     @eval mul(D::Diagonal, A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}) =
             @invoke mul(D::Diagonal, A::AbstractMatrix)
     @eval mul(D::Diagonal, A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}) =
@@ -967,15 +974,18 @@ function diag(D::Diagonal, k::Integer=0)
     end
     return v
 end
-tr(D::Diagonal) = sum(tr, D.diag)
-det(D::Diagonal) = prod(det, D.diag)
+tr(D::Diagonal{<:Number}) = sum(D.diag)
+det(D::Diagonal{<:Number}) = prod(D.diag)
+tr(D::Diagonal) = isempty(D.diag) ? zero(promote_leaf_eltypes(D.diag)) : sum(tr, D.diag)
+# for block-diagonal matrices, the empty case returns the determinant of an empty block
+det(D::Diagonal) = isempty(D.diag) ? det(zeros(promote_leaf_eltypes(D.diag), 0, 0)) : prod(det, D.diag)
 function logdet(D::Diagonal{<:Complex}) # make sure branch cut is correct
     z = sum(log, D.diag)
     complex(real(z), rem2pi(imag(z), RoundNearest))
 end
 
 # Matrix functions
-for f in (:exp, :cis, :log, :sqrt,
+for f in (:exp, :cis, :log, :sqrt, :abs,
           :cos, :sin, :tan, :csc, :sec, :cot,
           :cosh, :sinh, :tanh, :csch, :sech, :coth,
           :acos, :asin, :atan, :acsc, :asec, :acot,
@@ -1110,10 +1120,12 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
     if size(A, 1) == size(A, 2) && isdiag(A)
         return eigen(Diagonal(A), D; sortby)
     elseif all(isposdef, D.diag)
-        S = promote_type(eigtype(eltype(A)), eltype(D))
-        return eigen(A, cholesky(Diagonal{S}(D)); sortby)
+        S = promote_type(eigtype(A), _valeltype(D))
+        return _tohalf(promote_type(eltype(A), eltype(D)), eigen(A, cholesky(Diagonal{S}(D)); sortby))
     else
-        return eigen!(D \ A; sortby)
+        B = D \ A
+        # `eigen!` only exists for BLAS element types
+        return eltype(B) <: BlasFloat ? eigen!(B; sortby) : eigen(B; sortby)
     end
 end
 
@@ -1156,7 +1168,7 @@ function generic_normp(D::Diagonal, p)
     end
     return v
 end
-norm_x_minus_y(D1::Diagonal, D2::Diagonal) = norm_x_minus_y(D1.diag, D2.diag)
+norm_x_minus_y(D1::Diagonal, D2::Diagonal, ::typeof(norm)) = norm_x_minus_y(D1.diag, D2.diag, norm)
 
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)

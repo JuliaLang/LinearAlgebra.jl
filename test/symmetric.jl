@@ -1317,16 +1317,17 @@ end
             end
         end
         #nice functions
-        for f in (x->x^2, exp, cos, sin, tan, cosh, sinh, tanh, atan, asinh, cbrt)
+        for f in (x->x^2, exp, cos, sin, tan, cosh, sinh, tanh, atan, asinh, cbrt, abs)
             if T <: Real
-                @test @inferred(f(a)) isa Matrix{T}
+                f != abs && @test @inferred(f(a)) isa Matrix{T}
                 @test @inferred(f(syma)) isa Symmetric{T}
                 @test @inferred(f(symtria)) isa Symmetric{T}
                 @test @inferred(f(herma)) isa Hermitian{T}
             else
-                f != cbrt && @test @inferred(f(a)) isa Matrix{T}
+                f != cbrt && f != abs && @test @inferred(f(a)) isa Matrix{T}
                 @test @inferred(f(herma)) isa Hermitian{T}
             end
+            f == abs && @test @inferred(f(a)) isa Hermitian{T}
         end
         #special case cis
         if T <: Real

@@ -132,7 +132,7 @@ function _svd!(A::StridedMatrix{T}, full::Bool, alg::QRIteration) where {T<:Blas
 end
 
 # count positive singular values S ≥ given tolerances, S assumed sorted
-function _count_svdvals(S, atol::Real, rtol::Real)
+function _count_svdvals(S, atol::Number, rtol::Real)
     isempty(S) && return 0
     tol = max(rtol * S[1], atol)
     return iszero(S[1]) ? 0 : searchsortedlast(S, tol, rev=true)
@@ -190,11 +190,11 @@ julia> Uonly == U
 true
 ```
 """
-function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T}
-    svd!(eigencopy_oftype(A, eigtype(T)); full, alg, atol, rtol)
+function svd(A::AbstractVecOrMat; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0)
+    svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
 end
 function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T <: Union{Float16,Complex{Float16}}}
-    A = svd!(eigencopy_oftype(A, eigtype(T)); full, alg, atol, rtol)
+    A = svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
     return SVD{T}(A)
 end
 function svd(x::Number; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Real=0, rtol::Real=0)
@@ -254,8 +254,8 @@ julia> svdvals(A)
  0.0
 ```
 """
-svdvals(A::AbstractMatrix{T}) where {T} = svdvals!(eigencopy_oftype(A, eigtype(T)))
-svdvals(A::AbstractVector{T}) where {T} = [convert(eigtype(T), norm(A))]
+svdvals(A::AbstractMatrix{T}) where {T} = _tohalf(T, svdvals!(eigencopy_oftype(A, eigtype(A))))
+svdvals(A::AbstractVector{T}) where {T} = _tohalf(T, [convert(eigtype(T), norm(A))])
 svdvals(x::Number) = abs(x)
 svdvals(S::SVD{<:Any,T}) where {T} = (S.S)::Vector{T}
 
@@ -272,7 +272,7 @@ and `ϵ` is the [`eps`](@ref) of the element type of `S`.
 !!! compat "Julia 1.12"
     The `rank(::SVD)` method requires at least Julia 1.12.
 """
-function rank(S::SVD; atol::Real=0, rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
+function rank(S::SVD; atol::Number=zero(eltype(S.S)), rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
     tol = max(atol, rtol*S.S[1])
     count(>(tol), S.S)
 end
@@ -293,7 +293,7 @@ The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest 
 !!! compat "Julia 1.13"
     The `atol` and `rtol` arguments require Julia 1.13 or later.
 """
-function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
+function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Number=zero(eltype(F.S)), rtol::Real = (eps(real(float(one(T))))*min(size(F)...))*iszero(atol)) where T
     m, n = size(F)
     k = _count_svdvals(F.S, atol, rtol)
     if k == 0
@@ -306,7 +306,7 @@ function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Real=0, rtol::Real = (eps(r
     return B
 end
 
-function pinv(F::SVD{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(F)...))*iszero(atol)) where T
+function pinv(F::SVD{T}; atol::Number=zero(eltype(F.S)), rtol::Real = (eps(real(float(one(T))))*min(size(F)...))*iszero(atol)) where T
     k = _count_svdvals(F.S, atol, rtol)
     @views SVD(copy(F.Vt[k:-1:1, :]'), inv.(F.S[k:-1:1]), copy(F.U[:,k:-1:1]'))
 end
@@ -316,7 +316,7 @@ function inv(F::SVD)
     @inbounds for i in eachindex(F.S)
         iszero(F.S[i]) && throw(SingularException(i))
     end
-    k = _count_svdvals(F.S, 0, eps(real(eltype(F))))
+    k = _count_svdvals(F.S, zero(eltype(F.S)), eps(real(eltype(F))))
     return @views (F.S[1:k] .\ F.Vt[1:k, :])' * F.U[:,1:k]'
 end
 
@@ -519,8 +519,8 @@ julia> U == Uonly
 true
 ```
 """
-function svd(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}) where {TA,TB}
-    S = promote_type(eigtype(TA),TB)
+function svd(A::AbstractMatrix, B::AbstractMatrix)
+    S = promote_type(eigtype(A), _valeltype(B))
     return svd!(copy_similar(A, S), copy_similar(B, S))
 end
 # This method can be heavily optimized but it is probably not critical
@@ -629,8 +629,8 @@ julia> svdvals(A, B)
 ```
 """
 function svdvals(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
-    return svdvals!(copy_similar(A, S), copy_similar(B, S))
+    S = promote_type(eigtype(A), _valeltype(B))
+    return _tohalf(promote_type(TA, TB), svdvals!(copy_similar(A, S), copy_similar(B, S)))
 end
 svdvals(x::Number, y::Number) = abs(x/y)
 

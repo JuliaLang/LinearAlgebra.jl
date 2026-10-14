@@ -134,6 +134,8 @@ end
 # as is the LAPACK default (for complex λ — LAPACK sorts by λ for the Hermitian/Symmetric case)
 eigsortby(λ::Real) = λ
 eigsortby(λ::Complex) = (real(λ),imag(λ))
+# generic fallback for other number types, e.g. dimensionful quantities
+eigsortby(λ::Number) = (real(λ),imag(λ))
 function sorteig!(λ::AbstractVector, X::AbstractMatrix, sortby::Union{Function,Nothing}=eigsortby)
     if sortby !== nothing && !issorted(λ, by=sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
@@ -263,11 +265,11 @@ function eigen(A::AbstractMatrix{T}; permute::Bool=true, scale::Bool=true, sortb
     return Eigen(values, vectors)
 end
 function _eigen(A::AbstractMatrix{T}; permute=true, scale=true, sortby=eigsortby) where {T}
-    isdiag(A) && return eigen(Diagonal{eigtype(T)}(diag(A)); sortby)
+    isdiag(A) && return eigen(Diagonal{eigtype(A)}(diag(A)); sortby)
     if ishermitian(A)
-        eigen!(eigencopy_oftype(Hermitian(A), eigtype(T)); sortby)
+        eigen!(eigencopy_oftype(Hermitian(A), eigtype(A)); sortby)
     else
-        eigen!(eigencopy_oftype(A, eigtype(T)); permute, scale, sortby)
+        eigen!(eigencopy_oftype(A, eigtype(A)); permute, scale, sortby)
     end
 end
 
@@ -337,6 +339,18 @@ end
 
 # promotion type to use for eigenvalues of a Matrix{T}
 eigtype(T) = promote_type(Float32, typeof(zero(T)/sqrt(abs2(one(T)))))
+# for arrays with an abstract eltype, take the promoted type of the stored values into account
+eigtype(A::AbstractArray) = eigtype(_valeltype(A))
+
+# Half-precision input is computed in single precision (LAPACK has no half-precision
+# routines); convert the results back so that they match the input precision, as
+# done for the factorizations `eigen`, `svd` and `cholesky`.
+_tohalf(::Type, x) = x
+_tohalf(::Type{<:Union{Float16,Complex{Float16}}}, x::AbstractArray{<:Real}) = convert(AbstractArray{Float16}, x)
+_tohalf(::Type{<:Union{Float16,Complex{Float16}}}, x::AbstractArray{<:Complex}) = convert(AbstractArray{ComplexF16}, x)
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::Eigen) = Eigen(_tohalf(T, F.values), _tohalf(T, F.vectors))
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::GeneralizedEigen) =
+    GeneralizedEigen(_tohalf(T, F.values), _tohalf(T, F.vectors))
 
 """
     eigvals(A; permute::Bool=true, scale::Bool=true, sortby) -> values
@@ -361,7 +375,7 @@ julia> eigvals(diag_matrix)
 ```
 """
 eigvals(A::AbstractMatrix{T}; kws...) where T =
-    eigvals!(eigencopy_oftype(A, eigtype(T)); kws...)
+    _tohalf(T, eigvals!(eigencopy_oftype(A, eigtype(A)); kws...))
 
 """
 For a scalar input, `eigvals` will return a scalar.
@@ -545,8 +559,8 @@ true
 ```
 """
 function eigen(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
-    eigen!(copy_similar(A, S), copy_similar(B, S); kws...)
+    S = promote_type(eigtype(A), _valeltype(B))
+    _tohalf(promote_type(TA, TB), eigen!(copy_similar(A, S), copy_similar(B, S); kws...))
 end
 eigen(A::Number, B::Number) = eigen(fill(A,1,1), fill(B,1,1))
 
@@ -640,8 +654,8 @@ julia> eigvals(A,B)
 ```
 """
 function eigvals(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
-    return eigvals!(copy_similar(A, S), copy_similar(B, S); kws...)
+    S = promote_type(eigtype(A), _valeltype(B))
+    return _tohalf(promote_type(TA, TB), eigvals!(copy_similar(A, S), copy_similar(B, S); kws...))
 end
 
 """

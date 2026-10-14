@@ -123,6 +123,14 @@ end
     end
 end
 
+@testset "matrix log for non-BlasFloat matrices" begin
+    for T in (Int,)
+        A = UpperTriangular(T[1 2; 0 4])
+        B = log(float(A))
+        @test log(A) ≈ log(complex(A)) ≈ B
+    end
+end
+
 Areal   = randn(n, n)/2
 Aimg    = randn(n, n)/2
 A2real  = randn(n, n)/2
@@ -918,8 +926,13 @@ end
     end
 end
 
-@testset "(l/r)mul! and (l/r)div! for non-contiguous matrices" begin
+@testset "(l/r)mul! and (l/r)div! for non-contiguous arrays" begin
     U = UpperTriangular(reshape(collect(3:27.0),5,5))
+    b = float.(1:10)
+    b2 = copy(b); b2v = view(b2, 1:2:9); b2vc = copy(b2v)
+    @test lmul!(U, b2v) == lmul!(U, b2vc)
+    b2 = copy(b); b2v = view(b2, 1:2:9); b2vc = copy(b2v)
+    @test ldiv!(U, b2v) ≈ ldiv!(U, b2vc)
     B = float.(collect(reshape(1:100, 10,10)))
     B2 = copy(B); B2v = view(B2, 1:2:9, 1:5); B2vc = copy(B2v)
     @test lmul!(U, B2v) == lmul!(U, B2vc)
@@ -1113,6 +1126,35 @@ end
     end
 end
 
+@testset "zero for triangular matrices" begin
+    A = rand(4, 4)
+    @test zero(UpperTriangular(A)) isa UpperTriangular
+    @test zero(LowerTriangular(A)) isa LowerTriangular
+    @test iszero(zero(UpperTriangular(A)))
+    @test iszero(zero(LowerTriangular(A)))
+    @test zero(UnitUpperTriangular(A)) isa UpperTriangular
+    @test zero(UnitLowerTriangular(A)) isa LowerTriangular
+    @test iszero(zero(UnitUpperTriangular(A)))
+    @test iszero(zero(UnitLowerTriangular(A)))
+    @test iszero(diag(zero(UnitUpperTriangular(A))))
+    @test iszero(diag(zero(UnitLowerTriangular(A))))
+
+        # non-strided case: zero forwards to parent
+    struct ZeroTestWrapTri{T} <: AbstractArray{T,2}
+        parent::Matrix{T}
+    end
+    Base.size(A::ZeroTestWrapTri) = size(A.parent)
+    Base.getindex(A::ZeroTestWrapTri, i, j) = A.parent[i,j]
+    Base.zero(A::ZeroTestWrapTri) = ZeroTestWrapTri(zero(A.parent))
+
+    for T in (UpperTriangular, LowerTriangular)
+        Z = zero(T(ZeroTestWrapTri([1.0 2.0; 3.0 4.0])))
+        @test Z isa T
+        @test parent(Z) isa ZeroTestWrapTri
+        @test iszero(Z)
+    end
+end
+
 @testset "eigenvalue sorting" begin
     for T in (Float64, ComplexF64, Float16, ComplexF16)
         A = randn(T, 4, 4)
@@ -1124,6 +1166,19 @@ end
             @test B * F.vectors ≈ F.vectors * Diagonal(F.values)
             @test F.values ≈ eigvals(B; sortby = LinearAlgebra.eigsortby)
             @test F.vectors ≈ eigvecs(B; sortby = LinearAlgebra.eigsortby)
+        end
+    end
+end
+
+@testset "issue #1749: ldiv! with lazy adjoint/transpose parent" begin
+    M = ComplexF64[1 2+3im 1im; 4-1im 5 2-im; 3+im 2im 7]
+    b = ComplexF64[1, 2, 3]
+    B = ComplexF64[1 4; 2 5; 3 6]
+    for P in (transpose(M'), adjoint(transpose(M)), transpose(M), M')
+        for W in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+            A = W(P)
+            @test A \ b ≈ Matrix(A) \ b ≈ lu(Matrix(A)) \ b
+            @test A \ B ≈ Matrix(A) \ B ≈ lu(Matrix(A)) \ B
         end
     end
 end
