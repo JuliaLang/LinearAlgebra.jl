@@ -13,6 +13,16 @@ for file in readlines(joinpath(@__DIR__, "testgroups"))
     push!(testfiles, file * ".jl")
 end
 
+# Optionally run only a subset of the test files, e.g. LINALG_TEST_SHARD="1/2".
+# Files are assigned to shards round-robin in the order of `testgroups`.
+let shard = get(ENV, "LINALG_TEST_SHARD", "")
+    if !isempty(shard)
+        i, n = parse.(Int, split(shard, '/'))
+        1 <= i <= n || error("invalid LINALG_TEST_SHARD=$shard")
+        keepat!(testfiles, i:n:length(testfiles))
+    end
+end
+
 # ParallelTestRunner comes from the Pkg.test target; Julia base CI runs this
 # file without it and falls back to the serial path.
 if Base.find_package("ParallelTestRunner") !== nothing

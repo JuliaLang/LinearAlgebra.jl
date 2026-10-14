@@ -13,48 +13,52 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    name: test (${{ matrix.config.os }}, ${{ matrix.config.arch }}, ${{ matrix.julia-version }}, shard ${{ matrix.shard }})
+    runs-on: ${{ matrix.config.os }}
     # timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-        julia-arch:
-          - x64
-          - x86
         julia-version:
           - 'nightly'
-        test-args:
-          - ''
-        include:
-          - os: macOS-latest
-            julia-arch: aarch64
-            julia-version: 'nightly'
-            test-args: '--jobs=2'
-          - os: macOS-15-intel
-            julia-arch: x64
-            julia-version: 'nightly'
+        # Test files are split round-robin across shards (see test/runtests.jl).
+        shard:
+          - '1/2'
+          - '2/2'
+        # Coverage and forced bounds checking are only enabled on the Linux jobs;
+        # the remaining jobs run with the default bounds checking and without
+        # coverage instrumentation, which is considerably faster.
+        config:
+          - {os: ubuntu-latest, arch: x64, coverage: true, test-args: ''}
+          - {os: ubuntu-latest, arch: x86, coverage: true, test-args: ''}
+          - {os: windows-latest, arch: x64, coverage: false, test-args: ''}
+          - {os: windows-latest, arch: x86, coverage: false, test-args: ''}
+          - {os: macOS-latest, arch: aarch64, coverage: false, test-args: '--jobs=2'}
+          - {os: macOS-15-intel, arch: x64, coverage: false, test-args: ''}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.julia-version }}
-          arch: ${{ matrix.julia-arch }}
+          arch: ${{ matrix.config.arch }}
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         with:
           compiled_modules: 'existing'
-          test_args: ${{ matrix.test-args }}
+          coverage: ${{ matrix.config.coverage }}
+          check_bounds: ${{ matrix.config.coverage && 'yes' || 'auto' }}
+          test_args: ${{ matrix.config.test-args }}
         env:
           JULIA_PRUNE_OLD_LA: 'true'
           JULIA_NUM_THREADS: 1
+          LINALG_TEST_SHARD: ${{ matrix.shard }}
       - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.config.coverage
       - uses: codecov/codecov-action@v7
+        if: matrix.config.coverage
         with:
-          file: lcov.info
+          files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
   docs:
     runs-on: ubuntu-latest
