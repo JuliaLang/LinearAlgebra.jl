@@ -36,6 +36,9 @@ jobs:
           - os: macOS-15-intel
             arch: x64
             julia-version: 'nightly'
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+            julia-version: 'nightly'
           # macOS aarch64 also runs with forced bounds checks and collects coverage
           # of the code specific to Apple silicon
           - os: macOS-latest
