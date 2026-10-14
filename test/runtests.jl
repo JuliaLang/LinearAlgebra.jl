@@ -2,6 +2,15 @@
 
 include("prune_old_LA.jl")
 
+# `--comprehensive` selects comprehensive mode (see test/README.md). It is passed on
+# through the environment, which the test workers inherit.
+let i = findfirst(==("--comprehensive"), ARGS)
+    if i !== nothing
+        deleteat!(ARGS, i)
+        ENV["LINALG_TEST_COMPREHENSIVE"] = "true"
+    end
+end
+
 using Test, LinearAlgebra
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")

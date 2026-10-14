@@ -13,50 +13,71 @@ concurrency:
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
   test:
-    name: test (${{ matrix.config.os }}, ${{ matrix.config.arch }}, ${{ matrix.julia-version }}, shard ${{ matrix.shard }})
-    runs-on: ${{ matrix.config.os }}
+    name: test (${{ matrix.os }}, ${{ matrix.arch }}, ${{ matrix.julia-version }}${{ matrix.shard && format(', comprehensive {0}', matrix.shard) || '' }})
+    runs-on: ${{ matrix.os }}
     # timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
+        # Standard mode everywhere (see test/README.md), without coverage.
+        os:
+          - ubuntu-latest
+          - windows-latest
+        arch:
+          - x64
+          - x86
         julia-version:
           - 'nightly'
-        # Test files are split round-robin across shards (see test/runtests.jl).
-        shard:
-          - '1/2'
-          - '2/2'
-        # Coverage and forced bounds checking are only enabled on the Linux jobs;
-        # the remaining jobs run with the default bounds checking and without
-        # coverage instrumentation, which is considerably faster.
-        config:
-          - {os: ubuntu-latest, arch: x64, coverage: true, test-args: ''}
-          - {os: ubuntu-latest, arch: x86, coverage: true, test-args: ''}
-          - {os: windows-latest, arch: x64, coverage: false, test-args: ''}
-          - {os: windows-latest, arch: x86, coverage: false, test-args: ''}
-          - {os: macOS-latest, arch: aarch64, coverage: false, test-args: '--jobs=2'}
-          - {os: macOS-15-intel, arch: x64, coverage: false, test-args: ''}
+        exclude:
+          # ubuntu x64 runs the comprehensive tests below instead
+          - os: ubuntu-latest
+            arch: x64
+        include:
+          - os: macOS-15-intel
+            arch: x64
+            julia-version: 'nightly'
+          # macOS aarch64 also runs with forced bounds checks and collects coverage
+          # of the code specific to Apple silicon
+          - os: macOS-latest
+            arch: aarch64
+            julia-version: 'nightly'
+            test-args: '--jobs=2'
+            check-bounds: 'yes'
+            coverage: true
+          # Comprehensive mode with coverage, split into two shards (see test/runtests.jl)
+          - os: ubuntu-latest
+            arch: x64
+            julia-version: 'nightly'
+            shard: '1/2'
+            coverage: true
+          - os: ubuntu-latest
+            arch: x64
+            julia-version: 'nightly'
+            shard: '2/2'
+            coverage: true
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.julia-version }}
-          arch: ${{ matrix.config.arch }}
+          arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         with:
           compiled_modules: 'existing'
-          coverage: ${{ matrix.config.coverage }}
-          check_bounds: ${{ matrix.config.coverage && 'yes' || 'auto' }}
-          test_args: ${{ matrix.config.test-args }}
+          coverage: ${{ matrix.coverage == true }}
+          check_bounds: ${{ matrix.check-bounds || 'auto' }}
+          test_args: ${{ matrix.test-args }}
         env:
           JULIA_PRUNE_OLD_LA: 'true'
           JULIA_NUM_THREADS: 1
+          LINALG_TEST_COMPREHENSIVE: ${{ matrix.shard && 'true' || 'false' }}
           LINALG_TEST_SHARD: ${{ matrix.shard }}
       - uses: julia-actions/julia-processcoverage@v1
-        if: matrix.config.coverage
+        if: matrix.coverage == true
       - uses: codecov/codecov-action@v7
-        if: matrix.config.coverage
+        if: matrix.coverage == true
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
