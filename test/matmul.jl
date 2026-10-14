@@ -14,6 +14,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.OffsetArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 ## Test Julia fallbacks to BLAS routines
 
@@ -123,7 +124,8 @@ end
         @test mul!(ones(T, 1, 1), fill(T(NaN), 1, 1), ones(T, 1, 1), 0.0, 1.0) == ones(T, 1, 1)
     end
     # BLAS eltypes reach the 1x1 kernel with Symmetric/Hermitian wrappers through the symm/hemm path
-    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+    for (A, B) in ((AA, BB), (float(AAi), float(BBi)),
+                   (@static COMPREHENSIVE ? ((AAi, BBi), (float(AA), float(BB))) : ())...),
             wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
         @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
         @test mul!(fill(one(eltype(A)), 1, 1), wrapper_a(A), wrapper_b(B), 2, 3) ==
@@ -154,7 +156,8 @@ end
         @test_throws DimensionMismatch [1 2; 0 0; 0 0] * [1 2]
     end
     # BLAS eltypes reach the small-matrix kernels with Symmetric/Hermitian wrappers through the symm/hemm path
-    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+    for (A, B) in ((AA, BB), (float(AAi), float(BBi)),
+                   (@static COMPREHENSIVE ? ((AAi, BBi), (float(AA), float(BB))) : ())...),
             wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
         @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
     end
@@ -179,7 +182,8 @@ end
         @test_throws DimensionMismatch [1 2 3; 0 0 0; 0 0 0] * [1 2 3]
     end
     # BLAS eltypes reach the small-matrix kernels with Symmetric/Hermitian wrappers through the symm/hemm path
-    for (A, B) in ((AA, BB), (AAi, BBi), (float(AA), float(BB)), (float(AAi), float(BBi))),
+    for (A, B) in ((AA, BB), (float(AAi), float(BBi)),
+                   (@static COMPREHENSIVE ? ((AAi, BBi), (float(AA), float(BB))) : ())...),
             wrapper_a in mul_wrappers, wrapper_b in mul_wrappers
         @test wrapper_a(A) * wrapper_b(B) == Array(wrapper_a(A)) * Array(wrapper_b(B))
     end
@@ -500,7 +504,7 @@ end
 end
 
 @testset "dot product of subarrays of vectors (floats, negative stride, issue #37767)" begin
-    for T in (Float32, Float64, ComplexF32, ComplexF64)
+    for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         a = Vector{T}(3:2:7)
         b = Vector{T}(1:10)
         v = view(b, 7:-2:3)
@@ -513,7 +517,7 @@ end
 end
 
 @testset "dot product of stride-vector like input" begin
-    for T in (Float32, Float64, ComplexF32, ComplexF64)
+    for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         a = randn(T, 10)
         b = view(a, 1:10)
         c = reshape(b, 5, 2)
@@ -525,7 +529,7 @@ end
     end
 end
 
-@testset "Complex matrix x real MatOrVec etc (issue #29224)" for T in (Float32, Float64)
+@testset "Complex matrix x real MatOrVec etc (issue #29224)" for T in (Float64, (@static COMPREHENSIVE ? (Float32,) : ())...)
     A0 = randn(complex(T), 10, 10)
     B0 = randn(T, 10, 10)
     @testset "Combination Mat{$(complex(T))} Mat{$T}" for Bax1 in (1:5, 2:2:10), Bax2 in (1:5, 2:2:10)
@@ -565,7 +569,7 @@ end
     _matmulres(M, v) = [mapreduce(*, +, row, v) for row in eachrow(M)]
     testmatmul(M, v) = @test M * v ≈ _matmulres(M, v)
 
-    @testset for T in (Float32, Float64), n = (4, 5)
+    @testset for T in (Float64, (@static COMPREHENSIVE ? (Float32,) : ())...), n = (4, 5)
         M1 = reshape(Vector{T}(1:n^2), n, n)
         M2 = reinterpret(reshape, T, [Tuple(T(i + j) for j in 1:n) for i in 1:n])
         v = convert(Vector{Complex{T}}, (1:n) .+ im .* (4 .+ (1:n)))
@@ -596,7 +600,7 @@ end
     end
 end
 
-@testset "matrix x vector with negative lda or 0 stride" for T in (Float32, Float64)
+@testset "matrix x vector with negative lda or 0 stride" for T in (Float64, (@static COMPREHENSIVE ? (Float32,) : ())...)
     for TA in (T, complex(T)), TB in (T, complex(T))
         A = view(randn(TA, 10, 10), 1:10, 10:-1:1) # negative lda
         v = view([randn(TB)], 1 .+ 0(1:10)) # 0 stride
@@ -644,7 +648,7 @@ end
 end
 
 @testset "5-arg syrk! & herk!" begin
-    for T in (Float32, Float64, ComplexF32, ComplexF64), A in (randn(T, 5), randn(T, 5, 5))
+    for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...), A in (randn(T, 5), randn(T, 5, 5))
         B = A' * A
         C = B isa Number ? [B;;] : Matrix(Hermitian(B))
         @test mul!(copy(C), A', A, true, 2) ≈ 3C
@@ -779,7 +783,7 @@ end
 # issue #6450
 @test dot(Any[1.0, 2.0], Any[3.5, 4.5]) === 12.5
 
-@testset "dot" for elty in (Float32, Float64, ComplexF32, ComplexF64)
+@testset "dot" for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
     x = convert(Vector{elty}, [1.0, 2.0, 3.0])
     y = convert(Vector{elty}, [3.5, 4.5, 5.5])
     @test_throws DimensionMismatch dot(x, 1:2, y, 1:3)
@@ -851,7 +855,7 @@ end
     @test copy(A') == A'
 end
 
-@testset "gemv! and gemm_wrapper for $elty" for elty in [Float32, Float64, ComplexF64, ComplexF32]
+@testset "gemv! and gemm_wrapper for $elty" for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
     A10x10, x10, x11 = Array{elty}.(undef, ((10, 10), 10, 11))
     @test_throws DimensionMismatch LinearAlgebra.gemv!(x10, 'N', A10x10, x11)
     @test_throws DimensionMismatch LinearAlgebra.gemv!(x11, 'N', A10x10, x10)
@@ -932,7 +936,7 @@ function test_mul(C, A, B, S)
 end
 
 @testset "mul! vs * for special types" begin
-    eltypes = [Float32, Float64, Int64(-100):Int64(100)]
+    eltypes = [Float64, Int64(-100):Int64(100), (@static COMPREHENSIVE ? (Float32,) : ())...]
     for k in [3, 4, 10]
         T = rand(eltypes)
         bi1 = Bidiagonal(rand(T, k), rand(T, k - 1), rand([:U, :L]))
@@ -1372,7 +1376,7 @@ end
 end
 
 @testset "generic matmul checks axes (issue #1670)" begin
-    @testset "n = $n, T = $T" for n in (2, 3, 4), T in (Float64, BigFloat, Int)
+    @testset "n = $n, T = $T" for n in (2, 3, 4), T in (Float64, Int, (@static COMPREHENSIVE ? (BigFloat,) : ())...)
         M1 = rand(T <: Integer ? (1:9) : T, n, n)
         M2 = rand(T <: Integer ? (1:9) : T, n, n)
         Or = OffsetArray(M1, -2, 0) # offset rows
