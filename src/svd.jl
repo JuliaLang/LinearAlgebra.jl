@@ -679,9 +679,9 @@ Vt factor:
 
 julia> nullspace(F)
 3×1 Matrix{Float64}:
-  0.4082482904638629
+ 0.4082482904638629
  -0.816496580927726
-  0.408248290463863
+ 0.40824829046386296
 ```
 """
 function nullspace(F::SVD; atol::Real=0, rtol::Real = (min(size(F.U, 1), size(F.V, 1))*eps(real(float(oneunit(eltype(F))))))*iszero(atol))
