@@ -330,12 +330,16 @@ end
 @testset "nullspcae svd" begin
     # Test that we can get the nullspace
     A1 = [1.0 1.0; 2.0 0.0; -1.0 1.0] * [1.0 1.0 1.0; 1.0 -1.0 1.0]
-    N1 = nullspace(svd(A1))
+    N1 = nullspace(svd(A1, alg=LinearAlgebra.QRIteration()))
     @test norm(A1*N1) < 3*eps(eltype(A1))
+    N2 = nullspace(svd(A1, alg=LinearAlgebra.DivideAndConquer()))
+    @test norm(A1*N2) < 3*eps(eltype(A1))
 
     A2 = [1.0 1.0; -1.0 2.0; 3.0 3.0; 2.0 4.0] * [1.0 1.0 1.0 1.0; 1.0 -1.0 1.0 -1.0]
-    null2 = nullspace(svd(A2))
-    @test norm(A2 * null2) < 8 * maximum(A2) * eps(eltype(A2))
+    n1 = nullspace(svd(A2, alg=LinearAlgebra.QRIteration()))
+    @test norm(A2 * n1) < 8 * maximum(A2) * eps(eltype(A2))
+    n2 = nullspace(svd(A2, alg=LinearAlgebra.DivideAndConquer()))
+    @test norm(A2 * n2) < 8 * maximum(A2) * eps(eltype(A2))
 end
 
 end # module TestSVD

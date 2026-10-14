@@ -640,7 +640,50 @@ AbstractArray(F::SVD) = AbstractMatrix(F)
 Matrix(F::SVD) = Array(AbstractArray(F))
 Array(F::SVD) = Matrix(F)
 
-# compute nullspace directly from SVD
+"""
+    nullspace(S::SVD; atol::Real=0, rtol::Real=min(n,m)*ϵ)
+
+Computes a basis for the nullspace of a matrix directly from its singular value
+decomposition `S` by including the (right-)singular vectors (rows of `S.Vt`) whose singular
+values have magnitudes smaller than `max(atol, rtol*σ₁)`, where `σ₁` is the largest
+singular value.
+
+By default, the relative tolerance `rtol` is `n*ϵ`, where `n` is the size of the smallest
+dimension, and `ϵ` is the [`eps`](@ref) of the element type of `S`.
+
+# Examples
+```jldoctest
+julia> A = [1 1; 2 0; -1 1]*[1 2 3; 3 2 1]
+3×3 Matrix{Int64}:
+ 4  4   4
+ 2  4   6
+ 2  0  -2
+
+julia> F = svd(A, alg=LinearAlgebra.QRIteration())
+SVD{Float64, Float64, Matrix{Float64}, Vector{Float64}}
+U factor:
+3×3 Matrix{Float64}:
+ -0.673105    0.462165  -0.57735
+ -0.736799   -0.351843   0.57735
+  0.0636942   0.814008   0.57735
+singular values:
+3-element Vector{Float64}:
+ 10.027069108300799
+  3.384949792442987
+  5.768888059150692e-16
+Vt factor:
+3×3 Matrix{Float64}:
+ -0.402773  -0.562439  -0.722106
+  0.819212   0.130367  -0.558477
+ -0.408248   0.816497  -0.408248
+
+julia> nullspace(F)
+3×1 Matrix{Float64}:
+ -0.4082482904638629
+  0.8164965809277258
+ -0.4082482904638631
+```
+"""
 function nullspace(F::SVD; atol::Real=0, rtol::Real = (min(size(F.U, 1), size(F.V, 1))*eps(real(float(oneunit(eltype(F))))))*iszero(atol))
     r = rank(F; atol, rtol)
     indstart = r + 1 # nullspace starts after the numerical rank + 1
