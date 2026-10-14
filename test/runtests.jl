@@ -14,12 +14,14 @@ for file in readlines(joinpath(@__DIR__, "testgroups"))
 end
 
 # Optionally run only a subset of the test files, e.g. LINALG_TEST_SHARD="1/2".
-# Files are assigned to shards round-robin in the order of `testgroups`.
+# `testgroups` is sorted by decreasing runtime, and files are dealt out to the
+# shards in a snake order (1, 2, 2, 1, 1, 2, ...) to balance the total runtime.
 let shard = get(ENV, "LINALG_TEST_SHARD", "")
     if !isempty(shard)
         i, n = parse.(Int, split(shard, '/'))
         1 <= i <= n || error("invalid LINALG_TEST_SHARD=$shard")
-        keepat!(testfiles, i:n:length(testfiles))
+        snake(p) = (r = fld(p - 1, n); k = mod(p - 1, n) + 1; iseven(r) ? k : n + 1 - k)
+        keepat!(testfiles, [p for p in eachindex(testfiles) if snake(p) == i])
     end
 end
 
