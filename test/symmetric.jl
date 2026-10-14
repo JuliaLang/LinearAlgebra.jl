@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.Quaternions
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 Random.seed!(1010)
 
@@ -48,7 +49,8 @@ end
     n = 10
     areal = randn(n,n)/2
     aimg  = randn(n,n)/2
-    @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
+    @testset for eltya in (Float64, ComplexF64, BigFloat,
+                           (@static COMPREHENSIVE ? (Float32, ComplexF32, Int) : ())...)
         a = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
         asym = transpose(a) + a                 # symmetric indefinite
         aherm = a' + a                 # Hermitian indefinite
@@ -730,7 +732,8 @@ end
 end
 
 @testset "$HS solver with $RHS RHS - $T" for HS in (Hermitian, Symmetric),
-        RHS in (Hermitian, Symmetric, Diagonal, UpperTriangular, LowerTriangular),
+        RHS in (Symmetric, Diagonal, UpperTriangular,
+                (@static COMPREHENSIVE ? (Hermitian, LowerTriangular) : ())...),
         T   in (Float64, ComplexF64)
     D = rand(T, 10, 10); D = D'D
     A = HS(D)
@@ -916,9 +919,10 @@ end
 end
 
 @testset "Multiplications symmetric/hermitian for T=$T and S=$S for size n=$n" for T in
-        (Float16, Float32, Float64, BigFloat, Quaternion{Float64}),
-        S in (T <: Quaternion ? (Quaternion{Float64},) : (ComplexF16, ComplexF32, ComplexF64, Quaternion{Float64})),
-        n in (2, 3, 4)
+        (Float64, (@static COMPREHENSIVE ? (Float16, Float32, BigFloat, Quaternion{Float64}) : ())...),
+        S in (T <: Quaternion ? (Quaternion{Float64},) :
+              (ComplexF64, (@static COMPREHENSIVE ? (ComplexF16, ComplexF32, Quaternion{Float64}) : ())...)),
+        n in (3, (@static COMPREHENSIVE ? (2, 4) : ())...)
     let A = transpose(Symmetric(rand(S, n, n))), Bv = Vector(rand(T, n)), Bm = Matrix(rand(T, n,n))
         @test A * Bv ≈ Matrix(A) * Bv
         @test A * Bm ≈ Matrix(A) * Bm
@@ -1023,8 +1027,10 @@ end
 end
 
 @testset "hermitian part" begin
-    for T in [Float32, Complex{Float32}, Int32, Rational{Int32},
-              Complex{Int32}, Complex{Rational{Int32}}]
+    # one real floating-point type and one complex non-floating-point type cover both
+    # branches below; the other types run in comprehensive mode
+    for T in (Float32, Complex{Int32},
+              (@static COMPREHENSIVE ? (Complex{Float32}, Int32, Rational{Int32}, Complex{Rational{Int32}}) : ())...)
         f, f!, t = hermitianpart, hermitianpart!, T <: Real ? transpose : adjoint
         X = T[1 2 3; 4 5 6; 7 8 9]
         T <: Complex && (X .+= im .* X)
@@ -1289,7 +1295,7 @@ end
 
 @testset "asin/acos/acosh/tanh for matrix outside the real domain" begin
     M = [0 2;2 0] #eigenvalues are ±2
-    for T ∈ (Float32, Float64, ComplexF32, ComplexF64)
+    for T ∈ (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         M2 = Hermitian(T.(M))
         @test sin(asin(M2)) ≈ M2
         @test cos(acos(M2)) ≈ M2
@@ -1299,7 +1305,7 @@ end
 end
 
 @testset "type inference of matrix functions" begin
-    for T ∈ (Float32, Float64, ComplexF32, ComplexF64)
+    for T ∈ (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         a = randn(T, 2, 2)
         syma = Symmetric(a)
         symtria = SymTridiagonal(syma)
