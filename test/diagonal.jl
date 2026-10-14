@@ -689,44 +689,38 @@ end
             for (T, rtype) in zip(Tmats, restypes)
                 adjtype = (rtype == LowerTriangular) ? UpperTriangular : LowerTriangular
 
-                # Triangular mul/ldiv Diagonal
+                TA = Array(T)
+                # Triangular mul/div Diagonal
                 R = T * D
-                TA = Array(T)
-                @test R ≈ TA * M
-                @test isa(R, rtype)
+                @test R::rtype ≈ TA * M
                 R = T \ D
-                TA = Array(T)
-                @test R ≈ TA \ M
-                @test isa(R, rtype)
+                @test R::rtype ≈ TA \ M
+                R = T / D
+                @test R::rtype ≈ TA / M                
 
                 # Diagonal mul/rdiv Triangular
                 R = D * T
-                @test R ≈ M * TA
-                @test isa(R, rtype)
+                @test R::rtype ≈ M * TA
                 R = D / T
-                TA = Array(T)
-                @test R ≈ M / TA
-                @test isa(R, rtype)
+                @test R::rtype ≈ M / TA
+                R = D \ T
+                @test R::rtype ≈ M \ TA
 
                 # Adjoint of Triangular * Diagonal
                 R = T' * D
-                @test R ≈ TA' * M
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ TA' * M
 
                 # Diagonal * Adjoint of Triangular
                 R = D * T'
-                @test R ≈ M * TA'
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ M * TA'
 
                 # Transpose of Triangular * Diagonal
                 R = transpose(T) * D
-                @test R ≈ transpose(TA) * M
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ transpose(TA) * M
 
                 # Diagonal * Transpose of Triangular
                 R = D * transpose(T)
-                @test R ≈ M * transpose(TA)
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ M * transpose(TA)
             end
         end
     end
