@@ -572,6 +572,55 @@ function rank(A::QRPivoted; atol::Real=0, rtol::Real=min(size(A)...) * eps(real(
     return something(findfirst(i -> abs(A.factors[i,i]) <= tol, 1:m), m+1) - 1
 end
 
+"""
+    nullspace(F::QRPivoted; atol::Real=0, rtol::Real=min(n,m)*ϵ)
+
+Compute an orthonormal basis for the nullspace of the matrix `A` from its pivoted QR
+factorization `F = qr(A, ColumnNorm())`. The numerical rank `r` is determined as in
+[`rank(::QRPivoted)`](@ref) with the tolerances `atol` and `rtol`. Writing
+`A[:, F.p] = Q * [R₁₁ R₁₂; 0 R₂₂]` with `R₁₁` of size `r×r`, the columns of
+`[-R₁₁ \\ R₁₂; I]` (with rows permuted back by `F.p`) span the nullspace, and they are
+orthonormalized before being returned.
+
+Like [`rank(::QRPivoted)`](@ref), this is typically faster than the SVD-based
+[`nullspace`](@ref) method for matrices but may be less reliable for ill-conditioned matrices.
+
+!!! compat "Julia 1.14"
+    The `nullspace(::QRPivoted)` method requires at least Julia 1.14.
+"""
+function nullspace(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps(real(float(eltype(F)))) * iszero(atol))
+    m, n = size(F)
+    T = eltype(F)
+    (m == 0 || n == 0) && return Matrix{T}(I, n, n)
+    r = rank(F; atol, rtol)
+    R = F.R
+    # A[:, p] * [-R₁₁ \ R₁₂; I] = Q * [0; R₂₂] ≈ 0
+    Y = zeros(T, n, n - r)
+    Y[1:r, :] = -(UpperTriangular(view(R, 1:r, 1:r)) \ view(R, 1:r, r+1:n))
+    for j in 1:n-r
+        Y[r+j, j] = one(T)
+    end
+    # orthonormalize, then undo the column pivoting
+    return Matrix(qr!(Y).Q)[invperm(F.p), :]
+end
+
+"""
+    cond(F::Union{QR,QRCompactWY,QRPivoted}, p::Real=2)
+
+Condition number in the operator 2-norm of the matrix `A` from its QR factorization
+`F = qr(A)` or `F = qr(A, ColumnNorm())`, computed as `cond(F.R, 2)`. This is exact since
+neither `F.Q` nor the column permutation changes 2-norms. Other values of `p` are not
+supported, because the QR factorization does not preserve the operator `1`- and `Inf`-norms;
+use `cond(A, p)` or `cond(Matrix(F), p)` instead.
+
+!!! compat "Julia 1.14"
+    The `cond` methods for QR factorizations require at least Julia 1.14.
+"""
+function cond(F::Union{QR,QRCompactWY,QRPivoted}, p::Real=2)
+    p == 2 || throw(ArgumentError(lazy"only the 2-norm condition number can be computed from a QR factorization, got p = $p; use cond(A, p) or cond(Matrix(F), p) instead"))
+    return cond(F.R, 2)
+end
+
 # In-place solves store the right-hand side in the first m rows of B and overwrite
 # B with the n-row solution, so B must have exactly max(m, n) rows.
 function _check_qr_ldiv_rhs(A, B::AbstractVecOrMat)
