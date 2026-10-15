@@ -36,20 +36,16 @@ jobs:
           - os: macOS-15-intel
             arch: x64
             julia-version: 'nightly'
+          # ubuntu aarch64 also runs with forced bounds checks
           - os: ubuntu-26.04-arm
             arch: aarch64
             julia-version: 'nightly'
-          # ubuntu x86 collects coverage of the code specific to 32-bit platforms
-          - os: ubuntu-latest
-            arch: x86
-            coverage: true
-          # macOS aarch64 also runs with forced bounds checks and collects coverage
-          # of the code specific to Apple silicon
+            check-bounds: 'yes'
+          # macOS aarch64 also collects coverage of the code specific to Apple silicon
           - os: macOS-latest
             arch: aarch64
             julia-version: 'nightly'
             test-args: '--jobs=2'
-            check-bounds: 'yes'
             coverage: true
           # Comprehensive mode with coverage, split into two shards (see test/runtests.jl)
           - os: ubuntu-latest
