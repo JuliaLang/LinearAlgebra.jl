@@ -310,11 +310,8 @@ eigvecs(A::Union{Number, AbstractMatrix}; kws...) =
 eigvecs(F::Union{Eigen, GeneralizedEigen}) = F.vectors
 
 eigvals(F::Union{Eigen, GeneralizedEigen}) = F.values
-eigmin(F::Union{Eigen, GeneralizedEigen}) = _realextremum(minimum, eigvals(F))
-eigmax(F::Union{Eigen, GeneralizedEigen}) = _realextremum(maximum, eigvals(F))
-_realextremum(f, v) = f(v)
-# complex-typed but real-valued, e.g., from a Hermitian solver; otherwise error as before
-_realextremum(f, v::AbstractVector{<:Complex}) = all(isreal, v) ? f(real, v) : f(v)
+eigmin(F::Union{Eigen, GeneralizedEigen}) = complex(minimum(eigsortby, eigvals(F))...)
+eigmax(F::Union{Eigen, GeneralizedEigen}) = complex(maximum(eigsortby, eigvals(F))...)
 
 """
     eigvals!(A; permute::Bool=true, scale::Bool=true, sortby) -> values
