@@ -7,6 +7,8 @@
 
 module ImmutableArrays
 
+using LinearAlgebra
+
 export ImmutableArray
 
 "An immutable wrapper type for arrays."
@@ -27,5 +29,35 @@ AbstractArray{T,N}(A::ImmutableArray{S,N}) where {S,T,N} = ImmutableArray(Abstra
 
 Base.copy(A::ImmutableArray) = ImmutableArray(copy(A.data))
 Base.zero(A::ImmutableArray) = ImmutableArray(zero(A.data))
+
+Base.:(-)(A::ImmutableArray) = ImmutableArray(-A.data)
+Base.:(+)(A::ImmutableArray, B::ImmutableArray) = ImmutableArray(A.data + B.data)
+Base.:(-)(A::ImmutableArray, B::ImmutableArray) = ImmutableArray(A.data - B.data)
+
+Base.:(*)(A::ImmutableArray, x::Number) = ImmutableArray(A.data * x)
+Base.:(*)(x::Number, A::ImmutableArray) = ImmutableArray(x * A.data)
+
+Base.:(*)(A::ImmutableArray, B::ImmutableArray) = ImmutableArray(A.data * B.data)
+
+function LinearAlgebra.eigen(S::SymTridiagonal{T, <:ImmutableArray{T,1}}) where {T}
+    # Use the underlying data for the eigen computation
+    S2 = SymTridiagonal(diag(S), diag(S,1))
+    eigvals, eigvecs = eigen(S2)
+    return Eigen(ImmutableArray(eigvals), ImmutableArray(eigvecs))
+end
+
+function LinearAlgebra.eigen(S::Symmetric{T, <:ImmutableArray{T,2}}) where {T<:Real}
+    # Use the underlying data for the eigen computation
+    S2 = Symmetric(parent(S).data)
+    eigvals, eigvecs = eigen(S2)
+    return Eigen(ImmutableArray(eigvals), ImmutableArray(eigvecs))
+end
+
+function LinearAlgebra.eigen(S::Hermitian{T, <:ImmutableArray{T,2}}) where {T<:Union{Real,Complex}}
+    # Use the underlying data for the eigen computation
+    S2 = Hermitian(parent(S).data)
+    eigvals, eigvecs = eigen(S2)
+    return Eigen(ImmutableArray(eigvals), ImmutableArray(eigvecs))
+end
 
 end

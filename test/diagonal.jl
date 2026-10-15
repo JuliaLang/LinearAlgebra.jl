@@ -16,6 +16,7 @@ using Main.LinearAlgebraTestHelpers.InfiniteArrays
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
 
 const n=12 # Size of matrix problem to test
 Random.seed!(1)
@@ -234,7 +235,7 @@ LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
             @test Array(D*a) ≈ DM*a
             @test Array(D/a) ≈ DM/a
             if elty <: Real
-                @test convert(Array, abs.(D)^a) ≈ abs.(DM)^a
+                @test convert(Array, abs.(D)^a) ≈ Matrix(abs.(DM))^a
             else
                 @test convert(Array, D^a) ≈ DM^a rtol=max(eps(relty), 1e-15) # TODO: improve precision
             end
@@ -688,36 +689,38 @@ end
             for (T, rtype) in zip(Tmats, restypes)
                 adjtype = (rtype == LowerTriangular) ? UpperTriangular : LowerTriangular
 
-                # Triangular * Diagonal
-                R = T * D
                 TA = Array(T)
-                @test R ≈ TA * M
-                @test isa(R, rtype)
+                # Triangular mul/div Diagonal
+                R = T * D
+                @test R::rtype ≈ TA * M
+                R = T \ D
+                @test R::rtype ≈ TA \ M
+                R = T / D
+                @test R::rtype ≈ TA / M
 
-                # Diagonal * Triangular
+                # Diagonal mul/rdiv Triangular
                 R = D * T
-                @test R ≈ M * TA
-                @test isa(R, rtype)
+                @test R::rtype ≈ M * TA
+                R = D / T
+                @test R::rtype ≈ M / TA
+                R = D \ T
+                @test R::rtype ≈ M \ TA
 
                 # Adjoint of Triangular * Diagonal
                 R = T' * D
-                @test R ≈ TA' * M
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ TA' * M
 
                 # Diagonal * Adjoint of Triangular
                 R = D * T'
-                @test R ≈ M * TA'
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ M * TA'
 
                 # Transpose of Triangular * Diagonal
                 R = transpose(T) * D
-                @test R ≈ transpose(TA) * M
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ transpose(TA) * M
 
                 # Diagonal * Transpose of Triangular
                 R = D * transpose(T)
-                @test R ≈ M * transpose(TA)
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ M * transpose(TA)
             end
         end
     end
@@ -1068,7 +1071,8 @@ end
 
 @testset "eigenvalue sorting" begin
     D = Diagonal([0.4, 0.2, -1.3])
-    @test eigvals(D) == eigen(D).values == [0.4, 0.2, -1.3] # not sorted by default
+    @test eigvals(D) == eigen(D).values == [-1.3, 0.2, 0.4] #sorted by default
+    @test eigvals(D; sortby=nothing) == eigen(D; sortby=nothing).values == [0.4, 0.2, -1.3]
     @test eigvals(D; sortby=LinearAlgebra.eigsortby) == [-1.3, 0.2, 0.4] # sortby keyword supported for eigvals(::Diagonal)
     @test eigvals(Matrix(D)) == eigen(Matrix(D)).values == [-1.3, 0.2, 0.4] # sorted even if diagonal special case is detected
     E = eigen(D; sortby=abs) # sortby keyword supported for eigen(::Diagonal)
@@ -1228,14 +1232,26 @@ end
     outTri = similar(TriA)
     out = similar(A)
     # 2 args
-    @testset for fun in (*, rmul!, rdiv!, /)
+    @testset for fun in (*, /)
         @test fun(copy(TriA), D)::Tri == fun(Matrix(TriA), D)
         @test fun(copy(UTriA), D)::Tri == fun(Matrix(UTriA), D)
     end
-    @testset for fun in (*, lmul!, ldiv!, \)
+    @testset for fun in (rmul!, rdiv!)
+        @test fun(copy(TriA), D)::Tri == fun(Matrix(TriA), D)
+        @test_throws ArgumentError fun(copy(UTriA), D) # issue #1600
+    end
+    @testset for fun in (*, \)
         @test fun(D, copy(TriA))::Tri == fun(D, Matrix(TriA))
         @test fun(D, copy(UTriA))::Tri == fun(D, Matrix(UTriA))
     end
+    @testset for fun in (lmul!, ldiv!)
+        @test fun(D, copy(TriA))::Tri == fun(D, Matrix(TriA))
+        @test_throws ArgumentError fun(D, copy(UTriA)) # issue #1600
+    end
+    @views TriA2 = Tri(copy(A)[[1, 2, 3, 4], [1, 2, 3, 4]]) #non-strided matrix
+    @test rmul!(TriA2, D) == rmul!(Matrix(TriA), D)
+    @views TriA2 = Tri(copy(A)[[1, 2, 3, 4], [1, 2, 3, 4]])
+    @test lmul!(D, TriA2) == lmul!(D, Matrix(TriA))
     # 3 args
     @test outTri === ldiv!(outTri, D, TriA)::Tri == ldiv!(out, D, Matrix(TriA))
     @test outTri === ldiv!(outTri, D, UTriA)::Tri == ldiv!(out, D, Matrix(UTriA))
@@ -1413,7 +1429,7 @@ end
 
     # AbstractArray out
     c = fill(0, 4, 4)
-    kron!(c, b, a) 
+    kron!(c, b, a)
     @test c == diagm([3, 6, 4, 8])
     @test c == kron!(fill(0, 4, 4), Matrix(b), Matrix(a)) # against dense kron!
     c = Matrix{Float64}(undef, 4, 4)
@@ -1596,6 +1612,40 @@ end
         test_isapprox_and_type(norm(D, Inf), norm(A, Inf))
         test_isapprox_and_type(norm(D, -Inf), norm(A, -Inf))
         test_isapprox_and_type(norm(D, 0), norm(A, 0))
+    end
+end
+
+@testset "tr and det of empty Diagonal (issue #1707)" begin
+    for T in (Int, Float32, ComplexF64, BigInt)
+        D = Diagonal(T[])
+        @test @inferred(tr(D)) == zero(T)
+        @test @inferred(det(D)) == one(T)
+        @test typeof(tr(D)) == typeof(tr(Diagonal(T[1]))) == T
+        @test typeof(det(D)) == typeof(det(Diagonal(T[1]))) == T
+    end
+    @test tr(Diagonal(Number[])) == 0
+    @test det(Diagonal(Number[])) == 1
+    # block-diagonal: result type matches the nonempty case
+    for B in (Matrix{Int}, Matrix{Float32}, Matrix{BigInt})
+        E = Diagonal(B[])
+        N = Diagonal([B(I, 2, 2), B(I, 2, 2)])
+        @test @inferred(tr(E)) == 0
+        @test @inferred(det(E)) == 1
+        @test typeof(tr(E)) == typeof(tr(N))
+        @test typeof(det(E)) == typeof(det(N))
+    end
+end
+
+@testset "products of Diagonal with transposed non-commutative matrices (issue #1750)" begin
+    i, j, k = Quaternion(0.0,1,0,0), Quaternion(0.0,0,1,0), Quaternion(0.0,0,0,1)
+    M = [i j; zero(i) k]
+    A = view(M, [1, 2], :)
+    D = Diagonal([j, k])
+    for op in (transpose, adjoint)
+        @test op(A) * D == Matrix(op(A)) * D
+        @test D * op(A) == D * Matrix(op(A))
+        @test rmul!(op(copy(M)), D) == Matrix(op(M)) * D
+        @test lmul!(D, op(copy(M))) == D * Matrix(op(M))
     end
 end
 

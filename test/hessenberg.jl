@@ -5,6 +5,7 @@ module TestHessenberg
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
+using LinearAlgebra: _lqmul!, _rqmul!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
@@ -69,8 +70,9 @@ let n = 10
         H = UpperHessenberg(Areal)
         @test Array(Hc + H) == Array(Hc) + Array(H)
         @test Array(Hc - H) == Array(Hc) - Array(H)
+        Hi = UpperHessenberg(Int.(Areal .÷ (1/8)))
         @testset "ldiv and rdiv" begin
-            for b in (b_, B_), H in (H, Hc, H', Hc', transpose(Hc))
+            for b in (b_, B_), H in (H, Hc, H', Hc', transpose(Hc), Hi)
                 @test H * (H \ b) ≈ b
                 @test (b' / H) * H ≈ (Matrix(b') / H) * H ≈ b'
                 @test (transpose(b) / H) * H ≈ (Matrix(transpose(b)) / H) * H ≈ transpose(b)
@@ -132,7 +134,7 @@ let n = 10
         @test size(H.Q) == size(A)
         @test size(H) == size(A)
         @test_throws FieldError H.Z
-        @test convert(Array, H) ≈ A
+        @test Array(H) ≈ A
         @test (H.Q * H.H) * H.Q' ≈ A ≈ (Matrix(H.Q) * Matrix(H.H)) * Matrix(H.Q)'
         @test (H.Q' * A) * H.Q ≈ H.H
         #getindex for HessenbergQ
@@ -144,19 +146,19 @@ let n = 10
         hessstring = sprint((t, s) -> show(t, "text/plain", s), H)
         qstring = sprint((t, s) -> show(t, "text/plain", s), H.Q)
         hstring = sprint((t, s) -> show(t, "text/plain", s), H.H)
-        @test hessstring == "$(summary(H))\nQ factor: $qstring\nH factor:\n$hstring"
+        @test hessstring == "$(summary(H))\nQ factor:\n$qstring\nH factor:\n$hstring"
 
         #iterate
         q,h = H
         @test q == H.Q
         @test h == H.H
 
-        @test convert(Array, 2 * H) ≈ 2 * A ≈ convert(Array, H * 2)
-        @test convert(Array, H + 2I) ≈ A + 2I ≈ convert(Array, 2I + H)
-        @test convert(Array, H + (2+4im)I) ≈ A + (2+4im)I ≈ convert(Array, (2+4im)I + H)
-        @test convert(Array, H - 2I) ≈ A - 2I ≈ -convert(Array, 2I - H)
-        @test convert(Array, -H) == -convert(Array, H)
-        @test convert(Array, 2*(H + (2+4im)I)) ≈ 2A + (4+8im)I
+        @test Array(2 * H) ≈ 2 * A ≈ Array(H * 2)
+        @test Array(H + 2I) ≈ A + 2I ≈ Array(2I + H)
+        @test Array(H + (2+4im)I) ≈ A + (2+4im)I ≈ Array((2+4im)I + H)
+        @test Array(H - 2I) ≈ A - 2I ≈ -Array(2I - H)
+        @test Array(-H) == -Array(H)
+        @test Array(2*(H + (2+4im)I)) ≈ 2A + (4+8im)I
 
         b = convert(Vector{eltype(H)}, b_)
         B = convert(Matrix{eltype(H)}, B_)
@@ -196,7 +198,7 @@ end
     n = 10
     A = Tridiagonal(rand(n-1), rand(n), rand(n-1))
     H = hessenberg(A)
-    @test convert(Array, H) ≈ A
+    @test Array(H) ≈ A
 end
 
 # check logdet on a matrix that has a positive determinant
@@ -331,9 +333,83 @@ end
         F = eigen(H)
         @test λ ≈ eigvals(Matrix(H)) ≈ F.values
         @test H * F.vectors ≈ F.vectors * Diagonal(λ)
-        if T <: LinearAlgebra.BlasFloat
-            λ2 = @invoke eigvals!(copy(H)::UpperHessenberg) # test fallback
-            @test λ ≈ λ2
+        @test Diagonal(F.vectors' * F.vectors) ≈ I
+    end
+
+    # be sure to test real-H cases with both purely real and complex eigvals
+    for H in (UpperHessenberg([-1.1 -0.3 -0.0 -0.6 0.5; -0.6 -1.8 -0.3 1.5 1.1; 0.0 1.8 -0.6 1.2 0.9; 0.0 0.0 -0.1 -0.5 -0.2; 0.0 0.0 0.0 -0.5 -1.7]),
+              UpperHessenberg([-0.6 1.0 0.4 0.4 0.3; 1.2 -0.2 -1.5 0.7 0.0; 0.0 -1.3 -1.0 0.5 0.2; 0.0 0.0 0.5 -0.6 0.0; 0.0 0.0 0.0 0.7 -1.5]))
+        λ = eigvals(H)
+        F = eigen(H)
+        @test λ ≈ eigvals(Matrix(H)) ≈ F.values
+        @test H * F.vectors ≈ F.vectors * Diagonal(λ)
+        @test Diagonal(F.vectors' * F.vectors) ≈ I
+    end
+end
+
+@testset "generic multiplication with HessenbergQ and its adjoint" begin
+    hessenbergQs(A) = (hessenberg(A).Q, hessenberg(Hermitian(A'A, :U)).Q, hessenberg(Hermitian(A'A, :L)).Q)
+
+    @testset "matches LAPACK: $elty, n=$n" for
+            elty in (Float32, Float64, ComplexF32, ComplexF64), n in (1, 2, 3, 5, 9)
+        A = elty <: Complex ? complex.(randn(n, n), randn(n, n)) : randn(n, n)
+        A = convert(Matrix{elty}, A)
+        for Q in hessenbergQs(A)
+            for p in (1, 3)
+                B = elty <: Complex ? complex.(randn(n, p), randn(n, p)) : randn(n, p)
+                B = convert(Matrix{elty}, B)
+                @test _lqmul!(Q, copy(B), Val(false)) ≈ lmul!(Q, copy(B))
+                @test _lqmul!(Q, copy(B), Val(true)) ≈ lmul!(Q', copy(B))
+                C = elty <: Complex ? complex.(randn(p, n), randn(p, n)) : randn(p, n)
+                C = convert(Matrix{elty}, C)
+                @test _rqmul!(copy(C), Q, Val(false)) ≈ rmul!(copy(C), Q)
+                @test _rqmul!(copy(C), Q, Val(true)) ≈ rmul!(copy(C), Q')
+            end
+            b = elty <: Complex ? complex.(randn(n), randn(n)) : randn(n)
+            b = convert(Vector{elty}, b)
+            @test _lqmul!(Q, copy(b), Val(false)) ≈ lmul!(Q, copy(b))
+            @test _lqmul!(Q, copy(b), Val(true)) ≈ lmul!(Q', copy(b))
+        end
+    end
+
+    # `Q` comes from LAPACK, the operand is `BigFloat`, so the generic methods run; `Qsq` is
+    # only `Float64`-accurate, hence the tolerance
+    @testset "non-BLAS operands: n=$n" for n in (1, 2, 5, 8)
+        for Q in hessenbergQs(randn(n, n))
+            Qsq = Matrix(Q)
+            for B in (big.(randn(n, 3)), big.(randn(n)))
+                @test lmul!(Q, copy(B)) ≈ Qsq * B rtol=1e-12
+                @test lmul!(Q', copy(B)) ≈ Qsq' * B rtol=1e-12
+                @test Q * B ≈ Qsq * B rtol=1e-12
+                @test Q' * B ≈ Qsq' * B rtol=1e-12
+            end
+            C = big.(randn(3, n))
+            @test rmul!(copy(C), Q) ≈ C * Qsq rtol=1e-12
+            @test rmul!(copy(C), Q') ≈ C * Qsq' rtol=1e-12
+            @test C * Q ≈ C * Qsq rtol=1e-12
+            @test C * Q' ≈ C * Qsq' rtol=1e-12
+        end
+    end
+
+    # the promoted reflectors are only Float64-accurate, so orthogonality holds to that
+    @testset "round trip and consistency of the two sides: n=$n" for n in (2, 5, 8)
+        for Q in hessenbergQs(randn(n, n))
+            Qb = convert(LinearAlgebra.AbstractQ{BigFloat}, Q)
+            Id = Matrix{BigFloat}(I, n, n)
+            @test lmul!(Qb', lmul!(Qb, copy(Id))) ≈ Id rtol=1e-12
+            @test rmul!(rmul!(copy(Id), Qb), Qb') ≈ Id rtol=1e-12
+            A = big.(randn(3, n))
+            @test rmul!(copy(A), Qb) ≈ collect(lmul!(Qb', collect(A'))')
+            @test rmul!(copy(A), Qb') ≈ collect(lmul!(Qb, collect(A'))')
+        end
+    end
+
+    @testset "dimension mismatch" begin
+        for Q in hessenbergQs(randn(6, 6))
+            @test_throws DimensionMismatch lmul!(Q, big.(randn(5, 2)))
+            @test_throws DimensionMismatch lmul!(Q', big.(randn(5, 2)))
+            @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q)
+            @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q')
         end
     end
 end

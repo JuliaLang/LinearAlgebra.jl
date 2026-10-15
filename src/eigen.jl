@@ -123,12 +123,19 @@ Base.iterate(S::Union{Eigen,GeneralizedEigen}) = (S.values, Val(:vectors))
 Base.iterate(S::Union{Eigen,GeneralizedEigen}, ::Val{:vectors}) = (S.vectors, Val(:done))
 Base.iterate(S::Union{Eigen,GeneralizedEigen}, ::Val{:done}) = nothing
 
-isposdef(A::Union{Eigen,GeneralizedEigen}) = isreal(A.values) && all(x -> x > 0, A.values)
+function isposdef(A::Union{Eigen,GeneralizedEigen})
+    if A isa Eigen && length(A.values) != size(A.vectors, 1)
+        throw(ArgumentError("isposdef not defined for truncated eigen factorization"))
+    end
+    return isreal(A.values) && all(x -> x > 0, A.values)
+end
 
 # pick a canonical ordering to avoid returning eigenvalues in "random" order
 # as is the LAPACK default (for complex λ — LAPACK sorts by λ for the Hermitian/Symmetric case)
 eigsortby(λ::Real) = λ
 eigsortby(λ::Complex) = (real(λ),imag(λ))
+# generic fallback for other number types, e.g. dimensionful quantities
+eigsortby(λ::Number) = (real(λ),imag(λ))
 function sorteig!(λ::AbstractVector, X::AbstractMatrix, sortby::Union{Function,Nothing}=eigsortby)
     if sortby !== nothing && !issorted(λ, by=sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
@@ -138,6 +145,21 @@ function sorteig!(λ::AbstractVector, X::AbstractMatrix, sortby::Union{Function,
     return λ, X
 end
 sorteig!(λ::AbstractVector, sortby::Union{Function,Nothing}=eigsortby) = sortby === nothing ? λ : sort!(λ, by=sortby)
+
+# similar to geevx! (specifically zgeevx), normalize eigenvectors to unit length
+# and make largest component real and positive
+function eigvec_normalize!(v::AbstractVector)
+    normalize!(v)
+    maxabs2, k = findmax(abs2, v) # largest component
+    if eltype(v) <: Real # just a sign flip
+        v[k] < 0 && (v .= .- v)
+    elseif maxabs2 > 0
+        v .*= conj(v[k]) / sqrt(maxabs2) # change phase to make v[k] real > 0
+        v[k] = real(v[k]) # imaginary part is just roundoff error
+    end
+    return v
+end
+eigvec_normalize!(X::AbstractMatrix) = (foreach(eigvec_normalize!, eachcol(X)); X)
 
 """
     eigen!(A; permute, scale, sortby)
@@ -184,7 +206,7 @@ end
 Compute the eigenvalue decomposition of `A`, returning an [`Eigen`](@ref) factorization object `F`
 which contains the eigenvalues in `F.values` and the normalized eigenvectors in the columns of the
 matrix `F.vectors`. This corresponds to solving an eigenvalue problem of the form
-`Ax =  λx`, where `A` is a matrix, `x` is an eigenvector, and `λ` is an eigenvalue.
+`Ax = λx`, where `A` is a matrix, `x` is an eigenvector, and `λ` is an eigenvalue.
 (The `k`th eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
@@ -198,9 +220,7 @@ make rows and columns more equal in norm. The default is `true` for both options
 
 By default, the eigenvalues and vectors are sorted lexicographically by `(real(λ),imag(λ))`.
 A different comparison function `by(λ)` can be passed to `sortby`, or you can pass
-`sortby=nothing` to leave the eigenvalues in an arbitrary order.   Some special matrix types
-(e.g. [`Diagonal`](@ref) or [`SymTridiagonal`](@ref)) may implement their own sorting convention and not
-accept a `sortby` keyword.
+`sortby=nothing` to leave the eigenvalues in an arbitrary order.
 
 # Examples
 ```jldoctest
@@ -245,11 +265,11 @@ function eigen(A::AbstractMatrix{T}; permute::Bool=true, scale::Bool=true, sortb
     return Eigen(values, vectors)
 end
 function _eigen(A::AbstractMatrix{T}; permute=true, scale=true, sortby=eigsortby) where {T}
-    isdiag(A) && return eigen(Diagonal{eigtype(T)}(diag(A)); sortby)
+    isdiag(A) && return eigen(Diagonal{eigtype(A)}(diag(A)); sortby)
     if ishermitian(A)
-        eigen!(eigencopy_oftype(Hermitian(A), eigtype(T)); sortby)
+        eigen!(eigencopy_oftype(Hermitian(A), eigtype(A)); sortby)
     else
-        eigen!(eigencopy_oftype(A, eigtype(T)); permute, scale, sortby)
+        eigen!(eigencopy_oftype(A, eigtype(A)); permute, scale, sortby)
     end
 end
 
@@ -308,17 +328,29 @@ julia> A
 ```
 """
 function eigvals!(A::StridedMatrix{<:BlasReal}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
-    issymmetric(A) && return sorteig!(eigvals!(Symmetric(A)), sortby)
+    issymmetric(A) && return eigvals!(Symmetric(A); sortby)
     _, valsre, valsim, _ = LAPACK.geevx!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), 'N', 'N', 'N', A)
     return sorteig!(iszero(valsim) ? valsre : complex.(valsre, valsim), sortby)
 end
 function eigvals!(A::StridedMatrix{<:BlasComplex}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
-    ishermitian(A) && return sorteig!(eigvals(Hermitian(A)), sortby)
+    ishermitian(A) && return eigvals!(Hermitian(A); sortby)
     return sorteig!(LAPACK.geevx!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), 'N', 'N', 'N', A)[2], sortby)
 end
 
 # promotion type to use for eigenvalues of a Matrix{T}
 eigtype(T) = promote_type(Float32, typeof(zero(T)/sqrt(abs2(one(T)))))
+# for arrays with an abstract eltype, take the promoted type of the stored values into account
+eigtype(A::AbstractArray) = eigtype(_valeltype(A))
+
+# Half-precision input is computed in single precision (LAPACK has no half-precision
+# routines); convert the results back so that they match the input precision, as
+# done for the factorizations `eigen`, `svd` and `cholesky`.
+_tohalf(::Type, x) = x
+_tohalf(::Type{<:Union{Float16,Complex{Float16}}}, x::AbstractArray{<:Real}) = convert(AbstractArray{Float16}, x)
+_tohalf(::Type{<:Union{Float16,Complex{Float16}}}, x::AbstractArray{<:Complex}) = convert(AbstractArray{ComplexF16}, x)
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::Eigen) = Eigen(_tohalf(T, F.values), _tohalf(T, F.vectors))
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::GeneralizedEigen) =
+    GeneralizedEigen(_tohalf(T, F.values), _tohalf(T, F.vectors))
 
 """
     eigvals(A; permute::Bool=true, scale::Bool=true, sortby) -> values
@@ -343,7 +375,7 @@ julia> eigvals(diag_matrix)
 ```
 """
 eigvals(A::AbstractMatrix{T}; kws...) where T =
-    eigvals!(eigencopy_oftype(A, eigtype(T)); kws...)
+    _tohalf(T, eigvals!(eigencopy_oftype(A, eigtype(A)); kws...))
 
 """
 For a scalar input, `eigvals` will return a scalar.
@@ -385,8 +417,8 @@ Stacktrace:
 ```
 """
 function eigmax(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
-    v = eigvals(A; permute, scale)
-    if eltype(v)<:Complex
+    v = eigvals(A; permute, scale, sortby=nothing)
+    if eltype(v) <: Complex
         throw(DomainError(A, "`A` cannot have complex eigenvalues."))
     end
     return maximum(v)
@@ -421,15 +453,26 @@ Stacktrace:
 ```
 """
 function eigmin(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
-    v = eigvals(A; permute, scale)
-    if eltype(v)<:Complex
+    v = eigvals(A; permute, scale, sortby=nothing)
+    if eltype(v) <: Complex
         throw(DomainError(A, "`A` cannot have complex eigenvalues."))
     end
     return minimum(v)
 end
 
-inv(A::Eigen) = A.vectors * inv(Diagonal(A.values)) / A.vectors
-det(A::Eigen) = prod(A.values)
+function inv(A::Eigen)
+    if length(A.values) != size(A.vectors, 1)
+        throw(ArgumentError("inv not defined for truncated eigen factorization"))
+    end
+    return A.vectors * inv(Diagonal(A.values)) / A.vectors
+end
+
+function det(A::Eigen)
+    if length(A.values) != size(A.vectors, 1)
+        throw(ArgumentError("det not defined for truncated eigen factorization"))
+    end
+    return prod(A.values)
+end
 
 # Generalized eigenproblem
 function eigen!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function,Nothing}=eigsortby) where T<:BlasReal
@@ -476,7 +519,7 @@ Compute the generalized eigenvalue decomposition of `A` and `B`, returning a
 [`GeneralizedEigen`](@ref) factorization object `F` which contains the generalized eigenvalues in
 `F.values` and the generalized eigenvectors in the columns of the matrix `F.vectors`.
 This corresponds to solving a generalized eigenvalue problem of the form
-`Ax =  λBx`, where `A, B` are matrices, `x` is an eigenvector, and `λ` is an eigenvalue.
+`Ax = λBx`, where `A, B` are matrices, `x` is an eigenvector, and `λ` is an eigenvalue.
 (The `k`th generalized eigenvector can be obtained from the slice `F.vectors[:, k]`.)
 
 Iterating the decomposition produces the components `F.values` and `F.vectors`.
@@ -516,8 +559,8 @@ true
 ```
 """
 function eigen(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
-    eigen!(copy_similar(A, S), copy_similar(B, S); kws...)
+    S = promote_type(eigtype(A), _valeltype(B))
+    _tohalf(promote_type(TA, TB), eigen!(copy_similar(A, S), copy_similar(B, S); kws...))
 end
 eigen(A::Number, B::Number) = eigen(fill(A,1,1), fill(B,1,1))
 
@@ -611,8 +654,8 @@ julia> eigvals(A,B)
 ```
 """
 function eigvals(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
-    return eigvals!(copy_similar(A, S), copy_similar(B, S); kws...)
+    S = promote_type(eigtype(A), _valeltype(B))
+    return _tohalf(promote_type(TA, TB), eigvals!(copy_similar(A, S), copy_similar(B, S); kws...))
 end
 
 """

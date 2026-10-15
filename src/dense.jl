@@ -5,8 +5,6 @@
 ## BLAS cutoff threshold constants
 
 #TODO const DOT_CUTOFF = 128
-const ASUM_CUTOFF = 32
-const NRM2_CUTOFF = 32
 
 # Generic cross-over constant based on benchmarking on a single thread with an i7 CPU @ 2.5GHz
 # L1 cache: 32K, L2 cache: 256K, L3 cache: 6144K
@@ -100,12 +98,6 @@ function norm(x::StridedVector{T}, rx::Union{UnitRange{TI},AbstractRange{TI}}) w
     end
     GC.@preserve x BLAS.nrm2(length(rx), pointer(x)+(first(rx)-1)*sizeof(T), step(rx))
 end
-
-norm1(x::Union{Array{T},StridedVector{T}}) where {T<:BlasReal} =
-    length(x) < ASUM_CUTOFF ? generic_norm1(x) : BLAS.asum(x)
-
-norm2(x::Union{Array{T},StridedVector{T}}) where {T<:BlasFloat} =
-    length(x) < NRM2_CUTOFF ? generic_norm2(x) : BLAS.nrm2(x)
 
 # Conservative assessment of types that have zero(T) defined for themselves
 """
@@ -423,7 +415,9 @@ end
 function diagm_container(size, kv::Pair{<:Integer,<:AbstractVector}...)
     T = promote_type(map(x -> eltype(x.second), kv)...)
     # For some type `T`, `zero(T)` is not a `T` and `zeros(T, ...)` fails.
-    U = promote_type(T, typeof(zero(T)))
+    # The type assertion helps inference when `T` is not a constant type: otherwise `U`
+    # is inferred as `Any` and `zeros(U, ...)` may also dispatch to `zeros(dims::Integer...)`.
+    U = promote_type(T, typeof(zero(T)))::Type
     return zeros(U, diagm_size(size, kv...)...)
 end
 diagm_container(size, kv::Pair{<:Integer,<:BitVector}...) =
@@ -710,7 +704,7 @@ julia> exp(A)
  0.0      2.71828
 ```
 """
-exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(eltype(A))))
+exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(A)))
 exp(A::AdjointAbsMat) = adjoint(exp(parent(A)))
 exp(A::TransposeAbsMat) = transpose(exp(parent(A)))
 
@@ -1016,7 +1010,7 @@ and then the complex square root of the triangular factor.
 If a real square root exists, then an extension of this method [^H87] that computes the real
 Schur form and then the real square root of the quasi-triangular factor is instead used.
 
-When a non-Hermitian matrix has two or more null eigenvalues, the square root may not exist. In this case, and when the `check` flag is true, the algorithm will verify `X^2≈A` and throw an error if not. 
+When a non-Hermitian matrix has two or more null eigenvalues, the square root may not exist. In this case, and when the `check` flag is true, the algorithm will verify `X^2≈A` and throw an error if not.
 
 [^BH83]:
 
@@ -1148,7 +1142,6 @@ function inv(A::StridedMatrix{T}) where T
         Ai = tril!(parent(inv(LowerTriangular(A))))
     else
         Ai = inv!(lu(A))
-        Ai = convert(typeof(parent(Ai)), Ai)
     end
     return Ai
 end
@@ -1157,6 +1150,32 @@ end
 # otherwise, this performs an out-of-place broadcast
 @inline _broadcast!!(f, dest::StridedArray, args...) = broadcast!(f, dest, args...)
 @inline _broadcast!!(f, dest, args...) = broadcast(f, args...)
+
+"""
+    abs(A::AbstractMatrix)
+
+Compute the matrix absolute value `|A| = sqrt(A'A)`
+
+# Examples
+```jldoctest
+julia> A = [1.0 2.0; 3.0 4.0];
+
+julia> abs(A)
+2×2 Hermitian{Float64, Matrix{Float64}}:
+ 2.05798  2.40098
+ 2.40098  3.77297
+```
+"""
+function abs(A::AbstractMatrix{T}) where T
+    if isdiag(A)
+        f(x) = convert(AbstractMatrix{float(T)}, x) #preserves complexes and quaternions
+        return Hermitian(applydiagonal(f ∘ abs ∘ float, A))
+    elseif ishermitian(A)
+        return abs(Hermitian(A))
+    end
+    u, s, v = svd(A)
+    return Hermitian(v * Diagonal(s) * v')
+end
 
 """
     cos(A::AbstractMatrix)
@@ -1611,17 +1630,18 @@ verify/rule out each property. It will short-circuit as soon as it can rule out
 symmetry/triangular structure. The return value can be reused for efficient solving
 of multiple systems. For example: `A=factorize(A); x=A\\b; y=A\\C`.
 
-| Properties of `A`          | type of factorization                          |
-|:---------------------------|:-----------------------------------------------|
+| Properties of `A`          | type of factorization                      |
+|:---------------------------|:-------------------------------------------|
 | Dense Symmetric/Hermitian  | Bunch-Kaufman (see [`bunchkaufman`](@ref)) |
-| Sparse Symmetric/Hermitian | LDLt (see [`ldlt`](@ref))      |
-| Triangular                 | Triangular                                     |
-| Diagonal                   | Diagonal                                       |
-| Bidiagonal                 | Bidiagonal                                     |
-| Tridiagonal                | LU (see [`lu`](@ref))            |
-| Symmetric real tridiagonal | LDLt (see [`ldlt`](@ref))      |
-| General square             | LU (see [`lu`](@ref))            |
-| General non-square         | QR (see [`qr`](@ref))            |
+| Sparse Symmetric/Hermitian | LDLt (see [`ldlt`](@ref))                  |
+| Triangular                 | Triangular                                 |
+| Diagonal                   | Diagonal                                   |
+| Bidiagonal                 | Bidiagonal                                 |
+| UniformScaling             | UniformScaling                             |
+| Tridiagonal                | LU (see [`lu`](@ref))                      |
+| Symmetric real tridiagonal | LDLt (see [`ldlt`](@ref))                  |
+| General square             | LU (see [`lu`](@ref))                      |
+| General non-square         | QR (see [`qr`](@ref))                      |
 
 # Examples
 ```jldoctest
@@ -1754,7 +1774,7 @@ end
 ## Moore-Penrose pseudoinverse
 
 """
-    pinv(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    pinv(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     pinv(M, rtol::Real) = pinv(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes the Moore-Penrose pseudoinverse.
@@ -1796,10 +1816,8 @@ julia> N = pinv(M)
   1.47287   -1.00775
  -0.930233   1.16279
 
-julia> M * N
-2×2 Matrix{Float64}:
- 1.0          -2.22045e-16
- 4.44089e-16   1.0
+julia> M * N ≈ I
+true
 ```
 
 [^pr1387]: PR 1387, "stable pinv least-squares", [LinearAlgebra.jl#1387](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387)
@@ -1810,9 +1828,10 @@ julia> M * N
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Number=zero(real(T)), rtol::Real = (eps(real(float(one(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
-    Tout = typeof(zero(T)/sqrt(oneunit(T) + oneunit(T)))
+    # inverse units of `T`, numeric type promoted as by a `sqrt` (Int -> Float64)
+    Tout = typeof(inv(oneunit(T)) / sqrt(one(T) + one(T)))
     if m == 0 || n == 0
         return similar(A, Tout, (n, m))
     end
@@ -1820,8 +1839,8 @@ function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(o
         dA = diagview(A)
         maxabsA = maximum(abs, dA)
         tol = max(rtol * maxabsA, atol)
-        B = fill!(similar(A, Tout, (n, m)), 0)
-        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(x)).(dA)
+        B = fill!(similar(A, Tout, (n, m)), zero(Tout))
+        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(Tout)).(dA)
         return B
     end
     SVD         = svd(A)
@@ -1840,10 +1859,10 @@ end
 ## Basis for null space
 
 """
-    nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    nullspace(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
 
-Computes a basis for the nullspace of `M` by including the singular
+Computes a basis for the nullspace of `M` by returning the (orthonormal) singular
 vectors of `M` whose singular values have magnitudes smaller than `max(atol, rtol*σ₁)`,
 where `σ₁` is `M`'s largest singular value.
 
@@ -1878,7 +1897,7 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Number=zero(real(eltype(A))), rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)

@@ -145,7 +145,7 @@ size(D::Diagonal) = (n = length(D.diag); (n,n))
 
 axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
 
-@inline function Base.isassigned(D::Diagonal, i::Int, j::Int)
+@inline function Base.isassigned(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, D, i, j) || return false
     if i == j
         @inbounds r = isassigned(D.diag, i)
@@ -155,7 +155,7 @@ axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
     r
 end
 
-@inline function Base.isstored(D::Diagonal, i::Int, j::Int)
+@inline function Base.isstored(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = Base.isstored(D.diag, i)
@@ -177,7 +177,7 @@ function Base.maximum(D::Diagonal{T}) where T <: Number
     return maxdiag
 end
 
-@inline function getindex(D::Diagonal, i::Int, j::Int)
+@inline function getindex(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = D.diag[i]
@@ -219,7 +219,7 @@ zeroslike(::Type{M}, sz::Tuple{Integer, Vararg{Integer}}) where {M<:AbstractMatr
     r
 end
 
-@inline function setindex!(D::Diagonal, v, i::Int, j::Int)
+@inline function setindex!(D::Diagonal, v, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds D.diag[i] = v
@@ -332,6 +332,14 @@ Base.literal_pow(::typeof(^), D::Diagonal, valp::Val) =
     Diagonal(Base.literal_pow.(^, D.diag, valp)) # for speed
 Base.literal_pow(::typeof(^), D::Diagonal, ::Val{-1}) = inv(D) # for disambiguation
 
+postop_proc(::MulOrDiv, C, _, ::Diagonal) = C
+postop_proc(::MulOrDiv, C, ::Diagonal, _) = C
+postop_proc(::MulOrDiv, C, ::Diagonal, ::Diagonal) = C
+postop_proc(::typeof(\), C, ::LowerOrUnitLowerTriangular, ::Diagonal) = LowerTriangular(C)
+postop_proc(::typeof(\), C, ::UpperOrUnitUpperTriangular, ::Diagonal) = UpperTriangular(C)
+postop_proc(::typeof(/), C, ::Diagonal, ::LowerOrUnitLowerTriangular) = LowerTriangular(C)
+postop_proc(::typeof(/), C, ::Diagonal, ::UpperOrUnitUpperTriangular) = UpperTriangular(C)
+
 function mul(Da::Diagonal, Db::Diagonal)
     matmul_size_check(size(Da), size(Db))
     return Diagonal(Da.diag .* Db.diag)
@@ -342,7 +350,12 @@ function (*)(D::Diagonal, V::AbstractVector)
     return D.diag .* V
 end
 
+_wrapperop_reverses_products(::Adjoint, ::Diagonal) = true
+_wrapperop_reverses_products(::Transpose{<:Union{Real,Complex}}, ::Diagonal{<:Union{Real,Complex}}) = true
+_wrapperop_reverses_products(A, D) = false
+
 function mul(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(D) * adj(A)))
 end
@@ -350,6 +363,7 @@ function mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Numbe
     @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
 end
 function mul(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(D::AbstractMatrix, A::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(A) * adj(D)))
 end
@@ -370,6 +384,7 @@ end
 # A' = A' * D => A = D' * A
 # This uses the fact that D' is a Diagonal
 function rmul!(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke rmul!(A::AbstractMatrix, D::Diagonal)
     f = _wrapperop(A)
     lmul!(f(D), f(A))
     A
@@ -386,23 +401,20 @@ function rmul!(T::Tridiagonal, D::Diagonal)
     end
     return T
 end
-for T in [:UpperTriangular, :UnitUpperTriangular,
-        :LowerTriangular, :UnitLowerTriangular]
+for T in (:UpperTriangular, :LowerTriangular)
     @eval rmul!(A::$T{<:Any, <:StridedMatrix}, D::Diagonal) = _rmul!(A, D)
     @eval lmul!(D::Diagonal, A::$T{<:Any, <:StridedMatrix}) = _lmul!(D, A)
 end
 function _rmul!(A::UpperOrLowerTriangular, D::Diagonal)
     P = parent(A)
-    isunit = A isa UnitUpperOrUnitLowerTriangular
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
-        rowstart = isupper ? firstindex(A,1) : col+isunit
-        rowstop = isupper ? col-isunit : lastindex(A,1)
+        rowstart = isupper ? firstindex(A,1) : col
+        rowstop = isupper ? col : lastindex(A,1)
         for row in rowstart:rowstop
             P[row, col] *= D.diag[col]
         end
     end
-    isunit && _setdiag!(P, identity, D.diag)
     TriWrapper = isupper ? UpperTriangular : LowerTriangular
     return TriWrapper(P)
 end
@@ -420,6 +432,7 @@ end
 # A' = D * A' => A = A * D'
 # This uses the fact that D' is a Diagonal
 function lmul!(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke lmul!(D::Diagonal, A::AbstractVecOrMat)
     f = _wrapperop(A)
     rmul!(f(A), f(D))
     A
@@ -440,16 +453,14 @@ function lmul!(D::Diagonal, T::Tridiagonal)
 end
 function _lmul!(D::Diagonal, A::UpperOrLowerTriangular)
     P = parent(A)
-    isunit = A isa UnitUpperOrUnitLowerTriangular
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
-        rowstart = isupper ? firstindex(A,1) : col+isunit
-        rowstop = isupper ? col-isunit : lastindex(A,1)
+        rowstart = isupper ? firstindex(A,1) : col
+        rowstop = isupper ? col : lastindex(A,1)
         for row in rowstart:rowstop
             P[row, col] = D.diag[row] * P[row, col]
         end
     end
-    isunit && _setdiag!(P, identity, D.diag)
     TriWrapper = isupper ? UpperTriangular : LowerTriangular
     return TriWrapper(P)
 end
@@ -606,8 +617,10 @@ function (*)(Da::Diagonal, Db::Diagonal, Dc::Diagonal)
     return Diagonal(Da.diag .* Db.diag .* Dc.diag)
 end
 
-/(A::AbstractVector, D::Diagonal) = _rdiv!(similar(A, promote_op(/, eltype(A), eltype(D))), A, D)
-/(A::AbstractMatrix, D::Diagonal) = _rdiv!(matprod_dest(A, D, promote_op(/, eltype(A), eltype(D))), A, D)
+matop_dest(::typeof(/), A, D::Diagonal) = similar(A, promote_op(/, eltype(A), eltype(D)))
+matop_dest(::typeof(/), A::HermOrSym, D::Diagonal) = similar(A, promote_op(/, eltype(A), eltype(D)), size(A))
+
+/(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matop_dest(/, A, D), A, D)
 
 rdiv!(A::AbstractVecOrMat, D::Diagonal) = @inline _rdiv!(A, A, D)
 # avoid copy when possible via internal 3-arg backend
@@ -628,12 +641,10 @@ function _rdiv!(B::AbstractVecOrMat, A::AbstractVecOrMat, D::Diagonal)
     B
 end
 
-function \(D::Diagonal, B::AbstractVector)
-    j = findfirst(iszero, D.diag)
-    isnothing(j) || throw(SingularException(j))
-    return D.diag .\ B
-end
-\(D::Diagonal, B::AbstractMatrix) = ldiv!(matprod_dest(D, B, promote_op(\, eltype(D), eltype(B))), D, B)
+matop_dest(::typeof(\), D::Diagonal, B) = similar(B, promote_op(\, eltype(D), eltype(B)))
+matop_dest(::typeof(\), D::Diagonal, B::HermOrSym) = similar(B, promote_op(\, eltype(D), eltype(B)), size(B))
+
+\(D::Diagonal, B::AbstractVecOrMat) = ldiv!(matop_dest(\, D, B), D, B)
 
 ldiv!(D::Diagonal, B::AbstractVecOrMat) = @inline ldiv!(B, D, B)
 function ldiv!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
@@ -680,14 +691,13 @@ ldiv!(Dc::Diagonal, Da::Diagonal, Db::Diagonal) = Diagonal(ldiv!(Dc.diag, Da, Db
 @propagate_inbounds _getldiag(T::Tridiagonal, i) = T.dl[i]
 @propagate_inbounds _getldiag(S::SymTridiagonal, i) = transpose(S.ev[i])
 
-function (\)(D::Diagonal, S::SymTridiagonal)
+function matop_dest(::typeof(\), D::Diagonal, S::SymTridiagonal)
     T = promote_op(\, eltype(D), eltype(S))
-    du = similar(S.ev, T, max(length(S.dv)-1, 0))
-    d  = similar(S.dv, T, length(S.dv))
-    dl = similar(S.ev, T, max(length(S.dv)-1, 0))
-    ldiv!(Tridiagonal(dl, d, du), D, S)
+    du = similar(S.ev, T)
+    d  = similar(S.dv, T)
+    return Tridiagonal(similar(du), d, du)
 end
-(\)(D::Diagonal, T::Tridiagonal) = ldiv!(similar(T, promote_op(\, eltype(D), eltype(T))), D, T)
+
 function ldiv!(T::Tridiagonal, D::Diagonal, S::Union{SymTridiagonal,Tridiagonal})
     m = size(S, 1)
     dd = D.diag
@@ -717,14 +727,13 @@ function ldiv!(T::Tridiagonal, D::Diagonal, S::Union{SymTridiagonal,Tridiagonal}
     return T
 end
 
-function (/)(S::SymTridiagonal, D::Diagonal)
-    T = promote_op(\, eltype(D), eltype(S))
-    du = similar(S.ev, T, max(length(S.dv)-1, 0))
-    d  = similar(S.dv, T, length(S.dv))
-    dl = similar(S.ev, T, max(length(S.dv)-1, 0))
-    _rdiv!(Tridiagonal(dl, d, du), S, D)
+function matop_dest(::typeof(/), S::SymTridiagonal, D::Diagonal)
+    T = promote_op(/, eltype(S), eltype(D))
+    du = similar(S.ev, T)
+    d  = similar(S.dv, T)
+    return Tridiagonal(similar(du), d, du)
 end
-(/)(T::Tridiagonal, D::Diagonal) = _rdiv!(matprod_dest(T, D, promote_op(/, eltype(T), eltype(D))), T, D)
+
 function _rdiv!(T::Tridiagonal, S::Union{SymTridiagonal,Tridiagonal}, D::Diagonal)
     n = size(S, 2)
     dd = D.diag
@@ -766,20 +775,24 @@ end
 for Tri in (:UpperTriangular, :LowerTriangular)
     UTri = Symbol(:Unit, Tri)
     # 2 args
-    for (fun, f) in zip((:mul, :rmul!, :rdiv!, :/), (:identity, :identity, :inv, :inv))
+    for (fun, f) in zip((:mul, :/), (:identity, :inv))
         g = fun == :mul ? :* : fun
         @eval $fun(A::$Tri, D::Diagonal) = $Tri($g(A.data, D))
         @eval $fun(A::$UTri, D::Diagonal) = $Tri(_setdiag!($g(A.data, D), $f, D.diag))
     end
+    @eval rmul!(A::$Tri, D::Diagonal) = $Tri(rmul!(A.data, D))
+    @eval rdiv!(A::$Tri, D::Diagonal) = $Tri(rdiv!(A.data, D))
     @eval mul(A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
             @invoke mul(A::AbstractMatrix, D::Diagonal)
     @eval mul(A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}, D::Diagonal) =
             @invoke mul(A::AbstractMatrix, D::Diagonal)
-    for (fun, f) in zip((:mul, :lmul!, :ldiv!, :\), (:identity, :identity, :inv, :inv))
+    for (fun, f) in zip((:mul, :\), (:identity, :inv))
         g = fun == :mul ? :* : fun
         @eval $fun(D::Diagonal, A::$Tri) = $Tri($g(D, A.data))
         @eval $fun(D::Diagonal, A::$UTri) = $Tri(_setdiag!($g(D, A.data), $f, D.diag))
     end
+    @eval lmul!(D::Diagonal, A::$Tri) = $Tri(lmul!(D, A.data))
+    @eval ldiv!(D::Diagonal, A::$Tri) = $Tri(ldiv!(D, A.data))
     @eval mul(D::Diagonal, A::$Tri{<:Any, <:StridedMaybeAdjOrTransMat}) =
             @invoke mul(D::Diagonal, A::AbstractMatrix)
     @eval mul(D::Diagonal, A::$UTri{<:Any, <:StridedMaybeAdjOrTransMat}) =
@@ -965,15 +978,18 @@ function diag(D::Diagonal, k::Integer=0)
     end
     return v
 end
-tr(D::Diagonal) = sum(tr, D.diag)
-det(D::Diagonal) = prod(det, D.diag)
+tr(D::Diagonal{<:Number}) = sum(D.diag)
+det(D::Diagonal{<:Number}) = prod(D.diag)
+tr(D::Diagonal) = isempty(D.diag) ? zero(promote_leaf_eltypes(D.diag)) : sum(tr, D.diag)
+# for block-diagonal matrices, the empty case returns the determinant of an empty block
+det(D::Diagonal) = isempty(D.diag) ? det(zeros(promote_leaf_eltypes(D.diag), 0, 0)) : prod(det, D.diag)
 function logdet(D::Diagonal{<:Complex}) # make sure branch cut is correct
     z = sum(log, D.diag)
     complex(real(z), rem2pi(imag(z), RoundNearest))
 end
 
 # Matrix functions
-for f in (:exp, :cis, :log, :sqrt,
+for f in (:exp, :cis, :log, :sqrt, :abs,
           :cos, :sin, :tan, :csc, :sec, :cot,
           :cosh, :sinh, :tanh, :csch, :sech, :coth,
           :acos, :asin, :atan, :acsc, :asec, :acot,
@@ -1037,8 +1053,8 @@ _ortho_eltype(T) = Base.promote_op(/, T, T)
 _ortho_eltype(T::Type{<:Number}) = typeof(one(T)/one(T))
 
 #Eigensystem
-eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing) = sorteig!(copy(D.diag), sortby)
-eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing) =
+eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) = sorteig!(copy(D.diag), sortby)
+eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
     sorteig!(reduce(vcat, eigvals(x; sortby=nothing) for x in D.diag), sortby) #For block matrices, etc.
 function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
     facts = [eigen(x; sortby=nothing) for x in D.diag]
@@ -1062,7 +1078,7 @@ function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
     end
     return λ, vecs
 end
-function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing)
+function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
     if any(!isfinite, D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
@@ -1080,7 +1096,7 @@ function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{
     end
     Eigen(λ, evecs)
 end
-function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=nothing)
+function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
     if any(any(!isfinite, x) for x in D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
@@ -1092,7 +1108,7 @@ function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=tr
     end
     Eigen(λ, evecs)
 end
-function eigen(Da::Diagonal, Db::Diagonal; sortby::Union{Function,Nothing}=nothing)
+function eigen(Da::Diagonal, Db::Diagonal; sortby::Union{Function,Nothing}=eigsortby)
     if any(!isfinite, Da.diag) || any(!isfinite, Db.diag)
         throw(ArgumentError("matrices contain Infs or NaNs"))
     end
@@ -1101,17 +1117,19 @@ function eigen(Da::Diagonal, Db::Diagonal; sortby::Union{Function,Nothing}=nothi
     end
     return GeneralizedEigen(eigen(Db \ Da; sortby)...)
 end
-function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=nothing)
+function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=eigsortby)
     if any(iszero, D.diag)
         throw(ArgumentError("right-hand side diagonal matrix is singular"))
     end
     if size(A, 1) == size(A, 2) && isdiag(A)
         return eigen(Diagonal(A), D; sortby)
     elseif all(isposdef, D.diag)
-        S = promote_type(eigtype(eltype(A)), eltype(D))
-        return eigen(A, cholesky(Diagonal{S}(D)); sortby)
+        S = promote_type(eigtype(A), _valeltype(D))
+        return _tohalf(promote_type(eltype(A), eltype(D)), eigen(A, cholesky(Diagonal{S}(D)); sortby))
     else
-        return eigen!(D \ A; sortby)
+        B = D \ A
+        # `eigen!` only exists for BLAS element types
+        return eltype(B) <: BlasFloat ? eigen!(B; sortby) : eigen(B; sortby)
     end
 end
 
@@ -1154,7 +1172,7 @@ function generic_normp(D::Diagonal, p)
     end
     return v
 end
-norm_x_minus_y(D1::Diagonal, D2::Diagonal) = norm_x_minus_y(D1.diag, D2.diag)
+norm_x_minus_y(D1::Diagonal, D2::Diagonal, ::typeof(norm)) = norm_x_minus_y(D1.diag, D2.diag, norm)
 
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)

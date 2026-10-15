@@ -391,7 +391,7 @@ function lmul!(R::Rotation, A::AbstractVecOrMat)
     return A
 end
 function rmul!(A::AbstractMatrix, R::Rotation)
-    @inbounds for i in eachindex(R.rotations)
+    @inbounds for i in Iterators.reverse(eachindex(R.rotations))
         rmul!(A, R.rotations[i])
     end
     return A
@@ -399,7 +399,7 @@ end
 
 function lmul!(adjR::AdjointRotation{<:Any,<:Rotation}, A::AbstractVecOrMat)
     R = adjR.R
-    @inbounds for i in eachindex(R.rotations)
+    @inbounds for i in Iterators.reverse(eachindex(R.rotations))
         lmul!(adjoint(R.rotations[i]), A)
     end
     return A

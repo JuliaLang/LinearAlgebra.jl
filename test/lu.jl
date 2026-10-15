@@ -45,7 +45,7 @@ dimg  = randn(n)/2
         @testset "LU factorization for Number" begin
             num = rand(eltya)
             @test (lu(num)...,) == (hcat(one(eltya)), hcat(num), [1])
-            @test convert(Array, lu(num)) ≈ eltya[num]
+            @test Array(lu(num)) ≈ eltya[num]
         end
         @testset "Balancing in eigenvector calculations" begin
             A = convert(Matrix{eltya}, [ 3.0     -2.0      -0.9     2*eps(real(one(eltya)));
@@ -127,7 +127,7 @@ dimg  = randn(n)/2
                 end
 
                 # Test whether Ax_ldiv_B!(y, LU, x) indeed overwrites y
-                resultT = typeof(oneunit(eltyb) / oneunit(eltya))
+                resultT = typeof(zero(eltyb) / oneunit(eltya))
 
                 b_dest = similar(b, resultT)
                 c_dest = similar(c, resultT)
@@ -332,6 +332,30 @@ end
     @test allnames == ["L", "P", "U", "factors", "info", "ipiv", "p"]
 end
 
+struct TaggedArray{T,N} <: AbstractArray{T,N}
+    a::Array{T,N}
+end
+Base.size(A::TaggedArray) = size(A.a)
+Base.IndexStyle(::Type{<:TaggedArray}) = IndexLinear()
+Base.getindex(A::TaggedArray, i::Int) = A.a[i]
+Base.setindex!(A::TaggedArray, v, i::Int) = (A.a[i] = v; A)
+Base.similar(::TaggedArray, ::Type{T}, dims::Dims{N}) where {T,N} =
+    TaggedArray(Array{T,N}(undef, dims))
+
+@testset "Issue #1604. lu preserves the input array type" begin
+    A = TaggedArray(Rational{Int}[2 1 0; 1 2 1; 0 1 2])
+    F = lu(A)
+    @test F.factors isa TaggedArray{Rational{Int},2}
+    @test F.ipiv isa TaggedArray{LinearAlgebra.BlasInt,1}
+
+    T = Tridiagonal(TaggedArray([1.0, 1.0]),
+                    TaggedArray([4.0, 4.0, 4.0]),
+                    TaggedArray([1.0, 1.0]))
+    G = lu(T)
+    @test G.factors isa Tridiagonal{Float64,TaggedArray{Float64,1}}
+    @test G.ipiv isa TaggedArray{LinearAlgebra.BlasInt,1}
+end
+
 include("trickyarithmetic.jl")
 
 @testset "lu with type whose sum is another type" begin
@@ -484,6 +508,47 @@ end
         @test B \ v ≈ v
         @test vt / B ≈ vt
     end
+end
+
+@testset "abstract eltypes are promoted according to the stored values (#287)" begin
+    A = Real[1.0 big(floatmax(Float64))+1; 1.0 big(1.0)]
+    F = lu(A)
+    @test F isa LU{BigFloat}
+    @test all(isfinite, F.U)
+    @test F.L * F.U ≈ convert(Matrix{BigFloat}, A)[F.p, :]
+    @test lu(Number[1 im; 1 2]).U ≈ lu(ComplexF64[1 im; 1 2]).U
+    # the operations routed through `lu`, including the generic `\`, follow
+    A0 = [4.0 1.0 0.5; 1.0 3.0 0.2; 0.3 0.5 5.0]
+    b = [1.0, 2.0, 3.0]
+    B = [1.0 2.0; 3.0 4.0; 5.0 6.0]
+    for T in (Any, Real, Number, AbstractFloat)
+        A = convert(Matrix{T}, A0)
+        @test lu(A) isa LU{Float64}
+        @test lu(A) \ b ≈ A0 \ b
+        x = A \ b
+        @test x isa Vector{Float64}
+        @test x ≈ A0 \ b
+        X = A \ B
+        @test X isa Matrix{Float64}
+        @test X ≈ A0 \ B
+        @test permutedims(b) / A ≈ permutedims(b) / A0
+        @test [A; A[1:1, :]] \ vcat(b, b[1]) ≈ [A0; A0[1:1, :]] \ vcat(b, b[1])   # least squares
+        Ai = inv(A)
+        @test Ai isa Matrix{Float64}
+        @test Ai ≈ inv(A0)
+        @test det(A) ≈ det(A0)
+        if T !== Any   # `Symmetric` and `Tridiagonal` with `Any` elements cannot even be built or indexed
+            @test Symmetric(A) \ b ≈ Symmetric(A0) \ b
+            @test Tridiagonal(A) \ b ≈ Tridiagonal(A0) \ b
+        end
+    end
+    # mixed stored types promote to a common concrete type
+    A = Real[4 1 0; 1 3 0; 0 0 5.0]
+    @test lu(A) isa LU{Float64}
+    @test A \ b ≈ Float64.(A) \ b
+    A = Number[4 im 0; -im 3 0; 0 0 5]
+    @test lu(A) isa LU{ComplexF64}
+    @test A \ b ≈ ComplexF64.(A) \ b
 end
 
 end # module TestLU

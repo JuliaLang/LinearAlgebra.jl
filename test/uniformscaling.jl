@@ -72,7 +72,7 @@ end
     # on complex plane
     J = UniformScaling(randn(ComplexF64))
     for f in ( exp,   log, cis,
-               sqrt,
+               sqrt,  abs,
                sin,   cos,   tan,
                asin,  acos,  atan,
                csc,   sec,   cot,
@@ -91,7 +91,7 @@ end
     # on real axis
     for (λ, fs) in (
         # functions defined for x ∈ ℝ
-        (()->randn(),           (exp,
+        (()->randn(),           (exp,   cbrt,
                                  sin,   cos,   tan,
                                  csc,   sec,   cot,
                                  atan,  acot,
@@ -147,6 +147,18 @@ end
     @test [4.3201 0.002;0.001 4.32009] ≈ UniformScaling(4.32) rtol=0.1 atol=0.
     @test UniformScaling(4.32) ≉ fill(4.3,2,2) rtol=0.1 atol=0.01
     @test UniformScaling(4.32) ≈ 4.32 * [1 0; 0 1]
+end
+
+@testset "factorize" begin
+    @test factorize(I) === I
+    J = UniformScaling(2.0)
+    F = factorize(J)
+    @test F === J
+    b = [1.0, 2.0, 3.0]
+    B = [1.0 2.0; 3.0 4.0]
+    @test F \ b == J \ b
+    @test F \ B == J \ B
+    @test ldiv!(F, copy(b)) == J \ b
 end
 
 @testset "arithmetic with Number" begin

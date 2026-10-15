@@ -221,7 +221,9 @@ for (S, H) in ((:Symmetric, :Hermitian), (:Hermitian, :Symmetric))
         end
     end
 end
-
+# zero should forward to the parent array type
+zero(A::Union{Symmetric{T,<:StridedMatrix},Hermitian{T,<:StridedMatrix}}) where {T<:Number} = fill!(similar(A, typeof(zero(T))), zero(T))
+zero(A::Union{Symmetric,Hermitian}) = wrappertype(A)(zero(parent(A)), _sym_uplo(A.uplo))
 convert(::Type{T}, m::Union{Symmetric,Hermitian}) where {T<:Symmetric} = m isa T ? m : T(m)::T
 convert(::Type{T}, m::Union{Symmetric,Hermitian}) where {T<:Hermitian} = m isa T ? m : T(m)::T
 
@@ -274,7 +276,7 @@ uplo(S::HermOrSym) = sym_uplo(S.uplo)
 
 size(A::HermOrSym) = size(A.data)
 axes(A::HermOrSym) = axes(A.data)
-@inline function Base.isassigned(A::HermOrSym, i::Int, j::Int)
+@inline function Base.isassigned(A::HermOrSym, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     @inbounds if i == j || ((A.uplo == 'U') == (i < j))
         return isassigned(A.data, i, j)
@@ -283,7 +285,7 @@ axes(A::HermOrSym) = axes(A.data)
     end
 end
 
-@inline function getindex(A::Symmetric, i::Int, j::Int)
+@inline function getindex(A::Symmetric, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     @inbounds if i == j
         return symmetric(A.data[i, j], _sym_uplo(A.uplo))::symmetric_type(eltype(A.data))
@@ -293,7 +295,7 @@ end
         return transpose(A.data[j, i])
     end
 end
-@inline function getindex(A::Hermitian, i::Int, j::Int)
+@inline function getindex(A::Hermitian, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     @inbounds if i == j
         return hermitian(A.data[i, j], _sym_uplo(A.uplo))::hermitian_type(eltype(A.data))
@@ -307,7 +309,7 @@ end
 Base._reverse(A::Symmetric, dims::Integer) = reverse!(Matrix(A); dims)
 Base._reverse(A::Symmetric, ::Colon) = Symmetric(reverse(A.data), A.uplo == 'U' ? :L : :U)
 
-@propagate_inbounds function setindex!(A::Symmetric, v, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::Symmetric, v, i::Signed, j::Signed)
     i == j || throw(ArgumentError("Cannot set a non-diagonal index in a symmetric matrix"))
     issymmetric(v) || throw(ArgumentError("cannot set a diagonal element of a symmetric matrix to an asymmetric value"))
     setindex!(A.data, v, i, j)
@@ -317,7 +319,7 @@ end
 Base._reverse(A::Hermitian, dims) = reverse!(Matrix(A); dims)
 Base._reverse(A::Hermitian, ::Colon) = Hermitian(reverse(A.data), A.uplo == 'U' ? :L : :U)
 
-@propagate_inbounds function setindex!(A::Hermitian, v, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::Hermitian, v, i::Signed, j::Signed)
     if i != j
         throw(ArgumentError("Cannot set a non-diagonal index in a Hermitian matrix"))
     elseif !ishermitian(v)
@@ -917,7 +919,7 @@ function ^(A::SymSymTri{<:Complex}, p::Real)
     return Symmetric(schurpow(A, p))
 end
 
-for func in (:cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :cbrt)
+for func in (:cos, :sin, :tan, :cosh, :sinh, :tanh, :atan, :asinh, :cbrt, :abs)
     @eval begin
         function ($func)(A::SelfAdjoint)
             F = eigen(A)

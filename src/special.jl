@@ -118,29 +118,6 @@ _mul!(C::AbstractMatrix, A::AbstractTriangular, B::BandedMatrix, alpha::Number, 
 _mul!(C::AbstractMatrix, A::BandedMatrix, B::AbstractTriangular, alpha::Number, beta::Number) =
     @stable_muladdmul _mul!(C, A, B, MulAddMul(alpha, beta))
 
-function mul(H::UpperHessenberg, B::Bidiagonal)
-    T = promote_op(matprod, eltype(H), eltype(B))
-    A = mul!(similar(H, T, size(H)), H, B)
-    return B.uplo == 'U' ? UpperHessenberg(A) : A
-end
-function mul(B::Bidiagonal, H::UpperHessenberg)
-    T = promote_op(matprod, eltype(B), eltype(H))
-    A = mul!(similar(H, T, size(H)), B, H)
-    return B.uplo == 'U' ? UpperHessenberg(A) : A
-end
-
-function /(H::UpperHessenberg, B::Bidiagonal)
-    T = typeof(oneunit(eltype(H))/oneunit(eltype(B)))
-    A = _rdiv!(similar(H, T, size(H)), H, B)
-    return B.uplo == 'U' ? UpperHessenberg(A) : A
-end
-
-function \(B::Bidiagonal, H::UpperHessenberg)
-    T = typeof(oneunit(eltype(B))\oneunit(eltype(H)))
-    A = ldiv!(similar(H, T, size(H)), B, H)
-    return B.uplo == 'U' ? UpperHessenberg(A) : A
-end
-
 # specialized +/- for structured matrices. If these are removed, it falls
 # back to broadcasting which has ~2-10x speed regressions.
 # For the other structure matrix pairs, broadcasting works well.

@@ -1317,16 +1317,17 @@ end
             end
         end
         #nice functions
-        for f in (x->x^2, exp, cos, sin, tan, cosh, sinh, tanh, atan, asinh, cbrt)
+        for f in (x->x^2, exp, cos, sin, tan, cosh, sinh, tanh, atan, asinh, cbrt, abs)
             if T <: Real
-                @test @inferred(f(a)) isa Matrix{T}
+                f != abs && @test @inferred(f(a)) isa Matrix{T}
                 @test @inferred(f(syma)) isa Symmetric{T}
                 @test @inferred(f(symtria)) isa Symmetric{T}
                 @test @inferred(f(herma)) isa Hermitian{T}
             else
-                f != cbrt && @test @inferred(f(a)) isa Matrix{T}
+                f != cbrt && f != abs && @test @inferred(f(a)) isa Matrix{T}
                 @test @inferred(f(herma)) isa Hermitian{T}
             end
+            f == abs && @test @inferred(f(a)) isa Hermitian{T}
         end
         #special case cis
         if T <: Real
@@ -1379,6 +1380,28 @@ end
     @test LinearAlgebra.uplo(S) == :U
     H = Hermitian([1 2; 3 4], :L)
     @test LinearAlgebra.uplo(H) == :L
+end
+
+# For testing zero forwarding to parent array type
+struct ZeroTestWrap{T} <: AbstractArray{T,2}
+    parent::Matrix{T}
+end
+Base.size(A::ZeroTestWrap) = size(A.parent)
+Base.getindex(A::ZeroTestWrap, i, j) = A.parent[i,j]
+Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
+
+@testset "zero forwarding" begin
+    for T in (Symmetric, Hermitian)
+        Z = zero(T(ZeroTestWrap([1 2; 2 3])))
+        @test Z isa T
+        @test parent(Z) isa ZeroTestWrap
+        @test iszero(Z)
+    end
+    # strided case uses fill!
+    @test iszero(zero(Symmetric(rand(4, 4))))
+    @test zero(Symmetric(rand(4, 4))) isa Symmetric
+    @test iszero(zero(Hermitian(rand(ComplexF64, 4, 4))))
+    @test zero(Hermitian(rand(ComplexF64, 4, 4))) isa Hermitian
 end
 
 end # module TestSymmetric

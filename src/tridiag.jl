@@ -71,10 +71,8 @@ SymTridiagonal(dv::V, ev::V) where {T,V<:AbstractVector{T}} = SymTridiagonal{T}(
 SymTridiagonal{T}(dv::V, ev::V) where {T,V<:AbstractVector{T}} = SymTridiagonal{T,V}(dv, ev)
 function SymTridiagonal{T}(dv::AbstractVector, ev::AbstractVector) where {T}
     d = convert(AbstractVector{T}, dv)::AbstractVector{T}
-    e = convert(AbstractVector{T}, ev)::AbstractVector{T}
-    typeof(d) == typeof(e) ?
-        SymTridiagonal{T}(d, e) :
-        throw(ArgumentError("diagonal vectors needed to be convertible to same type"))
+    e = convert(typeof(d), ev)::AbstractVector{T}
+    return SymTridiagonal{T}(d, e)
 end
 SymTridiagonal(d::AbstractVector{T}, e::AbstractVector{S}) where {T,S} =
     SymTridiagonal{promote_type(T, S)}(d, e)
@@ -107,6 +105,8 @@ julia> SymTridiagonal(B)
  [1 2; 3 4]  [1 2; 2 3]
 ```
 """
+SymTridiagonal(A::AbstractMatrix)
+
 function (::Type{SymTri})(A::AbstractMatrix) where {SymTri <: SymTridiagonal}
     checksquare(A)
     du = diag(A, 1)
@@ -279,35 +279,82 @@ end
 ldiv!(A::SymTridiagonal, B::AbstractVecOrMat; shift::Number=false) = ldiv!(ldlt(A, shift=shift), B)
 rdiv!(B::AbstractVecOrMat, A::SymTridiagonal; shift::Number=false) = rdiv!(B, ldlt(A, shift=shift))
 
-eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = Eigen(LAPACK.stegr!('V', A.dv, A.ev)...)
-eigen(A::SymTridiagonal{T}) where T = eigen!(copymutable_oftype(A, eigtype(T)))
+# tridiagonal eigensolver meta-algorithm from LAPACK.syevr! for alg==RobustRepresentations()
+#   - if all eigenvalues are desired, call stev == sterf (eigvals) or stegr == stemr (eigen)
+#   - otherwise, and also if an error occurs, fall back to stebz and (if eigvecs wanted) stein
+function syevr_tri_eigen(range::AbstractChar, dv::AbstractVector{T}, ev::AbstractVector{T}, vl::Real, vu::Real, il::Integer, iu::Integer; sortby = eigsortby) where {T<:BlasReal}
+    if range == 'A' || (range == 'I' && il == 1 && iu == length(dv))
+        try
+            # need to copy dv, ev so that they are available for fallbacks, below
+            values, vectors = LAPACK.stegr!('V', range, copymutable(dv), copymutable(ev), vl, vu, il, iu)
+            return Eigen(sorteig!(values, vectors, sortby == eigsortby ? nothing : sortby)...)
+        catch ex
+            ex isa LAPACKException || rethrow()
+        end
+    end
+    # note that these functions do not actually modify dv, ev, despite the !
+    values, iblock, isplit = LAPACK.stebz!(range, 'B', T(vl), T(vu), il, iu, -1.0, dv, ev)
+    vectors = LAPACK.stein!(dv, ev, values, iblock, isplit)
+    return Eigen(sorteig!(values, vectors, sortby)...)
+end
+function syevr_tri_eigvals(range::AbstractChar, dv::AbstractVector{T}, ev::AbstractVector{T}, vl::Real, vu::Real, il::Integer, iu::Integer) where {T<:BlasReal}
+    if range == 'A' || (range == 'I' && il == 1 && iu == length(dv))
+        try
+            # need to copy dv, ev so that they are available for fallbacks, below
+            return LAPACK.stev!('N', copymutable(dv), copymutable(ev))[1]
+        catch ex
+            ex isa LAPACKException || rethrow()
+        end
+    end
+    # note that this function does not actually modify dv, ev, despite the !
+    return LAPACK.stebz!(range, 'E', T(vl), T(vu), il, iu, -1.0, dv, ev)[1]
+end
 
-eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange) =
-    Eigen(LAPACK.stegr!('V', 'I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)...)
-eigen(A::SymTridiagonal{T}, irange::UnitRange) where T =
-    eigen!(copymutable_oftype(A, eigtype(T)), irange)
+eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}; kws...) =
+    syevr_tri_eigen('A', A.dv, A.ev, 0.0, 0.0, 0, 0; kws...)
+eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}; kws...) = eigen!(A; kws...)
+eigen(A::SymTridiagonal{T}; kws...) where T = _tohalf(T, eigen!(copymutable_oftype(A, eigtype(T)); kws...))
 
-eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real) =
-    Eigen(LAPACK.stegr!('V', 'V', A.dv, A.ev, vl, vu, 0, 0)...)
-eigen(A::SymTridiagonal{T}, vl::Real, vu::Real) where T =
-    eigen!(copymutable_oftype(A, eigtype(T)), vl, vu)
+eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; kws...) =
+    syevr_tri_eigen('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop; kws...)
+eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; kws...) =
+    eigen!(A, irange; kws...)
+eigen(A::SymTridiagonal{T}, irange::UnitRange; kws...) where T =
+    _tohalf(T, eigen!(copymutable_oftype(A, eigtype(T)), irange; kws...))
 
-eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}) = LAPACK.stev!('N', A.dv, A.ev)[1]
-eigvals(A::SymTridiagonal{T}) where T = eigvals!(copymutable_oftype(A, eigtype(T)))
+eigen!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; kws...) =
+    syevr_tri_eigen('V', A.dv, A.ev, vl, vu, 0, 0; kws...)
+eigen(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; kws...) =
+    eigen!(A, vl, vu; kws...)
+eigen(A::SymTridiagonal{T}, vl::Real, vu::Real; kws...) where T =
+    _tohalf(T, eigen!(copymutable_oftype(A, eigtype(T)), vl, vu; kws...))
 
-eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange) =
-    LAPACK.stegr!('N', 'I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)[1]
-eigvals(A::SymTridiagonal{T}, irange::UnitRange) where T =
-    eigvals!(copymutable_oftype(A, eigtype(T)), irange)
+function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}; sortby = eigsortby)
+    vals = syevr_tri_eigvals('A', A.dv, A.ev, 0.0, 0.0, 0, 0)
+    return sorteig!(vals, sortby == eigsortby ? nothing : sortby)
+end
+eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}; kws...) = eigvals!(A; kws...)
+eigvals(A::SymTridiagonal{T}; kws...) where T = _tohalf(T, eigvals!(copymutable_oftype(A, eigtype(T)); kws...))
 
-eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real) =
-    LAPACK.stegr!('N', 'V', A.dv, A.ev, vl, vu, 0, 0)[1]
-eigvals(A::SymTridiagonal{T}, vl::Real, vu::Real) where T =
-    eigvals!(copymutable_oftype(A, eigtype(T)), vl, vu)
+function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; sortby = eigsortby)
+    vals = syevr_tri_eigvals('I', A.dv, A.ev, 0.0, 0.0, irange.start, irange.stop)
+    return sorteig!(vals, sortby == eigsortby ? nothing : sortby)
+end
+eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}, irange::UnitRange; kws...) = eigvals!(A, irange; kws...)
+eigvals(A::SymTridiagonal{T}, irange::UnitRange; kws...) where T =
+    _tohalf(T, eigvals!(copymutable_oftype(A, eigtype(T)), irange; kws...))
+
+function eigvals!(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; sortby = eigsortby)
+    vals = syevr_tri_eigvals('V', A.dv, A.ev, vl, vu, 0, 0)
+    return sorteig!(vals, sortby == eigsortby ? nothing : sortby)
+end
+eigvals(A::SymTridiagonal{<:BlasReal,<:StridedVector}, vl::Real, vu::Real; kws...) = eigvals!(A, vl, vu; kws...)
+eigvals(A::SymTridiagonal{T}, vl::Real, vu::Real; kws...) where T =
+    _tohalf(T, eigvals!(copymutable_oftype(A, eigtype(T)), vl, vu; kws...))
 
 #Computes largest and smallest eigenvalue
-eigmax(A::SymTridiagonal) = eigvals(A, size(A, 1):size(A, 1))[1]
-eigmin(A::SymTridiagonal) = eigvals(A, 1:1)[1]
+eigmax(A::SymTridiagonal) = eigvals(A, size(A, 1):size(A, 1); sortby = eigsortby)[1]
+eigmin(A::SymTridiagonal) = eigvals(A, 1:1; sortby = eigsortby)[1]
 
 #Compute selected eigenvectors only corresponding to particular eigenvalues
 """
@@ -442,39 +489,39 @@ end
 det(A::SymTridiagonal; shift::Number=false) = det_usmani(A.ev, A.dv, A.ev, shift)
 logabsdet(A::SymTridiagonal; shift::Number=false) = logabsdet(ldlt(A; shift=shift))
 
-@inline function Base.isassigned(A::SymTridiagonal, i::Int, j::Int)
+@inline function Base.isassigned(A::SymTridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.dv, i)
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds isassigned(A.ev, j)
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds isassigned(A.ev, i)
     else
         return true
     end
 end
 
-@inline function Base.isstored(A::SymTridiagonal, i::Int, j::Int)
+@inline function Base.isstored(A::SymTridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.dv, i)
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds Base.isstored(A.ev, j)
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds Base.isstored(A.ev, i)
     else
         return false
     end
 end
 
-@inline function getindex(A::SymTridiagonal{T}, i::Int, j::Int) where T
+@inline function getindex(A::SymTridiagonal{T}, i::Signed, j::Signed) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return symmetric((@inbounds A.dv[i]), :U)::symmetric_type(eltype(A.dv))
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return copy(transpose(@inbounds A.ev[j])) # materialized for type stability
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds A.ev[i]
     else
         return diagzero(A, i, j)
@@ -498,7 +545,7 @@ Base._reverse(A::SymTridiagonal, dims) = reverse!(Matrix(A); dims)
 Base._reverse(A::SymTridiagonal, dims::Colon) = SymTridiagonal(reverse(A.dv), reverse(A.ev))
 Base._reverse!(A::SymTridiagonal, dims::Colon) = (reverse!(A.dv); reverse!(A.ev); A)
 
-@inline function setindex!(A::SymTridiagonal, x, i::Integer, j::Integer)
+@inline function setindex!(A::SymTridiagonal, x, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         issymmetric(x) || throw(ArgumentError("cannot set a diagonal entry of a SymTridiagonal to an asymmetric value"))
@@ -615,8 +662,9 @@ julia> Tridiagonal(A)
  ⋅  ⋅  3  4
 ```
 """
-(::Type{Tri})(A::AbstractMatrix) where {Tri<:Tridiagonal} = Tri(diag(A,-1), diag(A,0), diag(A,1))
+Tridiagonal(A::AbstractMatrix)
 
+(::Type{Tri})(A::AbstractMatrix) where {Tri<:Tridiagonal} = Tri(diag(A,-1), diag(A,0), diag(A,1))
 Tridiagonal(A::Tridiagonal) = A
 Tridiagonal{T}(A::Tridiagonal{T}) where {T} = A
 function Tridiagonal{T}(A::Tridiagonal) where {T}
@@ -721,39 +769,39 @@ function diag(M::Tridiagonal, n::Integer=0)
     return v
 end
 
-@inline function Base.isassigned(A::Tridiagonal, i::Int, j::Int)
+@inline function Base.isassigned(A::Tridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.d, i)
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds isassigned(A.dl, j)
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds isassigned(A.du, i)
     else
         return true
     end
 end
 
-@inline function Base.isstored(A::Tridiagonal, i::Int, j::Int)
+@inline function Base.isstored(A::Tridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.d, i)
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds Base.isstored(A.dl, j)
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds Base.isstored(A.du, i)
     else
         return false
     end
 end
 
-@inline function getindex(A::Tridiagonal{T}, i::Int, j::Int) where T
+@inline function getindex(A::Tridiagonal{T}, i::Signed, j::Signed) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds A.d[i]
-    elseif i == j + 1
+    elseif i == j + oneunit(j)
         return @inbounds A.dl[j]
-    elseif i + 1 == j
+    elseif i + oneunit(i) == j
         return @inbounds A.du[i]
     else
         return diagzero(A, i, j)
@@ -773,13 +821,13 @@ end
     end
 end
 
-@inline function setindex!(A::Tridiagonal, x, i::Integer, j::Integer)
+@inline function setindex!(A::Tridiagonal, x, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         @inbounds A.d[i] = x
-    elseif i - j == 1
+    elseif isone(i - j)
         @inbounds A.dl[j] = x
-    elseif j - i == 1
+    elseif isone(j - i)
         @inbounds A.du[i] = x
     elseif !iszero(x)
         throw(ArgumentError(LazyString(lazy"cannot set entry ($i, $j) off ",
