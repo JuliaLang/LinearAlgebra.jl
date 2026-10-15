@@ -130,6 +130,7 @@ export
     lyap,
     mul!,
     norm,
+    norm_sqr,
     normalize!,
     normalize,
     nullspace,
