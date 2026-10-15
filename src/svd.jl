@@ -639,3 +639,9 @@ AbstractMatrix(F::SVD) = (F.U * Diagonal(F.S)) * F.Vt
 AbstractArray(F::SVD) = AbstractMatrix(F)
 Matrix(F::SVD) = Array(AbstractArray(F))
 Array(F::SVD) = Matrix(F)
+
+function nullspace(F::SVD; atol::Number=zero(real(eltype(F))), rtol::Real = (min(size(F.U, 1), size(F.V, 1))*eps(real(float(oneunit(eltype(F))))))*iszero(atol))
+    r = rank(F; atol, rtol)
+    indstart = r + 1 # nullspace starts after the numerical rank + 1
+    return copy((@view F.Vt[indstart:end,:])')
+end

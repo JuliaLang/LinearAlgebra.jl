@@ -1859,8 +1859,9 @@ end
 ## Basis for null space
 
 """
-    nullspace(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    nullspace(M; atol::Number=0, rtol::Real=atol>0 ? 0 : min(n,m)*ϵ)
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
+    nullspace(S::SVD; atol::Number=0, rtol::Real=atol>0 ? 0 : min(n,m)*ϵ)
 
 Computes a basis for the nullspace of `M` by returning the (orthonormal) singular
 vectors of `M` whose singular values have magnitudes smaller than `max(atol, rtol*σ₁)`,
@@ -1869,6 +1870,11 @@ where `σ₁` is `M`'s largest singular value.
 By default, the relative tolerance `rtol` is `n*ϵ`, where `n`
 is the size of the smallest dimension of `M`, and `ϵ` is the [`eps`](@ref) of
 the element type of `M`.
+
+Instead of a matrix `M`, you can pass an [`SVD`](@ref) factorization object `S`,
+as is returned by the [`svd`](@ref) function. This is useful, for example, if you want to re-use
+an existing SVD result, or if you want to use lower-level `svd` options to have more control
+over the SVD algorithm.
 
 # Examples
 ```jldoctest
@@ -1879,6 +1885,12 @@ julia> M = [1 0 0; 0 1 0; 0 0 0]
  0  0  0
 
 julia> nullspace(M)
+3×1 Matrix{Float64}:
+ 0.0
+ 0.0
+ 1.0
+
+julia> nullspace(svd(M, alg=LinearAlgebra.QRIteration()))
 3×1 Matrix{Float64}:
  0.0
  0.0
@@ -1901,9 +1913,7 @@ function nullspace(A::AbstractVecOrMat; atol::Number=zero(real(eltype(A))), rtol
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)
-    tol = max(atol, SVD.S[1]*rtol)
-    indstart = sum(s -> s .> tol, SVD.S) + 1
-    return copy((@view SVD.Vt[indstart:end,:])')
+    return nullspace(SVD; atol, rtol)
 end
 
 """
