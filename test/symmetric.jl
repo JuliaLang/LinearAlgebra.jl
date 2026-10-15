@@ -447,9 +447,9 @@ end
                 msymal = Matrix(symal)
                 @test_throws DimensionMismatch dot(symau, mtype(zeros(eltya, n-1, n-1)))
                 for eltyc in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
-                    creal = randn(n, n)/2
-                    cimag = randn(n, n)/2
-                    c = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(creal, cimag) : creal)
+                    creal = randn(eltyc, n, n)/2
+                    cimag = randn(eltyc, n, n)/2
+                    c = eltyc == Int ? rand(1:7, n, n) : convert(Matrix{eltyc}, eltya <: Complex ? complex.(creal, cimag) : creal)
                     symcu = mtype(c, :U)
                     symcl = mtype(c, :L)
                     msymcu = Matrix(symcu)
@@ -484,9 +484,9 @@ end
                 msymau = Matrix(symau)
                 msymal = Matrix(symal)
                 for eltyc in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
-                    creal = randn(n, n)/2
-                    cimag = randn(n, n)/2
-                    c = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(creal, cimag) : creal)
+                    creal = randn(eltyc, n, n)/2
+                    cimag = randn(eltyc, n, n)/2
+                    c = eltyc == Int ? rand(1:7, n, n) : convert(Matrix{eltyc}, eltya <: Complex ? complex.(creal, cimag) : creal)
                     symcu = mtype(c, :U)
                     symcl = mtype(c, :L)
                     msymcu = Matrix(symcu)
