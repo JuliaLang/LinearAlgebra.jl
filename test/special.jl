@@ -12,6 +12,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 n= 10 #Size of matrix to test
 Random.seed!(1)
@@ -203,7 +204,10 @@ end
     offdiag = 1:4
     uniformscalingmats = [UniformScaling(3), UniformScaling(1.0), UniformScaling(3//5), UniformScaling(ComplexF64(1.3, 3.5))]
     mats = Any[Diagonal(diag), Bidiagonal(diag, offdiag, 'U'), Bidiagonal(diag, offdiag, 'L'), Tridiagonal(offdiag, diag, offdiag), SymTridiagonal(diag, offdiag)]
-    for T in [ComplexF64, Int64, Rational{Int64}, Float64]
+    # every pair of these matrices is tested, so each container eltype adds many type
+    # combinations to compile; standard mode keeps Float64 and ComplexF64 next to the
+    # range-backed (Int) matrices
+    for T in [ComplexF64, Float64, (@static COMPREHENSIVE ? (Int64, Rational{Int64}) : ())...]
         push!(mats, Diagonal(Vector{T}(diag)))
         push!(mats, Bidiagonal(Vector{T}(diag), Vector{T}(offdiag), 'U'))
         push!(mats, Bidiagonal(Vector{T}(diag), Vector{T}(offdiag), 'L'))
