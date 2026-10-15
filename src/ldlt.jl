@@ -464,29 +464,25 @@ function ldiv!(F::LDLtPivoted{<:Any,<:SymTridiagonal}, B::AbstractVecOrMat)
         k, j = n, nb
         while k >= 1
             if j >= 1 && blocks[j] == k - 1
-                # 2×2 block [d1 e1; e1 d2] in rows k-1 and k. As in the reference given in
-                # the docstring of `BunchPivot`, the 2×2 systems are solved by Gaussian
-                # elimination with the off-diagonal entry e1 as the pivot, i.e., with the
-                # rows interchanged; the pivot choice guarantees that |d1*d2| < α*e1^2, so
-                # that this elimination is numerically stable.
+                # 2×2 block [d1 e1; e1 d2] in rows k-1 and k, which is solved with the
+                # explicit inverse (see the reference in the docstring of `BunchPivot`):
+                # for a 2×2 pivot, the pivoting strategy guarantees |d1*d2| < α*e1^2, so
+                # that the determinant Δ is computed without cancellation.
                 d1, d2, e1 = d[k-1], d[k], e[k-1]
-                l = d1/e1       # multiplier
-                u = e1 - l*d2   # trailing entry of the upper triangular factor
+                Δ = d1*d2 - e1*e1
+                i11, i12, i22 = d2/Δ, -e1/Δ, d1/Δ
                 if k < n
                     m = e[k]
                     @simd for c = 1:nrhs
                         y1, y2, xk1 = B[k-1,c], B[k,c], B[k+1,c]
-                        z2 = (y1 - l*y2)/u
-                        z1 = (y2 - d2*z2)/e1
-                        B[k-1,c] = z1 + e1*m*xk1
-                        B[k,c]   = z2 - d1*m*xk1
+                        B[k-1,c] = i11*y1 + i12*y2 + e1*m*xk1
+                        B[k,c]   = i12*y1 + i22*y2 - d1*m*xk1
                     end
                 else
                     @simd for c = 1:nrhs
                         y1, y2 = B[k-1,c], B[k,c]
-                        z2 = (y1 - l*y2)/u
-                        B[k,c]   = z2
-                        B[k-1,c] = (y2 - d2*z2)/e1
+                        B[k-1,c] = i11*y1 + i12*y2
+                        B[k,c]   = i12*y1 + i22*y2
                     end
                 end
                 k -= 2
