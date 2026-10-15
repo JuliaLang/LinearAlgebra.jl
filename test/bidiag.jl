@@ -17,13 +17,16 @@ using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 include("testutils.jl") # test_approx_eq_modphase
 
 n = 10 #Size of test matrix
 Random.seed!(1)
 
-@testset for relty in (Int, Float32, Float64, BigFloat), elty in (relty, Complex{relty})
+@testset for (relty, elty) in ((Int, Int), (Float64, Float64), (Float64, ComplexF64), (BigFloat, BigFloat),
+        (@static COMPREHENSIVE ? ((Int, Complex{Int}), (Float32, Float32), (Float32, ComplexF32),
+                                  (BigFloat, Complex{BigFloat})) : ())...)
     if relty <: AbstractFloat
         dv = convert(Vector{elty}, randn(n))
         ev = convert(Vector{elty}, randn(n-1))
