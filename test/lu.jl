@@ -7,6 +7,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra, Random
 using LinearAlgebra: ldiv!, BlasReal, BlasInt, BlasFloat, rdiv!
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+
 n = 10
 
 # Split n into 2 parts for tests needing two matrices
@@ -28,7 +34,7 @@ dlimg  = randn(n-1)/2
 dreal = randn(n)/2
 dimg  = randn(n)/2
 
-@testset for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
+@testset for eltya in (Float64, ComplexF64, BigFloat, Int, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
     a = eltya == Int ? rand(1:7, n, n) :
         convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
     d = if eltya == Int
@@ -105,7 +111,7 @@ dimg  = randn(n)/2
             @test UpperTriangular(tri) == L.U
         end
     end
-    @testset for eltyb in (Float32, Float64, ComplexF32, ComplexF64, Int)
+    @testset for eltyb in (Float64, ComplexF64, Int, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         b  = eltyb == Int ? rand(1:5, n, 2) :
             convert(Matrix{eltyb}, eltyb <: Complex ? complex.(breal, bimg) : breal)
         c  = eltyb == Int ? rand(1:5, n) :
