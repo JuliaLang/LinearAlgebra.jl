@@ -15,6 +15,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 n = 9
 Random.seed!(123)
@@ -136,11 +137,11 @@ Aimg    = randn(n, n)/2
 A2real  = randn(n, n)/2
 A2img   = randn(n, n)/2
 
-@testset for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
+@testset for eltya in (Float64, ComplexF64, BigFloat, Int, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
     A = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(Areal, Aimg) : Areal)
     εa = eps(abs(float(one(eltya))))
 
-    for eltyb in (Float32, Float64, ComplexF32, ComplexF64)
+    for eltyb in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         εb = eps(abs(float(one(eltyb))))
         ε = max(εa,εb)
 
