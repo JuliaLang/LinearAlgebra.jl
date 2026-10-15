@@ -464,21 +464,29 @@ function ldiv!(F::LDLtPivoted{<:Any,<:SymTridiagonal}, B::AbstractVecOrMat)
         k, j = n, nb
         while k >= 1
             if j >= 1 && blocks[j] == k - 1
-                # 2×2 block in rows k-1 and k
+                # 2×2 block [d1 e1; e1 d2] in rows k-1 and k. As in the reference given in
+                # the docstring of `BunchPivot`, the 2×2 systems are solved by Gaussian
+                # elimination with the off-diagonal entry e1 as the pivot, i.e., with the
+                # rows interchanged; the pivot choice guarantees that |d1*d2| < α*e1^2, so
+                # that this elimination is numerically stable.
                 d1, d2, e1 = d[k-1], d[k], e[k-1]
-                Δ = d1*d2 - e1*e1
+                l = d1/e1       # multiplier
+                u = e1 - l*d2   # trailing entry of the upper triangular factor
                 if k < n
                     m = e[k]
                     @simd for c = 1:nrhs
                         y1, y2, xk1 = B[k-1,c], B[k,c], B[k+1,c]
-                        B[k-1,c] = (d2*y1 - e1*y2)/Δ + e1*m*xk1
-                        B[k,c]   = (d1*y2 - e1*y1)/Δ - d1*m*xk1
+                        z2 = (y1 - l*y2)/u
+                        z1 = (y2 - d2*z2)/e1
+                        B[k-1,c] = z1 + e1*m*xk1
+                        B[k,c]   = z2 - d1*m*xk1
                     end
                 else
                     @simd for c = 1:nrhs
                         y1, y2 = B[k-1,c], B[k,c]
-                        B[k-1,c] = (d2*y1 - e1*y2)/Δ
-                        B[k,c]   = (d1*y2 - e1*y1)/Δ
+                        z2 = (y1 - l*y2)/u
+                        B[k,c]   = z2
+                        B[k-1,c] = (y2 - d2*z2)/e1
                     end
                 end
                 k -= 2
