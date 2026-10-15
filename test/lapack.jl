@@ -1001,4 +1001,37 @@ end
     end
 end
 
+# strided array that does not support `resize!`
+struct NonResizableArray{T,N} <: DenseArray{T,N}
+    data::Array{T,N}
+end
+Base.size(A::NonResizableArray) = size(A.data)
+Base.getindex(A::NonResizableArray{T,N}, I::Vararg{Int,N}) where {T,N} = A.data[I...]
+Base.setindex!(A::NonResizableArray{T,N}, v, I::Vararg{Int,N}) where {T,N} = setindex!(A.data, v, I...)
+Base.similar(::NonResizableArray, ::Type{T}, dims::Dims) where {T} = NonResizableArray(Array{T}(undef, dims))
+Base.unsafe_convert(::Type{Ptr{T}}, A::NonResizableArray{T}) where {T} = pointer(A.data)
+
+@testset "arrays without resize! (#1741)" begin
+    NR = NonResizableArray
+    A = [4.0 1.0 0.5; 1.0 3.0 0.2; 0.5 0.2 2.0]
+    λ = eigvals(Symmetric(A))
+    @test eigvals(Symmetric(NR(copy(A)))) ≈ λ
+    @test LAPACK.syevr!('V', 'I', 'U', NR(copy(A)), 0.0, 0.0, 1, 2, -1.0)[1] ≈ λ[1:2]
+    @test LAPACK.syevr!('V', 'V', 'U', NR(complex(A)), 0.0, 3.0, 0, 0, -1.0)[1] ≈ λ[λ .< 3]
+
+    dv, ev = [1.0, 2.0, 3.0], [0.5, 0.5]
+    @test LAPACK.stebz!('I', 'E', 0.0, 0.0, 1, 2, -1.0, NR(dv), NR(ev))[1] ≈
+          LAPACK.stebz!('I', 'E', 0.0, 0.0, 1, 2, -1.0, dv, ev)[1]
+    @test LAPACK.stegr!('V', 'I', NR(copy(dv)), NR(copy(ev)), 0.0, 0.0, 1, 2)[1] ≈
+          LAPACK.stegr!('V', 'I', copy(dv), copy(ev), 0.0, 0.0, 1, 2)[1]
+
+    B, tau = LAPACK.geqrf!(rand(3, 5))
+    @test LAPACK.orgqr!(view(copy(B), :, :), tau) ≈ LAPACK.orgqr!(copy(B), tau)
+
+    T = triu(rand(3, 3))
+    VR = LAPACK.trevc!('R', 'S', BlasInt[1, 0, 1], copy(T))[2]
+    @test LAPACK.trevc!('R', 'S', BlasInt[1, 0, 1], copy(T), similar(T), NR(similar(T)))[2] ≈ VR
+    @test LAPACK.trevc!('R', 'S', BlasInt[1, 0, 1], copy(T), similar(T), view(similar(T), :, :))[2] ≈ VR
+end
+
 end # module TestLAPACK
