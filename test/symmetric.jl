@@ -46,10 +46,8 @@ end
 
 @testset "Core functionality" begin
     n = 10
-    areal = randn(n,n)/2
-    aimg  = randn(n,n)/2
     @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
-        a = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
+        a = eltya == Int ? rand(1:7, n, n) : randn(eltya, n, n)
         asym = transpose(a) + a                 # symmetric indefinite
         aherm = a' + a                 # Hermitian indefinite
         apos  = a' * a                 # Hermitian positive definite
@@ -447,9 +445,7 @@ end
                 msymal = Matrix(symal)
                 @test_throws DimensionMismatch dot(symau, mtype(zeros(eltya, n-1, n-1)))
                 for eltyc in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
-                    creal = randn(n, n)/2
-                    cimag = randn(n, n)/2
-                    c = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(creal, cimag) : creal)
+                    c = eltyc == Int ? rand(1:7, n, n) : randn(eltyc, n, n)
                     symcu = mtype(c, :U)
                     symcl = mtype(c, :L)
                     msymcu = Matrix(symcu)
@@ -484,9 +480,7 @@ end
                 msymau = Matrix(symau)
                 msymal = Matrix(symal)
                 for eltyc in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
-                    creal = randn(n, n)/2
-                    cimag = randn(n, n)/2
-                    c = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(creal, cimag) : creal)
+                    c = eltyc == Int ? rand(1:7, n, n) : randn(eltyc, n, n)
                     symcu = mtype(c, :U)
                     symcl = mtype(c, :L)
                     msymcu = Matrix(symcu)
