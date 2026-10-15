@@ -2835,7 +2835,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
                 end
             end
             if n < size(A,2)
-                reshape(resize!(vec(A), m * n), m, n)
+                A[:,1:n]
             else
                 A
             end
@@ -2871,7 +2871,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
                 end
             end
             if n < size(A,2)
-                reshape(resize!(vec(A), m * n), m, n)
+                A[:,1:n]
             else
                 A
             end
@@ -3736,24 +3736,22 @@ for (trcon, trevc, trrfs, elty) in
                 work, info, 1, 1)
             chklapackerror(info[])
 
-            VLn = size(VL, 1)
-            VRn = size(VR, 1)
             #Decide what exactly to return
             if howmny == 'S' #compute selected eigenvectors
                 if side == 'L' #left eigenvectors only
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
+                    return select, (m[] == size(VL, 2) ? VL : VL[:, 1:m[]])
                 elseif side == 'R' #right eigenvectors only
-                    return select, reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return select, (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 else #side == 'B' #both eigenvectors
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return select, (m[] == size(VL, 2) ? VL : VL[:, 1:m[]]), (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 end
             else #compute all eigenvectors
                 if side == 'L' #left eigenvectors only
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
+                    return (m[] == size(VL, 2) ? VL : VL[:, 1:m[]])
                 elseif side == 'R' #right eigenvectors only
-                    return reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 else #side == 'B' #both eigenvectors
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return (m[] == size(VL, 2) ? VL : VL[:, 1:m[]]), (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 end
             end
         end
@@ -3875,24 +3873,22 @@ for (trcon, trevc, trrfs, elty, relty) in
                 work, rwork, info, 1, 1)
             chklapackerror(info[])
 
-            VLn = size(VL, 1)
-            VRn = size(VR, 1)
             #Decide what exactly to return
             if howmny == 'S' #compute selected eigenvectors
                 if side == 'L' #left eigenvectors only
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
+                    return select, (m[] == size(VL, 2) ? VL : VL[:, 1:m[]])
                 elseif side == 'R' #right eigenvectors only
-                    return select, reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return select, (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 else #side == 'B' #both eigenvectors
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return select, (m[] == size(VL, 2) ? VL : VL[:, 1:m[]]), (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 end
             else #compute all eigenvectors
                 if side == 'L' #left eigenvectors only
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
+                    return (m[] == size(VL, 2) ? VL : VL[:, 1:m[]])
                 elseif side == 'R' #right eigenvectors only
-                    return reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 else #side == 'B' #both eigenvectors
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return (m[] == size(VL, 2) ? VL : VL[:, 1:m[]]), (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 end
             end
         end
@@ -4037,7 +4033,8 @@ for (stev, stebz, stegr, stein, elty) in
                 w, iblock, isplit, work,
                 iwork, info, 1, 1)
             chklapackerror(info[])
-            resize!(w, m[]), resize!(iblock, m[]), resize!(isplit, nsplit[1])
+            (m[] == n ? w : w[1:m[]]), (m[] == n ? iblock : iblock[1:m[]]),
+                (nsplit[1] == n ? isplit : isplit[1:nsplit[1]])
         end
 
         function stegr!(jobz::AbstractChar, range::AbstractChar, dv::AbstractVector{$elty}, ev::AbstractVector{$elty}, vl::Real, vu::Real, il::Integer, iu::Integer)
@@ -4061,8 +4058,8 @@ for (stev, stebz, stegr, stein, elty) in
             w = similar(dv, $elty, n)
             ldz = jobz == 'N' ? 1 : n
             Zn = range == 'I' ? iu-il+1 : n
-            Z = similar(dv, $elty, ldz * Zn)
-            isuppz = similar(dv, BlasInt, 2 * Zn)
+            Z = similar(dv, $elty, ldz, Zn)
+            isuppz = Vector{BlasInt}(undef, 2 * Zn)
             work = Vector{$elty}(undef, 1)
             lwork = BlasInt(-1)
             iwork = Vector{BlasInt}(undef, 1)
@@ -4090,7 +4087,7 @@ for (stev, stebz, stegr, stein, elty) in
                     resize!(iwork, liwork)
                 end
             end
-            return resize!(w, m[]), reshape(resize!(Z, ldz * m[]), ldz, m[])
+            return (m[] == n ? w : w[1:m[]]), (m[] == Zn ? Z : Z[:, 1:m[]])
         end
 
         function stein!(dv::AbstractVector{$elty}, ev_in::AbstractVector{$elty}, w_in::AbstractVector{$elty}, iblock_in::AbstractVector{BlasInt}, isplit_in::AbstractVector{BlasInt})
@@ -5396,11 +5393,11 @@ for (syev, syevr, syevd, sygvd, elty) in
             W = similar(A, $elty, n)
             ldz = n
             if jobz == 'N'
-                Z = similar(A, $elty, 0)
+                Z = similar(A, $elty, ldz, 0)
             elseif jobz == 'V'
-                Z = similar(A, $elty, ldz * n)
+                Z = similar(A, $elty, ldz, range == 'I' ? iu - il + 1 : n)
             end
-            isuppz = similar(A, BlasInt, 2*n)
+            isuppz = Vector{BlasInt}(undef, 2*n)
             work   = Vector{$elty}(undef, 1)
             lwork  = BlasInt(-1)
             iwork  = Vector{BlasInt}(undef, 1)
@@ -5429,7 +5426,7 @@ for (syev, syevr, syevd, sygvd, elty) in
                 end
             end
             zm = jobz == 'V' ? m[] : 0
-            resize!(W, m[]), reshape(resize!(Z, ldz * zm), ldz, zm)
+            (m[] == n ? W : W[1:m[]]), (zm == size(Z, 2) ? Z : Z[:, 1:zm])
         end
         syevr!(jobz::AbstractChar, A::AbstractMatrix{$elty}) =
             syevr!(jobz, 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
@@ -5599,12 +5596,12 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
             W = similar(A, $relty, n)
             if jobz == 'N'
                 ldz = 1
-                Z = similar(A, $elty, 0)
+                Z = similar(A, $elty, ldz, 0)
             elseif jobz == 'V'
                 ldz = n
-                Z = similar(A, $elty, ldz * n)
+                Z = similar(A, $elty, ldz, range == 'I' ? iu - il + 1 : n)
             end
-            isuppz = similar(A, BlasInt, 2*n)
+            isuppz = Vector{BlasInt}(undef, 2*n)
             work   = Vector{$elty}(undef, 1)
             lwork  = BlasInt(-1)
             rwork  = Vector{$relty}(undef, 1)
@@ -5639,7 +5636,7 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
                 end
             end
             zm = jobz == 'V' ? m[] : 0
-            resize!(W, m[]), reshape(resize!(Z, ldz * zm), ldz, zm)
+            (m[] == n ? W : W[1:m[]]), (zm == size(Z, 2) ? Z : Z[:, 1:zm])
         end
         syevr!(jobz::AbstractChar, A::AbstractMatrix{$elty}) =
             syevr!(jobz, 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
