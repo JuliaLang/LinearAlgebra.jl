@@ -98,8 +98,8 @@ blocks are chosen according to the [`BunchPivot`](@ref) strategy, which does not
 interchanges of rows or columns, so that the tridiagonal structure is preserved. In contrast
 to [`LDLt`](@ref), this factorization exists and is numerically stable for any symmetric
 tridiagonal matrix, in particular for indefinite ones. The main use of an `LDLtPivoted`
-factorization `F = ldlt(S; alg=BunchPivot())` is to solve the linear system of equations
-`Sx = b` with `F\\b`. This is the return type of [`ldlt(_; alg=BunchPivot())`](@ref ldlt),
+factorization `F = ldlt(S, BunchPivot())` is to solve the linear system of equations
+`Sx = b` with `F\\b`. This is the return type of [`ldlt(_, BunchPivot())`](@ref ldlt),
 the corresponding matrix factorization function.
 
 The individual components of the factorization `F::LDLtPivoted` can be accessed via `getproperty`:
@@ -128,7 +128,7 @@ julia> S = SymTridiagonal([1., 2., 3.], [4., 1.])
  4.0  2.0  1.0
   ⋅   1.0  3.0
 
-julia> F = ldlt(S; alg=BunchPivot())
+julia> F = ldlt(S, BunchPivot())
 LDLtPivoted{Float64, SymTridiagonal{Float64, Vector{Float64}}, Vector{Int64}}
 L factor:
 3×3 UnitLowerTriangular{Float64, Matrix{Float64}}:
@@ -239,7 +239,7 @@ end
 
 # SymTridiagonal
 """
-    ldlt!(S::SymTridiagonal; alg::PivotingStrategy = NoPivot()) -> LDLt or LDLtPivoted
+    ldlt!(S::SymTridiagonal, pivot::PivotingStrategy = NoPivot()) -> LDLt or LDLtPivoted
 
 Same as [`ldlt`](@ref), but saves space by overwriting the input `S`, instead of creating a copy.
 
@@ -263,12 +263,10 @@ julia> S
   ⋅        0.545455  3.90909
 ```
 """
-ldlt!(S::SymTridiagonal; alg::PivotingStrategy = NoPivot()) = _ldlt!(S, alg)
+ldlt!(::SymTridiagonal{T,V}, pivot::PivotingStrategy) where {T,V} =
+    throw(ArgumentError(lazy"pivoting strategy $pivot is not supported by ldlt; use NoPivot() or BunchPivot()"))
 
-_ldlt!(::SymTridiagonal{T,V}, alg::PivotingStrategy) where {T,V} =
-    throw(ArgumentError(lazy"pivoting strategy $alg is not supported by ldlt; use NoPivot() or BunchPivot()"))
-
-function _ldlt!(S::SymTridiagonal{T,V}, ::NoPivot) where {T,V}
+function ldlt!(S::SymTridiagonal{T,V}, ::NoPivot = NoPivot()) where {T,V}
     n = size(S,1)
     d = S.dv
     e = S.ev
@@ -281,37 +279,37 @@ function _ldlt!(S::SymTridiagonal{T,V}, ::NoPivot) where {T,V}
     return LDLt{T,SymTridiagonal{T,V}}(S)
 end
 
-# Block LDLt factorization with 1×1 and 2×2 diagonal pivots, chosen by Bunch's strategy
-# (J. R. Bunch, SIAM J. Numer. Anal. 11 (1974), 521-528), which requires no interchanges
-# for tridiagonal matrices. See the docstrings of `BunchPivot` and `LDLtPivoted` for the
-# pivot choice and the storage format, respectively.
-function _ldlt!(S::SymTridiagonal{T,V}, ::BunchPivot) where {T,V}
+# Block LDLt factorization with 1×1 and 2×2 diagonal pivots, chosen by the simplified
+# pivoting strategy of Bunch and Marcia (Algorithm A1 in Numer. Linear Algebra Appl. 13
+# (2006), 865-867), which requires neither interchanges nor the largest entry of the matrix.
+# See the docstrings of `BunchPivot` and `LDLtPivoted` for the pivot choice and the storage
+# format, respectively.
+function ldlt!(S::SymTridiagonal{T,V}, ::BunchPivot) where {T,V}
     n = size(S,1)
     d = S.dv
     e = S.ev
     blocks = Int[]
-    # α minimizes the bound on the element growth, see the reference above
     α = (sqrt(5) - 1)/2
-    σ = max(maximum(abs, d; init=abs(zero(T))), maximum(abs, e; init=abs(zero(T))))
     k = 1
     @inbounds while k < n
-        dk, ek = d[k], e[k]
-        if σ*abs(dk) >= α*abs2(ek)
-            # 1×1 pivot: a zero pivot implies ek == 0, i.e., a structurally singular matrix
-            iszero(dk) && throw(ZeroPivotException(k))
-            lk = ek / dk
-            d[k+1] -= lk * ek
+        a1, a2, b2 = d[k], d[k+1], e[k]
+        b3 = k + 1 < n ? e[k+1] : zero(b2)
+        Δ = a1 * a2 - b2 * b2
+        if abs(a1 * a2) >= α * abs2(b2) || abs(Δ) <= α * abs(a1 * b3) ||
+                abs(b2 * Δ) <= α * abs(a1 * a1 * b3)
+            # 1×1 pivot: a zero pivot implies b2 == 0, i.e., a structurally singular matrix
+            iszero(a1) && throw(ZeroPivotException(k))
+            lk = b2 / a1
+            d[k+1] -= lk * b2
             e[k] = lk
             k += 1
         else
-            # 2×2 pivot [dk ek; ek d[k+1]], nonsingular by construction; ek is kept as the
+            # 2×2 pivot [a1 b2; b2 a2], nonsingular by construction; b2 is kept as the
             # off-diagonal entry of D
             push!(blocks, k)
             if k + 1 < n
-                ek1 = e[k+1]
-                Δ = dk * d[k+1] - ek * ek
-                m = ek1 / Δ
-                d[k+2] -= dk * ek1 * m
+                m = b3 / Δ
+                d[k+2] -= a1 * b3 * m
                 e[k+1] = m
             end
             k += 2
@@ -321,7 +319,7 @@ function _ldlt!(S::SymTridiagonal{T,V}, ::BunchPivot) where {T,V}
 end
 
 """
-    ldlt(S::SymTridiagonal; shift = 0, alg::PivotingStrategy = NoPivot()) -> LDLt or LDLtPivoted
+    ldlt(S::SymTridiagonal, pivot::PivotingStrategy = NoPivot(); shift = 0) -> LDLt or LDLtPivoted
 
 Compute an `LDLt` (i.e., ``LDL^T``) factorization of the real symmetric tridiagonal matrix `S` such that `S = L*Diagonal(d)*L'`
 where `L` is a unit lower triangular matrix and `d` is a vector. The main use of an `LDLt`
@@ -329,10 +327,10 @@ factorization `F = ldlt(S)` is to solve the linear system of equations `Sx = b` 
 
 If `shift` is nonzero, the factorization of `S + shift*I` is computed instead.
 
-The keyword argument `alg` selects the pivoting strategy. The default `NoPivot()` computes
+The second argument `pivot` selects the pivoting strategy. The default `NoPivot()` computes
 the factorization without pivoting, which fails with a [`ZeroPivotException`](@ref) if a zero
 pivot is encountered and may be numerically unstable for indefinite matrices. With
-`alg = BunchPivot()`, a block factorization `S = L*D*L'` with a block diagonal `D` consisting
+`BunchPivot()`, a block factorization `S = L*D*L'` with a block diagonal `D` consisting
 of `1×1` and `2×2` blocks is computed and returned as an [`LDLtPivoted`](@ref). The pivot
 blocks are chosen according to the [`BunchPivot`](@ref) strategy, which is numerically stable
 and does not require any interchanges, so that the tridiagonal structure is preserved.
@@ -374,7 +372,7 @@ julia> ldlt(S)
 ERROR: ZeroPivotException: factorization encountered one or more zero pivots. Consider switching to a pivoted LU factorization.
 [...]
 
-julia> F = ldlt(S; alg=BunchPivot());
+julia> F = ldlt(S, BunchPivot());
 
 julia> F \\ [2., 3., 5.]
 3-element Vector{Float64}:
@@ -383,13 +381,13 @@ julia> F \\ [2., 3., 5.]
   1.5
 ```
 """
-function ldlt(M::SymTridiagonal{T}; shift::Number=false, alg::PivotingStrategy=NoPivot()) where T
+function ldlt(M::SymTridiagonal{T}, pivot::PivotingStrategy = NoPivot(); shift::Number=false) where T
     S = typeof((zero(T)+shift)/one(T))
     Mₛ = SymTridiagonal{S}(copymutable_oftype(M.dv, S), copymutable_oftype(M.ev, S))
     if !iszero(shift)
         Mₛ.dv .+= shift
     end
-    return ldlt!(Mₛ; alg)
+    return ldlt!(Mₛ, pivot)
 end
 
 factorize(S::SymTridiagonal) = ldlt(S)

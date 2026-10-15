@@ -43,22 +43,22 @@ end
 @testset "Pivoted LDLt (BunchPivot)" begin
     @testset "unsupported pivoting strategy" begin
         S = SymTridiagonal(randn(5), randn(4))
-        @test_throws ArgumentError ldlt(S; alg=RowMaximum())
-        @test_throws ArgumentError ldlt!(copy(S); alg=ColumnNorm())
+        @test_throws ArgumentError ldlt(S, RowMaximum())
+        @test_throws ArgumentError ldlt!(copy(S), ColumnNorm())
     end
 
     @testset "NoPivot is the default and returns an LDLt" begin
         S = SymTridiagonal(randn(5), randn(4))
-        @test ldlt(S; alg=NoPivot()) == ldlt(S)
-        @test ldlt(S; alg=NoPivot()) isa LDLt
-        @test ldlt(S; alg=BunchPivot()) isa LDLtPivoted
+        @test ldlt(S, NoPivot()) == ldlt(S)
+        @test ldlt(S, NoPivot()) isa LDLt
+        @test ldlt(S, BunchPivot()) isa LDLtPivoted
     end
 
     @testset "indefinite matrices with zero diagonal, eltype $elty" for elty in (Float64, ComplexF64, BigFloat, Rational{BigInt})
         # zero pivot without pivoting, 2×2 pivot at the first position
         S = SymTridiagonal(elty[0, 1, 2], elty[1, 1])
         @test_throws ZeroPivotException ldlt(S)
-        F = ldlt(S; alg=BunchPivot())
+        F = ldlt(S, BunchPivot())
         @test F isa LDLtPivoted{elty, SymTridiagonal{elty, Vector{elty}}, Vector{Int}}
         @test F.blocks == [1]
         @test size(F) == (3, 3)
@@ -85,7 +85,7 @@ end
         # all-zero diagonal, 2×2 pivot at the last position
         S = SymTridiagonal(zeros(elty, 4), ones(elty, 3))
         @test_throws ZeroPivotException ldlt(S)
-        F = ldlt(S; alg=BunchPivot())
+        F = ldlt(S, BunchPivot())
         @test F.blocks == [1, 3]
         @test F.L * F.D * F.Lt == S
         @test F.D == SymTridiagonal(zeros(elty, 4), elty[1, 0, 1])
@@ -106,7 +106,7 @@ end
             # skip singular and ill-conditioned matrices
             κ = cond(A)
             (isfinite(κ) && κ < 1e4) || continue
-            F = ldlt(S; alg=BunchPivot())
+            F = ldlt(S, BunchPivot())
             @test issorted(F.blocks) && all(k -> 1 <= k < n, F.blocks)
             @test all(diff(F.blocks) .>= 2)
             @test F.L * F.D * F.Lt ≈ A
@@ -126,12 +126,12 @@ end
             @test logabsdet(F)[2] ≈ logabsdet(A)[2]
             # in-place factorization
             Sc = copy(S)
-            Fc = ldlt!(Sc; alg=BunchPivot())
+            Fc = ldlt!(Sc, BunchPivot())
             @test Fc.data === Sc
             @test Fc == F
             # shift
             s = 2one(elty)
-            Fs = ldlt(S; shift=s, alg=BunchPivot())
+            Fs = ldlt(S, BunchPivot(); shift=s)
             @test Array(Fs) ≈ A + s*I
             @test Fs \ b ≈ (A + s*I) \ b
             # dimension mismatch
@@ -146,7 +146,7 @@ end
         for ev in ([1., 0., 1.], [1., 1., 1.], [1., 2., 3.])
             S = SymTridiagonal(zeros(4), ev)
             @test_throws ZeroPivotException ldlt(S)
-            F = ldlt(S; alg=BunchPivot())
+            F = ldlt(S, BunchPivot())
             B = bunchkaufman(Symmetric(Matrix(S), :L))
             @test F.blocks == [1, 3]
             @test B.p == 1:4
@@ -164,7 +164,7 @@ end
             A = Matrix(S)
             κ = cond(A)
             (isfinite(κ) && κ < 1e4) || continue
-            F = ldlt(S; alg=BunchPivot())
+            F = ldlt(S, BunchPivot())
             B = bunchkaufman(Symmetric(A, :L))
             b = randn(elty, n, 2)
             @test F \ b ≈ B \ b
@@ -181,13 +181,13 @@ end
         A = Array(S)
         b = [1.0, 2.0, 3.0]
         x = A \ b
-        F = ldlt(S; alg=BunchPivot())
+        F = ldlt(S, BunchPivot())
         @test F.blocks == [1]
         @test F \ b ≈ x rtol=1e-12
         @test maximum(abs, F.d) <= 3 * maximum(abs, A)
         # a 1×1 pivot is chosen if the diagonal entry is large enough
         S = SymTridiagonal([1.0, -2.0, 3.0], [1.0, 1.0])
-        F = ldlt(S; alg=BunchPivot())
+        F = ldlt(S, BunchPivot())
         @test isempty(F.blocks)
         @test F.L == ldlt(S).L
         @test F.d == ldlt(S).d
@@ -195,14 +195,14 @@ end
 
     @testset "structurally singular matrix" begin
         S = SymTridiagonal([0.0, 1.0, 1.0], [0.0, 1.0])
-        @test_throws ZeroPivotException ldlt(S; alg=BunchPivot())
+        @test_throws ZeroPivotException ldlt(S, BunchPivot())
         S = SymTridiagonal([1.0, 0.0, 1.0], [0.0, 0.0])
-        @test_throws ZeroPivotException ldlt(S; alg=BunchPivot())
+        @test_throws ZeroPivotException ldlt(S, BunchPivot())
     end
 
     @testset "empty matrix" begin
         S = SymTridiagonal(Float64[], Float64[])
-        F = ldlt(S; alg=BunchPivot())
+        F = ldlt(S, BunchPivot())
         @test size(F) == (0, 0)
         @test isempty(F.blocks)
         @test F \ Float64[] == Float64[]
@@ -211,7 +211,7 @@ end
 
     @testset "conversions" begin
         S = SymTridiagonal([0., 1., 2., 0., 1.], [1., 1., 1., 1.])
-        F = ldlt(S; alg=BunchPivot())
+        F = ldlt(S, BunchPivot())
         @test Factorization{Float64}(F) === F
         @test LDLtPivoted{Float64}(F) === F
         @test typeof(F)(F) === F
@@ -230,11 +230,11 @@ end
 
     @testset "adjoint" begin
         Sr = SymTridiagonal([0., 1., 2.], [1., 1.])
-        F = ldlt(Sr; alg=BunchPivot())
+        F = ldlt(Sr, BunchPivot())
         @test F' === F
         @test transpose(F) === F
         Sc = SymTridiagonal(ComplexF64[0, 1, 2], ComplexF64[1 + im, 1 - im])
-        F = ldlt(Sc; alg=BunchPivot())
+        F = ldlt(Sc, BunchPivot())
         @test F' isa LDLtPivoted{ComplexF64}
         @test Array(F') ≈ Array(Sc)'
         @test transpose(F) === F
@@ -245,7 +245,7 @@ end
 
     @testset "REPL printing" begin
         S = SymTridiagonal([0., 1., 2.], [1., 1.])
-        F = ldlt(S; alg=BunchPivot())
+        F = ldlt(S, BunchPivot())
         ldltstring = sprint((t, s) -> show(t, "text/plain", s), F)
         lstring = sprint((t, s) -> show(t, "text/plain", s), F.L)
         dstring = sprint((t, s) -> show(t, "text/plain", s), F.D)
