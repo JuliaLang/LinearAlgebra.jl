@@ -1001,7 +1001,7 @@ end
 
 @testset "Triangular division by Diagonal #27989" begin
     K = 5
-    for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
+    for elty in (Float32, Float64, ComplexF32, ComplexF64)
         U = UpperTriangular(randn(elty, K, K))
         L = LowerTriangular(randn(elty, K, K))
         D = Diagonal(randn(elty, K))
