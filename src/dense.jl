@@ -1870,7 +1870,7 @@ By default, the relative tolerance `rtol` is `n*ϵ`, where `n`
 is the size of the smallest dimension of `M`, and `ϵ` is the [`eps`](@ref) of
 the element type of `M`.
 
-Instead of a matrix `M`, you can instead pass an [`SVD`](@ref) factorization object `S`,
+Instead of a matrix `M`, you can pass an [`SVD`](@ref) factorization object `S`,
 as is returned by the [`svd`](@ref) function.  This is useful, for example, if you want to re-use
 an existing SVD result, or if you want to use lower-level `svd` options to have more control
 over the SVD algorithm.
