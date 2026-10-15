@@ -593,15 +593,17 @@ function nullspace(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps(
     T = eltype(F)
     (m == 0 || n == 0) && return Matrix{T}(I, n, n)
     r = rank(F; atol, rtol)
-    R = F.R
-    # A[:, p] * [-R₁₁ \ R₁₂; I] = Q * [0; R₂₂] ≈ 0
+    R, p = F.R, F.p
+    # A[:, p] * [-R₁₁ \ R₁₂; I] = Q * [0; R₂₂] ≈ 0, so the rows of [-R₁₁ \ R₁₂; I]
+    # are stored in un-pivoted order directly
     Y = zeros(T, n, n - r)
-    Y[1:r, :] = -(UpperTriangular(view(R, 1:r, 1:r)) \ view(R, 1:r, r+1:n))
+    Y[view(p, 1:r), :] = -(UpperTriangular(view(R, 1:r, 1:r)) \ view(R, 1:r, r+1:n))
     for j in 1:n-r
-        Y[r+j, j] = one(T)
+        Y[p[r+j], j] = one(T)
     end
-    # orthonormalize, then undo the column pivoting
-    return Matrix(qr!(Y).Q)[invperm(F.p), :]
+    # orthonormalize; the Q factor of a row-permuted matrix is the row-permuted Q factor
+    # (up to column signs), so no separate un-pivoting copy is needed
+    return Matrix(qr!(Y).Q)
 end
 
 """
