@@ -35,6 +35,7 @@ export
     Adjoint,
     Bidiagonal,
     BunchKaufman,
+    BunchPivot,
     Cholesky,
     CholeskyPivoted,
     ColumnNorm,
@@ -47,6 +48,7 @@ export
     Hermitian,
     Hessenberg,
     LDLt,
+    LDLtPivoted,
     LQ,
     LU,
     LowerTriangular,
@@ -262,6 +264,31 @@ Note that the [element type](@ref eltype) of the matrix must admit [`norm`](@ref
 [`abs`](@ref) methods, whose respective result types must admit a [`<`](@ref) method.
 """
 struct ColumnNorm <: PivotingStrategy end
+
+"""
+    BunchPivot
+
+Block diagonal pivoting strategy for symmetric tridiagonal matrices due to Bunch, used by
+the [`ldlt`](@ref) factorization. At each step, either a `1×1` or a `2×2` diagonal block
+is chosen as the pivot, but rows and columns are never interchanged, so that the
+tridiagonal structure is preserved. Given the largest absolute value `σ` of all entries of
+the matrix `S` and `α = (√5 - 1)/2`, the `1×1` pivot `S[k,k]` is chosen if
+`σ*abs(S[k,k]) ≥ α*abs2(S[k+1,k])`, and the `2×2` pivot `S[k:k+1,k:k+1]` otherwise. This
+choice bounds the element growth, which makes the factorization numerically stable also
+for indefinite matrices, where [`NoPivot`](@ref) may fail or be unstable. In the
+`2×2` case, the pivot is guaranteed to be nonsingular. This is the diagonal pivoting method
+underlying the [`bunchkaufman`](@ref) factorization, specialized to tridiagonal matrices,
+for which no interchanges are necessary; the resulting [`LDLtPivoted`](@ref) factorization
+is thus a memory-efficient equivalent of a [`BunchKaufman`](@ref) factorization.
+
+Note that the [element type](@ref eltype) of the matrix must admit [`abs`](@ref) and
+[`abs2`](@ref) methods, whose result types must admit a [`<`](@ref) method.
+
+# References
+J. R. Bunch, "Partial pivoting strategies for symmetric matrices",
+SIAM Journal on Numerical Analysis 11 (1974), 521-528.
+"""
+struct BunchPivot <: PivotingStrategy end
 
 using Base: DimOrInd
 
