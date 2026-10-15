@@ -46,10 +46,8 @@ end
 
 @testset "Core functionality" begin
     n = 10
-    areal = randn(n,n)/2
-    aimg  = randn(n,n)/2
     @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
-        a = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
+        a = eltya == Int ? rand(1:7, n, n) : randn(eltya, n, n)
         asym = transpose(a) + a                 # symmetric indefinite
         aherm = a' + a                 # Hermitian indefinite
         apos  = a' * a                 # Hermitian positive definite
