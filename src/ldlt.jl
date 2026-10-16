@@ -96,8 +96,10 @@ matrix `S` such that `S = L*D*L'`, where `L` is a unit lower triangular matrix a
 block diagonal matrix with `1×1` and `2×2` blocks (stored as a `SymTridiagonal`). The pivot
 blocks are chosen according to the [`BunchPivot`](@ref) strategy, which does not require any
 interchanges of rows or columns, so that the tridiagonal structure is preserved. In contrast
-to [`LDLt`](@ref), this factorization exists and is numerically stable for any symmetric
-tridiagonal matrix, in particular for indefinite ones. The main use of an `LDLtPivoted`
+to [`LDLt`](@ref), this factorization exists and is numerically stable for any nonsingular
+symmetric tridiagonal matrix, in particular for indefinite ones. For complex `S`, the
+factorization is `S = L*D*transpose(L)`, since a `SymTridiagonal` matrix is complex symmetric,
+not Hermitian. The main use of an `LDLtPivoted`
 factorization `F = ldlt(S, BunchPivot())` is to solve the linear system of equations
 `Sx = b` with `F\\b`. This is the return type of [`ldlt(_, BunchPivot())`](@ref ldlt),
 the corresponding matrix factorization function.
@@ -297,8 +299,9 @@ function ldlt!(S::SymTridiagonal{T,V}, ::BunchPivot) where {T,V}
         Δ = a1 * a2 - b2 * b2
         if abs(a1 * a2) >= α * abs2(b2) || abs(Δ) <= α * abs(a1 * b3) ||
                 abs(b2 * Δ) <= α * abs(a1 * a1 * b3)
-            # 1×1 pivot: a zero pivot implies b2 == 0, i.e., a structurally singular matrix
-            iszero(a1) && throw(ZeroPivotException(k))
+            # 1×1 pivot: by the pivot choice, a zero pivot implies b2 == 0, so that the
+            # matrix is singular
+            iszero(a1) && throw(SingularException(k))
             lk = b2 / a1
             d[k+1] -= lk * b2
             e[k] = lk
@@ -315,6 +318,8 @@ function ldlt!(S::SymTridiagonal{T,V}, ::BunchPivot) where {T,V}
             k += 2
         end
     end
+    # a final 1×1 pivot
+    k == n && iszero(d[n]) && throw(SingularException(n))
     return LDLtPivoted{T,SymTridiagonal{T,V},typeof(blocks)}(S, blocks)
 end
 
@@ -333,7 +338,9 @@ pivot is encountered and may be numerically unstable for indefinite matrices. Wi
 `BunchPivot()`, a block factorization `S = L*D*L'` with a block diagonal `D` consisting
 of `1×1` and `2×2` blocks is computed and returned as an [`LDLtPivoted`](@ref). The pivot
 blocks are chosen according to the [`BunchPivot`](@ref) strategy, which is numerically stable
-and does not require any interchanges, so that the tridiagonal structure is preserved.
+and does not require any interchanges, so that the tridiagonal structure is preserved. With
+this strategy, a zero pivot can only occur for a singular matrix, in which case a
+[`SingularException`](@ref) is thrown.
 
 See also [`bunchkaufman`](@ref) for a similar, but pivoted, factorization of arbitrary symmetric or Hermitian matrices.
 
@@ -437,71 +444,71 @@ function ldiv!(F::LDLtPivoted{<:Any,<:SymTridiagonal}, B::AbstractVecOrMat)
     e = Fdata.ev
     blocks = getfield(F, :blocks)
     nb = length(blocks)
+    # The 2×2 blocks split the rows into runs of 1×1 pivots, which are processed in tight
+    # loops as in the unpivoted case, interrupted by the 2×2 blocks.
     @inbounds begin
         # forward substitution: solve L*y = b
-        k, j = 1, 1
-        while k < n
-            if j <= nb && blocks[j] == k
-                # 2×2 block, L[k+2,k] = -e[k]*e[k+1] and L[k+2,k+1] = d[k]*e[k+1]
-                if k + 1 < n
-                    dk, ek, m = d[k], e[k], e[k+1]
-                    @simd for c = 1:nrhs
-                        B[k+2,c] -= m*(dk*B[k+1,c] - ek*B[k,c])
-                    end
-                end
-                k += 2
-                j += 1
-            else
-                # 1×1 block, L[k+1,k] = e[k]
-                lk = e[k]
+        k = 1
+        for j in 1:nb+1
+            kb = j <= nb ? blocks[j] : n # start of the next 2×2 block
+            # 1×1 blocks, L[i+1,i] = e[i]
+            for i in k:kb-1
+                li = e[i]
                 @simd for c = 1:nrhs
-                    B[k+1,c] -= lk*B[k,c]
+                    B[i+1,c] -= li*B[i,c]
                 end
-                k += 1
             end
+            j <= nb || break
+            # 2×2 block, L[kb+2,kb] = -e[kb]*e[kb+1] and L[kb+2,kb+1] = d[kb]*e[kb+1]
+            if kb + 1 < n
+                dk, ek, m = d[kb], e[kb], e[kb+1]
+                @simd for c = 1:nrhs
+                    B[kb+2,c] -= m*(dk*B[kb+1,c] - ek*B[kb,c])
+                end
+            end
+            k = kb + 2
         end
         # block diagonal solve D*z = y, combined with backward substitution L'*x = z
-        k, j = n, nb
-        while k >= 1
-            if j >= 1 && blocks[j] == k - 1
-                # 2×2 block [d1 e1; e1 d2] in rows k-1 and k, which is solved with the
-                # explicit inverse (see the reference in the docstring of `BunchPivot`):
-                # for a 2×2 pivot, the pivoting strategy guarantees |d1*d2| < α*e1^2, so
-                # that the determinant Δ is computed without cancellation.
-                d1, d2, e1 = d[k-1], d[k], e[k-1]
-                Δ = d1*d2 - e1*e1
-                i11, i12, i22 = d2/Δ, -e1/Δ, d1/Δ
-                if k < n
-                    m = e[k]
-                    @simd for c = 1:nrhs
-                        y1, y2, xk1 = B[k-1,c], B[k,c], B[k+1,c]
-                        B[k-1,c] = i11*y1 + i12*y2 + e1*m*xk1
-                        B[k,c]   = i12*y1 + i22*y2 - d1*m*xk1
-                    end
-                else
-                    @simd for c = 1:nrhs
-                        y1, y2 = B[k-1,c], B[k,c]
-                        B[k-1,c] = i11*y1 + i12*y2
-                        B[k,c]   = i12*y1 + i22*y2
-                    end
-                end
-                k -= 2
-                j -= 1
-            else
-                # 1×1 block
-                dk = d[k]
-                if k < n
-                    lk = e[k]
-                    @simd for c = 1:nrhs
-                        B[k,c] = B[k,c]/dk - lk*B[k+1,c]
-                    end
-                else
-                    @simd for c = 1:nrhs
-                        B[k,c] /= dk
-                    end
+        k = n
+        for j in nb:-1:0
+            kb = j >= 1 ? blocks[j] + 1 : 0 # last row of the previous 2×2 block
+            # 1×1 blocks
+            if k == n && kb < n
+                dn = d[n]
+                @simd for c = 1:nrhs
+                    B[n,c] /= dn
                 end
                 k -= 1
             end
+            for i in k:-1:kb+1
+                di, li = d[i], e[i]
+                @simd for c = 1:nrhs
+                    B[i,c] = B[i,c]/di - li*B[i+1,c]
+                end
+            end
+            j >= 1 || break
+            # 2×2 block [d1 e1; e1 d2] in rows kb-1 and kb, which is solved with the
+            # explicit inverse (see the reference in the docstring of `BunchPivot`):
+            # for a 2×2 pivot, the pivoting strategy guarantees |d1*d2| < α*e1^2, so
+            # that the determinant Δ is computed without cancellation.
+            d1, d2, e1 = d[kb-1], d[kb], e[kb-1]
+            Δ⁻¹ = inv(d1*d2 - e1*e1)
+            i11, i12, i22 = d2*Δ⁻¹, -e1*Δ⁻¹, d1*Δ⁻¹
+            if kb < n
+                m = e[kb]
+                @simd for c = 1:nrhs
+                    y1, y2, xk1 = B[kb-1,c], B[kb,c], B[kb+1,c]
+                    B[kb-1,c] = i11*y1 + i12*y2 + e1*m*xk1
+                    B[kb,c]   = i12*y1 + i22*y2 - d1*m*xk1
+                end
+            else
+                @simd for c = 1:nrhs
+                    y1, y2 = B[kb-1,c], B[kb,c]
+                    B[kb-1,c] = i11*y1 + i12*y2
+                    B[kb,c]   = i12*y1 + i22*y2
+                end
+            end
+            k = kb - 2
         end
     end
     return B

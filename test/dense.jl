@@ -217,8 +217,11 @@ bimg  = randn(n,2)/2
         @test factorize(A) == LowerTriangular(A)
         A = diagm(0 => d, 1 => e)
         @test factorize(A) == Bidiagonal(d,e,:U)
+        A = diagm(0 => d, 1 => e, -1 => e)
+        @test factorize(A) isa LDLtPivoted
+        @test Matrix(factorize(A)) ≈ A
+        @test factorize(A) \ d ≈ A \ d
         if eltya <: Real
-            A = diagm(0 => d, 1 => e, -1 => e)
             @test Matrix(factorize(A)) ≈ Matrix(factorize(SymTridiagonal(d,e)))
             A = diagm(0 => d, 1 => e, -1 => e, 2 => f, -2 => f)
             @test inv(factorize(A)) ≈ inv(factorize(Symmetric(A)))
@@ -232,6 +235,43 @@ bimg  = randn(n,2)/2
         @test factorize(x) == x
     end
 end # for eltya
+
+@testset "factorize of dense symmetric tridiagonal matrices" begin
+    # indefinite, with zero diagonal: requires 2×2 pivots
+    A = diagm(0 => zeros(6), 1 => ones(5), -1 => ones(5))
+    F = factorize(A)
+    @test F isa LDLtPivoted{Float64}
+    @test F.blocks == [1, 3, 5]
+    @test Matrix(F) ≈ A
+    b = collect(1.0:6.0)
+    @test F \ b ≈ A \ b
+    @test det(F) ≈ det(A)
+    # integer matrix
+    A = [2 1 0; 1 2 1; 0 1 2]
+    F = factorize(A)
+    @test F isa LDLtPivoted{Float64}
+    @test F \ [1, 2, 3] ≈ float(A) \ [1, 2, 3]
+    # complex symmetric
+    A = ComplexF64[1 2im 0; 2im 0 1+im; 0 1+im 3]
+    F = factorize(A)
+    @test F isa LDLtPivoted{ComplexF64}
+    b = ComplexF64[1, 2, 3im]
+    @test F \ b ≈ A \ b
+    # complex Hermitian, but not symmetric: not representable as a SymTridiagonal
+    A = ComplexF64[1 2im 0; -2im 0 1+im; 0 1-im 3]
+    F = factorize(A)
+    @test F isa LU
+    @test F \ b ≈ A \ b
+    # real-valued Hermitian, stored as complex
+    A = ComplexF64[0 1 0; 1 0 2; 0 2 1]
+    F = factorize(A)
+    @test F isa LDLtPivoted{ComplexF64}
+    @test F \ b ≈ A \ b
+    # singular
+    @test_throws SingularException factorize([1.0 1.0; 1.0 1.0])
+    @test_throws SingularException factorize(diagm(0 => zeros(5), 1 => ones(4), -1 => ones(4)))
+    @test_throws SingularException factorize([0.0 0.0 0.0; 0.0 1.0 2.0; 0.0 2.0 1.0])
+end
 
 @testset "Test diagm for vectors" begin
     @test diagm(zeros(50)) == diagm(0 => zeros(50))

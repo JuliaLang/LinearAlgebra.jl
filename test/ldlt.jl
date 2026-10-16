@@ -193,11 +193,18 @@ end
         @test F.d == ldlt(S).d
     end
 
-    @testset "structurally singular matrix" begin
+    @testset "singular matrices" begin
         S = SymTridiagonal([0.0, 1.0, 1.0], [0.0, 1.0])
-        @test_throws ZeroPivotException ldlt(S, BunchPivot())
+        @test_throws SingularException(1) ldlt(S, BunchPivot())
         S = SymTridiagonal([1.0, 0.0, 1.0], [0.0, 0.0])
-        @test_throws ZeroPivotException ldlt(S, BunchPivot())
+        @test_throws SingularException(2) ldlt(S, BunchPivot())
+        # zero final pivot
+        S = SymTridiagonal([1.0, 1.0], [1.0])
+        @test_throws SingularException(2) ldlt(S, BunchPivot())
+        S = SymTridiagonal([0.0], Float64[])
+        @test_throws SingularException(1) ldlt(S, BunchPivot())
+        S = SymTridiagonal([1//1, 2, 1], [1//1, 1])
+        @test_throws SingularException(3) ldlt(S, BunchPivot())
     end
 
     @testset "empty matrix" begin
