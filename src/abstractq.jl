@@ -551,8 +551,8 @@ size(Q::HessenbergQ) = size(Q, 1), size(Q, 2)
 const BlasHessenbergQ{T,sym} = HessenbergQ{T,<:StridedMatrix{T},<:StridedVector{T},sym} where {T<:BlasFloat,sym}
 
 ## reconstruct the original matrix
-Matrix{T}(Q::BlasHessenbergQ{<:Any,false}) where {T} = convert(Matrix{T}, LAPACK.orghr!(1, size(Q.factors, 1), copy(Q.factors), Q.τ))
-Matrix{T}(Q::BlasHessenbergQ{<:Any,true}) where {T} = convert(Matrix{T}, LAPACK.orgtr!(Q.uplo, copy(Q.factors), Q.τ))
+Matrix{T}(Q::BlasHessenbergQ{S,false}) where {T,S<:BlasFloat} = convert(Matrix{T}, LAPACK.orghr!(1, size(Q.factors, 1), copy(Q.factors), Q.τ))
+Matrix{T}(Q::BlasHessenbergQ{S,true}) where {T,S<:BlasFloat} = convert(Matrix{T}, LAPACK.orgtr!(Q.uplo, copy(Q.factors), Q.τ))
 
 lmul!(Q::BlasHessenbergQ{T,false}, X::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.ormhr!('L', 'N', 1, size(Q.factors, 1), Q.factors, Q.τ, X)
@@ -573,18 +573,19 @@ rmul!(X::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:BlasHessenbergQ{T,true}}) wh
     (Q = adjQ.Q; LAPACK.ormtr!('R', Q.uplo, ifelse(T<:Real, 'T', 'C'), Q.factors, Q.τ, X))
 
 # `Q = H_1 ⋯ H_{n-1}` with the reflectors shifted one row down, so the packed kernels apply
-# once `factors` and the operand are restricted to rows 2:n. For `uplo == 'U'` the reflectors
-# run in the opposite order and sit above the diagonal, which reversing both index orders
-# turns back into the packed layout. The two branches call the kernel separately to keep
-# the view types concrete.
-function _lqmul!(Q::HessenbergQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+# once `factors` and the operand are restricted to rows 2:n. For a symmetric factorization
+# with `uplo == 'U'` the reflectors run in the opposite order and sit above the diagonal,
+# which reversing both index orders turns back into the packed layout; `uplo` is
+# meaningless for the general one, as for `ormhr!` versus `ormtr!`. The two branches call
+# the kernel separately to keep the view types concrete.
+function _lqmul!(Q::HessenbergQ{<:Any,<:Any,<:Any,sym}, B::AbstractVecOrMat, ::Val{adj}) where {sym,adj}
     require_one_based_indexing(B)
     n = size(Q.factors, 1)
     mB, nB = size(B, 1), size(B, 2)
     if n != mB
         throw(DimensionMismatch(lazy"matrix Q has dimensions ($n,$n) but B has dimensions ($mB, $nB)"))
     end
-    if Q.uplo == 'U'
+    if sym && Q.uplo == 'U'
         _lqmul!(QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), view(B, n-1:-1:1, :), Val(adj))
     else
         _lqmul!(QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), view(B, 2:n, :), Val(adj))
@@ -592,14 +593,14 @@ function _lqmul!(Q::HessenbergQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     B
 end
 
-function _rqmul!(A::AbstractVecOrMat, Q::HessenbergQ, ::Val{adj}) where {adj}
+function _rqmul!(A::AbstractVecOrMat, Q::HessenbergQ{<:Any,<:Any,<:Any,sym}, ::Val{adj}) where {sym,adj}
     require_one_based_indexing(A)
     n = size(Q.factors, 1)
     mA, nA = size(A, 1), size(A, 2)
     if nA != n
         throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($n, $n)"))
     end
-    if Q.uplo == 'U'
+    if sym && Q.uplo == 'U'
         _rqmul!(view(A, :, n-1:-1:1), QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), Val(adj))
     else
         _rqmul!(view(A, :, 2:n), QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), Val(adj))
