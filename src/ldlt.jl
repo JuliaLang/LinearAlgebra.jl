@@ -397,7 +397,7 @@ function ldlt(M::SymTridiagonal{T}, pivot::PivotingStrategy = NoPivot(); shift::
     return ldlt!(Mₛ, pivot)
 end
 
-factorize(S::SymTridiagonal) = ldlt(S)
+factorize(S::SymTridiagonal) = ldlt(S, BunchPivot())
 
 function ldiv!(S::LDLt{<:Any,<:SymTridiagonal}, B::AbstractVecOrMat)
     require_one_based_indexing(B)

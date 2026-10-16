@@ -273,7 +273,7 @@ function dot(x::AbstractVector, S::SymTridiagonal, y::AbstractVector)
     return r
 end
 
-(\)(T::SymTridiagonal, B::AbstractVecOrMat) = ldlt(T)\B
+(\)(T::SymTridiagonal, B::AbstractVecOrMat) = ldlt(T, BunchPivot())\B
 
 # division with optional shift for use in shifted-Hessenberg solvers (hessenberg.jl):
 ldiv!(A::SymTridiagonal, B::AbstractVecOrMat; shift::Number=false) = ldiv!(ldlt(A, shift=shift), B)

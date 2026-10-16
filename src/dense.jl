@@ -1639,8 +1639,7 @@ of multiple systems. For example: `A=factorize(A); x=A\\b; y=A\\C`.
 | Bidiagonal                 | Bidiagonal                                 |
 | UniformScaling             | UniformScaling                             |
 | Tridiagonal                | LU (see [`lu`](@ref))                      |
-| Symmetric real tridiagonal | LDLt (see [`ldlt`](@ref))                  |
-| Dense symmetric tridiagonal | Pivoted LDLt (see [`ldlt`](@ref) and [`BunchPivot`](@ref)) |
+| Symmetric tridiagonal      | Pivoted LDLt (see [`ldlt`](@ref) and [`BunchPivot`](@ref)) |
 | General square             | LU (see [`lu`](@ref))                      |
 | General non-square         | QR (see [`qr`](@ref))                      |
 

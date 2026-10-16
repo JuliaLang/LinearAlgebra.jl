@@ -47,6 +47,16 @@ end
         @test_throws ArgumentError ldlt!(copy(S), ColumnNorm())
     end
 
+    @testset "factorize and \\ use BunchPivot" begin
+        S = SymTridiagonal(zeros(4), [1.0, 0.0, 1.0])
+        @test factorize(S) isa LDLtPivoted
+        @test factorize(S).blocks == [1, 3]
+        b = [1.0, 2.0, 3.0, 4.0]
+        @test S \ b == [2.0, 1.0, 4.0, 3.0]
+        @test factorize(S) \ b == S \ b
+        @test_throws SingularException SymTridiagonal([1.0, 1.0], [1.0]) \ [1.0, 1.0]
+    end
+
     @testset "NoPivot is the default and returns an LDLt" begin
         S = SymTridiagonal(randn(5), randn(4))
         @test ldlt(S, NoPivot()) == ldlt(S)
