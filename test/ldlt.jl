@@ -55,6 +55,26 @@ end
         @test S \ b == [2.0, 1.0, 4.0, 3.0]
         @test factorize(S) \ b == S \ b
         @test_throws SingularException SymTridiagonal([1.0, 1.0], [1.0]) \ [1.0, 1.0]
+        # ldiv! and rdiv!, also with a shift that produces a zero diagonal
+        x = [2.0, 1.0, 4.0, 3.0]
+        @test ldiv!(S, copy(b)) == x
+        @test rdiv!(copy(b'), S) == x'
+        S1 = SymTridiagonal(ones(4), [1.0, 0.0, 1.0])
+        @test_throws ZeroPivotException ldlt(S1; shift=-1)
+        @test ldiv!(S1, copy(b); shift=-1) == x
+        @test rdiv!(copy(b'), S1; shift=-1) == x'
+        B = [b 2b]
+        @test ldiv!(S1, copy(B); shift=-1.0) == [x 2x]
+        @test rdiv!(copy(B'), S1; shift=-1.0) == [x 2x]'
+        @test_throws SingularException ldiv!(S1, copy(b); shift=-2)
+        # shifted solves with the Hessenberg factorization of an indefinite Hermitian matrix
+        A = Matrix(Hermitian(randn(ComplexF64, 6, 6)))
+        F = hessenberg(Hermitian(A))
+        for μ in (0.3, -0.5 + 0.2im, F.H.dv[1] + 0)
+            bc = randn(ComplexF64, 6)
+            @test (F + μ*I) \ bc ≈ (A + μ*I) \ bc
+            @test bc' / (F + μ*I) ≈ bc' / (A + μ*I)
+        end
     end
 
     @testset "NoPivot is the default and returns an LDLt" begin

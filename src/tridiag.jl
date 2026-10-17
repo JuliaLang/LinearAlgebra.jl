@@ -276,8 +276,10 @@ end
 (\)(T::SymTridiagonal, B::AbstractVecOrMat) = ldlt(T, BunchPivot())\B
 
 # division with optional shift for use in shifted-Hessenberg solvers (hessenberg.jl):
-ldiv!(A::SymTridiagonal, B::AbstractVecOrMat; shift::Number=false) = ldiv!(ldlt(A, shift=shift), B)
-rdiv!(B::AbstractVecOrMat, A::SymTridiagonal; shift::Number=false) = rdiv!(B, ldlt(A, shift=shift))
+ldiv!(A::SymTridiagonal, B::AbstractVecOrMat; shift::Number=false) =
+    ldiv!(ldlt(A, BunchPivot(); shift=shift), B)
+rdiv!(B::AbstractVecOrMat, A::SymTridiagonal; shift::Number=false) =
+    rdiv!(B, ldlt(A, BunchPivot(); shift=shift))
 
 # tridiagonal eigensolver meta-algorithm from LAPACK.syevr! for alg==RobustRepresentations()
 #   - if all eigenvalues are desired, call stev == sterf (eigvals) or stegr == stemr (eigen)
