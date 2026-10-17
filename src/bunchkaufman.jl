@@ -460,19 +460,6 @@ end
 
 export inertia
 
-function arg_illegal(fun_name::AbstractString,
-    info::Integer,
-    waer::AbstractChar)
-    if waer == 'W'
-        @warn " ** On entry to '$(fun_name)' parameter number " *
-            "$(info) had an illegal value"
-    else
-        error(" ** On entry to '$(fun_name)' parameter number " *
-            "$(info) had an illegal value")
-    end
-end
-
-
 function cabs1(z::T) where T <: Complex
     return abs(real(z)) + abs(imag(z))
 end
@@ -609,31 +596,10 @@ function generic_bunchkaufman!(
     rook::Bool=false
     ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
 
-    # Inputs must be 1-indexed; bounds may not be checked.
-    Base.require_one_based_indexing(A)
-
-    # Initialize info integer as 0
-    info = 0::BlasInt
-    # Get size of matrix
-    N, N2 = size(A)
-    # Initialize permutation vector
+    require_one_based_indexing(A)
+    N = checksquare(A)
     ipiv = Vector{BlasInt}(undef, N)
-
-    # Check input correctness
-    if uplo != 'U' && uplo != 'L'
-        info = (-1)::BlasInt
-    elseif N != N2
-        info = (-2)::BlasInt
-    elseif syhe != 'S' && syhe != 'H'
-        info = (-3)::BlasInt
-    end
-    if info < 0
-        arg_illegal("generic_bunchkaufman!", -info, 'W')
-        return A, ipiv, info
-    end
-    # if rook
-    #     error("Rook pivoting not implemented yet.")
-    # end
+    info = BlasInt(0)
 
     # Initialize `alpha` for use in choosing pivot block size.
     # The exact value is
