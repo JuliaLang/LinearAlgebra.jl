@@ -1557,34 +1557,12 @@ function bunchkaufman(A::AbstractMatrix{TS},
     rook::Bool = false;
     check::Bool = true
     ) where TS <:Union{TI, Complex{TI}} where TI <: Integer
-
-    # Identity whether matrix is symmetric or Hermitian or none
-    if A isa Symmetric
-        TA = Symmetric
-    elseif A isa Hermitian
-        TA = Hermitian
-    else
-        TA = Nothing
-    end
-
-    # Create a rational copy of input integer matrix, as the Bunch-Kaufman
-    # algorithm is closed over the rationals but not over the integers.
-    # We promote input to BigInt to avoid overflow problems
-    if TA == Nothing
-        if TS <: Integer
-            M = Rational{BigInt}.(bkcopy_oftype(A, TS))
-        else
-            M = Complex{Rational{BigInt}}.(bkcopy_oftype(A, TS))
-        end
-    else
-        if TS <: Integer
-            M = TA(Rational{BigInt}.(bkcopy_oftype(A, TS)), Symbol(A.uplo))
-        else
-            M = TA(Complex{Rational{BigInt}}.(bkcopy_oftype(A, TS)),
-                Symbol(A.uplo))
-        end
-    end
-
+    # Create a rational copy of the integer matrix, as the Bunch-Kaufman algorithm is closed
+    # over the rationals but not over the integers. We promote to BigInt to avoid overflow.
+    S = TS <: Complex ? Complex{Rational{BigInt}} : Rational{BigInt}
+    M = S.(A) # a full matrix, also for Symmetric and Hermitian A
+    M = A isa Symmetric ? Symmetric(M, Symbol(A.uplo)) :
+        A isa Hermitian ? Hermitian(M, Symbol(A.uplo)) : M
     return bunchkaufman_native!(M, rook; check)
 end
 
