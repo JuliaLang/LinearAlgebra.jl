@@ -1538,10 +1538,7 @@ function bunchkaufman_native!(A::AbstractMatrix{TS},
 end
 
 
-"""
-Overload 'bunchkaufman.jl' methods through multiple dispatch
-"""
-
+# Overload 'bunchkaufman.jl' methods through multiple dispatch
 function bunchkaufman!(A::AbstractMatrix{TS},
     rook::Bool = false;
     check::Bool = true
