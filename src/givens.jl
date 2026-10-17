@@ -106,6 +106,20 @@ function givensAlgorithm(f::T, g::T) where T<:AbstractFloat
                 scalepar = max(abs(f1), abs(g1))
                 if scalepar < safmx2u || count >= 20 break end
             end
+            if scalepar >= safmx2u
+                # scaling failed, so f and/or g is infinite, see the exceptional cases in
+                # Bindel et al., "On Computing Givens Rotations Reliably and Efficiently",
+                # ACM TOMS 28(2), 2002. Only the infinite ones among f1, g1 are still large.
+                finf = abs(f1) >= safmx2u
+                ginf = abs(g1) >= safmx2u
+                if finf && ginf # no meaningful rotation
+                    return T0(NaN), T0(NaN), T(NaN)
+                elseif finf # limit of the finite case as |f| → ∞
+                    return onepar, zeropar, f
+                else # limit of the finite case as |g| → ∞
+                    return zeropar, (g < -g ? -onepar : onepar), abs(g)
+                end
+            end
             r = sqrt(f1*f1 + g1*g1)
             cs = f1/r
             sn = g1/r
@@ -170,6 +184,10 @@ function givensAlgorithm(f::Complex{T}, g::Complex{T}) where T<:AbstractFloat
             gs *= safmn2
             scalepar *= safmn2
             if scalepar < safmx2u || count >= 20 break end
+        end
+        if scalepar >= safmx2u
+            # scaling failed, so f and/or g is infinite
+            return _givensAlgorithm_inf(f, g, fs, gs, safmx2u)
         end
     elseif scalepar <= safmn2u
         if g == 0
@@ -248,6 +266,38 @@ function givensAlgorithm(f::Complex{T}, g::Complex{T}) where T<:AbstractFloat
         end
     end
     return cs, sn, r
+end
+
+# Exceptional cases of zlartg for infinite f and/or g, see Bindel et al., "On Computing
+# Givens Rotations Reliably and Efficiently", ACM TOMS 28(2), 2002. The rotation is the
+# limit of the finite case. fs and gs are f and g scaled down such that exactly their
+# infinite components are still ≥ big in magnitude.
+function _givensAlgorithm_inf(f::Complex{T}, g::Complex{T}, fs, gs, big) where T<:AbstractFloat
+    onepar = one(T)
+    T0 = typeof(onepar) # dimensionless
+    zeropar = zero(onepar)
+    czero = complex(zeropar)
+    # direction of the infinite part of a component: ±1, or 0 if finite
+    infsign(x) = abs(x) >= big ? (x < -x ? -onepar : onepar) : zeropar
+    fr, fi = infsign(real(fs)), infsign(imag(fs))
+    gr, gi = infsign(real(gs)), infsign(imag(gs))
+    finf = fr != 0 || fi != 0
+    ginf = gr != 0 || gi != 0
+    if finf && ginf # no meaningful rotation
+        return T0(NaN), complex(T0(NaN), T0(NaN)), complex(T(NaN), T(NaN))
+    elseif finf # limit as |f| → ∞
+        return onepar, czero, f
+    end
+    # limit as |g| → ∞: cs = 0, sn = sign(f)*conj(sign(g)), r = sign(f)*∞
+    gdir = complex(gr, gi) / sqrt(gr*gr + gi*gi)
+    inf = abs(real(g)) + abs(imag(g))
+    f == 0 && return zeropar, conj(gdir), complex(inf)
+    # direction of f, scaled first to avoid overflow in abs
+    f1 = f / max(abs(real(f)), abs(imag(f)))
+    fdir = f1 / abs(f1)
+    # multiply by ∞ componentwise, avoiding ∞*0 = NaN
+    mulinf(x) = x == 0 ? x*zeropar : (x < -x ? -inf : inf)
+    return zeropar, fdir*conj(gdir), complex(mulinf(real(fdir)), mulinf(imag(fdir)))
 end
 
 # enable for unitful quantities
