@@ -286,7 +286,11 @@ end
 # (2006), 865-867), which requires neither interchanges nor the largest entry of the matrix.
 # See the docstrings of `BunchPivot` and `LDLtPivoted` for the pivot choice and the storage
 # format, respectively.
-function ldlt!(S::SymTridiagonal{T,V}, ::BunchPivot) where {T,V}
+ldlt!(S::SymTridiagonal{T,V}, ::BunchPivot) where {T,V} = _ldlt_bunch!(S, true)
+
+# With `check = false`, a zero 1×1 pivot does not throw; the factorization is then completed
+# with a singular D. This is possible since a zero 1×1 pivot implies a zero subdiagonal entry.
+function _ldlt_bunch!(S::SymTridiagonal{T,V}, check::Bool) where {T,V}
     n = size(S,1)
     d = S.dv
     e = S.ev
@@ -301,10 +305,14 @@ function ldlt!(S::SymTridiagonal{T,V}, ::BunchPivot) where {T,V}
                 abs(b2 * Δ) <= α * abs(a1 * a1 * b3)
             # 1×1 pivot: by the pivot choice, a zero pivot implies b2 == 0, so that the
             # matrix is singular
-            iszero(a1) && throw(SingularException(k))
-            lk = b2 / a1
-            d[k+1] -= lk * b2
-            e[k] = lk
+            if iszero(a1)
+                check && throw(SingularException(k))
+                e[k] = zero(e[k])
+            else
+                lk = b2 / a1
+                d[k+1] -= lk * b2
+                e[k] = lk
+            end
             k += 1
         else
             # 2×2 pivot [a1 b2; b2 a2], nonsingular by construction; b2 is kept as the
@@ -319,7 +327,7 @@ function ldlt!(S::SymTridiagonal{T,V}, ::BunchPivot) where {T,V}
         end
     end
     # a final 1×1 pivot
-    k == n && iszero(d[n]) && throw(SingularException(n))
+    check && k == n && iszero(d[n]) && throw(SingularException(n))
     return LDLtPivoted{T,SymTridiagonal{T,V},typeof(blocks)}(S, blocks)
 end
 
@@ -388,13 +396,17 @@ julia> F \\ [2., 3., 5.]
   1.5
 ```
 """
-function ldlt(M::SymTridiagonal{T}, pivot::PivotingStrategy = NoPivot(); shift::Number=false) where T
+ldlt(M::SymTridiagonal, pivot::PivotingStrategy = NoPivot(); shift::Number=false) =
+    ldlt!(_ldlt_shiftedcopy(M, shift), pivot)
+
+# a mutable copy of M + shift*I, with an element type that admits division
+function _ldlt_shiftedcopy(M::SymTridiagonal{T}, shift::Number) where T
     S = typeof((zero(T)+shift)/one(T))
     Mₛ = SymTridiagonal{S}(copymutable_oftype(M.dv, S), copymutable_oftype(M.ev, S))
     if !iszero(shift)
         Mₛ.dv .+= shift
     end
-    return ldlt!(Mₛ, pivot)
+    return Mₛ
 end
 
 factorize(S::SymTridiagonal) = ldlt(S, BunchPivot())
@@ -522,30 +534,28 @@ function logabsdet(F::LDLt{<:Any,<:SymTridiagonal})
     return sum(log∘abs, it), prod(sign, it)
 end
 
-# determinants of the diagonal blocks of D
-function _ldlt_blockdets(F::LDLtPivoted{T,<:SymTridiagonal}) where {T}
+function logabsdet(F::LDLtPivoted{T,<:SymTridiagonal}) where {T}
     Fdata = getfield(F, :data)
     d, e, blocks = Fdata.dv, Fdata.ev, getfield(F, :blocks)
-    n = length(d)
-    dets = Vector{T}(undef, n - length(blocks))
-    k, j, i = 1, 1, 1
-    @inbounds while k <= n
-        if j <= length(blocks) && blocks[j] == k
-            dets[i] = d[k]*d[k+1] - e[k]*e[k]
-            k += 2
-            j += 1
-        else
-            dets[i] = d[k]
-            k += 1
+    n, nb = length(d), length(blocks)
+    la = zero(typeof(log(abs(one(T)))))
+    σ = sign(one(T))
+    # runs of 1×1 blocks, interrupted by the 2×2 blocks
+    k = 1
+    @inbounds for j in 1:nb+1
+        kb = j <= nb ? blocks[j] : n + 1 # start of the next 2×2 block
+        for i in k:kb-1
+            di = d[i]
+            la += log(abs(di))
+            σ *= sign(di)
         end
-        i += 1
+        j <= nb || break
+        Δ = d[kb]*d[kb+1] - e[kb]*e[kb]
+        la += log(abs(Δ))
+        σ *= sign(Δ)
+        k = kb + 2
     end
-    return dets
-end
-
-function logabsdet(F::LDLtPivoted{<:Any,<:SymTridiagonal})
-    dets = _ldlt_blockdets(F)
-    return sum(log∘abs, dets), prod(sign, dets)
+    return la, σ
 end
 
 # Conversion methods

@@ -489,7 +489,8 @@ end
 
 # det with optional diagonal shift for use with shifted Hessenberg factorizations
 det(A::SymTridiagonal; shift::Number=false) = det_usmani(A.ev, A.dv, A.ev, shift)
-logabsdet(A::SymTridiagonal; shift::Number=false) = logabsdet(ldlt(A; shift=shift))
+logabsdet(A::SymTridiagonal; shift::Number=false) =
+    logabsdet(_ldlt_bunch!(_ldlt_shiftedcopy(A, shift), false))
 
 @inline function Base.isassigned(A::SymTridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false

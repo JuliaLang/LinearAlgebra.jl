@@ -67,6 +67,21 @@ end
         @test ldiv!(S1, copy(B); shift=-1.0) == [x 2x]
         @test rdiv!(copy(B'), S1; shift=-1.0) == [x 2x]'
         @test_throws SingularException ldiv!(S1, copy(b); shift=-2)
+        # logabsdet, also for singular matrices and zero pivots
+        @test logabsdet(S) == (0.0, 1.0)
+        @test logabsdet(S1; shift=-1) == (0.0, 1.0)
+        for Ssing in (SymTridiagonal([1.0, 1.0], [1.0]), SymTridiagonal([0.0, 1.0, 1.0], [0.0, 1.0]),
+                      SymTridiagonal(zeros(5), ones(4)))
+            @test logabsdet(Ssing) == (-Inf, 0.0)
+            @test logabsdet(Ssing) == logabsdet(Matrix(Ssing))
+        end
+        @test logabsdet(S1; shift=-2) == (-Inf, 0.0)
+        for elty in (Float64, ComplexF64)
+            Sr = SymTridiagonal(randn(elty, 20) .* rand((0, 1), 20), randn(elty, 19))
+            @test logabsdet(Sr)[1] ≈ logabsdet(Matrix(Sr))[1]
+            @test logabsdet(Sr)[2] ≈ logabsdet(Matrix(Sr))[2]
+            @test logabsdet(Sr; shift=0.5)[1] ≈ logabsdet(Matrix(Sr) + 0.5I)[1]
+        end
         # shifted solves with the Hessenberg factorization of an indefinite Hermitian matrix
         A = Matrix(Hermitian(randn(ComplexF64, 6, 6)))
         F = hessenberg(Hermitian(A))
