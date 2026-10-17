@@ -275,4 +275,22 @@ end
     end
 end
 
+@testset "generic Bunch-Kaufman solve" begin
+    for T in (BigFloat, Rational{BigInt}, Complex{Rational{BigInt}}), uplo in (:U, :L), rook in (false, true)
+        A = T.([0 1 2 0; 1 0 3 1; 2 3 1 0; 0 1 0 2])
+        F = bunchkaufman(Symmetric(A, uplo), rook)
+        # ldiv! returns its argument, also for a vector
+        b = T.([1, 2, 3, 4])
+        x = copy(b)
+        @test ldiv!(F, x) === x
+        @test A * x == b || A * x ≈ b
+        X = T.([1 2; 3 4; 5 6; 7 8])
+        Y = copy(X)
+        @test ldiv!(F, Y) === Y
+        @test A * Y == X || A * Y ≈ X
+        @test_throws DimensionMismatch F \ T.([1, 2, 3])
+        @test_throws DimensionMismatch ldiv!(F, zeros(T, 5, 2))
+    end
+end
+
 end # module TestBunchKaufman
