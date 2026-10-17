@@ -895,16 +895,9 @@ function generic_bksolve!(
     # Extract necessary variables
     A, ipiv, symm, rook = F.LD, F.ipiv, issymmetric(F), F.rook
 
-    # Load the requested adjoining operator
-    adj_op = symm ? identity : conj
-
     upper = (F.uplo == 'U')
-    @inline kcond1 = upper ? k -> k >= 1 : k -> k <= N
-    @inline kcond2 = upper ? k -> k <= N : k -> k >= 1
-    @inline knext = upper ? k -> k - 1 : k -> k + 1
-    @inline knext2 = upper ? k -> k + 1 : k -> k - 1
     k = upper ? N : 1
-    while kcond1(k); @inbounds begin
+    @inbounds while upper ? k >= 1 : k <= N
         kp = ipiv[k]
         if kp > 0
             #   1 x 1 diagonal block
@@ -923,7 +916,7 @@ function generic_bksolve!(
             #   Interchange rows K and -IPIV(K) THEN K-1 and -IPIV(K-1)
             # The first interchange is only needed when rook pivoting is used
             if rook; Base.swaprows!(B, k, -kp); end
-            kx = knext(k)
+            kx = upper ? k - 1 : k + 1
             Base.swaprows!(B, kx, -ipiv[kx])
             #   Multiply by inv(U(K)), where U(K) is the transformation
             #   stored in columns K-1 and K of A.
@@ -932,23 +925,24 @@ function generic_bksolve!(
             _bk_rank1_rhs!(B, view(A, rows, kx), rows, kx)
             #   Multiply by the inverse of the diagonal block.
             axk = A[kx,k]
+            caxk = symm ? axk : conj(axk)
             axx = A[kx,kx] / axk
-            akk = A[k,k] / adj_op(axk)
+            akk = A[k,k] / caxk
             denom = axx*akk - 1
             for j in 1:M
                 bx = B[kx,j] / axk
-                bk = B[k,j] / adj_op(axk)
+                bk = B[k,j] / caxk
                 B[kx,j] = (akk*bx - bk) / denom
                 B[k,j] = (axx*bk - bx) / denom
             end
             if upper; k -= 2; else; k += 2; end
         end
-    end; end
+    end
     #   Next solve U'*X = B, overwriting B with X.
     #   K is the main loop index, increasing from 1 to N in steps of
     #   1 or 2, depending on the size of the diagonal blocks.
     k = upper ? 1 : N
-    while kcond2(k); @inbounds begin
+    @inbounds while upper ? k <= N : k >= 1
         Aview = upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k)
         Bview = upper ? view(B, 1:(k-1), :) : view(B, (k+1):N, :)
         B_row = view(B, k, :)
@@ -965,7 +959,7 @@ function generic_bksolve!(
             #   2 x 2 diagonal block
             #   Multiply by inv(U**T(K+1)), where U(K+1) is the transformation
             #   stored in columns K and K+1 of A.
-            kx = knext2(k)
+            kx = upper ? k + 1 : k - 1
             _bk_dotsub!(B_row, Bview, Aview, symm)
             Aview = upper ? view(A, 1:(k-1), kx) : view(A, (k+1):N, kx)
             _bk_dotsub!(view(B, kx, :), Bview, Aview, symm)
@@ -975,7 +969,7 @@ function generic_bksolve!(
             if rook; Base.swaprows!(B, kx, -ipiv[kx]); end
             if upper; k += 2; else; k -= 2; end
         end
-    end; end
+    end
     return B0
 end
 
