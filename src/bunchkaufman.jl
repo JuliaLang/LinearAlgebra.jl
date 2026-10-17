@@ -535,6 +535,24 @@ function bk_rowcol_swap!(
 end
 
 
+# The largest complex 1-norm `rowmax` of the off-diagonal entries in row `imax` of the
+# leading (if `upper`) or trailing submatrix that ends (starts) at index `k`, and its column
+# index `jmax`. As only the upper (lower) triangle is stored, the part of the row in the other
+# triangle is read from the corresponding column.
+function _bk_rowmax(abs1::F, A::AbstractMatrix, imax::Integer, k::Integer, upper::Bool) where {F}
+    N = size(A, 1)
+    rowmax, jmax = zero(real(eltype(A))), 0
+    if imax != k
+        rowmax, jmax = findmax(abs1, upper ? view(A, imax, (imax+1):k) : view(A, imax, k:(imax-1)))
+        jmax += upper ? imax : k - 1
+    end
+    if upper ? imax > 1 : imax < N
+        stemp, itemp = findmax(abs1, upper ? view(A, 1:(imax-1), imax) : view(A, (imax+1):N, imax))
+        isless(rowmax, stemp) && ((rowmax, jmax) = (stemp, upper ? itemp : itemp + imax))
+    end
+    return rowmax, jmax
+end
+
 # The symmetric (if `cj === identity`) or Hermitian (if `cj === conj`) rank-1 update
 # `A[i,j] += α*A[i,k]*cj(A[j,k])` of the upper (if `upper`) or lower triangle of `A[inds,inds]`
 function _bk_rank1!(A::AbstractMatrix, k::Integer, α, inds::AbstractUnitRange, upper::Bool, cj::F) where {F}
@@ -692,35 +710,7 @@ function generic_bunchkaufman!(
                     #   Begin pivot search loop body
                     #   JMAX is the column-index of the largest off-diagonal
                     #   element in row IMAX, and ROWMAX is its absolute value.
-                    #   Determine both ROWMAX and JMAX.
-                    if imax != k
-                        thisview = upper ? view(A, imax, (imax+1):k) :
-                            view(A, imax, k:(imax-1))
-                        rowmax, jmax = findmax(abs1_fun, thisview)
-                        jmax += upper ? imax : k - 1
-                    else
-                        # LAPACK makes rowmax=0 in this case, but I believe it's
-                        # better to make rowmax=-1, so that we guarantee that jmax
-                        # will be define in the next if-block.
-                        # TODO: is this correct/safe?
-                        rowmax = 0
-                    end
-                    if (upper && imax > 1) || ((!upper) && imax < N)
-                        # Remember that we only have the upper triangular part
-                        # of the matrix. We inspect the part of the row in the
-                        # lower triangular part by traversing the corresponding
-                        # part of the transpose column.
-                        if upper
-                            stemp, itemp = findmax(abs1_fun, view(A, 1:(imax-1), imax))
-                        else
-                            stemp, itemp = findmax(abs1_fun, view(A, (imax+1):N, imax))
-                            itemp += imax
-                        end
-                        if stemp > rowmax
-                            rowmax = stemp
-                            jmax = itemp
-                        end
-                    end
+                    rowmax, jmax = _bk_rowmax(abs1_fun, A, imax, k, upper)
                     #   Equivalent to testing for (used to handle NaN and Inf)
                     #   CABS1( A( IMAX, IMAX ) ).GE.ALPHA*ROWMAX
                     if !(diag_abs_fun(A[imax,imax]) < alpha*rowmax)
@@ -745,20 +735,7 @@ function generic_bunchkaufman!(
                     #   End pivot search loop body
                 end
             else
-                #   JMAX is the column-index of the largest off-diagonal
-                #   element in row IMAX, and ROWMAX is its absolute value
-                # We don't really need JMAX, se we don't store it
-                thisview = upper ? view(A, imax, (imax+1):k) : view(A, imax, k:(imax-1))
-                rowmax = findmax(abs1_fun, thisview)[1]
-                if (upper && imax > 1) || ((!upper) && imax < N)
-                    # Remember that we only have the upper triangular part
-                    # of the matrix. We inspect the part of the row in the
-                    # lower triangular part by traversing the corresponding
-                    # part of the transpose column.
-                    thisview = upper ? view(A, 1:(imax-1), imax) :
-                        view(A, (imax+1):N, imax)
-                    rowmax = max(rowmax, findmax(abs1_fun, thisview)[1])
-                end
+                rowmax, _ = _bk_rowmax(abs1_fun, A, imax, k, upper)
                 if absakk >= alpha * colmax * (colmax/rowmax)
                     #   no interchange, use 1-by-1 pivot block
                     kp = k
