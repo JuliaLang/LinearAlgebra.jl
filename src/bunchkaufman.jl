@@ -488,52 +488,29 @@ This is an internal helper function for the main Bunch-Kaufman
 factorization function, `generic_bunchkaufman!`. As such, validity of the
 input values is not verified.
 """
-function bk_rowcol_swap!(
-    A::AbstractMatrix{TS},
-    k::Integer,
-    kp::Integer,
-    kstep::Integer,
-    upper::Bool,
-    herm::Bool
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
+function bk_rowcol_swap!(A::AbstractMatrix, k::Integer, kp::Integer, kstep::Integer,
+                         upper::Bool, herm::Bool)
     kk = upper ? k - kstep + 1 : k + kstep - 1
-    if kp != kk
-        if kp > 1
-            thisview = upper ? view(A, 1:(kp-1), :) : view(A, (kp+1):size(A,1), :)
-            Base.swapcols!(thisview, kp, kk)
-        end
-        thisrange = upper ? ((kp+1):(kk-1)) : ((kk+1):(kp-1))
-        if !herm
-            # Real/complex symmetric case
-            for j in thisrange
-                A[j,kk], A[kp,j] = A[kp,j], A[j,kk]
-            end
-            A[kk,kk], A[kp,kp] = A[kp,kp], A[kk,kk]
-        else
-            # Hermitian case
-            for j in thisrange
-                A[j,kk], A[kp,j] = conj(A[kp,j]), conj(A[j,kk])
-            end
-            A[kp,kk] = conj(A[kp,kk])
-            A[kk,kk], A[kp,kp] = real(A[kp,kp]), real(A[kk,kk])
-        end
-        if kstep == 2
-            if herm
-                # Force diagonal entry to be purely real
-                A[k,k] = real(A[k,k])
-            end
-            if upper
-                A[k-1,k], A[kp,k] = A[kp,k], A[k-1,k]
-            else
-                A[k+1,k], A[kp,k] = A[kp,k], A[k+1,k]
-            end
-        end
-        return true
-    else
-        return false
+    kp == kk && return false
+    Base.swapcols!(upper ? view(A, 1:(kp-1), :) : view(A, (kp+1):size(A,1), :), kp, kk)
+    cj = herm ? conj : identity
+    for j in (upper ? ((kp+1):(kk-1)) : ((kk+1):(kp-1)))
+        A[j,kk], A[kp,j] = cj(A[kp,j]), cj(A[j,kk])
     end
+    if herm
+        A[kp,kk] = conj(A[kp,kk])
+        A[kk,kk], A[kp,kp] = real(A[kp,kp]), real(A[kk,kk])
+    else
+        A[kk,kk], A[kp,kp] = A[kp,kp], A[kk,kk]
+    end
+    if kstep == 2
+        # Force diagonal entry to be purely real
+        herm && (A[k,k] = real(A[k,k]))
+        kx = upper ? k - 1 : k + 1
+        A[kx,k], A[kp,k] = A[kp,k], A[kx,k]
+    end
+    return true
 end
-
 
 # The largest complex 1-norm `rowmax` of the off-diagonal entries in row `imax` of the
 # leading (if `upper`) or trailing submatrix that ends (starts) at index `k`, and its column
