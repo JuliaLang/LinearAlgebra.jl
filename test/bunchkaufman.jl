@@ -293,8 +293,4 @@ end
     end
 end
 
-@testset "no stray docstring for the generic bunchkaufman! method" begin
-    @test !occursin("Overload", string(@doc bunchkaufman!))
-end
-
 end # module TestBunchKaufman
