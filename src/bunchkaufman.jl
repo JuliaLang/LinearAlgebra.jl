@@ -460,15 +460,8 @@ end
 
 export inertia
 
-function cabs1(z::T) where T <: Complex
-    return abs(real(z)) + abs(imag(z))
-end
-
-
-function cabsr(z::T) where T <: Complex
-    return abs(real(z))
-end
-
+# complex 1-norm, used for pivot selection as in LAPACK
+cabs1(z::Complex) = abs(real(z)) + abs(imag(z))
 
 """
 bk_rowcol_swap!(A, k, kp, kstep, upper, herm) -> did_swap::Bool
@@ -609,14 +602,11 @@ function generic_bunchkaufman!(
     # Use complex 1-norm for pivot selection, as in LAPACK
     abs1_fun = TS <: Real ? abs : cabs1
 
-    # Check if the matrix is symmetric of hermitian
-    if syhe == 'S' || (syhe == 'H' && TS <: Real)
-        # Use symmetric variant if matrix is real, regardless of 'syhe' value
-        syhe = 'S'
-        diag_abs_fun = abs1_fun
-    else
-        diag_abs_fun = cabsr
-    end
+    # A real matrix is factorized as symmetric, regardless of the value of `syhe`. For a
+    # Hermitian matrix, only the real part of the diagonal is used.
+    herm = syhe == 'H' && TS <: Complex
+    cj(z) = herm ? conj(z) : z
+    diag_abs(z) = herm ? abs(real(z)) : abs1_fun(z)
 
     # Compute machine safe minimum when working with floating point numbers.
     # LAPACK doesn't use this for diagonal pivoting though...
@@ -637,23 +627,17 @@ function generic_bunchkaufman!(
         end
     end
 
-    # Run factorization depending on where the data is stored
-    upper = (uplo == 'U')
-    herm = (syhe == 'H')
-    # TODO: Is this gonna inline properly?
-    @inline k_cond = upper ? k -> k >= 1 : k -> k <= N
-    @inline conj_op = herm ? conj : identity
-    @inline diagreal_op = herm ? (j -> A[j,j] = TS(real(A[j,j]))) : _ -> ()
-    k = upper ? N : 1
     # Main loop, comments refer to the upper triangular version of the factorization.
     # The lower triangular version is analogous.
-    while k_cond(k); @inbounds begin
+    upper = (uplo == 'U')
+    k = upper ? N : 1
+    @inbounds while upper ? k >= 1 : k <= N
         kstep = 1
         knext = upper ? k - 1 : k + 1
         p = k
         #   Determine rows and columns to be interchanged and whether
         #   a 1-by-1 or 2-by-2 pivot block will be used
-        absakk = diag_abs_fun(A[k,k])
+        absakk = diag_abs(A[k,k])
         #   IMAX is the row-index of the largest off-diagonal element in
         #    column K, and COLMAX is its absolute value.
         #    Determine both COLMAX and IMAX.
@@ -689,7 +673,7 @@ function generic_bunchkaufman!(
                     rowmax, jmax = _bk_rowmax(abs1_fun, A, imax, k, upper)
                     #   Equivalent to testing for (used to handle NaN and Inf)
                     #   CABS1( A( IMAX, IMAX ) ).GE.ALPHA*ROWMAX
-                    if !(diag_abs_fun(A[imax,imax]) < alpha*rowmax)
+                    if !(diag_abs(A[imax,imax]) < alpha*rowmax)
                     #   interchange rows and columns K and IMAX,
                     #   use 1-by-1 pivot block
                         kp = imax
@@ -715,7 +699,7 @@ function generic_bunchkaufman!(
                 if absakk >= alpha * colmax * (colmax/rowmax)
                     #   no interchange, use 1-by-1 pivot block
                     kp = k
-                elseif diag_abs_fun(A[imax,imax]) >= alpha * rowmax
+                elseif diag_abs(A[imax,imax]) >= alpha * rowmax
                     #   interchange rows and columns K and IMAX, use 1-by-1
                     #   pivot block
                     kp = imax
@@ -758,12 +742,12 @@ function generic_bunchkaufman!(
                 dk = herm ? real(A[k,k]) : A[k,k]
                 if !rook || absakk >= sfmin
                     r1 = 1 / dk
-                    _bk_rank1!(A, k, -r1, inds, upper, conj_op)
+                    _bk_rank1!(A, k, -r1, inds, upper, cj)
                     view(A, inds, k) .*= r1
                 else
                     #   A := A - (W(k)/D(k))*(D(k))*(W(k)/D(K))'
                     view(A, inds, k) ./= dk
-                    _bk_rank1!(A, k, -dk, inds, upper, conj_op)
+                    _bk_rank1!(A, k, -dk, inds, upper, cj)
                 end
             elseif !isempty(inds)
                 #   2-by-2 pivot block D(k): columns k and k-1 now hold
@@ -795,14 +779,11 @@ function generic_bunchkaufman!(
                     wknext = dxk * (dkk*A[j,knext] - A[j,k])
                     wk = dkx * (dxx*A[j,k] - A[j,knext])
                     r = upper ? (1:j) : (j:N)
-                    view(A, r, j) .-= view(A, r, k) .* conj_op(wk) .+ view(A, r, knext) .* conj_op(wknext)
+                    view(A, r, j) .-= view(A, r, k) .* cj(wk) .+ view(A, r, knext) .* cj(wknext)
                     A[j,k] = wk
                     A[j,knext] = wknext
-                    # Force diagonal entry to be purely real, but still of
-                    # complex type TS (I don't know why in LAPACK this
-                    # case, unlike the rest, enforces a complex type
-                    # explicitly).
-                    diagreal_op(j)
+                    # Force diagonal entry to be purely real
+                    herm && (A[j,j] = real(A[j,j]))
                 end
             end
         end
@@ -816,7 +797,7 @@ function generic_bunchkaufman!(
         #   Decrease K and return to the start of the main loop
         # k -= upper ? kstep : -kstep
         if upper; k -= kstep; else; k += kstep; end
-    end; end
+    end
     return A, ipiv, info
 end
 
