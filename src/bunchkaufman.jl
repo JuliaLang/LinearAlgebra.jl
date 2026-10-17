@@ -601,7 +601,6 @@ function generic_bunchkaufman!(
     alpha = TR <: AbstractFloat ? (1 + sqrt(TR(17))) / 8 : TR(16//25)
     # Use complex 1-norm for pivot selection, as in LAPACK
     abs1_fun = TS <: Real ? abs : cabs1
-
     # A real matrix is factorized as symmetric, regardless of the value of `syhe`. For a
     # Hermitian matrix, only the real part of the diagonal is used.
     herm = syhe == 'H' && TS <: Complex
@@ -639,60 +638,48 @@ function generic_bunchkaufman!(
         #   a 1-by-1 or 2-by-2 pivot block will be used
         absakk = diag_abs(A[k,k])
         #   IMAX is the row-index of the largest off-diagonal element in
-        #    column K, and COLMAX is its absolute value.
-        #    Determine both COLMAX and IMAX.
-        if upper && k > 1
-            colmax, imax = findmax(abs1_fun, view(A, 1:(k-1), k))
-        elseif (!upper) && k < N
-            colmax, imax = findmax(abs1_fun, view(A, (k+1):N, k))
-            imax += k
-        else
-            colmax = 0
+        #   column K, and COLMAX is its absolute value.
+        colmax = zero(TR)
+        if upper ? k > 1 : k < N
+            colmax, imax = findmax(abs1_fun, upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k))
+            upper || (imax += k)
         end
-        if (max(absakk, colmax) == 0) || isnan(absakk)
+        if iszero(max(absakk, colmax)) || isnan(absakk)
             #   Column K is zero or underflow, or contains a NaN:
             #   set INFO and continue
-            if info == 0
-                info = k::BlasInt
-            end
+            info == 0 && (info = BlasInt(k))
             kp = k
-            if herm
-                # Force diagonal entry to be purely real
-                A[k,k] = real(A[k,k])
-            end
+            # Force diagonal entry to be purely real
+            herm && (A[k,k] = real(A[k,k]))
         else
             if absakk >= alpha*colmax
-            #   no interchange, use 1-by-1 pivot block
+                #   no interchange, use 1-by-1 pivot block
                 kp = k
             elseif rook
                 #   Loop until pivot found
                 while true
-                    #   Begin pivot search loop body
                     #   JMAX is the column-index of the largest off-diagonal
                     #   element in row IMAX, and ROWMAX is its absolute value.
                     rowmax, jmax = _bk_rowmax(abs1_fun, A, imax, k, upper)
                     #   Equivalent to testing for (used to handle NaN and Inf)
                     #   CABS1( A( IMAX, IMAX ) ).GE.ALPHA*ROWMAX
                     if !(diag_abs(A[imax,imax]) < alpha*rowmax)
-                    #   interchange rows and columns K and IMAX,
-                    #   use 1-by-1 pivot block
+                        #   interchange rows and columns K and IMAX,
+                        #   use 1-by-1 pivot block
                         kp = imax
                         break
                     #   Equivalent to testing for ROWMAX .EQ. COLMAX,
                     #   used to handle NaN and Inf
-                    elseif (p == jmax || rowmax <= colmax)
-                    #   interchange rows and columns K+1 and IMAX,
-                    #   use 2-by-2 pivot block
+                    elseif p == jmax || rowmax <= colmax
+                        #   interchange rows and columns K+1 and IMAX,
+                        #   use 2-by-2 pivot block
                         kp = imax
                         kstep = 2
                         break
                     else
-                    #   Pivot NOT found, set variables and repeat
-                        p = imax
-                        colmax = rowmax
-                        imax = jmax
+                        #   Pivot NOT found, set variables and repeat
+                        p, colmax, imax = imax, rowmax, jmax
                     end
-                    #   End pivot search loop body
                 end
             else
                 rowmax, _ = _bk_rowmax(abs1_fun, A, imax, k, upper)
@@ -706,27 +693,18 @@ function generic_bunchkaufman!(
                 else
                     #   interchange rows and columns K-1 and IMAX, use 2-by-2
                     #   pivot block
-                    kp = imax
-                    p = imax
+                    kp = p = imax
                     kstep = 2
                 end
             end
-            #   Swap TWO rows and TWO columns
-            #   First swap
-            # The first swap only needs to be done when using rook pivoting
-            if rook && kstep == 2
-                #   Interchange rows and column K and P in the leading
-                #   submatrix A(1:k,1:k) if we have a 2-by-2 pivot
-                bk_rowcol_swap!(A, k, p, 1, upper, herm)
-            end
-            #   Second swap
-            did_swap = bk_rowcol_swap!(A, k, kp, kstep, upper, herm)
-            if herm && (!did_swap)
+            #   Swap TWO rows and TWO columns. The first swap of rows and columns K and P
+            #   in the leading submatrix A(1:k,1:k) is only needed for rook pivoting
+            #   with a 2-by-2 pivot block.
+            rook && kstep == 2 && bk_rowcol_swap!(A, k, p, 1, upper, herm)
+            if !bk_rowcol_swap!(A, k, kp, kstep, upper, herm) && herm
                 # Force diagonal entries to be purely real
                 A[k,k] = real(A[k,k])
-                if kstep == 2
-                    A[knext,knext] = real(A[knext,knext])
-                end
+                kstep == 2 && (A[knext,knext] = real(A[knext,knext]))
             end
             # indices of the remaining leading submatrix
             inds = upper ? (1:(k-kstep)) : ((k+kstep):N)
@@ -795,8 +773,7 @@ function generic_bunchkaufman!(
             ipiv[knext] = -kp
         end
         #   Decrease K and return to the start of the main loop
-        # k -= upper ? kstep : -kstep
-        if upper; k -= kstep; else; k += kstep; end
+        k += upper ? -kstep : kstep
     end
     return A, ipiv, info
 end
