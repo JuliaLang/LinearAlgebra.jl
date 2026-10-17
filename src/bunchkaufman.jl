@@ -484,80 +484,6 @@ end
 
 
 """
-generic_adr1!(uplo, alpha, x, y, A, syhe) -> nothing
-
-`generic_adr1!` performs the following adjoint (symmetric or Hermitian)
-rank 1 operation
-
-`A[1:K,1:L] = alpha*x*y' + A[1:K,1:L]`
-
-in-place, where `alpha` is a scalar, `x` is a K element vector, `y`
-is an L element vector and `A` is an `NxM` matrix. Note that `y'` can
-denote either the transpose, i.e. `transpose(y)` or the conjugate
-transpose , i.e. `adjoint(y)`.
-
-`uplo` is a character, either `'U'`, `'L'` or `'F'`, indicating whether
-the matrix is stored in the upper triangular part (`uplo=='U'`), the
-lower triangular part (`uplo=='L'`), or the full storage space is used
-(`uplo=='F'`). If `uplo!='F'` then only the corresponding triangular
-part is updated. The values `'U'` or `'L'` can only be used when A is
-square (`N==M`).
-
-`syhe` is a character, either `'S'` or `'H'`, indicating whether the
-symmetric adjoint (`syhe=='S'`, and `y'==transpose(y)`) or the hermitian
-adjoint (`syhe=='H'`, and `y'==adjoint(y)`) must be used.
-"""
-function generic_adr1!(uplo::AbstractChar,
-    alpha::ClosedScalar{TR},
-    x::AbstractVector{TS},
-    y::AbstractVector{TS},
-    A::AbstractMatrix{TS},
-    syhe::AbstractChar
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-
-    # Inputs must be 1-indexed; bounds may not be checked.
-    Base.require_one_based_indexing(x, A)
-
-    # Check argument validity
-    K = length(x)
-    L = length(y)
-    N, M = size(A)
-    info = 0::BlasInt
-    if (uplo != 'U' && uplo != 'L' && uplo != 'F') || (uplo != 'F' && N != M)
-        info = (-1)::BlasInt
-    elseif K > N
-        info = (-3)::BlasInt
-    elseif L > M
-        info = (-4)::BlasInt
-    elseif syhe != 'S' && syhe != 'H'
-        info = (-6)::BlasInt
-    end
-    if info < 0
-        arg_illegal("generic_sadr1!", -info, 'E')
-    end
-
-    # Load the requested adjoining operator
-    adj_op = syhe == 'S' ? identity : conj
-
-    # Define loop range function according to the type of storage
-    # TODO: can we adjust the range without anonymous functions,
-    # but without having to write the same code thrice?
-    i_range = uplo == 'F' ? _ -> (1:K) : uplo == 'U' ? j -> (1:min(j,K)) : j -> (j:K)
-
-    # Compute rank update of A
-    for j in 1:L; @inbounds begin
-        if y[j] != 0
-            temp = alpha * adj_op(y[j])
-            for i in i_range(j)
-                A[i,j] += x[i] * temp
-            end
-        end
-    end; end
-    return
-end
-
-
-"""
 bk_rowcol_swap!(A, k, kp, kstep, upper, herm) -> did_swap::Bool
 
 Performs the row and column interchange of the Bunch-Kaufman factorization.
@@ -619,6 +545,17 @@ function bk_rowcol_swap!(
     else
         return false
     end
+end
+
+
+# The symmetric (if `cj === identity`) or Hermitian (if `cj === conj`) rank-1 update
+# `A[i,j] += α*A[i,k]*cj(A[j,k])` of the upper (if `upper`) or lower triangle of `A[inds,inds]`
+function _bk_rank1!(A::AbstractMatrix, k::Integer, α, inds::AbstractUnitRange, upper::Bool, cj::F) where {F}
+    for j in inds
+        r = upper ? (first(inds):j) : (j:last(inds))
+        axpy!(α * cj(A[j,k]), view(A, r, k), view(A, r, j))
+    end
+    return A
 end
 
 
@@ -901,10 +838,7 @@ function generic_bunchkaufman!(
                     r1 = !herm ? 1 / A[k,k] : 1 / real(A[k,k])
                     # Perform rank-1 update to store the Schur complement
                     # in a submatrix of A
-                    x = upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k)
-                    # if 'upper' this should assign by reference
-                    thisview = upper ? A : view(A, (k+1):N, (k+1):N)
-                    generic_adr1!(uplo, -r1, x, x, thisview, syhe)
+                    _bk_rank1!(A, k, -r1, upper ? (1:(k-1)) : ((k+1):N), upper, conj_op)
                     #   Store U(k) in column k
                     thisrange = upper ? (1:(k-1)) : ((k+1):N)
                     for i in thisrange
@@ -924,10 +858,7 @@ function generic_bunchkaufman!(
                     #      = A - (W(k)/D(k))*(D(k))*(W(k)/D(K))**T
                     # Perform rank-1 update to store the Schur complement
                     # in a submatrix of A
-                    x = upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k)
-                    # if 'upper' this should assign by reference
-                    thisview = upper ? A : view(A, (k+1):N, (k+1):N)
-                    generic_adr1!(uplo, -r1, x, x, thisview, syhe)
+                    _bk_rank1!(A, k, -r1, upper ? (1:(k-1)) : ((k+1):N), upper, conj_op)
                 end
             elseif (upper && k > 2) || ((!upper) && k < N - 1)
                 #   2-by-2 pivot block D(k): columns k and k-1 now hold
