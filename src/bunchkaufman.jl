@@ -1231,8 +1231,8 @@ function bunchkaufman(A::AbstractMatrix{TS},
     # over the rationals but not over the integers. We promote to BigInt to avoid overflow.
     S = TS <: Complex ? Complex{Rational{BigInt}} : Rational{BigInt}
     M = S.(A) # a full matrix, also for Symmetric and Hermitian A
-    M = A isa Symmetric ? Symmetric(M, Symbol(A.uplo)) :
-        A isa Hermitian ? Hermitian(M, Symbol(A.uplo)) : M
+    M = A isa Symmetric ? Symmetric(M, _sym_uplo(A.uplo)) :
+        A isa Hermitian ? Hermitian(M, _sym_uplo(A.uplo)) : M
     return bunchkaufman_native!(M, rook; check)
 end
 
