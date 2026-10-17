@@ -867,17 +867,16 @@ the Bunch-Kaufman factorization of `A` is provided by `F`.
 """
 function generic_bksolve!(
     F::BunchKaufman{TS},
-    B0::AbstractVecOrMat{TS},
+    B::AbstractMatrix{TS},
     ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
 
     A, ipiv, symm, rook = F.LD, F.ipiv, issymmetric(F), F.rook
-    require_one_based_indexing(A, ipiv, B0)
+    require_one_based_indexing(A, ipiv, B)
     N = size(A, 1)
-    if size(B0, 1) != N
-        throw(DimensionMismatch(lazy"matrix has dimensions $(size(A)) but right hand side has first dimension $(size(B0, 1))"))
+    if size(B, 1) != N
+        throw(DimensionMismatch(lazy"matrix has dimensions $(size(A)) but right hand side has first dimension $(size(B, 1))"))
     end
-    B = B0 isa AbstractVector ? view(B0, :, :) : B0
-    (N == 0 || size(B, 2) == 0) && return B0
+    (N == 0 || size(B, 2) == 0) && return B
     upper = (F.uplo == 'U')
 
     #   First solve U*D*X = B, overwriting B with X.
@@ -953,7 +952,12 @@ function generic_bksolve!(
             k += upper ? 2 : -2
         end
     end
-    return B0
+    return B
+end
+# a vector is solved as a matrix with a single column
+function generic_bksolve!(F::BunchKaufman{TS}, b::AbstractVector{TS}) where TS <: ClosedScalar{TR} where TR <: ClosedReal
+    generic_bksolve!(F, view(b, :, :))
+    return b
 end
 
 # B[rows,:] -= x*transpose(B[k,:])
