@@ -1108,7 +1108,7 @@ function generic_syconv(
     Base.require_one_based_indexing(F.LD, F.ipiv)
 
     # Extract necessary variables
-    A, ipiv, rook = gettri ? deepcopy(F.LD) : F.LD, F.ipiv, F.rook
+    A, ipiv, rook = gettri ? copy(F.LD) : F.LD, F.ipiv, F.rook
 
     # Get size of matrix
     N = size(A)[1]
