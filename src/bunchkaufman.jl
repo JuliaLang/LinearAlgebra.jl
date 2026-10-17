@@ -870,32 +870,19 @@ function generic_bksolve!(
     B0::AbstractVecOrMat{TS},
     ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
 
-    # Inputs must be 1-indexed; bounds may not be checked.
-    Base.require_one_based_indexing(F.LD, F.ipiv, B0)
-
-    # Get size of matrices
-    N = size(F.LD)[1]
-    if typeof(B0) <: AbstractVector
-        N3 = size(B0)[1]
-        M = 1
-        B = view(B0, :, :)
-    else
-        N3, M = size(B0)
-        B = B0
-    end
-
-    # Check input correctness
-    if N3 != N
-        throw(DimensionMismatch(lazy"matrix has dimensions $(size(F.LD)) but right hand side has first dimension $N3"))
-    end
-
-    #   Quick return if possible
-    if N == 0 || M == 0; return B0; end
-
-    # Extract necessary variables
     A, ipiv, symm, rook = F.LD, F.ipiv, issymmetric(F), F.rook
-
+    require_one_based_indexing(A, ipiv, B0)
+    N = size(A, 1)
+    if size(B0, 1) != N
+        throw(DimensionMismatch(lazy"matrix has dimensions $(size(A)) but right hand side has first dimension $(size(B0, 1))"))
+    end
+    B = B0 isa AbstractVector ? view(B0, :, :) : B0
+    (N == 0 || size(B, 2) == 0) && return B0
     upper = (F.uplo == 'U')
+
+    #   First solve U*D*X = B, overwriting B with X.
+    #   K is the main loop index, decreasing from N to 1 in steps of
+    #   1 or 2, depending on the size of the diagonal blocks.
     k = upper ? N : 1
     @inbounds while upper ? k >= 1 : k <= N
         kp = ipiv[k]
@@ -909,14 +896,14 @@ function generic_bksolve!(
             _bk_rank1_rhs!(B, view(A, rows, k), rows, k)
             #   Multiply by the inverse of the diagonal block.
             s = symm ? 1 / A[k,k] : 1 / real(A[k,k])
-            for j in 1:M; B[k,j] *= s; end
-            if upper; k -= 1; else; k += 1; end
+            view(B, k, :) .*= s
+            k += upper ? -1 : 1
         else
             #   2 x 2 diagonal block
             #   Interchange rows K and -IPIV(K) THEN K-1 and -IPIV(K-1)
-            # The first interchange is only needed when rook pivoting is used
-            if rook; Base.swaprows!(B, k, -kp); end
+            #   The first interchange is only needed when rook pivoting is used
             kx = upper ? k - 1 : k + 1
+            rook && Base.swaprows!(B, k, -kp)
             Base.swaprows!(B, kx, -ipiv[kx])
             #   Multiply by inv(U(K)), where U(K) is the transformation
             #   stored in columns K-1 and K of A.
@@ -929,13 +916,13 @@ function generic_bksolve!(
             axx = A[kx,kx] / axk
             akk = A[k,k] / caxk
             denom = axx*akk - 1
-            for j in 1:M
+            for j in axes(B, 2)
                 bx = B[kx,j] / axk
                 bk = B[k,j] / caxk
                 B[kx,j] = (akk*bx - bk) / denom
                 B[k,j] = (axx*bk - bx) / denom
             end
-            if upper; k -= 2; else; k += 2; end
+            k += upper ? -2 : 2
         end
     end
     #   Next solve U'*X = B, overwriting B with X.
@@ -943,31 +930,27 @@ function generic_bksolve!(
     #   1 or 2, depending on the size of the diagonal blocks.
     k = upper ? 1 : N
     @inbounds while upper ? k <= N : k >= 1
-        Aview = upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k)
-        Bview = upper ? view(B, 1:(k-1), :) : view(B, (k+1):N, :)
-        B_row = view(B, k, :)
         kp = ipiv[k]
+        rows = upper ? (1:(k-1)) : ((k+1):N)
+        #   Multiply by inv(U'(K)), where U(K) is the transformation
+        #   stored in column K of A.
+        _bk_dotsub!(view(B, k, :), view(B, rows, :), view(A, rows, k), symm)
         if kp > 0
             #   1 x 1 diagonal block
-            #   Multiply by inv(U**T(K)), where U(K) is the transformation
-            #   stored in column K of A.
-            _bk_dotsub!(B_row, Bview, Aview, symm)
             #   Interchange rows K and IPIV(K).
             Base.swaprows!(B, k, kp)
-            if upper; k += 1; else; k -= 1; end
+            k += upper ? 1 : -1
         else
             #   2 x 2 diagonal block
-            #   Multiply by inv(U**T(K+1)), where U(K+1) is the transformation
-            #   stored in columns K and K+1 of A.
+            #   Multiply by inv(U'(K+1)), where U(K+1) is the transformation
+            #   stored in column K+1 of A.
             kx = upper ? k + 1 : k - 1
-            _bk_dotsub!(B_row, Bview, Aview, symm)
-            Aview = upper ? view(A, 1:(k-1), kx) : view(A, (k+1):N, kx)
-            _bk_dotsub!(view(B, kx, :), Bview, Aview, symm)
+            _bk_dotsub!(view(B, kx, :), view(B, rows, :), view(A, rows, kx), symm)
             #   Interchange rows K and -IPIV(K) THEN K+1 and -IPIV(K+1).
-            # The second interchange is only needed when rook pivoting is used
+            #   The second interchange is only needed when rook pivoting is used
             Base.swaprows!(B, k, -kp)
-            if rook; Base.swaprows!(B, kx, -ipiv[kx]); end
-            if upper; k += 2; else; k -= 2; end
+            rook && Base.swaprows!(B, kx, -ipiv[kx])
+            k += upper ? 2 : -2
         end
     end
     return B0
