@@ -642,7 +642,6 @@ function generic_bunchkaufman!(
     herm = (syhe == 'H')
     # TODO: Is this gonna inline properly?
     @inline k_cond = upper ? k -> k >= 1 : k -> k <= N
-    @inline irange = upper ? j -> (j:-1:1) : j -> (j:N)
     @inline conj_op = herm ? conj : identity
     @inline diagreal_op = herm ? (j -> A[j,j] = TS(real(A[j,j]))) : _ -> ()
     k = upper ? N : 1
@@ -814,9 +813,8 @@ function generic_bunchkaufman!(
                 for j in thisrange
                     wknext = dxk * (dkk*A[j,knext] - A[j,k])
                     wk = dkx * (dxx*A[j,k] - A[j,knext])
-                    for i in irange(j)
-                        A[i,j] -= (A[i,k]*conj_op(wk) + A[i,knext]*conj_op(wknext))
-                    end
+                    r = upper ? (1:j) : (j:N)
+                    view(A, r, j) .-= view(A, r, k) .* conj_op(wk) .+ view(A, r, knext) .* conj_op(wknext)
                     A[j,k] = wk
                     A[j,knext] = wknext
                     # Force diagonal entry to be purely real, but still of
