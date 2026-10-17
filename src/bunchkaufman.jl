@@ -1110,7 +1110,6 @@ function generic_bksolve!(
     # Load the requested adjoining operator
     adj_op = symm ? identity : conj
 
-    R1 = TR(1)
     upper = (F.uplo == 'U')
     @inline kcond1 = upper ? k -> k >= 1 : k -> k <= N
     @inline kcond2 = upper ? k -> k <= N : k -> k >= 1
@@ -1125,9 +1124,8 @@ function generic_bksolve!(
             Base.swaprows!(B, k, kp)
             #   Multiply by inv(U(K)), where U(K) is the transformation
             #   stored in column K of A.
-            Aview = upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k)
-            Bview = upper ? B : view(B, (k+1):N, :)
-            generic_adr1!('F', -R1, Aview, view(B, k, :), Bview, 'S')
+            rows = upper ? (1:(k-1)) : ((k+1):N)
+            _bk_rank1_rhs!(B, view(A, rows, k), rows, k)
             #   Multiply by the inverse of the diagonal block.
             s = symm ? 1 / A[k,k] : 1 / real(A[k,k])
             for j in 1:M; B[k,j] *= s; end
@@ -1141,11 +1139,9 @@ function generic_bksolve!(
             Base.swaprows!(B, kx, -ipiv[kx])
             #   Multiply by inv(U(K)), where U(K) is the transformation
             #   stored in columns K-1 and K of A.
-            Aview = upper ? view(A, 1:(k-2), k) : view(A, (k+2):N, k)
-            Bview = upper ? B : view(B, (k+2):N, :)
-            generic_adr1!('F', -R1, Aview, view(B, k, :), Bview, 'S')
-            Aview = upper ? view(A, 1:(k-2), kx) : view(A, (k+2):N, kx)
-            generic_adr1!('F', -R1, Aview, view(B, kx, :), Bview, 'S')
+            rows = upper ? (1:(k-2)) : ((k+2):N)
+            _bk_rank1_rhs!(B, view(A, rows, k), rows, k)
+            _bk_rank1_rhs!(B, view(A, rows, kx), rows, kx)
             #   Multiply by the inverse of the diagonal block.
             axk = A[kx,k]
             axx = A[kx,kx] / axk
@@ -1193,6 +1189,14 @@ function generic_bksolve!(
         end
     end; end
     return B0
+end
+
+# B[rows,:] -= x*transpose(B[k,:])
+function _bk_rank1_rhs!(B::AbstractMatrix, x::AbstractVector, rows::AbstractUnitRange, k::Integer)
+    for j in axes(B, 2)
+        axpy!(-B[k,j], x, view(B, rows, j))
+    end
+    return B
 end
 
 # b -= transpose(B)*a (if `symm`) or b -= transpose(B)*conj(a). This simple loop is faster
