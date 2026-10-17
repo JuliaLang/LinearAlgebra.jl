@@ -540,7 +540,42 @@ true
 ```
 """
 cholesky(A::AbstractMatrix, ::NoPivot=NoPivot(); check::Bool = true) =
-    _cholesky(cholcopy(A); check)
+    _isdimensionful(eltype(A)) ? _cholesky_unitful(A, NoPivot(); check) : _cholesky(cholcopy(A); check)
+
+## Dimensionful element types
+# A number type is dimensionful if it is not closed under multiplication (`1kg * 1kg` is a `kg^2`);
+# such a type is not closed under `sqrt` and `/` either, so the factorization cannot be computed
+# in place in an array of that type. For a matrix with a single unit `u`, however, `A = U'U` with
+# `U = sqrt(u) * cholesky(A / u).U`, and that is how `cholesky` handles such matrices.
+_isdimensionful(::Type{T}) where {T} = isconcretetype(T) && !(typeof(oneunit(T) * oneunit(T)) === T)
+# dimensionless copy of `A`, in the type `S` of `one(eltype(A))`
+_stripunit(A::AbstractMatrix, u, S) = (x -> S(x / u)).(A)
+_stripunit(A::HermOrSym, u, S) = typeof(A).name.wrapper(_stripunit(parent(A), u, S), sym_uplo(A.uplo))
+_striptol(tol::Real, u, S) = tol    # dimensionless (e.g. the default) tolerance: used as is
+_striptol(tol, u, S) = S(tol / u)   # tolerance in the units of `A`
+function _cholesky_unitful(A::AbstractMatrix{T}, piv; kwargs...) where {T}
+    u = oneunit(T)
+    C = cholesky(_stripunit(A, u, typeof(one(T))), piv; kwargs...)
+    return _reattachunit(C, sqrt(u))
+end
+_reattachunit(C::Cholesky, su) = Cholesky(C.factors .* su, C.uplo, C.info)
+_reattachunit(C::CholeskyPivoted, su) =
+    CholeskyPivoted(C.factors .* su, C.uplo, C.piv, C.rank, C.tol, C.info) # `tol` is relative to the dimensionless copy
+
+# `A = U'U`: with `u = oneunit(eltype(U))^2` the unit of `A`, `y = U' \ B` has the units of
+# `B / sqrt(u)` and `x = U \ y` those of `B / u`; both steps need an output array of their own
+function ldiv(C::Cholesky, B::AbstractVecOrMat)
+    T = eltype(C)
+    _isdimensionful(T) || return @invoke ldiv(C::Factorization, B::AbstractVecOrMat)
+    require_one_based_indexing(B)
+    size(C, 1) == size(B, 1) || throw(DimensionMismatch("arguments must have the same number of rows"))
+    U = C.uplo == 'U' ? UpperTriangular(C.factors) : LowerTriangular(C.factors)'
+    TY = typeof(zero(eltype(B)) / oneunit(T))  # `zero`: the elements of `B` need only form a vector space (cf. #1446)
+    TX = typeof(zero(TY) / oneunit(T))
+    Y = ldiv!(similar(B, TY), U', B)
+    return ldiv!(similar(B, TX), U, Y)
+end
+
 @deprecate cholesky(A::Union{StridedMatrix,RealHermSymComplexHerm{<:Real,<:StridedMatrix}}, ::Val{false}; check::Bool = true) cholesky(A, NoPivot(); check) false
 
 function cholesky(A::AbstractMatrix{Float16}, ::NoPivot=NoPivot(); check::Bool = true)
@@ -611,7 +646,8 @@ true
 ```
 """
 cholesky(A::AbstractMatrix, ::RowMaximum; tol = 0.0, check::Bool = true) =
-    _cholesky(cholcopy(A), RowMaximum(); tol, check)
+    _isdimensionful(eltype(A)) ? _cholesky_unitful(A, RowMaximum(); tol = _striptol(tol, oneunit(eltype(A)), typeof(one(eltype(A)))), check) :
+                                 _cholesky(cholcopy(A), RowMaximum(); tol, check)
 @deprecate cholesky(A::Union{StridedMatrix,RealHermSymComplexHerm{<:Real,<:StridedMatrix}}, ::Val{true}; tol = 0.0, check::Bool = true) cholesky(A, RowMaximum(); tol, check) false
 
 function cholesky(A::AbstractMatrix{Float16}, ::RowMaximum; tol = 0.0, check::Bool = true)
