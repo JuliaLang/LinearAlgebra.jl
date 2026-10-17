@@ -558,96 +558,6 @@ end
 
 
 """
-generic_mvpv!(trans, alpha, A, x, beta, y) -> nothing
-
-`generic_mvpv!` performs the following matrix-vector operation:
-
-`y[1:K] = alpha*A'*x[1:L] + beta*y[1:K]`
-
-in-place, where `alpha` and `beta` are scalars, `x` is a vector with at
-least L elements, `y` is a vector with at least K elements, and `A` is
-an `NxM` matrix. `A'` can denote the transpose, i.e. `transpose(A)` or
-the conjugate transpose, i.e. `adjoint(A)`, and then `M==K && N==L`.
-`A'` can also denote no adjoining at all, i.e. `A'==A`, and then
-`N==K && M==L`.
-
-`trans` is a character, either `'T'`, `'C'` or `'N'`, indicating whether
-`A'=transpose(A)`, `A'=adjoint(A)` or `A'=A`, respectively.
-"""
-function generic_mvpv!(trans::AbstractChar,
-    alpha::ClosedScalar{TR},
-    A::AbstractMatrix{TS},
-    x::AbstractVector{TS},
-    beta::ClosedScalar{TR},
-    y::AbstractVector{TS},
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-
-    # Inputs must be 1-indexed; bounds may not be checked.
-    Base.require_one_based_indexing(A, x, y)
-
-    # Check argument validity
-    M, N = size(A)
-    K = trans == 'N' ? M : N
-    L = trans == 'N' ? N : M
-    info = 0::BlasInt
-    if trans != 'T' && trans != 'C' && trans != 'N'
-        info = (-1)::BlasInt
-    elseif length(y) < K
-        info = (-3)::BlasInt
-    elseif length(x) < L
-        info = (-4)::BlasInt
-    end
-    if info < 0
-        arg_illegal("generic_sadr1!", -info, 'E')
-    end
-
-    #   Quick return if possible.
-    if K == 0 || (alpha == 0 && beta == 1); return; end
-
-    #   Start the operations. In this version the elements of A are
-    #   accessed sequentially with one pass through A.
-    #   First form  y := beta*y.
-    @inbounds begin
-        if beta != 1
-            if beta == 0
-                # Way less allocations and way faster for BigFloat.
-                # For Float64 there is some (acceptable IMO) performance loss.
-                y[1:K] .= 0
-            else
-                for i in 1:K; y[i] *= beta; end
-            end
-        end
-        if alpha == 0 || L == 0; return; end
-
-        if trans == 'N'
-            #   Form  y := alpha*A*x + y.
-            for j in 1:L
-                # Faster than a loop
-                axpy!(alpha*x[j], view(A, 1:K, j), view(y, 1:K))
-            end
-        else
-            #   Form  y := alpha*A**T*x + y  or  y := alpha*A**H*x + y.
-            noconj = (trans == 'T')
-            for i = 1:K
-                temp = 0
-                if noconj
-                    for j = 1:L
-                        temp = temp + A[j,i]*x[j]
-                    end
-                else
-                    for j = 1:L
-                        temp = temp + conj(A[j,i])*x[j]
-                    end
-                end
-                y[i] += alpha*temp
-            end
-        end
-    end
-    return
-end
-
-
-"""
 bk_rowcol_swap!(A, k, kp, kstep, upper, herm) -> did_swap::Bool
 
 Performs the row and column interchange of the Bunch-Kaufman factorization.
@@ -1263,13 +1173,7 @@ function generic_bksolve!(
             #   1 x 1 diagonal block
             #   Multiply by inv(U**T(K)), where U(K) is the transformation
             #   stored in column K of A.
-            if symm
-                generic_mvpv!('T', -R1, Bview, Aview, R1, B_row)
-            else
-                conj!(B_row)
-                generic_mvpv!('C', -R1, Bview, Aview, R1, B_row)
-                conj!(B_row)
-            end
+            _bk_dotsub!(B_row, Bview, Aview, symm)
             #   Interchange rows K and IPIV(K).
             Base.swaprows!(B, k, kp)
             if upper; k += 1; else; k -= 1; end
@@ -1278,21 +1182,9 @@ function generic_bksolve!(
             #   Multiply by inv(U**T(K+1)), where U(K+1) is the transformation
             #   stored in columns K and K+1 of A.
             kx = knext2(k)
-            if symm
-                generic_mvpv!('T', -R1, Bview, Aview, R1, B_row)
-                Aview = upper ? view(A, 1:(k-1), kx) : view(A, (k+1):N, kx)
-                B_row = view(B, kx, :)
-                generic_mvpv!('T', -R1, Bview, Aview, R1, B_row)
-            elseif k > 1
-                conj!(B_row)
-                generic_mvpv!('C', -R1, Bview, Aview, R1, B_row)
-                conj!(B_row)
-                Aview = upper ? view(A, 1:(k-1), kx) : view(A, (k+1):N, kx)
-                B_row = view(B, kx, :)
-                conj!(B_row)
-                generic_mvpv!('C', -R1, Bview, Aview, R1, B_row)
-                conj!(B_row)
-            end
+            _bk_dotsub!(B_row, Bview, Aview, symm)
+            Aview = upper ? view(A, 1:(k-1), kx) : view(A, (k+1):N, kx)
+            _bk_dotsub!(view(B, kx, :), Bview, Aview, symm)
             #   Interchange rows K and -IPIV(K) THEN K+1 and -IPIV(K+1).
             # The second interchange is only needed when rook pivoting is used
             Base.swaprows!(B, k, -kp)
@@ -1301,6 +1193,21 @@ function generic_bksolve!(
         end
     end; end
     return B0
+end
+
+# b -= transpose(B)*a (if `symm`) or b -= transpose(B)*conj(a). This simple loop is faster
+# than `mul!` or `dot` for the non-BLAS number types that this code is used for.
+_bk_dotsub!(b::AbstractVector, B::AbstractMatrix, a::AbstractVector, symm::Bool) =
+    _bk_dotsub!(b, B, a, symm ? identity : conj)
+function _bk_dotsub!(b::AbstractVector, B::AbstractMatrix, a::AbstractVector, cj::F) where {F}
+    for c in eachindex(b)
+        t = zero(eltype(b))
+        for j in eachindex(a)
+            t += B[j,c] * cj(a[j])
+        end
+        b[c] -= t
+    end
+    return b
 end
 
 
