@@ -744,42 +744,28 @@ function generic_bunchkaufman!(
                     A[knext,knext] = real(A[knext,knext])
                 end
             end
+            # indices of the remaining leading submatrix
+            inds = upper ? (1:(k-kstep)) : ((k+kstep):N)
             if kstep == 1
                 #   1-by-1 pivot block D(k): column k now holds
                 #   W(k) = U(k)*D(k)
-                #   where U(k) is the k-th column of U
+                #   where U(k) is the k-th column of U.
+                #   Perform a rank-1 update of A(1:k-1,1:k-1) as
+                #   A := A - U(k)*D(k)*U(k)' = A - W(k)*1/D(k)*W(k)'
+                #   to store the Schur complement, and store U(k) in column k.
                 #   When rook=false, sfmin is not defined, but the short-circuit
                 #   evaluation of the conditional avoids an error.
-                if (!rook) || absakk >= sfmin
-                    #   Perform a rank-1 update of A(1:k-1,1:k-1) as
-                    #   A := A - U(k)*D(k)*U(k)' = A - W(k)*1/D(k)*W(k)'
-                    # Compute 1/D(k)
-                    r1 = !herm ? 1 / A[k,k] : 1 / real(A[k,k])
-                    # Perform rank-1 update to store the Schur complement
-                    # in a submatrix of A
-                    _bk_rank1!(A, k, -r1, upper ? (1:(k-1)) : ((k+1):N), upper, conj_op)
-                    #   Store U(k) in column k
-                    thisrange = upper ? (1:(k-1)) : ((k+1):N)
-                    for i in thisrange
-                        A[i,k] *= r1
-                    end
+                dk = herm ? real(A[k,k]) : A[k,k]
+                if !rook || absakk >= sfmin
+                    r1 = 1 / dk
+                    _bk_rank1!(A, k, -r1, inds, upper, conj_op)
+                    view(A, inds, k) .*= r1
                 else
-                    # Compute D(k)
-                    r1 = !herm ? A[k,k] : real(A[k,k])
-                    #   Store U(k) in column k
-                    thisrange = upper ? (1:(k-1)) : ((k+1):N)
-                    for i in thisrange
-                        A[i,k] /= r1
-                    end
-                    #   Perform a rank-1 update of A(k+1:n,k+1:n) as
-                    #   A := A - U(k)*D(k)*U(k)**T
-                    #      = A - W(k)*(1/D(k))*W(k)**T
-                    #      = A - (W(k)/D(k))*(D(k))*(W(k)/D(K))**T
-                    # Perform rank-1 update to store the Schur complement
-                    # in a submatrix of A
-                    _bk_rank1!(A, k, -r1, upper ? (1:(k-1)) : ((k+1):N), upper, conj_op)
+                    #   A := A - (W(k)/D(k))*(D(k))*(W(k)/D(K))'
+                    view(A, inds, k) ./= dk
+                    _bk_rank1!(A, k, -dk, inds, upper, conj_op)
                 end
-            elseif (upper && k > 2) || ((!upper) && k < N - 1)
+            elseif !isempty(inds)
                 #   2-by-2 pivot block D(k): columns k and k-1 now hold
                 #   ( W(k-1) W(k) ) = ( U(k-1) U(k) )*D(k)
                 #   where U(k) and U(k-1) are the k-th and (k-1)-th columns
@@ -787,30 +773,25 @@ function generic_bunchkaufman!(
                 #   Perform a rank-2 update of A(1:k-2,1:k-2) as
                 #   A := A - ( U(k-1) U(k) )*D(k)*( U(k-1) U(k) )'
                 #   = A - ( W(k-1) W(k) )*inv(D(k))*( W(k-1) W(k) )'
-                thisrange = upper ? ((k-2):-1:1) : ((k+2):N)
-                if !herm
-                    # Real/complex symmetric case
-                    #TODO: is this way to compute the inverse backward stable?
-                    # (it probably is as it comes from LAPACK)
-                    dxk = A[knext,k]
-                    dxx = A[knext,knext] / dxk
-                    dkk = A[k,k] / dxk
-                    t = 1 / (dkk * dxx - 1)
-                    dxk = t / dxk
-                    dkx = dxk
-                else
-                    # Hermitian case
-                    # TODO: is this way to compute the inverse backward stable?
-                    # (it probably is as it is a small modification of LAPACK's
-                    # method)
-                    dxk = A[knext,k]
+                dxk = A[knext,k]
+                if herm
+                    # a small modification of LAPACK's method for the Hermitian case
                     dxx = real(A[knext,knext]) / dxk
                     dkk = real(A[k,k]) / conj(dxk)
                     t = 1 / (real(dkk * dxx) - 1)
                     dkx = t / conj(dxk)
                     dxk = t / dxk
+                else
+                    dxx = A[knext,knext] / dxk
+                    dkk = A[k,k] / dxk
+                    t = 1 / (dkk * dxx - 1)
+                    dkx = dxk = t / dxk
                 end
-                for j in thisrange
+                # The columns j have to be processed from the diagonal block outwards: the
+                # update of column j reads A[i,k] and A[i,knext] for the rows i of its stored
+                # part, which are at least as far from the diagonal block as row j, and these
+                # entries are only overwritten when column i is processed.
+                for j in (upper ? reverse(inds) : inds)
                     wknext = dxk * (dkk*A[j,knext] - A[j,k])
                     wk = dkx * (dxx*A[j,k] - A[j,knext])
                     r = upper ? (1:j) : (j:N)
