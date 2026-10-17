@@ -1232,6 +1232,10 @@ When `A` is sparse, a similar polyalgorithm is used. For indefinite matrices, th
 factorization does not use pivoting during the numerical factorization and therefore the
 procedure can fail even for invertible matrices.
 
+The element type of `B` must be concrete, since `A` is promoted to the element type of the
+solution. For an abstractly typed `B` (e.g. a `Vector{Any}` or a `Vector{Real}`), an
+`ArgumentError` is thrown; convert `B` to a concrete element type first.
+
 See also: [`factorize`](@ref), [`pinv`](@ref).
 
 # Examples
@@ -1251,9 +1255,9 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
     # an abstract `eltype(A)` is narrowed to the promoted type of the stored values, as in the factorizations
-    # the scalar type of the solution: the elements of `B` may themselves be vectors
     TA0 = _valeltype(A)
-    T = promote_op(\, TA0, _scalartype(eltype(B)))
+    # the scalar type of the solution: the elements of `B` may themselves be vectors
+    T = promote_op(\, TA0, _scalartype(_rhs_eltype(B)))
     if m == n
         if istril(A)
             if istriu(A)
