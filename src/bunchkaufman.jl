@@ -1186,19 +1186,13 @@ function generic_bksolve!(
         B = B0
     end
 
-    # Initialize info integer as 0
-    info = 0::BlasInt
-
     # Check input correctness
     if N3 != N
-        info = (-2)::BlasInt
-    end
-    if info < 0
-        arg_illegal("generic_bksolve!", -info, 'E')
+        throw(DimensionMismatch(lazy"matrix has dimensions $(size(F.LD)) but right hand side has first dimension $N3"))
     end
 
     #   Quick return if possible
-    if N == 0 || M == 0; return B; end
+    if N == 0 || M == 0; return B0; end
 
     # Extract necessary variables
     A, ipiv, symm, rook = F.LD, F.ipiv, issymmetric(F), F.rook
@@ -1306,7 +1300,7 @@ function generic_bksolve!(
             if upper; k += 2; else; k -= 2; end
         end
     end; end
-    return B
+    return B0
 end
 
 
