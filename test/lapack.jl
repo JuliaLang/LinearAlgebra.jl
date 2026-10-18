@@ -303,6 +303,25 @@ end
     end
 end
 
+# xggsvd is deprecated since LAPACK 3.6.0, but still provided
+@testset "ggsvd" begin
+    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
+        # A with fewer rows than the rank of [A; B] is stored differently in R
+        for m in (5, 2)
+            A, B = rand(elty, m, 3), rand(elty, 4, 3)
+            F = LinearAlgebra.GeneralizedSVD(LAPACK.ggsvd!('U', 'V', 'Q', copy(A), copy(B))...)
+            @test F.U*F.D1*F.R*F.Q' ≈ A
+            @test F.V*F.D2*F.R*F.Q' ≈ B
+            @test sort(F.vals) ≈ sort(svdvals(A, B))
+        end
+        A, B = rand(elty, 5, 3), rand(elty, 4, 3)
+        @test_throws DimensionMismatch LAPACK.ggsvd!('N','N','N',A,rand(elty, 4, 2))
+        @test_throws ArgumentError LAPACK.ggsvd!('X','N','N',A,B)
+        @test_throws ArgumentError LAPACK.ggsvd!('N','X','N',A,B)
+        @test_throws ArgumentError LAPACK.ggsvd!('N','N','X',A,B)
+    end
+end
+
 @testset "geevx, ggev, ggev3 errors" begin
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         A = rand(elty,10,10)
