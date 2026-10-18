@@ -1410,4 +1410,60 @@ end
     end
 end
 
+@static if COMPREHENSIVE
+@testset "BLAS eltypes falling back to generic multiplication" begin
+    Random.seed!(1234)
+    naive(A, B) = [sum(A[i,k]*B[k,j] for k in axes(A,2)) for i in axes(A,1), j in axes(B,2)]
+    naivev(A, x) = [sum(A[i,k]*x[k] for k in axes(A,2)) for i in axes(A,1)]
+    A, B = rand(4, 4), rand(4, 4)
+    # Symmetric/Hermitian times matrix, with a coefficient that BLAS can't take
+    for W in (Symmetric, Hermitian)
+        C = rand(4, 4)
+        @test mul!(copy(C), W(A), B, big(2), 3) ≈ 2naive(W(A), B) + 3C
+        @test mul!(copy(C), B, W(A), big(2), 3) ≈ 2naive(B, W(A)) + 3C
+    end
+    # Symmetric/Hermitian times vector, with a parent that is not unit-strided, and with
+    # complex vectors
+    Av = view(rand(8, 8), 1:2:8, 1:2:8)
+    x, y = rand(4), rand(4)
+    xc, yc = rand(ComplexF64, 4), rand(ComplexF64, 4)
+    for W in (Symmetric, Hermitian)
+        @test mul!(copy(y), W(Av), x, 2, 3) ≈ 2naivev(W(Av), x) + 3y
+        @test mul!(copy(yc), W(A), xc, 2, 3) ≈ 2naivev(W(A), xc) + 3yc
+    end
+    # output aliased with an input
+    Ac = rand(ComplexF64, 4, 4)
+    @test_throws ArgumentError mul!(A, A, B)
+    @test_throws ArgumentError mul!(B, A, B)
+    @test_throws ArgumentError mul!(Ac, Ac, B)
+    # complex times real, with a complex coefficient
+    C = rand(ComplexF64, 4, 4)
+    @test mul!(copy(C), Ac, B, 2+im, 3) ≈ (2+im)*naive(Ac, B) + 3C
+    # internal helpers
+    @test LinearAlgebra.gemm_wrapper('S', 'N', A, B) ≈ naive(Symmetric(A), B)
+    @test_throws DimensionMismatch LinearAlgebra.generic_syrk!(zeros(BigFloat, 3, 3),
+                                                               big.(rand(4, 2)), false, true, 1, 0)
+end
+
+@testset "mul! with transposition characters" begin
+    A, B, C = rand(3, 4), rand(3, 2), rand(4, 2)
+    @test mul!(copy(C), 'T', 'N', A, B, 2, 3) ≈ 2transpose(A)*B + 3C
+    @test mul!(copy(C), 'C', 'N', complex(A), B, 2, 3) ≈ 2A'*B + 3C
+    x, y = rand(3), rand(4)
+    @test mul!(copy(y), 'T', A, x, 2, 3) ≈ 2transpose(A)*x + 3y
+    Ab, xb, yb = big.(A), big.(x), big.(y)
+    @test mul!(copy(yb), 'T', Ab, xb, 2, 3) ≈ 2transpose(Ab)*xb + 3yb
+end
+
+@testset "copy_transpose! with a transposition character" begin
+    M = rand(ComplexF64, 3, 4)
+    for (tM, ref) in (('N', transpose(M[1:3, 2:3])), ('T', M[2:3, 1:3]), ('C', conj(M[2:3, 1:3])))
+        B = zeros(ComplexF64, 5, 5)
+        @test LinearAlgebra.copy_transpose!(B, 2:3, 3:5, tM, M, 1:3, 2:3) === B
+        @test B[2:3, 3:5] == ref
+        @test count(!iszero, B) == 6
+    end
+end
+end # COMPREHENSIVE
+
 end # module TestMatmul
