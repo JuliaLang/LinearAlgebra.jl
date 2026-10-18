@@ -615,23 +615,11 @@ function generic_bunchkaufman!(
     cj(z) = herm ? conj(z) : z
     diag_abs(z) = herm ? abs(real(z)) : abs1_fun(z)
 
-    # Compute machine safe minimum when working with floating point numbers.
-    # LAPACK doesn't use this for diagonal pivoting though...
+    # For rook pivoting, the safe minimum, i.e., the smallest positive number whose reciprocal
+    # does not overflow, as computed by LAPACK's `dlamch('S')`. LAPACK doesn't use this for
+    # diagonal pivoting though... With rationals, all results are exact.
     if rook
-        if TR <: AbstractFloat
-            # eps(0) gives the smallest subnormal number, and eps(1) gives the floating
-            # point type epsilon. eps(0)/eps(1) gives the smallest normal number, plus
-            # possibly some rounding error.
-            sfmin = nextfloat(eps(TR(0)) / eps(TR(1)), 2)
-            small = 1 / prevfloat(typemax(TR), 2)
-            if small >= sfmin
-                # 1/sfmin may overflow, so use 'small' plus a bit as the safe minimum
-                sfmin = nextfloat(small * (1 + eps(TR(1))), 2)
-            end
-        else
-            # We're working with rationals in this case, so the all results are exact.
-            sfmin = TR(0)
-        end
+        sfmin = TR <: AbstractFloat ? max(floatmin(TR), (1 + eps(TR)) / floatmax(TR)) : TR(0)
     end
 
     # Main loop, comments refer to the upper triangular version of the factorization.
