@@ -1651,4 +1651,43 @@ end
     end
 end
 
+@static if COMPREHENSIVE
+@testset "Diagonal corner cases" begin
+    # 1x1 matrices have no off-diagonal zeros
+    @test minimum(Diagonal([3])) == 3
+    @test maximum(Diagonal([-3])) == -3
+    @test minimum(Diagonal([3, 4])) == 0 && maximum(Diagonal([-3, -4])) == 0
+    @test_throws ArgumentError opnorm(Diagonal([1.0, 2, 3]), 3)
+end
+
+@testset "Diagonal and tridiagonal division size checks" begin
+    D = Diagonal([1.0, 2, 3])
+    S = Tridiagonal([1.0, 2], [3.0, 4, 5], [6.0, 7])
+    @test_throws DimensionMismatch ldiv!(similar(S), Diagonal([1.0, 2]), S)
+    @test_throws DimensionMismatch ldiv!(Tridiagonal(zeros(1), zeros(2), zeros(1)), D, S)
+    @test_throws DimensionMismatch LinearAlgebra._rdiv!(similar(S), S, Diagonal([1.0, 2]))
+    @test_throws DimensionMismatch LinearAlgebra._rdiv!(Tridiagonal(zeros(1), zeros(2), zeros(1)), S, D)
+end
+
+@testset "kron! of Diagonal with matrix entries into a dense matrix" begin
+    # the entries have no zero, so the off-diagonal blocks are computed explicitly
+    A = Diagonal([[1 2; 3 4], [5 6; 7 8]])
+    B = Diagonal([[1 0; 0 2], [0 1; 1 0]])
+    C = Matrix{Matrix{Int}}(undef, 4, 4)
+    @test kron!(C, A, B) === C
+    @test C == kron(A, B)
+    @test C[1, 1] == [1 4; 3 8] && C[1, 2] == zeros(Int, 2, 2)
+end
+
+@testset "Diagonal eigen and cholesky errors" begin
+    @test_throws ArgumentError eigen(Diagonal([[1.0 NaN; 0 1], [1.0 0; 0 1]]))
+    @test_throws ArgumentError eigen(Diagonal([1.0, Inf]), Diagonal([1.0, 2]))
+    @test_throws ArgumentError eigen(Diagonal([1.0, 2]), Diagonal([1.0, 0]))
+    @test_throws ArgumentError eigen([1.0 2; 3 4], Diagonal([1.0, 0]))
+    D = Diagonal([1.0+im, 2])
+    @test_throws PosDefException cholesky(D, RowMaximum())
+    @test !issuccess(cholesky(D, RowMaximum(); check = false))
+end
+end # COMPREHENSIVE
+
 end # module TestDiagonal
