@@ -14,6 +14,7 @@ using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers.Quaternions
 using Main.LinearAlgebraTestHelpers.StridedArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
@@ -881,5 +882,35 @@ end
         end
     end
 end
+
+@static if COMPREHENSIVE
+@testset "transpose!/adjoint! between vectors and matrices, and copy_adjoint!" begin
+    M = [1+im 2-im 3; 4 5im 6]
+    @test transpose!(zeros(Complex{Int}, 3), M[1:1, :]) == vec(M[1, :])
+    @test transpose!(zeros(Complex{Int}, 1, 3), vec(M[1, :])) == M[1:1, :]
+    # a source with cartesian indexing
+    @test adjoint!(zeros(Complex{Int}, 3), view(M, 1:1, :)) == conj(vec(M[1, :]))
+    B = zeros(Complex{Int}, 4, 4)
+    @test LinearAlgebra.copy_adjoint!(B, 2:4, 1:2, M, 1:2, 1:3) === B
+    @test B[2:4, 1:2] == M[1:2, 1:3]'
+    @test count(!iszero, B) == 6
+    @test_throws ArgumentError LinearAlgebra.copy_transpose!(B, 1:2, 1:2, M, 1:2, 1:3)
+    @test_throws ArgumentError LinearAlgebra.copy_transpose!(B, 1:3, 1:3, M, 1:2, 1:3)
+    # destination of a different shape: elements are copied in linear order
+    @test copyto!(zeros(Complex{Int}, 1, 6), transpose(M)) == reshape(vec(Matrix(transpose(M))), 1, 6)
+    @test copyto!(zeros(Complex{Int}, 1, 6), M') == reshape(vec(Matrix(M')), 1, 6)
+end
+
+@testset "lazily conjugated vectors and non-recursive dot" begin
+    v, w = [1+im, 2], [3, 4-im]
+    s = Adjoint(Transpose(v)) + Adjoint(Transpose(w))
+    @test s isa Adjoint{<:Any, <:Transpose}
+    @test s == Adjoint(Transpose(v + w))
+    # element types for which the product is not a BLAS dot
+    @test transpose([1, 2]) * [1.5, 2.5] == 6.5
+    @test transpose(Int[]) * Float64[] === 0.0
+    @test_throws DimensionMismatch transpose([1, 2]) * [1.0]
+end
+end # COMPREHENSIVE
 
 end # module TestAdjointTranspose
