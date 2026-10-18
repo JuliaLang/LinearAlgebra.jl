@@ -11,6 +11,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 @testset "broadcast[!] over combinations of scalars, structured matrices, and dense vectors/matrices" begin
     @testset for N in (0,1,2,10) # some edge cases, and a structured case
@@ -595,5 +596,16 @@ end
         @test Hc1 .+ Hc2 == Matrix(Hc1) + Matrix(Hc2)
     end
 end
+
+@static if COMPREHENSIVE
+@testset "similar for a Diagonal broadcast, and iszerodefined" begin
+    D = Diagonal([1, 2])
+    bc = Broadcast.instantiate(Broadcast.broadcasted(+, D, D))
+    @test similar(bc, Float64) isa Diagonal{Float64}
+    @test size(similar(bc, Float64)) == (2, 2)
+    @test !LinearAlgebra.iszerodefined(Base.inferencebarrier(Tuple{Int}))
+    @test tuple.(D) == [(1,) (0,); (0,) (2,)]
+end
+end # COMPREHENSIVE
 
 end
