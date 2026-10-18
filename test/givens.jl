@@ -7,6 +7,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra, Random
 using LinearAlgebra: Givens, Rotation, givensAlgorithm
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+
 # Test givens rotations
 @testset "Test Givens for $elty" for elty in (Float32, Float64, ComplexF32, ComplexF64)
     if elty <: Real
@@ -144,6 +150,26 @@ end
     @test !isfinite(r)
     cs, sn, r = givensAlgorithm(T(1.0), T(Inf))
     @test !isfinite(r)
+end
+
+@static if COMPREHENSIVE
+# rescaling of tiny and huge inputs, compared with c = |f|/h, s = sign(f)*conj(g)/h,
+# r = sign(f)*h for h = hypot(|f|, |g|)
+@testset "givensAlgorithm - extreme scaling, $T" for T in (Float32, Float64)
+    tiny = floatmin(T)
+    f, g = 3tiny, 4tiny
+    c, s, r = givensAlgorithm(f, g)
+    @test c ≈ 3/5 && s ≈ 4/5 && r ≈ 5tiny
+    for (f, g) in ((complex(T(3), T(4))*tiny, complex(T(1), -T(2))*tiny), # tiny f and g
+                   (complex(T(3), T(4))*tiny, zero(Complex{T})),          # tiny f, zero g
+                   (complex(T(2)), complex(floatmax(T)/4, floatmax(T)/8))) # |f| << |g|
+        c, s, r = givensAlgorithm(f, g)
+        h = hypot(abs(f), abs(g))
+        @test c ≈ abs(f)/h
+        @test s ≈ f/abs(f)*conj(g)/h
+        @test r ≈ f/abs(f)*h
+    end
+end
 end
 
 # ordering of compositions
