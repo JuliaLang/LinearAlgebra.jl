@@ -99,7 +99,7 @@ end
 subsetrows(X::AbstractVector, Y::AbstractArray, k) = Y[1:k]
 subsetrows(X::AbstractMatrix, Y::AbstractArray, k) = Y[1:k, :]
 
-function chkfinite(A::AbstractMatrix)
+function chkfinite(A::AbstractVecOrMat)
     for a in A
         if !isfinite(a)
             throw(ArgumentError("matrix contains Infs or NaNs"))
@@ -4120,6 +4120,8 @@ for (stev, stebz, stegr, stein, elty) in
             if length(ev) != n - 1
                 throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
+            chkfinite(dv)
+            chkfinite(ev)
             Zmat = similar(dv, $elty, (n, job != 'N' ? n : 0))
             work = Vector{$elty}(undef, max(1, 2n-2))
             info = Ref{BlasInt}()
@@ -4144,6 +4146,8 @@ for (stev, stebz, stegr, stein, elty) in
             if length(ev) != n - 1
                 throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
+            chkfinite(dv)
+            chkfinite(ev)
             m = Ref{BlasInt}()
             nsplit = Vector{BlasInt}(undef, 1)
             w = similar(dv, $elty, n)
@@ -4181,6 +4185,8 @@ for (stev, stebz, stegr, stein, elty) in
             else
                 throw(DimensionMismatch(lazy"ev has length $ne but needs one less than dv's length, $n)"))
             end
+            chkfinite(dv)
+            chkfinite(ev)
 
             abstol = Vector{$elty}(undef, 1)
             m = Ref{BlasInt}()
@@ -4229,6 +4235,8 @@ for (stev, stebz, stegr, stein, elty) in
             else
                 throw(DimensionMismatch(lazy"ev_in has length $ne but needs one less than dv's length, $n)"))
             end
+            chkfinite(dv)
+            chkfinite(ev_in)
             ldz = n #Leading dimension
             #Number of eigenvalues to find
             if !(1 <= length(w_in) <= n)

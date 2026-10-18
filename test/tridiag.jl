@@ -1273,6 +1273,23 @@ end
     @test F.vectors ≈ Fdense.vectors
 end
 
+@testset "eigen of SymTridiagonal with Infs or NaNs" begin
+    # like for dense matrices; LAPACK's tridiagonal eigensolvers do not check their input
+    for (dv, ev) in (([NaN, 1.0], [1.0]), ([1.0, 2, NaN], [1.0, 1]), ([1.0, 1], [NaN]), ([Inf, 1.0], [1.0]))
+        S = SymTridiagonal(dv, ev)
+        @test_throws ArgumentError eigvals(Matrix(S))
+        @test_throws ArgumentError eigvals(S)
+        @test_throws ArgumentError eigvals(S, 1:1)
+        @test_throws ArgumentError eigvals(S, -10, 10)
+        @test_throws ArgumentError eigen(S)
+        @test_throws ArgumentError eigvecs(S, [1.0])
+    end
+    @test_throws ArgumentError LAPACK.stev!('N', [NaN, 1.0], [1.0])
+    @test_throws ArgumentError LAPACK.stegr!('N', 'A', [NaN, 1.0], [1.0], 0.0, 0.0, 0, 0)
+    @test_throws ArgumentError LAPACK.stebz!('A', 'E', 0.0, 0.0, 0, 0, -1.0, [NaN, 1.0], [1.0])
+    @test_throws ArgumentError LAPACK.stein!([NaN, 1.0], [1.0], [1.0])
+end
+
 @testset "eigen sorting" begin
     B = SymTridiagonal([3, 4, 1, 2],[1, 0, 2]) #block diagonal matrix to hit 'B' ordering of stebz!
     fB = Float64.(B)
