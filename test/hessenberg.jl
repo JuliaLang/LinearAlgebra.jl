@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 # for tuple tests below
 ≅(x,y) = all(p -> p[1] ≈ p[2], zip(x,y))
@@ -431,5 +432,20 @@ end
         end
     end
 end
+
+@static if COMPREHENSIVE
+@testset "Hessenberg corner cases" begin
+    @test dot(Float64[], UpperHessenberg(zeros(0, 0)), Float64[]) === 0.0
+    A = [4.0 1 2; 1 3 0; 2 1 5]
+    F = hessenberg(A) + 2I
+    @test F.μ == 2
+    @test Matrix(F) ≈ A + 2I
+    @test occursin("\nwith shift μI for μ = 2\nQ factor:", sprint(show, "text/plain", F))
+    @test !occursin("with shift", sprint(show, "text/plain", hessenberg(A)))
+    # scaling that would change the eltype of F.H
+    @test_throws MethodError hessenberg(A) * (1 + 2im)
+    @test_throws MethodError (1 + 2im) * hessenberg(A)
+end
+end # COMPREHENSIVE
 
 end # module TestHessenberg
