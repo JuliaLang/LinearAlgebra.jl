@@ -912,6 +912,48 @@ function exp!(A::StridedMatrix{T}) where T<:BlasFloat
     X
 end
 
+## Generic matrix exponential for element types not supported by LAPACK: scaling and squaring
+## with a diagonal Padé approximant of a degree chosen for the precision of the element type,
+## from Golub and Van Loan, "Matrix Computations", 4th edition, 2013, Algorithm 9.3.1
+function exp!(A::StridedMatrix{T}) where {T<:Union{AbstractFloat,Complex{<:AbstractFloat}}}
+    n = checksquare(A)
+    if isdiag(A)
+        for i in diagind(A, IndexStyle(A))
+            A[i] = exp(A[i])
+        end
+        return A
+    end
+    all(isfinite, A) || throw(ArgumentError("matrix contains Infs or NaNs"))
+    R = real(T)
+    # scale A by 2^-s, so that its norm is at most 1/2
+    nA = opnorm(A, 1)
+    s = nA > 1//2 ? ceil(Int, log2(2nA)) : 0
+    s > 0 && rmul!(A, inv(R(2)^s))
+    # the smallest degree q such that the bound 2^(3-2q) (q!)^2/((2q)!(2q+1)!) of the
+    # relative backward error of the Padé approximant is at most the machine precision
+    q = 1
+    while R(2)^(3-2q) * R(factorial(big(q))^2 // (factorial(big(2q)) * factorial(big(2q+1)))) > eps(R)
+        q += 1
+    end
+    # the numerator N = Σⱼ cⱼ Aʲ and denominator D = Σⱼ (-1)ʲ cⱼ Aʲ of the Padé approximant,
+    # with cⱼ = (2q-j)! q! / ((2q)! j! (q-j)!)
+    N = Matrix{T}(I, n, n)
+    D = Matrix{T}(I, n, n)
+    X = copy(A)
+    c = one(R)
+    for j in 1:q
+        c *= R(q - j + 1) / R(j * (2q - j + 1))
+        j > 1 && (X = X * A)
+        N .+= c .* X
+        D .+= (isodd(j) ? -c : c) .* X
+    end
+    F = D \ N
+    for _ in 1:s
+        F = F * F
+    end
+    return copyto!(A, F)
+end
+
 ## Swap rows i and j and columns i and j in X
 function rcswap!(i::Integer, j::Integer, X::AbstractMatrix{<:Number})
     for k = axes(X,1)

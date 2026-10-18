@@ -624,6 +624,28 @@ end
     @test exp(log(A8)) ≈ A8
 end
 
+@testset "Matrix exponential for element types not supported by LAPACK" begin
+    A = [4 2 0; 1 4 1; 1 1 4]
+    for T in (BigFloat, Complex{BigFloat})
+        @test exp(T.(A))::Matrix{T} ≈ exp(float.(A))
+    end
+    for f in (cis, sin, cos)
+        @test f(big.(A)) ≈ f(float.(A))
+    end
+    @test exp(Rational{BigInt}[1 2; 3 4]) ≈ exp([1.0 2; 3 4])
+    @test exp(zeros(BigFloat, 2, 2)) == I
+    @test exp(big.([1.0 0; 0 2])) == [exp(big(1)) 0; 0 exp(big(2))]
+    @test_throws ArgumentError exp(big.([1 NaN; 0 1]))
+    # accurate to the working precision
+    setprecision(BigFloat, 512) do
+        t = big(3)/2
+        @test exp([0 -t; t 0]) ≈ [cos(t) -sin(t); sin(t) cos(t)] rtol=10eps(BigFloat)
+        @test exp([big(10) 1; 0 10]) ≈ exp(big(10)) * [1 1; 0 1] rtol=100eps(BigFloat)
+        B = big.(A)
+        @test sin(B)^2 + cos(B)^2 ≈ I atol=100eps(BigFloat)
+    end
+end
+
 @testset "Matrix trigonometry" begin
     @testset "Tests for $elty" for elty in (Float32, Float64, ComplexF32, ComplexF64)
         A1  = convert(Matrix{elty}, [3 2 0; 1 3 1; 1 1 3])
