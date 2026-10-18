@@ -7,12 +7,6 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra
 using LinearAlgebra: DivideAndConquer, QRIteration, RobustRepresentations
 
-const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
-isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
-
-using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
-
 @testset "chol-eigen-eigvals" begin
     ## Cholesky decomposition based
 
@@ -229,7 +223,6 @@ end
     testeigvecs(H, @view vals[2:2])
 end
 
-@static if COMPREHENSIVE
 struct UnsupportedAlg <: LinearAlgebra.Algorithm end
 
 @testset "Hermitian eigen corner cases" begin
@@ -244,6 +237,5 @@ struct UnsupportedAlg <: LinearAlgebra.Algorithm end
     @test E.values ≈ [2]
     @test T * E.vectors ≈ E.vectors * Diagonal(E.values)
 end
-end # COMPREHENSIVE
 
 end # module TestSymmetricEigen

@@ -18,7 +18,6 @@ using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.Furlongs
-using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 Random.seed!(123)
 
@@ -1140,7 +1139,6 @@ end
     @test_throws DimensionMismatch fn([I; ones(BigInt, 1, 2)])
 end
 
-@static if COMPREHENSIVE
 @testset "_valeltype" begin
     # the element types are only known at run time
     for (A, T) in Any[([1, 2], Int), (Real[1, 2.0], Float64), (Real[], Real),
@@ -1188,6 +1186,5 @@ end
     @test_throws BoundsError axpy!(2, x, 1:2, y, 3:4)
     @test_throws DimensionMismatch LinearAlgebra.reflectorApply!(ones(2, 3), [1.0, 2], 1.0)
 end
-end # COMPREHENSIVE
 
 end # module TestGeneric

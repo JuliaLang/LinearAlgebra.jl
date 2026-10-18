@@ -1321,7 +1321,6 @@ end
     end
 end
 
-@static if COMPREHENSIVE
 @testset "Bidiagonal corner cases" begin
     @test promote_rule(Tridiagonal{Float64, Vector{Float64}}, Bidiagonal{Int, Vector{Int}}) == Tridiagonal{Float64}
     U = Bidiagonal([1, 2, 3], [4, 5], :U)
@@ -1333,6 +1332,5 @@ end
     @test sum(E; dims = 1) == zeros(1, 0)
     @test sum(E; dims = 2) == zeros(0, 1)
 end
-end # COMPREHENSIVE
 
 end # module TestBidiagonal

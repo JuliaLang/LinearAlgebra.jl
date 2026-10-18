@@ -13,7 +13,6 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
-using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 # for tuple tests below
 ≅(x,y) = all(p -> p[1] ≈ p[2], zip(x,y))
@@ -433,7 +432,6 @@ end
     end
 end
 
-@static if COMPREHENSIVE
 @testset "Hessenberg corner cases" begin
     @test dot(Float64[], UpperHessenberg(zeros(0, 0)), Float64[]) === 0.0
     A = [4.0 1 2; 1 3 0; 2 1 5]
@@ -446,6 +444,5 @@ end
     @test_throws MethodError hessenberg(A) * (1 + 2im)
     @test_throws MethodError (1 + 2im) * hessenberg(A)
 end
-end # COMPREHENSIVE
 
 end # module TestHessenberg

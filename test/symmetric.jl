@@ -1408,7 +1408,6 @@ Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
     @test zero(Hermitian(rand(ComplexF64, 4, 4))) isa Hermitian
 end
 
-@static if COMPREHENSIVE
 # an element type that is neither a number nor a matrix, with its own symmetric_type
 struct SymEltype end
 Base.transpose(x::SymEltype) = x
@@ -1439,6 +1438,5 @@ end
     @test !isreal(Hermitian(C, :L))
     @test isreal(Symmetric(C, :U)) && isreal(Hermitian(C, :U))
 end
-end # COMPREHENSIVE
 
 end # module TestSymmetric

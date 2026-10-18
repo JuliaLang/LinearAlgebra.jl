@@ -1184,7 +1184,6 @@ end
     end
 end
 
-@static if COMPREHENSIVE
 @testset "triangular corner cases" begin
     A = [1.0 2 3; 4 5 6; 7 8 10]
     Tri = Tridiagonal(ComplexF64[1+im, 2], ComplexF64[3, 4im, 5], ComplexF64[6, 7-im])
@@ -1218,6 +1217,7 @@ end
     @test_throws ArgumentError eigvecs(UpperTriangular(big.(A)))
 end
 
+@static if COMPREHENSIVE
 @testset "l/rdiv! with lazy adjoint/transpose parent" begin
     M = ComplexF64[1 2+3im 1im; 4-1im 5 2-im; 3+im 2im 7]
     B = ComplexF64[1 2 3; 4 5 6]
@@ -1234,6 +1234,7 @@ end
         end
     end
 end
+end # COMPREHENSIVE
 
 @testset "log and fractional power, few square roots" begin
     # 2x2 block of a real Schur form for which log takes a single square root
@@ -1246,6 +1247,5 @@ end
         @test U^0.3 ≈ UpperTriangular([1.0 0.3ε; 0 1.0])
     end
 end
-end # COMPREHENSIVE
 
 end # module TestTriangular

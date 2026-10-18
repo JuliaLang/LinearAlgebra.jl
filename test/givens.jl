@@ -7,12 +7,6 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra, Random
 using LinearAlgebra: Givens, Rotation, givensAlgorithm
 
-const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
-isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
-
-using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
-
 # Test givens rotations
 @testset "Test Givens for $elty" for elty in (Float32, Float64, ComplexF32, ComplexF64)
     if elty <: Real
@@ -152,7 +146,6 @@ end
     @test !isfinite(r)
 end
 
-@static if COMPREHENSIVE
 # rescaling of tiny and huge inputs, compared with c = |f|/h, s = sign(f)*conj(g)/h,
 # r = sign(f)*h for h = hypot(|f|, |g|)
 @testset "givensAlgorithm - extreme scaling, $T" for T in (Float32, Float64)
@@ -169,7 +162,6 @@ end
         @test s ≈ f/abs(f)*conj(g)/h
         @test r ≈ f/abs(f)*h
     end
-end
 end
 
 # ordering of compositions

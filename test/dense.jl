@@ -1549,7 +1549,6 @@ end
     @test abs(H) isa Hermitian
 end
 
-@static if COMPREHENSIVE
 @testset "isone of a large matrix" begin
     # matrices of at least ISONE_CUTOFF bytes are checked column by column
     n = isqrt(LinearAlgebra.ISONE_CUTOFF ÷ sizeof(Float64))
@@ -1590,6 +1589,5 @@ end
 @testset "cond rethrows errors other than singularity" begin
     @test_throws OverflowError cond(Rational{Int8}[100 99; 99 98], 1)
 end
-end # COMPREHENSIVE
 
 end # module TestDense

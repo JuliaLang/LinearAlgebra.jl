@@ -557,7 +557,6 @@ end
     @test A \ b ≈ ComplexF64.(A) \ b
 end
 
-@static if COMPREHENSIVE
 @testset "Tridiagonal LU corner cases" begin
     # the preallocated second superdiagonal is reused
     du2 = zeros(1)
@@ -573,6 +572,5 @@ end
     @test Fc' \ b ≈ Matrix(Tc)' \ b
     @test_throws DimensionMismatch ldiv!(Fc', ones(ComplexF64, 2))
 end
-end # COMPREHENSIVE
 
 end # module TestLU

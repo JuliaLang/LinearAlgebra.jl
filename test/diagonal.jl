@@ -1651,7 +1651,6 @@ end
     end
 end
 
-@static if COMPREHENSIVE
 @testset "Diagonal corner cases" begin
     # 1x1 matrices have no off-diagonal zeros
     @test minimum(Diagonal([3])) == 3
@@ -1688,6 +1687,5 @@ end
     @test_throws PosDefException cholesky(D, RowMaximum())
     @test !issuccess(cholesky(D, RowMaximum(); check = false))
 end
-end # COMPREHENSIVE
 
 end # module TestDiagonal

@@ -17,7 +17,6 @@ using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
-using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 include("testutils.jl") # test_approx_eq_modphase
 
@@ -1298,7 +1297,6 @@ end
     end
 end
 
-@static if COMPREHENSIVE
 @testset "Tridiagonal corner cases" begin
     # cholesky of a non-Hermitian matrix
     T = Tridiagonal([1.0, 2], [3.0, 4, 5], [6.0, 7])
@@ -1311,6 +1309,5 @@ end
     M = [1 2; 2 3]
     @test_throws "asymmetric value" LinearAlgebra.fillband!(SymTridiagonal([M, M], [M]), [1 2; 3 4], 0, 0)
 end
-end # COMPREHENSIVE
 
 end # module TestTridiagonal

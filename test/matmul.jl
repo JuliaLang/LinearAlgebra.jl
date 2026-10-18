@@ -1410,7 +1410,6 @@ end
     end
 end
 
-@static if COMPREHENSIVE
 @testset "BLAS eltypes falling back to generic multiplication" begin
     Random.seed!(1234)
     naive(A, B) = [sum(A[i,k]*B[k,j] for k in axes(A,2)) for i in axes(A,1), j in axes(B,2)]
@@ -1464,6 +1463,5 @@ end
         @test count(!iszero, B) == 6
     end
 end
-end # COMPREHENSIVE
 
 end # module TestMatmul

@@ -7,12 +7,6 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted
 
-const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
-isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
-
-using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
-
 @testset "Simple svdvals / svd tests" begin
     ≊(x,y) = isapprox(x,y,rtol=1e-15)
 
@@ -348,7 +342,6 @@ end
     @test norm(A2 * n2) < 8 * maximum(A2) * eps(eltype(A2))
 end
 
-@static if COMPREHENSIVE
 @testset "ldiv! with all singular values below the tolerance" begin
     F = svd([1.0 0; 0 1e-3; 0 0])
     B = [1.0 2; 3 4; 5 6]
@@ -356,6 +349,5 @@ end
     @test ldiv!(F, copy(B); atol = 2)[1:2, :] == zeros(2, 2)
     @test ldiv!(F, copy(B))[1:2, :] ≈ [1.0 2; 3000 4000]
 end
-end # COMPREHENSIVE
 
 end # module TestSVD

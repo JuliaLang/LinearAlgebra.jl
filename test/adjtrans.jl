@@ -14,7 +14,6 @@ using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers.Quaternions
 using Main.LinearAlgebraTestHelpers.StridedArrays
-using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
@@ -883,7 +882,6 @@ end
     end
 end
 
-@static if COMPREHENSIVE
 @testset "transpose!/adjoint! between vectors and matrices, and copy_adjoint!" begin
     M = [1+im 2-im 3; 4 5im 6]
     @test transpose!(zeros(Complex{Int}, 3), M[1:1, :]) == vec(M[1, :])
@@ -911,6 +909,5 @@ end
     @test transpose(Int[]) * Float64[] === 0.0
     @test_throws DimensionMismatch transpose([1, 2]) * [1.0]
 end
-end # COMPREHENSIVE
 
 end # module TestAdjointTranspose

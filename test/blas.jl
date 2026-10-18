@@ -806,9 +806,8 @@ end
     @test length(BLAS.lbt_get_config().loaded_libs) == length(cfg0.loaded_libs)
 end
 
-@static if COMPREHENSIVE
 @testset "allocating and pointer BLAS wrappers" begin
-    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
+    @testset for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         x = elty[1, -2, 3]
         α = elty(2)
         @test BLAS.asum(3, x, 1) ≈ sum(fabs, x)
@@ -856,6 +855,5 @@ end
     @test_throws ArgumentError BLAS.lbt_find_backing_library("dgemm_", :foo; config = cfg)
     @test_throws ArgumentError BLAS.lbt_find_backing_library("not_a_blas_symbol", :ilp64; config = cfg)
 end
-end # COMPREHENSIVE
 
 end # module TestBLAS

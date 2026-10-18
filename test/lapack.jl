@@ -1040,7 +1040,6 @@ Base.unsafe_convert(::Type{Ptr{T}}, A::NonResizableArray{T}) where {T} = pointer
     @test LAPACK.trevc!('R', 'S', BlasInt[1, 0, 1], copy(T), similar(T), view(similar(T), :, :))[2] ≈ VR
 end
 
-@static if COMPREHENSIVE
 @testset "LAPACK error code helpers" begin
     @test_throws ArgumentError LAPACK.chkargsok(BlasInt(-1))
     @test_throws ArgumentError LAPACK.chklapackerror(BlasInt(-1))
@@ -1054,7 +1053,7 @@ end
 
 @testset "LAPACK wrappers without other callers" begin
     Random.seed!(1234)
-    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
+    @testset for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         n = 4
         A = rand(elty, n, n) + n*I
         B = rand(elty, n, n) + n*I
@@ -1146,6 +1145,5 @@ end
         end
     end
 end
-end # COMPREHENSIVE
 
 end # module TestLAPACK

@@ -909,7 +909,6 @@ end
     end
 end
 
-@static if COMPREHENSIVE
 @testset "ldiv! corner cases" begin
     # rank-revealing solve with an empty factorization or right hand side
     F = qr([1.0 2; 3 4; 5 6], ColumnNorm())
@@ -920,6 +919,5 @@ end
     @test ldiv!(G, C, 1e-8) === (C, 0)
     @test_throws DimensionMismatch ldiv!(qr([1.0 2; 3 4])', ones(3))
 end
-end # COMPREHENSIVE
 
 end # module TestQR

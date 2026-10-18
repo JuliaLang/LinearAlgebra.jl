@@ -6,12 +6,6 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using LinearAlgebra, Test, Random
 
-const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
-const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
-isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
-
-using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
-
 tc(r1::NTuple{N,Any}, r2::NTuple{N,Any}) where {N} = all(x->tc(x...), [zip(r1,r2)...])
 tc(r1::BitArray{N}, r2::Union{BitArray{N},Array{Bool,N}}) where {N} = true
 tc(r1::SubArray{Bool,N1,BitArray{N2}}, r2::SubArray{Bool,N1,<:Union{BitArray{N2},Array{Bool,N2}}}) where {N1,N2} = true
@@ -106,7 +100,6 @@ b2 = bitrand(v1)
 b1 = bitrand(n1, n1)
 @check_bit_operation diag(b1)
 
-@static if COMPREHENSIVE
 @testset "istriu/istril of tall BitMatrix" begin
     # columns that span several chunks, with a nonzero only in a middle chunk
     A = falses(200, 200)
@@ -118,6 +111,5 @@ b1 = bitrand(n1, n1)
     @test !istril(A) && istriu(A)
     @test istril(A) == istril(Matrix(A))
 end
-end # COMPREHENSIVE
 
 end # module
