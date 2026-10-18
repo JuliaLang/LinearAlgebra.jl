@@ -1321,4 +1321,18 @@ end
     end
 end
 
+@static if COMPREHENSIVE
+@testset "Bidiagonal corner cases" begin
+    @test promote_rule(Tridiagonal{Float64, Vector{Float64}}, Bidiagonal{Int, Vector{Int}}) == Tridiagonal{Float64}
+    U = Bidiagonal([1, 2, 3], [4, 5], :U)
+    L = Bidiagonal([1, 2, 3], [4, 5], :L)
+    @test_throws "cannot set the lower bidiagonal band to a nonzero value for uplo=:U" copyto!(copy(U), L)
+    @test_throws "cannot set the upper bidiagonal band to a nonzero value for uplo=:L" copyto!(copy(L), U)
+    @test_throws DimensionMismatch LinearAlgebra._rdiv!(zeros(2, 3), rand(3, 3), Bidiagonal([1.0, 2, 3], [4.0, 5], :U))
+    E = Bidiagonal(Float64[], Float64[], :U)
+    @test sum(E; dims = 1) == zeros(1, 0)
+    @test sum(E; dims = 2) == zeros(0, 1)
+end
+end # COMPREHENSIVE
+
 end # module TestBidiagonal
