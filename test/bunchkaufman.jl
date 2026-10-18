@@ -293,6 +293,47 @@ end
     end
 end
 
+@testset "matrices with an abstract element type" begin
+    A = Real[2 1; 1 1.5]
+    F = bunchkaufman(A)
+    @test F isa BunchKaufman{Float64}
+    @test A * (F \ [1, 2]) ≈ [1, 2]
+end
+
+@testset "generic Bunch-Kaufman for plain matrices" begin
+    # a complex symmetric, non-Hermitian matrix is factorized as symmetric
+    A = Complex{BigFloat}.([1 2im 0; 2im 3 1; 0 1 2im])
+    F = bunchkaufman(A)
+    @test issymmetric(F)
+    @test F.U * F.D * transpose(F.U) ≈ A[F.p, F.p]
+    @test_throws ArgumentError bunchkaufman(BigFloat.([1 2; 3 4]))
+end
+
+@testset "rook pivoting with a pivot below the safe minimum" begin
+    x = Float16(1e-6) # a subnormal number
+    for uplo in (:U, :L)
+        A = Symmetric(Float16[x x 0; x 1 1; 0 1 3], uplo)
+        F = bunchkaufman(A, true)
+        @test F.ipiv == 1:3
+        M = uplo === :U ? F.U * F.D * F.U' : F.L * F.D * F.L'
+        @test M ≈ Matrix(A)[F.p, F.p]
+    end
+end
+
+@testset "inertia with zero eigenvalues" begin
+    # 2x2 block with two eigenvalues below the tolerance
+    @test inertia(bunchkaufman(Symmetric([0 1e-3; 1e-3 0])); atol=1.0) == (0, 0, 2)
+    # 2x2 block with one eigenvalue below the tolerance, whose sign is that of the trace
+    F = bunchkaufman(Symmetric([0.5 1; 1 0.1]))
+    @test F.ipiv == [-1, -1]
+    @test inertia(F; atol=0.7) == (1, 0, 1)
+    @test inertia(bunchkaufman(Symmetric(-[0.5 1; 1 0.1])); atol=0.7) == (0, 1, 1)
+    # 1x1 block below the default tolerance
+    @test inertia(bunchkaufman(Symmetric([1 0; 0 1e-20]))) == (1, 0, 1)
+    # only the number of zero eigenvalues is defined for complex symmetric matrices
+    @test inertia(bunchkaufman(Symmetric(ComplexF64[1 0; 0 1e-20]))) == (nothing, nothing, 1)
+end
+
 @testset "right division (#1032)" begin
     # the example from the issue
     A = rand(3, 3)
