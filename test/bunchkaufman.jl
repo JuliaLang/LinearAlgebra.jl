@@ -293,4 +293,36 @@ end
     end
 end
 
+@testset "right division (#1032)" begin
+    # the example from the issue
+    A = rand(3, 3)
+    A = A' * A
+    @test A / bunchkaufman(A) ≈ I
+    for T in (Float64, ComplexF64, BigFloat, Complex{BigFloat}, Rational{BigInt}, Complex{Rational{BigInt}}),
+            W in (Symmetric, Hermitian), uplo in (:U, :L), rook in (false, true)
+        T <: Real && W === Hermitian && continue
+        M = T.([0 1 2 0; 1 0 3 1; 2 3 1 0; 0 1 0 2] .+ (T <: Complex ? im .* [0 1 0 2; 1 0 1 0; 0 1 0 1; 2 0 1 0] : 0))
+        M = W === Hermitian ? M + M' : M + transpose(M)
+        A = W(M, uplo)
+        F = bunchkaufman(A, rook)
+        B = T.([1 2 0 1; 3 4 1 0; 5 6 2 2])
+        X = B / F
+        @test X * Matrix(A) == B || X * Matrix(A) ≈ B
+        @test X == B / Matrix(A) || X ≈ B / Matrix(A)
+        Y = copy(B)
+        @test rdiv!(Y, F) === Y
+        @test Y == X
+        b = T.([1, 2, 3, 4])
+        # a row vector gives a 1×n matrix, as for other factorizations
+        @test size(b' / F) == (1, 4)
+        @test (b' / F) * Matrix(A) == b' || (b' / F) * Matrix(A) ≈ b'
+        @test transpose(b) / F * Matrix(A) == transpose(b) || transpose(b) / F * Matrix(A) ≈ transpose(b)
+        @test_throws DimensionMismatch T.(ones(2, 3)) / F
+    end
+    # complex right-hand side with a real factorization
+    A = Symmetric([2.0 1 0; 1 0 3; 0 3 1])
+    B = [1.0+2im 0 1; 3 4im 1]
+    @test B / bunchkaufman(A) ≈ B / Matrix(A)
+end
+
 end # module TestBunchKaufman

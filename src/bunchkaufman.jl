@@ -156,7 +156,7 @@ When `check = false`, responsibility for checking the decomposition's
 validity (via [`issuccess`](@ref)) lies with the user.
 
 The following functions are available for `BunchKaufman` objects:
-[`size`](@ref), `\\`, [`inv`](@ref), [`issymmetric`](@ref),
+[`size`](@ref), `\\`, `/`, [`inv`](@ref), [`issymmetric`](@ref),
 [`ishermitian`](@ref), [`getindex`](@ref).
 
 [^Bunch1977]: J R Bunch and L Kaufman, Some stable methods for calculating inertia and solving symmetric linear systems, Mathematics of Computation 31:137 (1977), 163-179. [url](https://www.ams.org/journals/mcom/1977-31-137/S0025-5718-1977-0428694-0/).
@@ -409,6 +409,14 @@ function ldiv!(B::BunchKaufman{T,<:StridedMatrix}, R::StridedVecOrMat{T}) where 
             LAPACK.hetrs!(B.uplo, B.LD, B.ipiv, R)
         end
     end
+end
+
+# The factorized matrix A is Hermitian or symmetric, so X*A = B is equivalent to A*X' = B' or
+# A*transpose(X) = transpose(B), respectively. LAPACK has no right solves, so the transposed
+# right-hand side is copied.
+function rdiv!(B::AbstractMatrix, F::BunchKaufman)
+    op = ishermitian(F) ? adjoint : transpose
+    return copyto!(B, op(ldiv!(F, copy(op(B)))))
 end
 
 function logabsdet(F::BunchKaufman)
