@@ -557,4 +557,22 @@ end
     @test A \ b ≈ ComplexF64.(A) \ b
 end
 
+@static if COMPREHENSIVE
+@testset "Tridiagonal LU corner cases" begin
+    # the preallocated second superdiagonal is reused
+    du2 = zeros(1)
+    T = Tridiagonal([1.0, 2], [4.0, 5, 6], [1.0, 3], du2)
+    M = Matrix(T)
+    F = lu!(T)
+    @test F.factors.du2 === du2
+    @test F.L * F.U ≈ M[F.p, :]
+    # the adjoint of a real LU is a TransposeFactorization, so use a complex matrix
+    Tc = Tridiagonal(ComplexF64[1+im, 2], ComplexF64[4, 5im, 6], ComplexF64[1, 3-im])
+    Fc = lu(Tc)
+    b = ComplexF64[1, 2, 3]
+    @test Fc' \ b ≈ Matrix(Tc)' \ b
+    @test_throws DimensionMismatch ldiv!(Fc', ones(ComplexF64, 2))
+end
+end # COMPREHENSIVE
+
 end # module TestLU
