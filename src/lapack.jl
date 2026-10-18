@@ -1184,7 +1184,7 @@ for (gesvx, elty) in
                Ptr{$elty}, Ptr{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong),
               fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
               ldb, X, n, rcond, ferr, berr, work, iwork, info, 1, 1, 1)
-            chklapackerror(info[])
+            chkargsok(info[])
             if info[] == n + 1
                 @warn "Matrix is singular to working precision"
             else
@@ -1256,7 +1256,7 @@ for (gesvx, elty, relty) in
                Ptr{$elty}, Ptr{$relty}, Ref{BlasInt}, Clong, Clong, Clong),
               fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
               ldb, X, n, rcond, ferr, berr, work, rwork, info, 1, 1, 1)
-            chklapackerror(info[])
+            chkargsok(info[])
             if info[] == n + 1
                 @warn "Matrix is singular to working precision"
             else
