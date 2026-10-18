@@ -754,4 +754,14 @@ end
     @test cholesky(Number[2 im; -im 2]).U ≈ cholesky(ComplexF64[2 im; -im 2]).U
 end
 
+@static if COMPREHENSIVE
+@testset "generic Cholesky of an indefinite matrix, lower" begin
+    A = Hermitian(big.([3.0 2; 2 0]), :L)
+    C = cholesky(A; check = false)
+    @test !issuccess(C)
+    @test C.info == 2
+    @test_throws PosDefException cholesky(A)
+end
+end # COMPREHENSIVE
+
 end # module TestCholesky
