@@ -7,6 +7,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra
 using LinearAlgebra: DivideAndConquer, QRIteration, RobustRepresentations
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+
 @testset "chol-eigen-eigvals" begin
     ## Cholesky decomposition based
 
@@ -222,5 +228,22 @@ end
     testeigvecs(H, vals[1:2])
     testeigvecs(H, @view vals[2:2])
 end
+
+@static if COMPREHENSIVE
+struct UnsupportedAlg <: LinearAlgebra.Algorithm end
+
+@testset "Hermitian eigen corner cases" begin
+    H = Hermitian([2.0 1; 1 3])
+    λ = eigvals(Matrix(H))
+    @test_throws ArgumentError eigen!(copy(H); alg = UnsupportedAlg())
+    @test eigvals!(copy(H), 1:1) ≈ λ[1:1]
+    @test eigvals!(copy(H), 0, 10) ≈ λ
+    # 1x1 complex Hermitian tridiagonal matrix
+    T = Hermitian(Tridiagonal(ComplexF64[], ComplexF64[2], ComplexF64[]))
+    E = eigen(T)
+    @test E.values ≈ [2]
+    @test T * E.vectors ≈ E.vectors * Diagonal(E.values)
+end
+end # COMPREHENSIVE
 
 end # module TestSymmetricEigen
