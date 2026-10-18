@@ -901,4 +901,12 @@ end
     @test ST == diagm(-1=>fill(2, length(ev)), 0=>fill(2, length(dv)), 1=>fill(2, length(ev)))
 end
 
+@static if COMPREHENSIVE
+@testset "opnorm of banded matrices with an invalid p" begin
+    for A in (Bidiagonal([1.0, 2], [3.0], :U), Tridiagonal([1.0], [1.0, 2], [3.0]), SymTridiagonal([1.0, 2], [3.0]))
+        @test_throws ArgumentError opnorm(A, 3)
+    end
+end
+end # COMPREHENSIVE
+
 end # module TestSpecial
