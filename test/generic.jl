@@ -1174,6 +1174,20 @@ end
 @testset "peakflops in parallel" begin
     @test LinearAlgebra.peakflops(64, ntrials=1, parallel=true) > 0
 end
+
+@testset "generic helpers corner cases" begin
+    # MulAddMul with α == 1 and β != 0, constructed at run time
+    m = LinearAlgebra.MulAddMul(Base.inferencebarrier(1), Base.inferencebarrier(2))
+    @test m isa LinearAlgebra.MulAddMul{true,false}
+    @test m.alpha == 1 && m.beta == 2
+    @test_throws ArgumentError @macroexpand LinearAlgebra.@stable_muladdmul foo(1)
+    # generic fallbacks, for an array type without specialized methods
+    @test !issymmetric(Test.GenericArray(ones(ComplexF64, 2, 3)))
+    @test !ishermitian(Test.GenericArray(ones(2, 3)))
+    x, y = BigFloat[1, 2], BigFloat[1, 2, 3]
+    @test_throws BoundsError axpy!(2, x, 1:2, y, 3:4)
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApply!(ones(2, 3), [1.0, 2], 1.0)
+end
 end # COMPREHENSIVE
 
 end # module TestGeneric
