@@ -210,8 +210,17 @@ julia> S.L * S.D * S.L' ≈ A[S.p, S.p]
 true
 ```
 """
-bunchkaufman(A::AbstractMatrix{T}, rook::Bool=false; check::Bool = true) where {T} =
-    bunchkaufman!(bkcopy_oftype(A, typeof(sqrt(oneunit(T)))), rook; check = check)
+bunchkaufman(A::AbstractMatrix, rook::Bool=false; check::Bool = true) =
+    bunchkaufman!(bkcopy_oftype(A, _bktype(_valeltype(A))), rook; check)
+
+# The element type of the copy of the matrix that is factorized. The Bunch-Kaufman algorithm is
+# closed over the floating-point and the rational numbers, but not over the integers, which
+# are therefore promoted to rationals, with BigInt to avoid overflow. Other types are promoted
+# as by `sqrt`.
+_bktype(::Type{T}) where {T<:ClosedScalar} = T
+_bktype(::Type{<:Integer}) = Rational{BigInt}
+_bktype(::Type{<:Complex{<:Integer}}) = Complex{Rational{BigInt}}
+_bktype(::Type{T}) where {T} = typeof(sqrt(oneunit(T)))
 
 BunchKaufman{T}(B::BunchKaufman) where {T} =
     BunchKaufman(convert(Matrix{T}, B.LD), B.ipiv, B.uplo, B.symmetric, B.rook, B.info)
@@ -1214,26 +1223,6 @@ function bunchkaufman!(A::AbstractMatrix{TS},
     check::Bool = true
     ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
     return bunchkaufman_native!(A, rook; check)
-end
-
-function bunchkaufman(A::AbstractMatrix{TS},
-    rook::Bool = false;
-    check::Bool = true
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-    return bunchkaufman!(bkcopy_oftype(A, TS), rook; check)
-end
-
-function bunchkaufman(A::AbstractMatrix{TS},
-    rook::Bool = false;
-    check::Bool = true
-    ) where TS <:Union{TI, Complex{TI}} where TI <: Integer
-    # Create a rational copy of the integer matrix, as the Bunch-Kaufman algorithm is closed
-    # over the rationals but not over the integers. We promote to BigInt to avoid overflow.
-    S = TS <: Complex ? Complex{Rational{BigInt}} : Rational{BigInt}
-    M = S.(A) # a full matrix, also for Symmetric and Hermitian A
-    M = A isa Symmetric ? Symmetric(M, _sym_uplo(A.uplo)) :
-        A isa Hermitian ? Hermitian(M, _sym_uplo(A.uplo)) : M
-    return bunchkaufman_native!(M, rook; check)
 end
 
 function ldiv!(B::BunchKaufman{TS},

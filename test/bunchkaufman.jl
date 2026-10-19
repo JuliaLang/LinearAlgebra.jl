@@ -294,10 +294,18 @@ end
 end
 
 @testset "matrices with an abstract element type" begin
-    A = Real[2 1; 1 1.5]
-    F = bunchkaufman(A)
-    @test F isa BunchKaufman{Float64}
-    @test A * (F \ [1, 2]) ≈ [1, 2]
+    # the element type is determined by the stored values
+    for (A, T) in ((Union{Float32,Float64}[2.0 1.0; 1.0 1.5], Float64),
+                   (AbstractFloat[2.0 1.0; 1.0 1.5], Float64),
+                   (Real[2 1; 1 1.5], Float64),
+                   (Real[2//1 1//2; 1//2 3//2], Rational{Int}),
+                   (Hermitian(Number[2 im; -im 3]), Complex{Rational{BigInt}}))
+        F = bunchkaufman(A)
+        @test F isa BunchKaufman{T}
+        @test Matrix(A) * (F \ [1, 2]) ≈ [1, 2]
+    end
+    # without stored values, the element type is promoted as by sqrt
+    @test bunchkaufman(Matrix{Real}(undef, 0, 0)) isa BunchKaufman{Float64}
 end
 
 @testset "generic Bunch-Kaufman for plain matrices" begin
