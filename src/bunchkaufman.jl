@@ -757,10 +757,12 @@ function generic_bunchkaufman!(
                 # The columns j have to be processed from the diagonal block outwards: the
                 # update of column j reads A[i,k] and A[i,knext] for the rows i of its stored
                 # part, which are at least as far from the diagonal block as row j, and these
-                # entries are only overwritten when column i is processed.
+                # entries are only overwritten when column i is processed. The row of W*inv(D(k))
+                # is computed with the factors in the order of the matrix product, which matters
+                # for number types whose multiplication does not commute.
                 for j in (upper ? reverse(inds) : inds)
-                    wknext = dxk * (dkk*A[j,knext] - A[j,k])
-                    wk = dkx * (dxx*A[j,k] - A[j,knext])
+                    wknext = (A[j,knext]*dkk - A[j,k]) * dxk
+                    wk = (A[j,k]*dxx - A[j,knext]) * dkx
                     r = upper ? (1:j) : (j:N)
                     view(A, r, j) .-= view(A, r, k) .* cj(wk) .+ view(A, r, knext) .* cj(wknext)
                     A[j,k] = wk
@@ -914,15 +916,16 @@ function generic_bksolve!(
             rows = upper ? (1:(k-2)) : ((k+2):N)
             _bk_rank1_rhs!(B, view(A, rows, k), rows, k)
             _bk_rank1_rhs!(B, view(A, rows, kx), rows, kx)
-            #   Multiply by the inverse of the diagonal block.
+            #   Multiply by the inverse of the diagonal block, from the left, which matters for
+            #   number types whose multiplication does not commute.
             axk = A[kx,k]
             caxk = symm ? axk : conj(axk)
             axx = A[kx,kx] / axk
             akk = A[k,k] / caxk
             denom = axx*akk - 1
             for j in axes(B, 2)
-                bx = B[kx,j] / axk
-                bk = B[k,j] / caxk
+                bx = axk \ B[kx,j]
+                bk = caxk \ B[k,j]
                 B[kx,j] = (akk*bx - bk) / denom
                 B[k,j] = (axx*bk - bx) / denom
             end
@@ -973,15 +976,16 @@ function _bk_rank1_rhs!(B::AbstractMatrix, x::AbstractVector, rows::AbstractUnit
     return B
 end
 
-# b -= transpose(B)*a (if `symm`) or b -= transpose(B)*conj(a). This simple loop is faster
-# than `mul!` or `dot` for the non-BLAS number types that this code is used for.
+# b -= transpose(transpose(a)*B) (if `symm`) or b -= transpose(a'*B), with the factors in this
+# order for number types whose multiplication does not commute. This simple loop is faster than
+# `mul!` or `dot` for the non-BLAS number types that this code is used for.
 _bk_dotsub!(b::AbstractVector, B::AbstractMatrix, a::AbstractVector, symm::Bool) =
     _bk_dotsub!(b, B, a, symm ? identity : conj)
 function _bk_dotsub!(b::AbstractVector, B::AbstractMatrix, a::AbstractVector, cj::F) where {F}
     for c in eachindex(b)
         t = zero(eltype(b))
         for j in eachindex(a)
-            t += B[j,c] * cj(a[j])
+            t += cj(a[j]) * B[j,c]
         end
         b[c] -= t
     end
