@@ -932,24 +932,33 @@ function exp!(A::StridedMatrix{T}) where {T<:Union{AbstractFloat,Complex{<:Abstr
     # the smallest degree q such that the bound 2^(3-2q) (q!)^2/((2q)!(2q+1)!) of the
     # relative backward error of the Padé approximant is at most the machine precision
     q = 1
-    while R(2)^(3-2q) * R(factorial(big(q))^2 // (factorial(big(2q)) * factorial(big(2q+1)))) > eps(R)
+    bound = inv(R(6))
+    while bound > eps(R)
         q += 1
+        bound /= 16 * (4R(q)^2 - 1)
     end
     # the numerator N = Σⱼ cⱼ Aʲ and denominator D = Σⱼ (-1)ʲ cⱼ Aʲ of the Padé approximant,
     # with cⱼ = (2q-j)! q! / ((2q)! j! (q-j)!)
     N = Matrix{T}(I, n, n)
     D = Matrix{T}(I, n, n)
     X = copy(A)
+    Y = similar(X)
     c = one(R)
     for j in 1:q
         c *= R(q - j + 1) / R(j * (2q - j + 1))
-        j > 1 && (X = X * A)
-        N .+= c .* X
-        D .+= (isodd(j) ? -c : c) .* X
+        if j > 1
+            X, Y = mul!(Y, X, A), X
+        end
+        cD = isodd(j) ? -c : c
+        for k in eachindex(N, D, X)
+            N[k] += c * X[k]
+            D[k] += cD * X[k]
+        end
     end
     F = D \ N
+    G = similar(F)
     for _ in 1:s
-        F = F * F
+        F, G = mul!(G, F, F), F
     end
     return copyto!(A, F)
 end
