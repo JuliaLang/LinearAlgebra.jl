@@ -955,8 +955,8 @@ function exp!(A::StridedMatrix{T}) where {T<:Union{AbstractFloat,Complex{<:Abstr
             D[k] += cD * X[k]
         end
     end
-    F = D \ N
-    G = similar(F)
+    # F = D \ N, overwriting N, and square it s times, reusing X as work space
+    F, G = ldiv!(lu!(D), N), X
     for _ in 1:s
         F, G = mul!(G, F, F), F
     end
