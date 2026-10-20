@@ -55,6 +55,10 @@ end
         @test S \ b == [2.0, 1.0, 4.0, 3.0]
         @test factorize(S) \ b == S \ b
         @test_throws SingularException SymTridiagonal([1.0, 1.0], [1.0]) \ [1.0, 1.0]
+        # inv uses factorize, which failed with a zero pivot before (#601)
+        A = SymTridiagonal([1.0, 0.0, 0.0], [0.0, 1.0])
+        @test inv(A) == inv(Matrix(A))
+        @test A \ [1.0, 2.0, 3.0] == [1.0, 3.0, 2.0]
         # ldiv! and rdiv!, also with a shift that produces a zero diagonal
         x = [2.0, 1.0, 4.0, 3.0]
         @test ldiv!(S, copy(b)) == x
