@@ -14,6 +14,8 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 import Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers.Quaternions
 using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 @testset "Check that non-floats are correctly promoted" begin
@@ -644,6 +646,21 @@ end
         B = big.(A)
         @test sin(B)^2 + cos(B)^2 ≈ I atol=100eps(BigFloat)
     end
+    # other array types
+    @test exp(SizedArray{(3,3)}(big.(A))) ≈ exp(float.(A))
+    @test exp(ImmutableArray(big.(A))) ≈ exp(float.(A))
+    # matrices of quaternions and block matrices, compared with the corresponding matrices of
+    # numbers, where a quaternion is represented as a complex 2×2 matrix
+    flat(B) = reduce(vcat, [reduce(hcat, [Matrix(B[i,j]) for j in axes(B, 2)]) for i in axes(B, 1)])
+    cplx(q) = [complex(q.s, q.v1) complex(q.v2, q.v3); complex(-q.v2, q.v3) complex(q.s, -q.v1)]
+    Q = [Quaternion(1.0, 0.5, -2.0, 0.3) Quaternion(0.1, -0.4, 0.2, 0.0)
+         Quaternion(-0.3, 0.2, 0.1, 1.6) Quaternion(0.5, 0.0, -0.1, 0.2)]
+    @test flat(cplx.(exp(Q)::Matrix{Quaternion{Float64}})) ≈ exp(flat(cplx.(Q)))
+    for T in (Float64, BigFloat)
+        B = [SizedArray{(2,2)}(T[i+j 1; -j 2i]) for i in 1:2, j in 1:2]
+        @test flat(exp(B)::typeof(B)) ≈ exp(flat(B))
+    end
+    @test_throws ArgumentError exp(fill(SizedArray{(1,1)}([NaN;;]), 1, 1))
 end
 
 @testset "Matrix trigonometry" begin

@@ -705,7 +705,7 @@ julia> exp(A)
  0.0      2.71828
 ```
 """
-exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(A)))
+exp(A::AbstractMatrix) = exp!(copy_similar(A, _exp_eltype(A)))
 exp(A::AdjointAbsMat) = adjoint(exp(parent(A)))
 exp(A::TransposeAbsMat) = transpose(exp(parent(A)))
 
@@ -912,21 +912,28 @@ function exp!(A::StridedMatrix{T}) where T<:BlasFloat
     X
 end
 
-## Generic matrix exponential for element types not supported by LAPACK: scaling and squaring
-## with a diagonal Padé approximant of a degree chosen for the precision of the element type,
-## from Golub and Van Loan, "Matrix Computations", 4th edition, 2013, Algorithm 9.3.1
-function exp!(A::StridedMatrix{T}) where {T<:Union{AbstractFloat,Complex{<:AbstractFloat}}}
+# matrices with elements that are not numbers, like matrices, are exponentiated as block
+# matrices, keeping their element type
+_exp_eltype(A::AbstractMatrix) = _valeltype(A) <: Number ? eigtype(A) : eltype(A)
+
+## Generic matrix exponential for element types not supported by LAPACK, including matrices
+## with matrix elements (block matrices): scaling and squaring with a diagonal Padé
+## approximant of a degree chosen for the precision of the elements, from Golub and Van Loan,
+## "Matrix Computations", 4th edition, 2013, Algorithm 9.3.1
+function exp!(A::AbstractMatrix)
+    require_one_based_indexing(A)
     n = checksquare(A)
-    if isdiag(A)
+    if eltype(A) <: Union{Real,Complex} && isdiag(A)
         for i in diagind(A, IndexStyle(A))
             A[i] = exp(A[i])
         end
         return A
     end
-    all(isfinite, A) || throw(ArgumentError("matrix contains Infs or NaNs"))
-    R = real(T)
-    # scale A by 2^-s, so that its norm is at most 1/2
-    nA = opnorm(A, 1)
+    # scale A by 2^-s, so that its norm is at most 1/2. The Frobenius norm, which is also
+    # defined for block matrices, bounds the 2-norm.
+    nA = norm(A)
+    isfinite(nA) || throw(ArgumentError("matrix contains Infs or NaNs"))
+    R = typeof(nA)
     s = nA > 1//2 ? ceil(Int, log2(2nA)) : 0
     s > 0 && rmul!(A, inv(R(2)^s))
     # the smallest degree q such that the bound 2^(3-2q) (q!)^2/((2q)!(2q+1)!) of the
@@ -938,10 +945,11 @@ function exp!(A::StridedMatrix{T}) where {T<:Union{AbstractFloat,Complex{<:Abstr
         bound /= 16 * (4R(q)^2 - 1)
     end
     # the numerator N = Σⱼ cⱼ Aʲ and denominator D = Σⱼ (-1)ʲ cⱼ Aʲ of the Padé approximant,
-    # with cⱼ = (2q-j)! q! / ((2q)! j! (q-j)!)
-    N = Matrix{T}(I, n, n)
-    D = Matrix{T}(I, n, n)
-    X = copy(A)
+    # with cⱼ = (2q-j)! q! / ((2q)! j! (q-j)!), starting from the identity with the element
+    # types (and block sizes) of A
+    eye() = [i == j ? one(A[i,j]) : zero(A[i,j]) for i in 1:n, j in 1:n]
+    N, D = eye(), eye()
+    X = copyto!(similar(N), A)
     Y = similar(X)
     c = one(R)
     for j in 1:q
@@ -955,8 +963,11 @@ function exp!(A::StridedMatrix{T}) where {T<:Union{AbstractFloat,Complex{<:Abstr
             D[k] += cD * X[k]
         end
     end
-    # F = D \ N, overwriting N, and square it s times, reusing X as work space
-    F, G = ldiv!(lu!(D), N), X
+    # F = D \ N, overwriting N, and square it s times, reusing X as work space. As D is
+    # finite and close to the identity, it is nonsingular, and elimination without pivoting
+    # is stable for elements that are not numbers and can't be compared for pivoting.
+    pivot = eltype(D) <: Number ? RowMaximum() : NoPivot()
+    F, G = ldiv!(lu!(D, pivot; check = false), N), X
     for _ in 1:s
         F, G = mul!(G, F, F), F
     end
