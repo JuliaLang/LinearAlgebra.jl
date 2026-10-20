@@ -1468,16 +1468,24 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
 end
 
 ## Generic triangular multiplication
+# The multiplicative identity of the elements of a triangular matrix A, for a unit diagonal and
+# to convert units. For numbers, it is determined by the element type, and computed once. For
+# other elements, like matrices of variable size, it is computed from the diagonal element A[i,i].
+_oneunit(::Type{T}) where {T<:Number} = oneunit(T)
+_oneunit(::Type) = nothing
+_oneunit(oA, A, i) = oA
+_oneunit(::Nothing, A, i) = oneunit(A[i,i])
+
 function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(C, A, B)
     matmul_size_check(size(C), size(A), size(B))
-    oA = oneunit(eltype(A))
+    oA = _oneunit(eltype(A))
     unit = isunitc == 'U'
     @inbounds if uploc == 'U'
         if tfun === identity
             for j in axes(B,2)
                 for i in axes(A,1)
-                    Cij = (unit ? oA : A[i,i]) * B[i,j]
+                    Cij = (unit ? _oneunit(oA, A, i) : A[i,i]) * B[i,j]
                     for k in i + 1:lastindex(B,1)
                         Cij += A[i,k] * B[k,j]
                     end
@@ -1487,7 +1495,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
         else # tfun in (transpose, adjoint)
             for j in axes(B,2)
                 for i in reverse(axes(B,1))
-                    Cij = (unit ? oA : tfun(A[i,i])) * B[i,j]
+                    Cij = (unit ? _oneunit(oA, A, i) : tfun(A[i,i])) * B[i,j]
                     for k in firstindex(B,1):i - 1
                         Cij += tfun(A[k,i]) * B[k,j]
                     end
@@ -1499,7 +1507,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
         if tfun === identity
             for j in axes(B,2)
                 for i in reverse(axes(A,1))
-                    Cij = (unit ? oA : A[i,i]) * B[i,j]
+                    Cij = (unit ? _oneunit(oA, A, i) : A[i,i]) * B[i,j]
                     for k in firstindex(B,1):i - 1
                         Cij += A[i,k] * B[k,j]
                     end
@@ -1509,7 +1517,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
         else # tfun in (transpose, adjoint)
             for j in axes(B,2)
                 for i in axes(A,2)
-                    Cij = (unit ? oA : tfun(A[i,i])) * B[i,j]
+                    Cij = (unit ? _oneunit(oA, A, i) : tfun(A[i,i])) * B[i,j]
                     for k in i + 1:lastindex(B,1)
                         Cij += tfun(A[k,i]) * B[k,j]
                     end
@@ -1525,12 +1533,12 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
     require_one_based_indexing(C, xA, B)
     matmul_size_check(size(C), size(xA), size(B))
     A = parent(xA)
-    oA = oneunit(eltype(A))
+    oA = _oneunit(eltype(A))
     unit = isunitc == 'U'
     @inbounds if uploc == 'U'
         for j in axes(B,2)
             for i in axes(A,1)
-                Cij = (unit ? oA : conj(A[i,i])) * B[i,j]
+                Cij = (unit ? _oneunit(oA, A, i) : conj(A[i,i])) * B[i,j]
                 for k in i + 1:lastindex(B,1)
                     Cij += conj(A[i,k]) * B[k,j]
                 end
@@ -1540,7 +1548,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
     else # uploc == 'L'
         for j in axes(B,2)
             for i in reverse(axes(A,1))
-                Cij = (unit ? oA : conj(A[i,i])) * B[i,j]
+                Cij = (unit ? _oneunit(oA, A, i) : conj(A[i,i])) * B[i,j]
                 for k in firstindex(B,1):i - 1
                     Cij += conj(A[i,k]) * B[k,j]
                 end
@@ -1554,13 +1562,13 @@ end
 function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     require_one_based_indexing(C, A, B)
     matmul_size_check(size(C), size(A), size(B))
-    oB = oneunit(eltype(B))
+    oB = _oneunit(eltype(B))
     unit = isunitc == 'U'
     @inbounds if uploc == 'U'
         if tfun === identity
             for i in axes(A,1)
                 for j in reverse(axes(B,2))
-                    Cij = A[i,j] * (unit ? oB : B[j,j])
+                    Cij = A[i,j] * (unit ? _oneunit(oB, B, j) : B[j,j])
                     for k in firstindex(A,2):j - 1
                         Cij += A[i,k] * B[k,j]
                     end
@@ -1570,7 +1578,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
         else # tfun in (transpose, adjoint)
             for i in axes(A,1)
                 for j in axes(B,1)
-                    Cij = A[i,j] * (unit ? oB : tfun(B[j,j]))
+                    Cij = A[i,j] * (unit ? _oneunit(oB, B, j) : tfun(B[j,j]))
                     for k in j + 1:lastindex(A,2)
                         Cij += A[i,k] * tfun(B[j,k])
                     end
@@ -1582,7 +1590,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
         if tfun === identity
             for i in axes(A,1)
                 for j in axes(B,2)
-                    Cij = A[i,j] * (unit ? oB : B[j,j])
+                    Cij = A[i,j] * (unit ? _oneunit(oB, B, j) : B[j,j])
                     for k in j + 1:lastindex(A,2)
                         Cij += A[i,k] * B[k,j]
                     end
@@ -1592,7 +1600,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
         else # tfun in (transpose, adjoint)
             for i in axes(A,1)
                 for j in reverse(axes(B,1))
-                    Cij = A[i,j] * (unit ? oB : tfun(B[j,j]))
+                    Cij = A[i,j] * (unit ? _oneunit(oB, B, j) : tfun(B[j,j]))
                     for k in firstindex(A,2):j - 1
                         Cij += A[i,k] * tfun(B[j,k])
                     end
@@ -1608,12 +1616,12 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
     require_one_based_indexing(C, A, xB)
     matmul_size_check(size(C), size(A), size(xB))
     B = parent(xB)
-    oB = oneunit(eltype(B))
+    oB = _oneunit(eltype(B))
     unit = isunitc == 'U'
     @inbounds if uploc == 'U'
         for i in axes(A,1)
             for j in reverse(axes(B,2))
-                Cij = A[i,j] * (unit ? oB : conj(B[j,j]))
+                Cij = A[i,j] * (unit ? _oneunit(oB, B, j) : conj(B[j,j]))
                 for k in firstindex(A,2):j - 1
                     Cij += A[i,k] * conj(B[k,j])
                 end
@@ -1623,7 +1631,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
     else # uploc == 'L'
         for i in axes(A,1)
             for j in axes(B,2)
-                Cij = A[i,j] * (unit ? oB : conj(B[j,j]))
+                Cij = A[i,j] * (unit ? _oneunit(oB, B, j) : conj(B[j,j]))
                 for k in j + 1:lastindex(A,2)
                     Cij += A[i,k] * conj(B[k,j])
                 end
@@ -1656,7 +1664,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
         throw(DimensionMismatch(lazy"size of output, $(size(C)), does not match size of right hand side, $(size(B))"))
     end
     iszero(mA) && return C
-    oA = oneunit(eltype(A))
+    oA = _oneunit(eltype(A))
     @inbounds if uploc == 'U'
         if isunitc == 'N'
             if tfun === identity
@@ -1666,7 +1674,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
                     Cm = C[m,k] = amm \ B[m,k]
                     # fill C-column
                     for i in reverse(axes(B,1))[2:end]
-                        C[i,k] = oA \ B[i,k] - _ustrip(A[i,m]) * Cm
+                        C[i,k] = _oneunit(oA, A, i) \ B[i,k] - _ustrip(A[i,m]) * Cm
                     end
                     for j in reverse(axes(B,1))[2:end]
                         ajj = A[j,j]
@@ -1693,10 +1701,10 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
         else # isunitc == 'U'
             if tfun === identity
                 for k in axes(B,2)
-                    Cm = C[m,k] = oA \ B[m,k]
+                    Cm = C[m,k] = _oneunit(oA, A, m) \ B[m,k]
                     # fill C-column
                     for i in reverse(axes(B,1))[2:end]
-                        C[i,k] = oA \ B[i,k] - _ustrip(A[i,m]) * Cm
+                        C[i,k] = _oneunit(oA, A, i) \ B[i,k] - _ustrip(A[i,m]) * Cm
                     end
                     for j in reverse(axes(B,1))[2:end]
                         Cj = C[j,k]
@@ -1712,7 +1720,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
                         for i in firstindex(A,1):j-1
                             Bj -= tfun(A[i,j]) * C[i,k]
                         end
-                        C[j,k] = oA \ Bj
+                        C[j,k] = _oneunit(oA, A, j) \ Bj
                     end
                 end
             end
@@ -1726,7 +1734,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
                     C1 = C[1,k] = a11 \ B[1,k]
                     # fill C-column
                     for i in axes(B,1)[2:end]
-                        C[i,k] = oA \ B[i,k] - _ustrip(A[i,1]) * C1
+                        C[i,k] = _oneunit(oA, A, i) \ B[i,k] - _ustrip(A[i,1]) * C1
                     end
                     for j in axes(B,1)[2:end]
                         ajj = A[j,j]
@@ -1753,10 +1761,10 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
         else # isunitc == 'U'
             if tfun === identity
                 for k in axes(B,2)
-                    C1 = C[1,k] = oA \ B[1,k]
+                    C1 = C[1,k] = _oneunit(oA, A, 1) \ B[1,k]
                     # fill C-column
                     for i in axes(B,1)[2:end]
-                        C[i,k] = oA \ B[i,k] - _ustrip(A[i,1]) * C1
+                        C[i,k] = _oneunit(oA, A, i) \ B[i,k] - _ustrip(A[i,1]) * C1
                     end
                     for j in axes(B,1)[2:end]
                         Cj = C[j,k]
@@ -1772,7 +1780,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
                         for i in j+1:lastindex(A,1)
                             Bj -= tfun(A[i,j]) * C[i,k]
                         end
-                        C[j,k] = oA \ Bj
+                        C[j,k] = _oneunit(oA, A, j) \ Bj
                     end
                 end
             end
@@ -1793,7 +1801,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
         throw(DimensionMismatch(lazy"size of output, $(size(C)), does not match size of right hand side, $(size(B))"))
     end
     iszero(mA) && return C
-    oA = oneunit(eltype(A))
+    oA = _oneunit(eltype(A))
     @inbounds if uploc == 'U'
         if isunitc == 'N'
             for k in axes(B,2)
@@ -1802,7 +1810,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
                 Cm = C[m,k] = amm \ B[m,k]
                 # fill C-column
                 for i in reverse(axes(B,1))[2:end]
-                    C[i,k] = oA \ B[i,k] - _ustrip(conj(A[i,m])) * Cm
+                    C[i,k] = _oneunit(oA, A, i) \ B[i,k] - _ustrip(conj(A[i,m])) * Cm
                 end
                 for j in reverse(axes(B,1))[2:end]
                     ajj = conj(A[j,j])
@@ -1815,10 +1823,10 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
             end
         else # isunitc == 'U'
             for k in axes(B,2)
-                Cm = C[m,k] = oA \ B[m,k]
+                Cm = C[m,k] = _oneunit(oA, A, m) \ B[m,k]
                 # fill C-column
                 for i in reverse(axes(B,1))[2:end]
-                    C[i,k] = oA \ B[i,k] - _ustrip(conj(A[i,m])) * Cm
+                    C[i,k] = _oneunit(oA, A, i) \ B[i,k] - _ustrip(conj(A[i,m])) * Cm
                 end
                 for j in reverse(axes(B,1))[2:end]
                     Cj = C[j,k]
@@ -1836,7 +1844,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
                 C1 = C[1,k] = a11 \ B[1,k]
                 # fill C-column
                 for i in axes(B,1)[2:end]
-                    C[i,k] = oA \ B[i,k] - _ustrip(conj(A[i,1])) * C1
+                    C[i,k] = _oneunit(oA, A, i) \ B[i,k] - _ustrip(conj(A[i,1])) * C1
                 end
                 for j in axes(A,2)[2:end]
                     ajj = conj(A[j,j])
@@ -1849,10 +1857,10 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
             end
         else # isunitc == 'U'
             for k in axes(B,2)
-                C1 = C[1,k] = oA \ B[1,k]
+                C1 = C[1,k] = _oneunit(oA, A, 1) \ B[1,k]
                 # fill C-column
                 for i in axes(B,1)[2:end]
-                    C[i,k] = oA \ B[i,k] - _ustrip(conj(A[i,1])) * C1
+                    C[i,k] = _oneunit(oA, A, i) \ B[i,k] - _ustrip(conj(A[i,1])) * C1
                 end
                 for j in axes(A,2)[2:end]
                     Cj = C[j,k]
@@ -1875,7 +1883,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
     if size(C) != size(A)
         throw(DimensionMismatch(lazy"size of output, $(size(C)), does not match size of left hand side, $(size(A))"))
     end
-    oB = oneunit(eltype(B))
+    oB = _oneunit(eltype(B))
     unit = isunitc == 'U'
     @inbounds if uploc == 'U'
         if tfun === identity
@@ -1886,7 +1894,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                         Aij -= C[i,k]*B[k,j]
                     end
                     unit || (iszero(B[j,j]) && throw(SingularException(j)))
-                    C[i,j] = Aij / (unit ? oB : B[j,j])
+                    C[i,j] = Aij / (unit ? _oneunit(oB, B, j) : B[j,j])
                 end
             end
         else # tfun in (adjoint, transpose)
@@ -1897,7 +1905,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                         Aij -= C[i,k]*tfun(B[j,k])
                     end
                     unit || (iszero(B[j,j]) && throw(SingularException(j)))
-                    C[i,j] = Aij / (unit ? oB : tfun(B[j,j]))
+                    C[i,j] = Aij / (unit ? _oneunit(oB, B, j) : tfun(B[j,j]))
                 end
             end
         end
@@ -1910,7 +1918,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                         Aij -= C[i,k]*B[k,j]
                     end
                     unit || (iszero(B[j,j]) && throw(SingularException(j)))
-                    C[i,j] = Aij / (unit ? oB : B[j,j])
+                    C[i,j] = Aij / (unit ? _oneunit(oB, B, j) : B[j,j])
                 end
             end
         else # tfun in (adjoint, transpose)
@@ -1921,7 +1929,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                         Aij -= C[i,k]*tfun(B[j,k])
                     end
                     unit || (iszero(B[j,j]) && throw(SingularException(j)))
-                    C[i,j] = Aij / (unit ? oB : tfun(B[j,j]))
+                    C[i,j] = Aij / (unit ? _oneunit(oB, B, j) : tfun(B[j,j]))
                 end
             end
         end
@@ -1938,7 +1946,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
     if size(C) != size(A)
         throw(DimensionMismatch(lazy"size of output, $(size(C)), does not match size of left hand side, $(size(A))"))
     end
-    oB = oneunit(eltype(B))
+    oB = _oneunit(eltype(B))
     unit = isunitc == 'U'
     if uploc == 'U'
         @inbounds for i in axes(A,1)
@@ -1948,7 +1956,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
                     Aij -= C[i,k]*conj(B[k,j])
                 end
                 unit || (iszero(B[j,j]) && throw(SingularException(j)))
-                C[i,j] = Aij / (unit ? oB : conj(B[j,j]))
+                C[i,j] = Aij / (unit ? _oneunit(oB, B, j) : conj(B[j,j]))
             end
         end
     else # uploc == 'L'
@@ -1959,7 +1967,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
                     Aij -= C[i,k]*conj(B[k,j])
                 end
                 unit || (iszero(B[j,j]) && throw(SingularException(j)))
-                C[i,j] = Aij / (unit ? oB : conj(B[j,j]))
+                C[i,j] = Aij / (unit ? _oneunit(oB, B, j) : conj(B[j,j]))
             end
         end
     end

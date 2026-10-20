@@ -1183,4 +1183,22 @@ end
     end
 end
 
+@testset "block triangular matrices with blocks of variable size" begin
+    # oneunit is not defined for the type of the blocks, so it is computed from the diagonal blocks
+    flat(B) = reduce(vcat, [reduce(hcat, [B[i,j] for j in axes(B, 2)]) for i in axes(B, 1)])
+    A = [[i+j 1.0; -j 2i+1] for i in 1:3, j in 1:3]
+    B = [[i 2.0; 1 -j] for i in 1:3, j in 1:2]
+    Bt = permutedims(B)
+    @testset for TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular), op in (identity, transpose, adjoint)
+        unit = TT in (UnitUpperTriangular, UnitLowerTriangular)
+        upper = TT in (UpperTriangular, UnitUpperTriangular)
+        M = [i == j ? (unit ? [1.0 0; 0 1] : A[i,j]) : (upper ? i < j : i > j) ? A[i,j] : zeros(2, 2) for i in 1:3, j in 1:3]
+        T, F = op(TT(A)), op(flat(M))
+        @test flat(T * B) ≈ F * flat(B)
+        @test flat(Bt * T) ≈ flat(Bt) * F
+        @test flat(T \ B) ≈ F \ flat(B)
+        @test flat(Bt / T) ≈ flat(Bt) / F
+    end
+end
+
 end # module TestTriangular
