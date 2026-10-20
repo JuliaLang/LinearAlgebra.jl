@@ -1170,7 +1170,7 @@ end
     end
 end
 
-@testset "issue #1749: ldiv! with lazy adjoint/transpose parent" begin
+@testset "issue #1749: mul and div with lazy adjoint/transpose parent" begin
     M = ComplexF64[1 2+3im 1im; 4-1im 5 2-im; 3+im 2im 7]
     b = ComplexF64[1, 2, 3]
     B = ComplexF64[1 4; 2 5; 3 6]
@@ -1179,6 +1179,8 @@ end
             A = W(P)
             @test A \ b ≈ Matrix(A) \ b ≈ lu(Matrix(A)) \ b
             @test A \ B ≈ Matrix(A) \ B ≈ lu(Matrix(A)) \ B
+            @test Matrix(B') * A ≈ Matrix(B') * Matrix(A)
+            @test Matrix(B') / A ≈ Matrix(B') / Matrix(A)
         end
     end
 end
