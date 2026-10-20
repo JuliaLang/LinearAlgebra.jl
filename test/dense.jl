@@ -14,6 +14,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 import Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 @testset "Check that non-floats are correctly promoted" begin
     @test [1 0 0; 0 1 0]\[1,1] ≈ [1;1;0]
@@ -29,7 +30,7 @@ Random.seed!(1234323)
 
 @testset "Matrix condition number" begin
     ainit = rand(n, n)
-    @testset "for $elty" for elty in (Float32, Float64, ComplexF32, ComplexF64)
+    @testset "for $elty" for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         ainit = convert(Matrix{elty}, ainit)
         for a in (copy(ainit), view(ainit, 1:n, 1:n))
             ainv = inv(a)
@@ -82,7 +83,7 @@ a2img  = randn(n,n)/2
 breal = randn(n,2)/2
 bimg  = randn(n,2)/2
 
-@testset "For A containing $eltya" for eltya in (Float32, Float64, ComplexF32, ComplexF64, Int)
+@testset "For A containing $eltya" for eltya in (Float64, ComplexF64, Int, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
     ainit = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
     ainit2 = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(a2real, a2img) : a2real)
     ε = εa = eps(abs(float(one(eltya))))
@@ -96,7 +97,7 @@ bimg  = randn(n,2)/2
             @test isposdef!(copy(apd))
         end
     end
-    @testset "For b containing $eltyb" for eltyb in (Float32, Float64, ComplexF32, ComplexF64, Int)
+    @testset "For b containing $eltyb" for eltyb in (Float64, ComplexF64, Int, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         binit = eltyb == Int ? rand(1:5, n, 2) : convert(Matrix{eltyb}, eltyb <: Complex ? complex.(breal, bimg) : breal)
         εb = eps(abs(float(one(eltyb))))
         ε = max(εa,εb)
@@ -338,7 +339,8 @@ end
     nnorm = 10
     mmat = 10
     nmat = 8
-    @testset "For $elty" for elty in (Float32, Float64, BigFloat, ComplexF32, ComplexF64, Complex{BigFloat}, Int32, Int64, BigInt)
+    @testset "For $elty" for elty in (Float64, ComplexF64, BigFloat, Int64,
+                                      (@static COMPREHENSIVE ? (Float32, ComplexF32, Complex{BigFloat}, Int32, BigInt) : ())...)
         x = fill(elty(1),10)
         @testset "Vector" begin
             xs = view(x,1:2:10)
@@ -1157,7 +1159,10 @@ end
         ADin += [im 0; 0 im]
     end
 
-    for A in (Aa, Ab, Ac, Ad, Ah, ADi, ADin)
+    #At : upper triangular, negative diagonal, issue #1767
+    At = convert(Matrix{elty}, [-1 1; 0 2])
+
+    for A in (Aa, Ab, Ac, Ad, Ah, ADi, ADin, At)
         @test A^(1/2) ≈ sqrt(A)
         @test A^(-1/2) ≈ inv(sqrt(A))
         @test A^(3/4) ≈ sqrt(A) * sqrt(sqrt(A))
@@ -1184,9 +1189,8 @@ end
 end
 
 @testset "issue #23366 (Int Matrix to Int power)" begin
-    @testset "Tests for $elty" for elty in (Int128, Int16, Int32, Int64, Int8,
-                                            UInt128, UInt16, UInt32, UInt64, UInt8,
-                                            BigInt)
+    @testset "Tests for $elty" for elty in (Int64, UInt64, BigInt,
+                                            (@static COMPREHENSIVE ? (Int128, Int16, Int32, Int8, UInt128, UInt16, UInt32, UInt8) : ())...)
         #@info "Testing $elty"
         @test elty[1 1;1 0]^-1 == [0  1;  1 -1]
         @test elty[1 1;1 0]^-2 == [1 -1; -1  2]
@@ -1253,7 +1257,7 @@ function test_div_pinv_consistency(a, b)
 end
 
 @testset "/ and \\ consistency with pinv for vectors" begin
-    @testset "Tests for type $elty" for elty in (Float32, Float64, ComplexF32, ComplexF64)
+    @testset "Tests for type $elty" for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         c = rand(elty, 5)
         r = (elty <: Complex ? adjoint : transpose)(rand(elty, 5))
         cm = rand(elty, 5, 1)

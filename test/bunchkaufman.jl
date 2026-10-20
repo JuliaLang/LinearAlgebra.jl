@@ -8,6 +8,12 @@ using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted
 using Base: getproperty
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+
 n = 10
 
 # Split n into 2 parts for tests needing two matrices
@@ -30,9 +36,10 @@ a2imint = rand(1:7, n, n)
 breint = rand(1:5, n, 2)
 bimint = rand(1:5, n, 2)
 
-@testset "$eltya argument A" for eltya in (Float32, Float64, ComplexF32, ComplexF64, Int, ###
-    Float16, Complex{Float16}, BigFloat, Complex{BigFloat}, Complex{Int}, BigInt,
-    Complex{BigInt}, Rational{BigInt}, Complex{Rational{BigInt}})
+# Standard mode: BLAS types, Int, generic real and complex floats, and exact rationals
+@testset "$eltya argument A" for eltya in (Float64, ComplexF64, Int, BigFloat, Complex{BigFloat},
+    Rational{BigInt}, (@static COMPREHENSIVE ? (Float32, ComplexF32, Float16, Complex{Float16},
+    Complex{Int}, BigInt, Complex{BigInt}, Complex{Rational{BigInt}}) : ())...)
     # a = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
     # a2 = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(a2real, a2img) : a2real)
     a = convert(Matrix{eltya}, eltya <: Complex ? (real(eltya) <: AbstractFloat ?
@@ -136,9 +143,9 @@ bimint = rand(1:5, n, 2)
             @test Base.propertynames(bc1) == (:p, :P, :L, :U, :D)
         end
 
-        @testset "$eltyb argument B" for eltyb in (Float32, Float64, ComplexF32, ComplexF64, Int, ###
-            Float16, Complex{Float16}, BigFloat, Complex{BigFloat}, Complex{Int}, BigInt,
-            Complex{BigInt}, Rational{BigInt}, Complex{Rational{BigInt}})
+        @testset "$eltyb argument B" for eltyb in (Float64, ComplexF64, Int, BigFloat,
+            (@static COMPREHENSIVE ? (Float32, ComplexF32, Float16, Complex{Float16}, Complex{BigFloat},
+            Complex{Int}, BigInt, Complex{BigInt}, Rational{BigInt}, Complex{Rational{BigInt}}) : ())...)
             # b = eltyb == Int ? rand(1:5, n, 2) : convert(Matrix{eltyb}, eltyb <: Complex ? complex.(breal, bimg) : breal)
             b = convert(Matrix{eltyb}, eltyb <: Complex ? (real(eltyb) <: AbstractFloat ?
                 complex.(breal, bimg) : complex.(breint, bimint)) : (eltyb <: AbstractFloat ?
