@@ -1408,6 +1408,20 @@ Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
     @test zero(Hermitian(rand(ComplexF64, 4, 4))) isa Hermitian
 end
 
+@testset "logabsdet of a Hermitian matrix has a real sign" begin
+    for T in (Float64, ComplexF64, Complex{BigFloat}), uplo in (:U, :L)
+        # indefinite, with a 2-by-2 pivot in the Bunch-Kaufman factorization
+        A = T <: Complex ? T[0 1+2im 3; 1-2im 0 1im; 3 -1im 0] : T[0 1 3; 1 0 1; 3 1 0]
+        for H in (Hermitian(A, uplo), Hermitian(T[2 0; 0 -3], uplo))
+            l, s = @inferred logabsdet(H)
+            @test s isa real(T)
+            @test s ≈ sign(det(H))
+            @test exp(l) * s ≈ det(H)
+            @test l ≈ logabsdet(Matrix(H))[1]
+        end
+    end
+end
+
 # an element type that is neither a number nor a matrix, with its own symmetric_type
 struct SymEltype end
 Base.transpose(x::SymEltype) = x
