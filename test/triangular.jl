@@ -1184,20 +1184,25 @@ end
 end
 
 @testset "block triangular matrices with blocks of variable size" begin
-    # oneunit is not defined for the type of the blocks, so it is computed from the diagonal blocks
+    # oneunit is not defined for the type of the blocks, so it is computed from the diagonal
+    # blocks, and blocks, which need not be square, are stripped of units elementwise
     flat(B) = reduce(vcat, [reduce(hcat, [B[i,j] for j in axes(B, 2)]) for i in axes(B, 1)])
-    A = [[i+j 1.0; -j 2i+1] for i in 1:3, j in 1:3]
-    B = [[i 2.0; 1 -j] for i in 1:3, j in 1:2]
-    Bt = permutedims(B)
-    @testset for TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular), op in (identity, transpose, adjoint)
-        unit = TT in (UnitUpperTriangular, UnitLowerTriangular)
-        upper = TT in (UpperTriangular, UnitUpperTriangular)
-        M = [i == j ? (unit ? [1.0 0; 0 1] : A[i,j]) : (upper ? i < j : i > j) ? A[i,j] : zeros(2, 2) for i in 1:3, j in 1:3]
-        T, F = op(TT(A)), op(flat(M))
-        @test flat(T * B) ≈ F * flat(B)
-        @test flat(Bt * T) ≈ flat(Bt) * F
-        @test flat(T \ B) ≈ F \ flat(B)
-        @test flat(Bt / T) ≈ flat(Bt) / F
+    block(m, n, i, j) = [(i == j && r == c ? 4.0 : 0.0) + (r + i) / (c + j) for r in 1:m, c in 1:n]
+    @testset for sz in ((2, 2, 2), (1, 2, 3))
+        A = [block(sz[i], sz[j], i, j) for i in 1:3, j in 1:3]
+        B = [block(sz[i], 2, i, j) for i in 1:3, j in 1:2]
+        Bt = [block(2, sz[j], i, j) for i in 1:2, j in 1:3]
+        @testset for TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular), op in (identity, transpose, adjoint)
+            unit = TT in (UnitUpperTriangular, UnitLowerTriangular)
+            upper = TT in (UpperTriangular, UnitUpperTriangular)
+            M = [i == j ? (unit ? Matrix(1.0I, sz[i], sz[i]) : A[i,j]) :
+                 (upper ? i < j : i > j) ? A[i,j] : zeros(sz[i], sz[j]) for i in 1:3, j in 1:3]
+            T, F = op(TT(A)), op(flat(M))
+            @test flat(T * B) ≈ F * flat(B)
+            @test flat(Bt * T) ≈ flat(Bt) * F
+            @test flat(T \ B) ≈ F \ flat(B)
+            @test flat(Bt / T) ≈ flat(Bt) / F
+        end
     end
 end
 

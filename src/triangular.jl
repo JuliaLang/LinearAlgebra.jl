@@ -1646,6 +1646,9 @@ end
 
 @inline _ustrip(a) = oneunit(a) \ a
 @inline _ustrip(a::Union{AbstractFloat,Integer,Complex,Rational}) = a
+# blocks, which need not be square, are stripped elementwise
+_ustrip(a::AbstractArray{<:Union{AbstractFloat,Integer,Complex,Rational}}) = a
+_ustrip(a::AbstractArray) = _ustrip.(a)
 
 # manually hoisting b[j] significantly improves performance as of Dec 2015
 # manually eliding bounds checking significantly improves performance as of Dec 2015
