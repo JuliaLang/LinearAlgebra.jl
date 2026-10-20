@@ -375,6 +375,37 @@ end
     @test B / bunchkaufman(A) ≈ B / Matrix(A)
 end
 
+@testset "sign of logabsdet" begin
+    M = [0 1+2im 3; 1-2im 0 1im; 3 -1im 0]
+    for T in (ComplexF64, Complex{BigFloat}), uplo in (:U, :L), rook in (false, true)
+        A = T.(M)
+        # the sign has the element type, and for a Hermitian matrix it is real-valued, also with
+        # 2-by-2 pivots
+        F = bunchkaufman(Hermitian(A, uplo), rook)
+        @test any(<(0), F.ipiv)
+        l, s = @inferred logabsdet(F)
+        @test s isa T && s == -1
+        @test l ≈ log(12)
+        S = Symmetric(A, uplo)
+        l, s = @inferred logabsdet(bunchkaufman(S, rook))
+        @test l ≈ log(abs(det(Matrix(S))))
+        @test s ≈ sign(det(Matrix(S)))
+        # a singular matrix
+        F0 = bunchkaufman(Hermitian(zeros(T, 2, 2), uplo), rook; check=false)
+        @test isequal(@inferred(logabsdet(F0)), (real(T)(-Inf), zero(T)))
+    end
+    # the logarithm of a rational determinant is a floating-point number, and so is the sign of a
+    # complex rational number
+    for (T, TS) in ((Rational{BigInt}, Rational{BigInt}), (Complex{Rational{BigInt}}, Complex{BigFloat}))
+        F = bunchkaufman(Hermitian(T.([2 1; 1 -3])))
+        l, s = @inferred logabsdet(F)
+        @test l isa BigFloat && l ≈ log(7)
+        @test s isa TS && s == -1
+        F0 = bunchkaufman(Hermitian(zeros(T, 2, 2)); check=false)
+        @test isequal(@inferred(logabsdet(F0)), (big(-Inf), zero(TS)))
+    end
+end
+
 @testset "Hermitian matrices of quaternions" begin
     # the real 4n×4n matrix of the map x -> A*x has each eigenvalue of a Hermitian A four times
     realmat(q) = [q.s -q.v1 -q.v2 -q.v3; q.v1 q.s -q.v3 q.v2; q.v2 q.v3 q.s -q.v1; q.v3 -q.v2 q.v1 q.s]
@@ -398,8 +429,9 @@ end
         λ = eigvals(Symmetric(realmat(M)))
         np, nn = count(>(0), λ) ÷ 4, count(<(0), λ) ÷ 4
         @test inertia(F) == (np, nn, 0)
-        @test logabsdet(F)[1] ≈ sum(log ∘ abs, λ) / 4
-        @test logabsdet(F)[2] == (-1)^nn
+        l, s = @inferred logabsdet(F)
+        @test l ≈ sum(log ∘ abs, λ) / 4
+        @test s === (-1.0)^nn
     end
     M = let B = randn(Quaternion{Float64}, 4, 4); B + B'; end
     # a plain Hermitian matrix is factorized as Hermitian

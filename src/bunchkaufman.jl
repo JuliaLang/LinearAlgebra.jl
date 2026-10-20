@@ -438,24 +438,31 @@ function rdiv!(B::AbstractMatrix, F::BunchKaufman)
     return copyto!(B, op(ldiv!(F, copy(op(B)))))
 end
 
-function logabsdet(F::BunchKaufman)
+# The sign of a factor of the determinant. The determinant of a Hermitian matrix is real, so its
+# sign is taken from the real part. This also covers number types other than real and complex
+# numbers, like quaternions, whose matrices are always factorized as Hermitian and for which
+# `sign` need not be defined.
+_bk_sgn(x::Union{Real,Complex}, herm::Bool) = herm ? sign(real(x)) : sign(x)
+_bk_sgn(x::Number, herm::Bool) = sign(real(x))
+
+function logabsdet(F::BunchKaufman{T}) where {T}
     M = F.LD
     p = F.ipiv
-    n = size(F.LD, 1)
-
+    n = size(M, 1)
+    herm = ishermitian(F)
+    # The sign has the type of the sign of an element, which is complex for complex matrices, as
+    # these may be complex symmetric. For a complex Hermitian matrix, it is real-valued.
+    s = one(typeof(_bk_sgn(one(T), false)))
+    # zero, with the type of the logarithm, which is a floating-point type also for rationals
+    abs_det = log(one(real(T)))
     if !issuccess(F)
-        return eltype(F)(-Inf), zero(eltype(F))
+        return oftype(abs_det, -Inf), zero(s)
     end
-    s = one(real(eltype(F)))
-    # for other number types than real and complex numbers, like quaternions, the matrix is
-    # Hermitian and the determinant real
-    sgn(x) = sign(eltype(F) <: Union{Real,Complex} ? x : real(x))
     i = 1
-    abs_det = zero(real(eltype(F)))
     while i <= n
         if p[i] > 0
             elm = M[i,i]
-            s *= sgn(elm)
+            s *= _bk_sgn(elm, herm)
             abs_det += log(abs(elm))
             i += 1
         else
@@ -464,15 +471,13 @@ function logabsdet(F::BunchKaufman)
             # always large for 2x2 pivots.
             if F.uplo == 'U'
                 elm = M[i, i + 1]*(M[i,i]/M[i, i + 1]*M[i + 1, i + 1] -
-                    (issymmetric(F) ? M[i, i + 1] : conj(M[i, i + 1])))
-                s *= sgn(elm)
-                abs_det += log(abs(elm))
+                    (herm ? conj(M[i, i + 1]) : M[i, i + 1]))
             else
                 elm = M[i + 1,i]*(M[i, i]/M[i + 1, i]*M[i + 1, i + 1] -
-                    (issymmetric(F) ? M[i + 1, i] : conj(M[i + 1, i])))
-                s *= sgn(elm)
-                abs_det += log(abs(elm))
+                    (herm ? conj(M[i + 1, i]) : M[i + 1, i]))
             end
+            s *= _bk_sgn(elm, herm)
+            abs_det += log(abs(elm))
             i += 2
         end
     end
