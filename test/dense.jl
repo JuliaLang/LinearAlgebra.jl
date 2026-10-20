@@ -661,6 +661,12 @@ end
         @test flat(exp(B)::typeof(B)) ≈ exp(flat(B))
     end
     @test_throws ArgumentError exp(fill(SizedArray{(1,1)}([NaN;;]), 1, 1))
+    # blocks whose size is not part of their type, like matrices, which need not be square
+    block(m, n, i, j) = [(i == j && r == c ? 1.0 : 0.0) + (r + i) / (c + 2j) for r in 1:m, c in 1:n]
+    for sz in ((2, 2), (1, 2))
+        B = [block(sz[i], sz[j], i, j) for i in 1:2, j in 1:2]
+        @test flat(exp(B)::typeof(B)) ≈ exp(flat(B))
+    end
 end
 
 @testset "Matrix trigonometry" begin
