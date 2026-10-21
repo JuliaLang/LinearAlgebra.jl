@@ -353,6 +353,9 @@ end
         @test_throws ArgumentError svd(A, Id)
         @test_throws ArgumentError svd(Id, A)
         @test_throws ArgumentError svdvals(A, Id)
+        # svd(A, B) calls ggsvd! only for LAPACK older than 3.6
+        @test_throws ArgumentError LAPACK.ggsvd!('N', 'N', 'N', copy(A), copy(Id))
+        @test_throws ArgumentError LAPACK.ggsvd!('N', 'N', 'N', copy(Id), copy(A))
         if elty <: Real
             for B in (Bidiagonal(elty[1, x, 3], elty[1, 2], :U), Bidiagonal(elty[1, 2, 3], elty[x, 2], :L))
                 @test_throws ArgumentError svd(B)
