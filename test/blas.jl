@@ -809,29 +809,51 @@ end
 @testset "allocating and pointer BLAS wrappers" begin
     @testset for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         x = elty[1, -2, 3]
-        α = elty(2)
+        # complex for complex elty, so that conj(α) differs from α in her2k
+        α = elty <: Real ? elty(2) : elty(2, -1)
         @test BLAS.asum(3, x, 1) ≈ sum(fabs, x)
         @test BLAS.iamax(3, x, 1) == 3
         A = elty[2 1 0; 1 3 1; 0 1 4]
         # band storage of A, with one superdiagonal and one subdiagonal
         @test BLAS.gbmv('N', 3, 1, 1, α, elty[0 1 1; 2 3 4; 1 1 0], x) ≈ α*A*x
-        @test BLAS.symm('L', 'U', α, A, A) ≈ α*A*A
-        @test triu(BLAS.syr2k('U', 'N', α, A, A)) ≈ triu(2α*A*transpose(A))
+        # M is not symmetric, so that only the triangle selected by uplo determines the result,
+        # and B and C are not square, so that side and trans determine the shape of the result
+        M = elty[2 1 5; -1 3 1; 4 -2 4]
+        B = elty[1 2; -1 0; 3 1]
+        C = elty[0 1; 2 -1; 1 1]
+        for uplo in ('U', 'L')
+            tri = uplo == 'U' ? triu : tril
+            S = Symmetric(M, Symbol(uplo))
+            @test BLAS.symm('L', uplo, α, M, B) ≈ α*S*B
+            @test BLAS.symm('R', uplo, α, M, copy(transpose(B))) ≈ α*transpose(B)*S
+            @test tri(BLAS.syr2k(uplo, 'N', α, B, C)) ≈ tri(α*B*transpose(C) + α*C*transpose(B))
+            @test tri(BLAS.syr2k(uplo, 'T', α, B, C)) ≈ tri(α*transpose(B)*C + α*transpose(C)*B)
+            if elty <: Real
+                @test BLAS.symv(uplo, α, M, x) ≈ α*S*x
+            else
+                # the imaginary part of the diagonal is not read
+                N = M + im*elty[0 1 0; -1 0 2; 1 3 0]
+                H = Hermitian(N, Symbol(uplo))
+                @test BLAS.hemv(uplo, α, N, x) ≈ α*H*x
+                @test BLAS.hemm('L', uplo, α, N, B) ≈ α*H*B
+                @test BLAS.hemm('R', uplo, α, N, copy(B')) ≈ α*B'*H
+                Bc, Cc = B + im*C, C - im*B
+                @test tri(BLAS.herk(uplo, 'N', real(α), Bc)) ≈ tri(real(α)*Bc*Bc')
+                @test tri(BLAS.herk(uplo, 'C', real(α), Bc)) ≈ tri(real(α)*Bc'*Bc)
+                @test tri(BLAS.her2k(uplo, 'N', α, Bc, Cc)) ≈ tri(α*Bc*Cc' + conj(α)*Cc*Bc')
+                @test tri(BLAS.her2k(uplo, 'C', α, Bc, Cc)) ≈ tri(α*Bc'*Cc + conj(α)*Cc'*Bc)
+            end
+        end
         if elty <: Real
-            @test BLAS.symv('U', α, A, x) ≈ α*A*x
             # upper band storage of A
             @test BLAS.sbmv('U', 1, α, elty[0 1 1; 2 3 4], x) ≈ α*A*x
             @test_throws DimensionMismatch BLAS.symv!('U', α, A, x[1:2], zero(elty), similar(x))
             @test_throws DimensionMismatch BLAS.spr!('U', α, x, zeros(elty, 5))
         else
             H = A + im*elty[0 1 0; -1 0 1; 0 -1 0]
-            @test BLAS.hemv('U', α, H, x) ≈ α*H*x
             # upper band storage of H
             @test BLAS.hbmv('U', 1, α, elty[0 1+im 1+im; 2 3 4], x) ≈ α*H*x
             @test_throws DimensionMismatch BLAS.hemv!('U', α, H, x[1:2], zero(elty), similar(x))
-            @test BLAS.hemm('L', 'U', α, H, A) ≈ α*H*A
-            @test triu(BLAS.herk('U', 'N', real(α), H)) ≈ triu(real(α)*H*H')
-            @test triu(BLAS.her2k('U', 'N', α, H, A)) ≈ triu(α*H*A' + conj(α)*A*H')
         end
     end
 end
