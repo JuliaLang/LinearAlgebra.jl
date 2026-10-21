@@ -27,7 +27,7 @@ jobs:
           - x64
           - x86
         julia-version:
-          - '~1.14.0-0'
+          - 1.14-nightly
         exclude:
           # ubuntu x64 runs the comprehensive tests below instead
           - os: ubuntu-latest
@@ -35,27 +35,27 @@ jobs:
         include:
           - os: macOS-15-intel
             arch: x64
-            julia-version: '~1.14.0-0'
+            julia-version: 1.14-nightly
           # ubuntu aarch64 also runs with forced bounds checks
           - os: ubuntu-26.04-arm
             arch: aarch64
-            julia-version: '~1.14.0-0'
+            julia-version: 1.14-nightly
             check-bounds: 'yes'
           # macOS aarch64 also collects coverage of the code specific to Apple silicon
           - os: macOS-latest
             arch: aarch64
-            julia-version: '~1.14.0-0'
+            julia-version: 1.14-nightly
             test-args: '--jobs=2'
             coverage: true
           # Comprehensive mode with coverage, split into two shards (see test/runtests.jl)
           - os: ubuntu-latest
             arch: x64
-            julia-version: '~1.14.0-0'
+            julia-version: 1.14-nightly
             shard: '1/2'
             coverage: true
           - os: ubuntu-latest
             arch: x64
-            julia-version: '~1.14.0-0'
+            julia-version: 1.14-nightly
             shard: '2/2'
             coverage: true
     steps:
