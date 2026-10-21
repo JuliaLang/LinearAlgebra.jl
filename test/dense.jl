@@ -622,6 +622,18 @@ end
 
     A8 = 100 * [-1+1im 0 0 1e-8; 0 1 0 0; 0 0 1 0; 0 0 0 1]
     @test exp(log(A8)) ≈ A8
+
+    @testset "large exponents (issue #1082)" begin
+        A = [1 1e-10; 0 1]
+        B = A^(1e20)
+        @test B ≈ [1 1e10; 0 1]
+        B = A^(-1e20)
+        @test B ≈ inv(A)^1e20
+        @test (A^prevfloat(Inf64))[1,2] ≈ A[1,2] * prevfloat(Inf64)
+        @test (A^prevfloat(Inf32))[1,2] ≈ A[1,2] * prevfloat(Inf32)
+        @test (A^prevfloat(Inf16))[1,2] ≈ A[1,2] * prevfloat(Inf16)
+    end
+
 end
 
 @testset "Matrix trigonometry" begin
