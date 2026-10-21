@@ -831,8 +831,8 @@ end
             if elty <: Real
                 @test BLAS.symv(uplo, α, M, x) ≈ α*S*x
             else
-                # the imaginary part of the diagonal is not read
-                N = M + im*elty[0 1 0; -1 0 2; 1 3 0]
+                # the imaginary part of the diagonal is not read, as in getindex of Hermitian
+                N = M + im*elty[1 1 0; -1 -2 2; 1 3 3]
                 H = Hermitian(N, Symbol(uplo))
                 @test BLAS.hemv(uplo, α, N, x) ≈ α*H*x
                 @test BLAS.hemm('L', uplo, α, N, B) ≈ α*H*B
