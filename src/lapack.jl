@@ -43,6 +43,15 @@ end
 
 chklapackerror_positive(ret, f...) = throw(LAPACKException(ret))
 
+# For routines that don't check their input for Infs and NaNs: these often propagate to the
+# result, but if the routine fails instead, they are the likely cause
+function chklapackerror(ret::BlasInt, inputisfinite::Bool)
+    if ret != 0 && !inputisfinite
+        throw(ArgumentError("matrix contains Infs or NaNs"))
+    end
+    chklapackerror(ret)
+end
+
 function chknonsingular(ret::BlasInt)
     if ret > 0
         throw(SingularException(ret))
@@ -2316,8 +2325,7 @@ for (geevx, ggev, ggev3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
-            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
-            chkfinite(B)
+            inputisfinite = all(isfinite, A) && all(isfinite, B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2339,8 +2347,9 @@ for (geevx, ggev, ggev3, elty) in
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
             beta = similar(A, $elty, n)
-            vl = similar(A, $elty, ldvl, n)
-            vr = similar(A, $elty, ldvr, n)
+            # for a NaN eigenvalue, xGGEV may write to the column after VL or VR (#1808)
+            vl = zeros($elty, ldvl, n + 1)
+            vr = zeros($elty, ldvr, n + 1)
             work = Vector{$elty}(undef, 1)
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
@@ -2356,13 +2365,13 @@ for (geevx, ggev, ggev3, elty) in
                     alphai, beta, vl, ldvl,
                     vr, ldvr, work, lwork,
                     info, 1, 1)
-                chklapackerror(info[])
+                chklapackerror(info[], inputisfinite)
                 if i == 1
                     lwork = BlasInt(work[1])
                     resize!(work, lwork)
                 end
             end
-            alphar, alphai, beta, vl, vr
+            alphar, alphai, beta, vl[:, 1:n], vr[:, 1:n]
         end
 
         #       SUBROUTINE DGGEV3( JOBVL, JOBVR, N, A, LDA, B, LDB, ALPHAR, ALPHAI,
@@ -2382,8 +2391,7 @@ for (geevx, ggev, ggev3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
-            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
-            chkfinite(B)
+            inputisfinite = all(isfinite, A) && all(isfinite, B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2405,8 +2413,9 @@ for (geevx, ggev, ggev3, elty) in
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
             beta = similar(A, $elty, n)
-            vl = similar(A, $elty, ldvl, n)
-            vr = similar(A, $elty, ldvr, n)
+            # for a NaN eigenvalue, xGGEV may write to the column after VL or VR (#1808)
+            vl = zeros($elty, ldvl, n + 1)
+            vr = zeros($elty, ldvr, n + 1)
             work = Vector{$elty}(undef, 1)
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
@@ -2422,13 +2431,13 @@ for (geevx, ggev, ggev3, elty) in
                     alphai, beta, vl, ldvl,
                     vr, ldvr, work, lwork,
                     info, 1, 1)
-                chklapackerror(info[])
+                chklapackerror(info[], inputisfinite)
                 if i == 1
                     lwork = BlasInt(work[1])
                     resize!(work, lwork)
                 end
             end
-            alphar, alphai, beta, vl, vr
+            alphar, alphai, beta, vl[:, 1:n], vr[:, 1:n]
         end
     end
 end
@@ -2535,8 +2544,7 @@ for (geevx, ggev, ggev3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
-            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
-            chkfinite(B)
+            inputisfinite = all(isfinite, A) && all(isfinite, B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2575,7 +2583,7 @@ for (geevx, ggev, ggev3, elty, relty) in
                     beta, vl, ldvl, vr,
                     ldvr, work, lwork, rwork,
                     info, 1, 1)
-                chklapackerror(info[])
+                chklapackerror(info[], inputisfinite)
                 if i == 1
                     lwork = BlasInt(work[1])
                     resize!(work, lwork)
@@ -2602,8 +2610,7 @@ for (geevx, ggev, ggev3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
-            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
-            chkfinite(B)
+            inputisfinite = all(isfinite, A) && all(isfinite, B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2642,7 +2649,7 @@ for (geevx, ggev, ggev3, elty, relty) in
                     beta, vl, ldvl, vr,
                     ldvr, work, lwork, rwork,
                     info, 1, 1)
-                chklapackerror(info[])
+                chklapackerror(info[], inputisfinite)
                 if i == 1
                     lwork = BlasInt(work[1])
                     resize!(work, lwork)
@@ -6631,8 +6638,7 @@ for (gees, gges, gges3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
-            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
-            chkfinite(B)
+            inputisfinite = all(isfinite, A) && all(isfinite, B)
             sdim = BlasInt(0)
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
@@ -6658,7 +6664,7 @@ for (gees, gges, gges3, elty) in
                     beta, vsl, ldvsl, vsr,
                     ldvsr, work, lwork, C_NULL,
                     info, 1, 1, 1)
-                chklapackerror(info[])
+                chklapackerror(info[], inputisfinite)
                 if i == 1
                     lwork = BlasInt(real(work[1]))
                     resize!(work, lwork)
@@ -6685,8 +6691,7 @@ for (gees, gges, gges3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
-            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
-            chkfinite(B)
+            inputisfinite = all(isfinite, A) && all(isfinite, B)
             sdim = BlasInt(0)
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
@@ -6712,7 +6717,7 @@ for (gees, gges, gges3, elty) in
                     beta, vsl, ldvsl, vsr,
                     ldvsr, work, lwork, C_NULL,
                     info, 1, 1, 1)
-                chklapackerror(info[])
+                chklapackerror(info[], inputisfinite)
                 if i == 1
                     lwork = BlasInt(real(work[1]))
                     resize!(work, lwork)
@@ -6787,8 +6792,7 @@ for (gees, gges, gges3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
-            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
-            chkfinite(B)
+            inputisfinite = all(isfinite, A) && all(isfinite, B)
             sdim = BlasInt(0)
             alpha = similar(A, $elty, n)
             beta = similar(A, $elty, n)
@@ -6814,7 +6818,7 @@ for (gees, gges, gges3, elty, relty) in
                     vsl, ldvsl, vsr, ldvsr,
                     work, lwork, rwork, C_NULL,
                     info, 1, 1, 1)
-                chklapackerror(info[])
+                chklapackerror(info[], inputisfinite)
                 if i == 1
                     lwork = BlasInt(real(work[1]))
                     resize!(work, lwork)
@@ -6842,8 +6846,7 @@ for (gees, gges, gges3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
-            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
-            chkfinite(B)
+            inputisfinite = all(isfinite, A) && all(isfinite, B)
             sdim = BlasInt(0)
             alpha = similar(A, $elty, n)
             beta = similar(A, $elty, n)
@@ -6869,7 +6872,7 @@ for (gees, gges, gges3, elty, relty) in
                     vsl, ldvsl, vsr, ldvsr,
                     work, lwork, rwork, C_NULL,
                     info, 1, 1, 1)
-                chklapackerror(info[])
+                chklapackerror(info[], inputisfinite)
                 if i == 1
                     lwork = BlasInt(real(work[1]))
                     resize!(work, lwork)

@@ -510,14 +510,16 @@ function eigen!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function
     vecs = zeros(Complex{T}, n, n)
     j = 1
     while j <= n
-        if alphai[j] == 0
-            vecs[:,j] = view(vr, :, j)
-        else
+        # a positive alphai marks the first of a complex conjugate pair; a NaN, as for
+        # input with Infs or NaNs, does not
+        if alphai[j] > 0
             for i = 1:n
                 vecs[i,j  ] = vr[i,j] + im*vr[i,j+1]
                 vecs[i,j+1] = vr[i,j] - im*vr[i,j+1]
             end
             j += 1
+        else
+            vecs[:,j] = view(vr, :, j)
         end
         j += 1
     end
