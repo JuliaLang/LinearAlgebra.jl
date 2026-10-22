@@ -1378,22 +1378,16 @@ end
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
 function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix})
-    LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data))
+    LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A))
 end
 function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix})
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data))
+    LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A))
 end
 function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix})
-    LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)'))
+    LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A'))
 end
 function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix})
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)'))
+    LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A'))
 end
 
 ####################
