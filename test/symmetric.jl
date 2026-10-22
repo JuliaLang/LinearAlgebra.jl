@@ -1422,4 +1422,21 @@ end
     end
 end
 
+@testset "det and logdet with NaN" begin
+    # Bunch-Kaufman reports a NaN pivot like a zero pivot, which must not give a zero determinant
+    for A in (Symmetric([1.0 2; 2 NaN]), Hermitian(ComplexF64[1 2im; -2im NaN]), Symmetric(ComplexF64[1 2; 2 NaN]))
+        @test isnan(det(A))
+        @test isnan(logdet(A))
+        @test isnan(first(logabsdet(A)))
+    end
+    # the generic implementation
+    @test isnan(det(bunchkaufman(Symmetric(big.([1.0 2; 2 NaN])); check=false)))
+    # singular matrices still have a zero determinant
+    for A in (Symmetric([1.0 2 3; 2 4 6; 3 6 10]), Hermitian(ComplexF64[1 1im; -1im 1]))
+        @test det(A) == 0
+        @test logdet(A) == -Inf
+        @test logabsdet(A) == (-Inf, 0)
+    end
+end
+
 end # module TestSymmetric
