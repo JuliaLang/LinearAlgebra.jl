@@ -2308,6 +2308,8 @@ for (geevx, ggev, ggev3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
+            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
+            chkfinite(B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2372,6 +2374,8 @@ for (geevx, ggev, ggev3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
+            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
+            chkfinite(B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2523,6 +2527,8 @@ for (geevx, ggev, ggev3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
+            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
+            chkfinite(B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2588,6 +2594,8 @@ for (geevx, ggev, ggev3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
+            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
+            chkfinite(B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -6611,6 +6619,8 @@ for (gees, gges, gges3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
+            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
+            chkfinite(B)
             sdim = BlasInt(0)
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
@@ -6663,6 +6673,8 @@ for (gees, gges, gges3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
+            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
+            chkfinite(B)
             sdim = BlasInt(0)
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
@@ -6763,6 +6775,8 @@ for (gees, gges, gges3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
+            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
+            chkfinite(B)
             sdim = BlasInt(0)
             alpha = similar(A, $elty, n)
             beta = similar(A, $elty, n)
@@ -6816,6 +6830,8 @@ for (gees, gges, gges3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
+            chkfinite(A) # the generalized Schur routines fail, or give NaNs, for NaNs and Infs
+            chkfinite(B)
             sdim = BlasInt(0)
             alpha = similar(A, $elty, n)
             beta = similar(A, $elty, n)

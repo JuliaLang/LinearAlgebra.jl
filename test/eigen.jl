@@ -459,4 +459,21 @@ end
     @test eigen(Float16[1 1; 1 2]).values isa Vector{Float16}
 end
 
+@testset "generalized eigenproblem and Schur form with Infs and NaNs" begin
+    # LAPACK's generalized eigenvalue and Schur routines fail, or give NaNs, for them, so they
+    # are rejected beforehand
+    @testset for elty in (Float64, ComplexF64), x in (NaN, Inf)
+        A = elty[1 2 0; x 2 2; 0 1 3]
+        B = elty[2 1 0; 1 2 1; 0 1 2]
+        for (X, Y) in ((A, B), (B, A))
+            @test_throws ArgumentError eigvals(X, Y)
+            @test_throws ArgumentError eigen(X, Y)
+            @test_throws ArgumentError schur(X, Y)
+            # called only for LAPACK older than 3.6
+            @test_throws ArgumentError LAPACK.ggev!('N', 'V', copy(X), copy(Y))
+            @test_throws ArgumentError LAPACK.gges!('V', 'V', copy(X), copy(Y))
+        end
+    end
+end
+
 end # module TestEigen
