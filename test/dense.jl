@@ -625,6 +625,7 @@ end
 
     @testset "large exponents (issue #1082)" begin
         A = [1 1e-10; 0 1]
+        @test A^typemin(Int8) == A^Int(typemin(Int8))
         B = A^(1e20)
         @test B ≈ [1 1e10; 0 1]
         B = A^(-1e20)

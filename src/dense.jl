@@ -584,7 +584,14 @@ kron(a::AdjointAbsVec, b::AdjointAbsVec) = adjoint(kron(adjoint(a), adjoint(b)))
 kron(a::AdjOrTransAbsVec, b::AdjOrTransAbsVec) = transpose(kron(transpose(a), transpose(b)))
 
 # Matrix power
-(^)(A::AbstractMatrix, p::Integer) = p < 0 ? power_by_squaring(inv(A), -p) : power_by_squaring(A, p)
+function (^)(A::AbstractMatrix, p::Integer)
+    if p < 0
+        invA = inv(A) # prevents overflow with typemin(p)
+        return invA * power_by_squaring(invA, -(p+1))
+    else
+        return power_by_squaring(A, p)
+    end
+end
 function (^)(A::AbstractMatrix{T}, p::Integer) where T<:Integer
     # make sure that e.g. [1 1;1 0]^big(3)
     # gets promotes in a similar way as 2^big(3)
@@ -594,8 +601,8 @@ end
 function integerpow(A::AbstractMatrix{T}, p) where T
     TT = promote_op(^, T, typeof(p))
     A2 = convert(AbstractMatrix{TT}, A)
-    if typemin(Int) < p ≤ typemax(Int)
-        return A2^Integer(p)
+    if typemin(Int) ≤ p ≤ typemax(Int)
+        return A2^Int(p)
     else
         return A2^BigInt(p)
     end
