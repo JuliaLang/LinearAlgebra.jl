@@ -2347,9 +2347,10 @@ for (geevx, ggev, ggev3, elty) in
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
             beta = similar(A, $elty, n)
-            # for a NaN eigenvalue, xGGEV may write to the column after VL or VR (#1808)
-            vl = zeros($elty, ldvl, n + 1)
-            vr = zeros($elty, ldvr, n + 1)
+            # for a NaN eigenvalue, xGGEV may write to the column after VL or VR (#1808), so
+            # reserve one more column, and drop it from the vectors returned
+            vl = zeros($elty, ldvl*(n + 1))
+            vr = zeros($elty, ldvr*(n + 1))
             work = Vector{$elty}(undef, 1)
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
@@ -2371,7 +2372,7 @@ for (geevx, ggev, ggev3, elty) in
                     resize!(work, lwork)
                 end
             end
-            alphar, alphai, beta, vl[:, 1:n], vr[:, 1:n]
+            alphar, alphai, beta, reshape(resize!(vl, ldvl*n), ldvl, n), reshape(resize!(vr, ldvr*n), ldvr, n)
         end
 
         #       SUBROUTINE DGGEV3( JOBVL, JOBVR, N, A, LDA, B, LDB, ALPHAR, ALPHAI,
@@ -2413,9 +2414,10 @@ for (geevx, ggev, ggev3, elty) in
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
             beta = similar(A, $elty, n)
-            # for a NaN eigenvalue, xGGEV may write to the column after VL or VR (#1808)
-            vl = zeros($elty, ldvl, n + 1)
-            vr = zeros($elty, ldvr, n + 1)
+            # for a NaN eigenvalue, xGGEV may write to the column after VL or VR (#1808), so
+            # reserve one more column, and drop it from the vectors returned
+            vl = zeros($elty, ldvl*(n + 1))
+            vr = zeros($elty, ldvr*(n + 1))
             work = Vector{$elty}(undef, 1)
             lwork = BlasInt(-1)
             info = Ref{BlasInt}()
@@ -2437,7 +2439,7 @@ for (geevx, ggev, ggev3, elty) in
                     resize!(work, lwork)
                 end
             end
-            alphar, alphai, beta, vl[:, 1:n], vr[:, 1:n]
+            alphar, alphai, beta, reshape(resize!(vl, ldvl*n), ldvl, n), reshape(resize!(vr, ldvr*n), ldvr, n)
         end
     end
 end
