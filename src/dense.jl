@@ -599,19 +599,18 @@ function (^)(A::AbstractMatrix{T}, p::Integer) where T<:Integer
     return power_by_squaring(convert(AbstractMatrix{TT}, A), p)
 end
 function integerpow(A::AbstractMatrix{T}, p) where T
+    TT = promote_op(^, T, typeof(p))
+    A2 = convert(AbstractMatrix{TT}, A)
     if typemin(Int) ≤ p ≤ typemax(Int)
-        TT = promote_op(^, T, Int)
-        A2 = convert(AbstractMatrix{TT}, A)
         return A2^Int(p)
     else
-        TT = promote_op(^, T, BigInt)
-        A2 = convert(AbstractMatrix{TT}, A)
         return A2^BigInt(p)
     end
 end
 function schurpow(A::AbstractMatrix, p)
+    T = promote_op(^, eltype(A), typeof(p))
     if istriu(A)
-        cA = complex(float(A))
+        cA = convert(AbstractMatrix{complex(float(T))}, A)
         # Integer part
         retmat = integerpow(cA, floor(p))
         # Real part
@@ -622,7 +621,8 @@ function schurpow(A::AbstractMatrix, p)
             retmat = retmat * powm!(UpperTriangular(copy(cA)), real(p - floor(p)))
         end
     else
-        S, Q, d = Schur{Complex}(schur(A))
+        rA = convert(AbstractMatrix{float(T)}, A)
+        S, Q, d = Schur{Complex}(schur(rA))
         # Integer part
         R = integerpow(S, floor(p))
         # Real part
