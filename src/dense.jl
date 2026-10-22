@@ -599,11 +599,13 @@ function (^)(A::AbstractMatrix{T}, p::Integer) where T<:Integer
     return power_by_squaring(convert(AbstractMatrix{TT}, A), p)
 end
 function integerpow(A::AbstractMatrix{T}, p) where T
-    TT = promote_op(^, T, typeof(p))
-    A2 = convert(AbstractMatrix{TT}, A)
     if typemin(Int) ≤ p ≤ typemax(Int)
+        TT = promote_op(^, T, Int)
+        A2 = convert(AbstractMatrix{TT}, A)
         return A2^Int(p)
     else
+        TT = promote_op(^, T, BigInt)
+        A2 = convert(AbstractMatrix{TT}, A)
         return A2^BigInt(p)
     end
 end
