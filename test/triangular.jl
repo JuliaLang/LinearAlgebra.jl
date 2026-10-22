@@ -1184,6 +1184,16 @@ end
     end
 end
 
+@testset "eigmax, eigmin, and permute and scale in eigvals and eigen" begin
+    A = [1.0 2 3; 0 -2 4; 0 0 5]
+    for T in (UpperTriangular(A), LowerTriangular(copy(A')), UnitUpperTriangular(A), UnitLowerTriangular(copy(A')))
+        @test eigmax(T) ≈ eigmax(Matrix(T))
+        @test eigmin(T) ≈ eigmin(Matrix(T))
+        @test eigvals(T; permute=false, scale=false) == eigvals(T)
+        @test eigen(T; permute=false, scale=false).values == eigen(T).values
+    end
+end
+
 @testset "triangular corner cases" begin
     A = [1.0 2 3; 4 5 6; 7 8 10]
     Tri = Tridiagonal(ComplexF64[1+im, 2], ComplexF64[3, 4im, 5], ComplexF64[6, 7-im])

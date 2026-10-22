@@ -828,6 +828,13 @@ end
         D = copy(B)
         X, rcond, f, b, r = LAPACK.gesvx!(C,D)
         @test X ≈ A\B rtol=inv(rcond)*eps(real(elty))
+        # singular to working precision: warn and return the solution
+        ε = eps(real(elty))
+        S = elty[1 1; 1 1+ε]
+        X = @test_logs (:warn, "Matrix is singular to working precision") LAPACK.gesvx!(copy(S), Matrix{elty}(I, 2, 2))[1]
+        @test X ≈ elty[1+ε -1; -1 1] / ε
+        # exactly singular
+        @test_throws SingularException(2) LAPACK.gesvx!(elty[1 1; 1 1], Matrix{elty}(I, 2, 2))
     end
 end
 

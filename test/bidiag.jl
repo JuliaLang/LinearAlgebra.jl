@@ -1321,6 +1321,15 @@ end
     end
 end
 
+@testset "eigmax, eigmin, and permute and scale in eigvals and eigen" begin
+    for B in (Bidiagonal([1.0, -2, 5], [2.0, 4], :U), Bidiagonal([1.0, -2, 5], [2.0, 4], :L))
+        @test eigmax(B) ≈ eigmax(Matrix(B))
+        @test eigmin(B) ≈ eigmin(Matrix(B))
+        @test eigvals(B; permute=false, scale=false) == eigvals(B)
+        @test eigen(B; permute=false, scale=false).values == eigen(B).values
+    end
+end
+
 @testset "Bidiagonal corner cases" begin
     @test promote_rule(Tridiagonal{Float64, Vector{Float64}}, Bidiagonal{Int, Vector{Int}}) == Tridiagonal{Float64}
     U = Bidiagonal([1, 2, 3], [4, 5], :U)
