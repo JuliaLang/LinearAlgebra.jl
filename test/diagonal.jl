@@ -1483,6 +1483,9 @@ end
     @test lmul!(0.2, copy(D)) ≈ lmul!(0.2, Array(D))
     @test_throws ArgumentError rmul!(D, NaN)
     @test_throws ArgumentError lmul!(NaN, D)
+    msg = "cannot set index (2, 1) off the diagonal band to a nonzero value (NaN)"
+    @test_throws msg rmul!(D, NaN)
+    @test_throws msg lmul!(NaN, D)
     D = Diagonal(rand(1))
     @test all(isnan, rmul!(copy(D), NaN))
     @test all(isnan, lmul!(NaN, copy(D)))
