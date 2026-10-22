@@ -2120,8 +2120,12 @@ powm(A::LowerTriangular, p::Real) = copy(transpose(powm!(copy(transpose(A)), p::
 # Based on the code available at http://eprints.ma.man.ac.uk/1851/02/logm.zip,
 # Copyright (c) 2011, Awad H. Al-Mohy and Nicholas J. Higham
 # Julia version relicensed with permission from original authors
-log(A::UpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(A))
-log(A::UnitUpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(A))
+log(A::UpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(_denseparent(A)))
+log(A::UnitUpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(_denseparent(A)))
+# log_quasitriu overwrites a copy of A with the logarithm, which fills the upper triangle, so the
+# copy needs dense storage also if the parent of A is banded, like a Bidiagonal
+_denseparent(A::UpperTriangular) = parent(A) isa StridedMatrix ? A : UpperTriangular(Matrix(parent(A)))
+_denseparent(A::UnitUpperTriangular) = parent(A) isa StridedMatrix ? A : UnitUpperTriangular(Matrix(parent(A)))
 log(A::LowerTriangular) = copy(transpose(log(copy(transpose(A)))))
 log(A::UnitLowerTriangular) = copy(transpose(log(copy(transpose(A)))))
 
@@ -2415,24 +2419,26 @@ function _pow_superdiag_quasitriu!(A, A0, p)
         end
         Ak = t(A0[k,k])
         Akp1 = t(A0[k+1,k+1])
+        A0kkp1 = t(A0[k,k+1])
 
         Akp = Ak^p
         Akp1p = Akp1^p
 
         if Ak == Akp1
-            A[k,k+1] = p * A0[k,k+1] * Ak^(p-1)
+            A[k,k+1] = p * A0kkp1 * Ak^(p-1)
         elseif 2 * abs(Ak) < abs(Akp1) || 2 * abs(Akp1) < abs(Ak) || iszero(Akp1 + Ak)
-            A[k,k+1] = A0[k,k+1] * (Akp1p - Akp) / (Akp1 - Ak)
+            A[k,k+1] = A0kkp1 * (Akp1p - Akp) / (Akp1 - Ak)
         else
             logAk = log(Ak)
             logAkp1 = log(Akp1)
             z = (Akp1 - Ak)/(Akp1 + Ak)
             if abs(z) > 1
-                A[k,k+1] = A0[k,k+1] * (Akp1p - Akp) / (Akp1 - Ak)
+                A[k,k+1] = A0kkp1 * (Akp1p - Akp) / (Akp1 - Ak)
             else
                 w = atanh(z) + im * pi * (unw(logAkp1-logAk) - unw(log1p(z)-log1p(-z)))
                 dd = 2 * exp(p*(logAk+logAkp1)/2) * sinh(p*w) / (Akp1 - Ak);
-                A[k,k+1] = A0[k,k+1] * dd
+                # for a real A, dd is real, unless an entry is NaN
+                A[k,k+1] = A0kkp1 * (t <: Real ? real(dd) : dd)
             end
         end
         k += 1

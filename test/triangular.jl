@@ -1183,4 +1183,21 @@ end
     end
 end
 
+@testset "log with banded parents and with NaN" begin
+    # the logarithm fills the upper triangle, which a banded parent can't hold
+    B = Bidiagonal([1.0, 100, 3], [5.0, 2], :U)
+    for A in (UpperTriangular(B), UnitUpperTriangular(B), Tridiagonal([0.0, 0], [1.0, 100, 3], [5.0, 2]))
+        @test log(A) ≈ log(Matrix(A))
+    end
+    # NaNs propagate into the result instead of throwing
+    for T in (Float64, ComplexF64)
+        L = log(UpperTriangular(T[1 2 3; 0 NaN 4; 0 0 5]))
+        @test isnan(L[2,2]) && isnan(L[1,2]) && isnan(L[2,3])
+        @test L[1,1] == 0 && L[3,3] ≈ log(5)
+        L = log(UpperTriangular(T[1 NaN 3; 0 2 4; 0 0 5]))
+        @test isnan(L[1,2]) && isnan(L[1,3])
+        @test diag(L) ≈ log.([1, 2, 5])
+    end
+end
+
 end # module TestTriangular
