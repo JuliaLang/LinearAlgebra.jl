@@ -75,6 +75,12 @@ end
             @test_throws DimensionMismatch LAPACK.bdsqr!('U', d, e, Vt, U, C[1:end - 1, :])
 
             @test_throws ArgumentError LAPACK.bdsdc!('U','Z',d,e)
+            for x in elty.((NaN, Inf))
+                @test_throws ArgumentError LAPACK.bdsqr!('U', [d[1:end-1]; x], e, Vt, U, C)
+                @test_throws ArgumentError LAPACK.bdsqr!('U', d, [x; e[2:end]], Vt, U, C)
+                @test_throws ArgumentError LAPACK.bdsdc!('U', 'I', [x; d[2:end]], e)
+                @test_throws ArgumentError LAPACK.bdsdc!('U', 'N', d, [e[1:end-1]; x])
+            end
 
             A = rand(elty,n,n)
             B = copy(A)
