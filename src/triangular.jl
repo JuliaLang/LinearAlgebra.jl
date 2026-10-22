@@ -1388,25 +1388,21 @@ end
 
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
+# trevc! overwrites its argument, so pass a dense copy, which also has the zeros and the unit
+# diagonal of A, and not the parent of A
 function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
 function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
 end
 function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
 function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
 end
 
 ####################
