@@ -1190,7 +1190,7 @@ end
         @test eigmin(T) ≈ eigmin(Matrix(T))
         @test eigvals(T; permute=false, scale=false) == eigvals(T)
         @test eigen(T; permute=false, scale=false).values == eigen(T).values
-        @test eigvecs(copy(T); permute=false, scale=false) == eigvecs(copy(T))
+        @test eigvecs(T; permute=false, scale=false) == eigvecs(T)
     end
 end
 

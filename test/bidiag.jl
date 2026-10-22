@@ -1334,7 +1334,7 @@ end
         @test eigmin(B) ≈ eigmin(Matrix(B))
         @test eigvals(B; permute=false, scale=false) == eigvals(B)
         @test eigen(B; permute=false, scale=false).values == eigen(B).values
-        @test eigvecs(copy(B); permute=false, scale=false) == eigvecs(copy(B))
+        @test eigvecs(B; permute=false, scale=false) == eigvecs(B)
     end
 end
 
