@@ -1390,24 +1390,18 @@ end
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
 # permute and scale, as for general matrices, have no effect on triangular ones
 function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
 function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
 end
 function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
 function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
 end
 
 ####################
