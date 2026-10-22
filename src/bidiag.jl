@@ -1448,7 +1448,8 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
 end
 
 # Eigensystems
-eigvals(M::Bidiagonal; sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
+# permute and scale, as for general matrices, have no effect on bidiagonal ones
+eigvals(M::Bidiagonal; permute::Bool=true, scale::Bool=true, sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
 function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
     n = length(M.dv)
     Q = Matrix{T}(undef, n,n)
@@ -1475,7 +1476,7 @@ function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
     end
     return isnothing(sortby) ? Q : sorteig!(copy(M.dv), Q, sortby)[2]
 end
-eigen(M::Bidiagonal; sortby=eigsortby) = Eigen(sorteig!(eigvals(M; sortby=nothing), eigvecs(M; sortby=nothing), sortby)...)
+eigen(M::Bidiagonal; permute::Bool=true, scale::Bool=true, sortby=eigsortby) = Eigen(sorteig!(eigvals(M; sortby=nothing), eigvecs(M; sortby=nothing), sortby)...)
 
 Base._sum(A::Bidiagonal, ::Colon) = sum(A.dv) + sum(A.ev)
 function Base._sum(A::Bidiagonal, dims::Integer)

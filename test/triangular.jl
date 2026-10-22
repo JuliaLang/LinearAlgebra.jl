@@ -1183,6 +1183,16 @@ end
     end
 end
 
+@testset "eigmax, eigmin, and permute and scale in eigvals and eigen" begin
+    A = [1.0 2 3; 0 -2 4; 0 0 5]
+    for T in (UpperTriangular(A), LowerTriangular(copy(A')), UnitUpperTriangular(A), UnitLowerTriangular(copy(A')))
+        @test eigmax(T) ≈ eigmax(Matrix(T))
+        @test eigmin(T) ≈ eigmin(Matrix(T))
+        @test eigvals(T; permute=false, scale=false) == eigvals(T)
+        @test eigen(T; permute=false, scale=false).values == eigen(T).values
+    end
+end
+
 @testset "log with banded parents and with NaN" begin
     # the logarithm fills the upper triangle, which a banded parent can't hold
     B = Bidiagonal([1.0, 100, 3], [5.0, 2], :U)
