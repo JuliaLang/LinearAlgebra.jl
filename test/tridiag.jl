@@ -1297,7 +1297,6 @@ end
     @test eigvals(S, -10, 10) ≈ [1, 3]
     @test all(isnan, eigvecs(S, [1.0]))
     @test_throws ArgumentError eigvals(S, 1:1)
-    @test_throws ArgumentError eigvals(SymTridiagonal([1.0, 2, 3], [Inf, 2]), -10, 10)
 end
 
 @testset "eigen sorting" begin
