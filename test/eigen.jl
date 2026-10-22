@@ -460,22 +460,11 @@ end
 end
 
 @testset "generalized eigenproblem and Schur form with Infs and NaNs" begin
-    # LAPACK's xGGEV wrote to the column after the eigenvectors for a NaN eigenvalue (#1808),
-    # which crashed Julia sooner or later
-    for x in (NaN, Inf)
-        A = [x 2; 1 2]
-        B = [2.0 1; 1 2]
-        for _ in 1:1000
-            eigen(A, B)
-            GC.gc(false)
-        end
-        @test all(isnan, eigen(A, B).values)
-        @test all(isnan, eigen(A, B).vectors)
-    end
+    # LAPACK's generalized eigenvalue and Schur routines may take very long to fail for them,
+    # return wrong results or corrupt memory, so they are rejected beforehand
     @testset for elty in (Float64, ComplexF64), x in (NaN, Inf)
         A = elty[1 2 0; x 2 2; 0 1 3]
         B = elty[2 1 0; 1 2 1; 0 1 2]
-        # LAPACK fails for these, so the error points to the Infs or NaNs
         for (X, Y) in ((A, B), (B, A))
             @test_throws ArgumentError eigvals(X, Y)
             @test_throws ArgumentError eigen(X, Y)
@@ -484,14 +473,10 @@ end
             @test_throws ArgumentError LAPACK.ggev!('N', 'V', copy(X), copy(Y))
             @test_throws ArgumentError LAPACK.gges!('V', 'V', copy(X), copy(Y))
         end
-        # but returns NaNs for an Inf if the other matrix is the identity
-        if isinf(x)
-            Id = Matrix{elty}(I, 3, 3)
-            @test all(isnan, eigvals(A, Id))
-            @test all(isnan, eigen(A, Id).values)
-            @test all(isnan, schur(A, Id).values)
-        end
     end
+    # xGGEV wrote to the column after the eigenvectors for a NaN eigenvalue (#1808)
+    @test_throws ArgumentError eigen([NaN 2; 1 2], [2.0 1; 1 2])
+    @test_throws ArgumentError eigen([Inf 2; 1 2], [2.0 1; 1 2])
 end
 
 end # module TestEigen
