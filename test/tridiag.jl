@@ -922,6 +922,9 @@ end
         @test lmul!(0.2, copy(T)) ≈ lmul!(0.2, Array(T))
         @test_throws ArgumentError rmul!(T, NaN)
         @test_throws ArgumentError lmul!(NaN, T)
+        msg = "cannot set index (3, 1) off the tridiagonal band to a nonzero value (NaN)"
+        @test_throws msg rmul!(T, NaN)
+        @test_throws msg lmul!(NaN, T)
     end
     for T in (SymTridiagonal(rand(2), rand(1)), Tridiagonal(rand(1), rand(2), rand(1)))
         @test all(isnan, rmul!(copy(T), NaN))
