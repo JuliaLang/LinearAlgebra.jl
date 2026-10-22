@@ -2991,7 +2991,8 @@ end
 # End of auxiliary functions for matrix square root
 
 # Generic eigensystems
-eigvals(A::AbstractTriangular; sortby = eigsortby) = sorteig!(diag(A), sortby)
+# permute and scale, as for general matrices, have no effect on triangular ones
+eigvals(A::AbstractTriangular; permute::Bool=true, scale::Bool=true, sortby = eigsortby) = sorteig!(diag(A), sortby)
 # fallback for unknown types
 function eigvecs(A::AbstractTriangular{<:BlasFloat}; sortby = eigsortby)
     if istriu(A)
@@ -3030,7 +3031,7 @@ function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     return abs_det, sgn
 end
 
-eigen(A::AbstractTriangular; sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
+eigen(A::AbstractTriangular; permute::Bool=true, scale::Bool=true, sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
 
 # Generic singular systems
 for func in (:svd, :svd!, :svdvals)
