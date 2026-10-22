@@ -6566,6 +6566,7 @@ for (gees, gges, gges3, elty) in
             @chkvalidparam 1 jobvs ('N', 'V')
             chkstride1(A)
             n     = checksquare(A)
+            chkfinite(A) # the Schur routines fail for NaNs and give NaNs for Infs
             sdim  = Vector{BlasInt}(undef, 1)
             wr    = similar(A, $elty, n)
             wi    = similar(A, $elty, n)
@@ -6716,6 +6717,7 @@ for (gees, gges, gges3, elty, relty) in
             @chkvalidparam 1 jobvs ('N', 'V')
             chkstride1(A)
             n     = checksquare(A)
+            chkfinite(A) # the Schur routines fail for NaNs and give NaNs for Infs
             sort  = 'N'
             sdim  = BlasInt(0)
             w     = similar(A, $elty, n)
