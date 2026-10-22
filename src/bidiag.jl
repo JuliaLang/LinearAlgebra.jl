@@ -1450,7 +1450,7 @@ end
 # Eigensystems
 # permute and scale, as for general matrices, have no effect on bidiagonal ones
 eigvals(M::Bidiagonal; permute::Bool=true, scale::Bool=true, sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
-function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
+function eigvecs(M::Bidiagonal{T}; permute::Bool=true, scale::Bool=true, sortby=eigsortby) where T
     n = length(M.dv)
     Q = Matrix{T}(undef, n,n)
     blks = [0; findall(iszero, M.ev); n]

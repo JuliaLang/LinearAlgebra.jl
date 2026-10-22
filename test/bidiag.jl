@@ -1328,12 +1328,13 @@ end
     end
 end
 
-@testset "eigmax, eigmin, and permute and scale in eigvals and eigen" begin
+@testset "eigmax, eigmin, and permute and scale in eigvals, eigvecs and eigen" begin
     for B in (Bidiagonal([1.0, -2, 5], [2.0, 4], :U), Bidiagonal([1.0, -2, 5], [2.0, 4], :L))
         @test eigmax(B) ≈ eigmax(Matrix(B))
         @test eigmin(B) ≈ eigmin(Matrix(B))
         @test eigvals(B; permute=false, scale=false) == eigvals(B)
         @test eigen(B; permute=false, scale=false).values == eigen(B).values
+        @test eigvecs(copy(B); permute=false, scale=false) == eigvecs(copy(B))
     end
 end
 
