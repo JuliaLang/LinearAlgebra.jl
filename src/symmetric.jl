@@ -821,7 +821,7 @@ function _factorize(A::HermOrSym{T}; check::Bool=true) where T
     end
 end
 
-logabsdet(A::RealHermSymComplexHerm) = ((l, s) = logabsdet(_factorize(A; check=false)); return real(l), s)
+logabsdet(A::RealHermSymComplexHerm) = ((l, s) = logabsdet(_factorize(A; check=false)); return real(l), real(s))
 logabsdet(A::Symmetric{<:Real}) = logabsdet(_factorize(A; check=false))
 logabsdet(A::Symmetric) = logabsdet(_factorize(A; check=false))
 logdet(A::RealHermSymComplexHerm) = real(logdet(_factorize(A; check=false)))
@@ -904,7 +904,9 @@ function sympow(A, p::Integer)
 end
 function ^(A::SelfAdjoint, p::Real)
     isinteger(p) && return integerpow(A, p)
-    F = eigen(A)
+    T = promote_op(^, eltype(A), typeof(p))
+    A2 = convert(AbstractMatrix{T}, A)
+    F = eigen(A2)
     if all(λ -> λ ≥ 0, F.values)
         rootpower = map(λ -> λ^(p / 2), F.values)
         retmat = _psd_spectral_product(rootpower, F.vectors)

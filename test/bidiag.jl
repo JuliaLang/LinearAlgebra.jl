@@ -997,6 +997,13 @@ end
         @test lmul!(0.2, copy(T)) ≈ lmul!(0.2, Array(T))
         @test_throws ArgumentError rmul!(T, NaN)
         @test_throws ArgumentError lmul!(NaN, T)
+        msg = if T.uplo == 'U'
+            "cannot set index (2, 1) off the upper bidiagonal band to a nonzero value (NaN)"
+        else
+            "cannot set index (1, 2) off the lower bidiagonal band to a nonzero value (NaN)"
+        end
+        @test_throws msg rmul!(T, NaN)
+        @test_throws msg lmul!(NaN, T)
     end
     for T in (Bidiagonal(rand(1), rand(0), :U), Bidiagonal(rand(1), rand(0), :L))
         @test all(isnan, rmul!(copy(T), NaN))
@@ -1318,6 +1325,15 @@ end
         @test ldiv!(zeros(5), t(Bidiagonal(ones(5), ones(4), :L)), ones(5)) ≈ [1.0, 0.0, 1.0, 0.0, 1.0]
         @test ones(5, 5) / t(Bidiagonal(ones(5), ones(4), :L)) ≈ [float(isodd(j)) for i in 1:5, j in 1:5]
         @test rdiv!(ones(5,5), t(Bidiagonal(ones(5), ones(4), :U))) ≈ [float(isodd(j)) for i in 1:5, j in 1:5]
+    end
+end
+
+@testset "eigmax, eigmin, and permute and scale in eigvals and eigen" begin
+    for B in (Bidiagonal([1.0, -2, 5], [2.0, 4], :U), Bidiagonal([1.0, -2, 5], [2.0, 4], :L))
+        @test eigmax(B) ≈ eigmax(Matrix(B))
+        @test eigmin(B) ≈ eigmin(Matrix(B))
+        @test eigvals(B; permute=false, scale=false) == eigvals(B)
+        @test eigen(B; permute=false, scale=false).values == eigen(B).values
     end
 end
 
