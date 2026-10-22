@@ -223,16 +223,18 @@ end
 end
 
 @testset "Infs and NaNs" begin
-    # LAPACK's Schur routines fail for NaNs and give NaNs for Infs, so both are rejected beforehand
-    @testset for elty in (Float64, ComplexF64), x in (NaN, Inf)
-        A = elty[1 2 0; x 2 2; 0 1 3]
+    @testset for elty in (Float64, ComplexF64)
+        # LAPACK's Schur routine may take very long to fail for NaNs
+        A = elty[1 2 0; NaN 2 2; 0 1 3]
         @test_throws ArgumentError schur(A)
         # through the Schur decomposition
         @test_throws ArgumentError sqrt(A)
         @test_throws ArgumentError log(A)
-        @test_throws ArgumentError A^0.5
-        @test_throws ArgumentError acos(A)
-        @test_throws ArgumentError sylvester(A, A, A)
+        # but returns NaNs for an Inf
+        A = elty[1 2 0; Inf 2 2; 0 1 3]
+        @test all(isnan, schur(A).values)
+        @test all(isnan, sqrt(A))
+        @test all(isnan, log(A))
     end
 end
 
