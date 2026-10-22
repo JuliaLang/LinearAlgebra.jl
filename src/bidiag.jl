@@ -469,8 +469,8 @@ function rmul!(B::Bidiagonal, x::Number)
         row, col = 1 + isupper, 1 + !isupper
         # ensure that zeros are preserved on scaling
         y = B[row,col] * x
-        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set entry ($row, $col) off the ",
-            isupper ? "upper" : "lower", " bidiagonal band to a nonzero value ", x)))
+        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off the ",
+            isupper ? "upper" : "lower", " bidiagonal band to a nonzero value ($y)")))
     end
     rmul!(B.dv, x)
     rmul!(B.ev, x)
@@ -482,8 +482,8 @@ function lmul!(x::Number, B::Bidiagonal)
         row, col = 1 + isupper, 1 + !isupper
         # ensure that zeros are preserved on scaling
         y = x * B[row,col]
-        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set entry ($row, $col) off the ",
-            isupper ? "upper" : "lower", " bidiagonal band to a nonzero value ", x)))
+        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off the ",
+            isupper ? "upper" : "lower", " bidiagonal band to a nonzero value ($y)")))
     end
     lmul!(x, B.dv)
     lmul!(x, B.ev)

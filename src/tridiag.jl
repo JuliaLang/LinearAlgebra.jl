@@ -225,7 +225,7 @@ function rmul!(A::SymTridiagonal, x::Number)
         # ensure that zeros are preserved on scaling
         y = A[3,1] * x
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
-            "the tridiagonal band to a nonzero value ", y)))
+            "the tridiagonal band to a nonzero value ($y)")))
     end
     rmul!(A.dv, x)
     rmul!(A.ev, x)
@@ -236,7 +236,7 @@ function lmul!(x::Number, B::SymTridiagonal)
         # ensure that zeros are preserved on scaling
         y = x * B[3,1]
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (3, 1) off ",
-            "the tridiagonal band to a nonzero value ", y)))
+            "the tridiagonal band to a nonzero value ($y)")))
     end
     lmul!(x, B.dv)
     lmul!(x, B.ev)
