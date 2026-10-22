@@ -997,6 +997,13 @@ end
         @test lmul!(0.2, copy(T)) ≈ lmul!(0.2, Array(T))
         @test_throws ArgumentError rmul!(T, NaN)
         @test_throws ArgumentError lmul!(NaN, T)
+        msg = if T.uplo == 'U'
+            "cannot set index (2, 1) off the upper bidiagonal band to a nonzero value (NaN)"
+        else
+            "cannot set index (1, 2) off the lower bidiagonal band to a nonzero value (NaN)"
+        end
+        @test_throws msg rmul!(T, NaN)
+        @test_throws msg lmul!(NaN, T)
     end
     for T in (Bidiagonal(rand(1), rand(0), :U), Bidiagonal(rand(1), rand(0), :L))
         @test all(isnan, rmul!(copy(T), NaN))
