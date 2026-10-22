@@ -416,8 +416,6 @@ function logabsdet(F::BunchKaufman)
     p = F.ipiv
     n = size(F.LD, 1)
 
-    # A factorization that is not successful is still complete: the pivot it reports is zero,
-    # giving a zero determinant below, or NaN, which must propagate.
     s = one(real(eltype(F)))
     i = 1
     abs_det = zero(real(eltype(F)))
