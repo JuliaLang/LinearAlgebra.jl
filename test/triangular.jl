@@ -1236,6 +1236,14 @@ end
     for A0 in (A, UnitUpperTriangular(A), UpperTriangular(Bidiagonal([1.0, 2], [3.0], :U)))
         @test iszero(tril(parent(LinearAlgebra._log_quasitriu_copy(Float64, A0)), -1))
     end
+    # nor what is stored below the diagonal of the parent, which the wrapper hides
+    for d in (1.5, -1.5)
+        M = Matrix(Bidiagonal(fill(d, 200), fill(0.1, 199), :U))
+        Mnan = copy(M)
+        Mnan[CartesianIndices(M)[[i > j for i in 1:200, j in 1:200]]] .= NaN
+        @test isequal(log(UpperTriangular(Mnan)), log(UpperTriangular(M)))
+        @test isequal(log(UnitUpperTriangular(Mnan)), log(UnitUpperTriangular(M)))
+    end
 end
 
 end # module TestTriangular
