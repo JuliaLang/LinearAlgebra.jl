@@ -119,7 +119,8 @@ end
 
 # for routines that may hang or return wrong results for NaNs, but not for Infs
 function chknan(A::AbstractVecOrMat)
-    if any(isnan, A)
+    # mapreduce instead of any, which doesn't vectorize because of its early exit
+    if mapreduce(isnan, |, A; init = false)
         throw(ArgumentError("matrix contains NaNs"))
     end
     return true
