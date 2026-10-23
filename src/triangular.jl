@@ -2116,12 +2116,8 @@ powm(A::LowerTriangular, p::Real) = copy(transpose(powm!(copy(transpose(A)), p::
 # Based on the code available at http://eprints.ma.man.ac.uk/1851/02/logm.zip,
 # Copyright (c) 2011, Awad H. Al-Mohy and Nicholas J. Higham
 # Julia version relicensed with permission from original authors
-log(A::UpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(_denseparent(A)))
-log(A::UnitUpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(_denseparent(A)))
-# log_quasitriu overwrites a copy of A with the logarithm, which fills the upper triangle, so the
-# copy needs dense storage also if the parent of A is banded, like a Bidiagonal
-_denseparent(A::UpperTriangular) = parent(A) isa StridedMatrix ? A : UpperTriangular(Matrix(parent(A)))
-_denseparent(A::UnitUpperTriangular) = parent(A) isa StridedMatrix ? A : UnitUpperTriangular(Matrix(parent(A)))
+log(A::UpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(A))
+log(A::UnitUpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(A))
 log(A::LowerTriangular) = copy(transpose(log(copy(transpose(A)))))
 log(A::UnitLowerTriangular) = copy(transpose(log(copy(transpose(A)))))
 
@@ -2129,15 +2125,9 @@ function log_quasitriu(A0::AbstractMatrix{T}) where T<:BlasFloat
     # allocate real A if log(A) will be real and complex A otherwise
     checksquare(A0)
     if isreal(A0) && (!istriu(A0) || !any(x -> real(x) < zero(real(T)), diag(A0)))
-        A = T <: Complex ? real(A0) : copy(A0)
+        A = _log_quasitriu_copy(real(T), A0)
     else
-        A = T <: Complex ? copy(A0) : complex(A0)
-    end
-    if A0 isa UnitUpperTriangular
-        A = UpperTriangular(parent(A))
-        @inbounds for i in axes(A,1)
-            A[i,i] = 1
-        end
+        A = _log_quasitriu_copy(complex(T), A0)
     end
     Y0 = _log_quasitriu!(A0, A)
     # return complex result for complex input
@@ -2149,6 +2139,11 @@ function log_quasitriu(A0::AbstractMatrix{T}) where T<:BlasFloat
         return Y
     end
 end
+# The copy of A0 that _log_quasitriu! overwrites. For a triangular A0, it is upper triangular with
+# dense storage, also if the parent of A0 is banded, since the logarithm fills the upper triangle,
+# and it has zeros below the diagonal, which _sqrt_quasitriu! reads in the parent.
+_log_quasitriu_copy(::Type{S}, A0::Union{UpperTriangular,UnitUpperTriangular}) where {S} = UpperTriangular(Matrix{S}(A0))
+_log_quasitriu_copy(::Type{S}, A0::AbstractMatrix) where {S} = Matrix{S}(A0)
 # type-stable implementation of log_quasitriu
 # A is a copy of A0 that is overwritten while computing the result. It has the same eltype
 # as the result.

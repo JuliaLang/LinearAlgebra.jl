@@ -1223,4 +1223,19 @@ end
     end
 end
 
+@testset "log reads no uninitialized memory" begin
+    # log_quasitriu overwrites a copy of its argument, and the square roots in it read the parent
+    # of that copy below the diagonal, which was left uninitialized; this gave NaNs or wrong
+    # results at random
+    A = UpperTriangular(Matrix(Bidiagonal(fill(1.5, 200), fill(0.1, 199), :U)))
+    for _ in 1:3
+        L = log(A)
+        @test all(isfinite, L)
+        @test exp(Matrix(L)) ≈ A
+    end
+    for A0 in (A, UnitUpperTriangular(A), UpperTriangular(Bidiagonal([1.0, 2], [3.0], :U)))
+        @test iszero(tril(parent(LinearAlgebra._log_quasitriu_copy(Float64, A0)), -1))
+    end
+end
+
 end # module TestTriangular
