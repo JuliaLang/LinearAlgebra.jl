@@ -1170,7 +1170,7 @@ end
     end
 end
 
-@testset "issue #1749: ldiv! with lazy adjoint/transpose parent" begin
+@testset "issue #1749: mul and div with lazy adjoint/transpose parent" begin
     M = ComplexF64[1 2+3im 1im; 4-1im 5 2-im; 3+im 2im 7]
     b = ComplexF64[1, 2, 3]
     B = ComplexF64[1 4; 2 5; 3 6]
@@ -1179,6 +1179,31 @@ end
             A = W(P)
             @test A \ b ≈ Matrix(A) \ b ≈ lu(Matrix(A)) \ b
             @test A \ B ≈ Matrix(A) \ B ≈ lu(Matrix(A)) \ B
+            @test Matrix(B') * A ≈ Matrix(B') * Matrix(A)
+            @test Matrix(B') / A ≈ Matrix(B') / Matrix(A)
+        end
+    end
+end
+
+@testset "block triangular matrices with blocks of variable size" begin
+    # oneunit is not defined for the type of the blocks, so it is computed from the diagonal
+    # blocks, and blocks, which need not be square, are stripped of units elementwise
+    flat(B) = reduce(vcat, [reduce(hcat, [B[i,j] for j in axes(B, 2)]) for i in axes(B, 1)])
+    block(m, n, i, j) = [(i == j && r == c ? 4.0 : 0.0) + (r + i) / (c + j) for r in 1:m, c in 1:n]
+    @testset for sz in ((2, 2, 2), (1, 2, 3))
+        A = [block(sz[i], sz[j], i, j) for i in 1:3, j in 1:3]
+        B = [block(sz[i], 2, i, j) for i in 1:3, j in 1:2]
+        Bt = [block(2, sz[j], i, j) for i in 1:2, j in 1:3]
+        @testset for TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular), op in (identity, transpose, adjoint)
+            unit = TT in (UnitUpperTriangular, UnitLowerTriangular)
+            upper = TT in (UpperTriangular, UnitUpperTriangular)
+            M = [i == j ? (unit ? Matrix(1.0I, sz[i], sz[i]) : A[i,j]) :
+                 (upper ? i < j : i > j) ? A[i,j] : zeros(sz[i], sz[j]) for i in 1:3, j in 1:3]
+            T, F = op(TT(A)), op(flat(M))
+            @test flat(T * B) ≈ F * flat(B)
+            @test flat(Bt * T) ≈ flat(Bt) * F
+            @test flat(T \ B) ≈ F \ flat(B)
+            @test flat(Bt / T) ≈ flat(Bt) / F
         end
     end
 end
