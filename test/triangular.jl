@@ -15,6 +15,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 n = 9
 Random.seed!(123)
@@ -1190,6 +1191,70 @@ end
         @test eigmin(T) ≈ eigmin(Matrix(T))
         @test eigvals(T; permute=false, scale=false) == eigvals(T)
         @test eigen(T; permute=false, scale=false).values == eigen(T).values
+    end
+end
+
+@testset "triangular corner cases" begin
+    A = [1.0 2 3; 4 5 6; 7 8 10]
+    Tri = Tridiagonal(ComplexF64[1+im, 2], ComplexF64[3, 4im, 5], ComplexF64[6, 7-im])
+    @testset for TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+        T = TT(A)
+        B = AbstractMatrix{Float64}(T)
+        @test B == T && B isa TT
+        @test parent(B) !== parent(T)
+        # complex parent that is not strided
+        @test real(TT(Tri)) == TT(real(Tri))
+        @test parent(real(TT(Tri))) isa Tridiagonal
+        @test dot(Float64[], TT(zeros(0, 0)), Float64[]) === 0.0
+        # transpose(vector) / triangular of adjoint
+        v = [1.0, 2, 3]
+        @test transpose(v) / TT(A') ≈ transpose(v) / Matrix(TT(A'))
+    end
+    @testset for TT in (UpperTriangular, LowerTriangular)
+        half = TT === UpperTriangular ? "lower" : "upper"
+        @test_throws "cannot set indices in the $half triangular part" fill!(TT(zeros(2, 2)), 1)
+        T = TT(A)
+        @test copyto!(zeros(4, 4), T) == copyto!(zeros(4, 4), Matrix(T))
+        # scaling with a parent that is not strided
+        T = TT(Tri)
+        M = Matrix(T)
+        for S in (T*2, 2*T, T/2, 2\T)
+            @test S isa TT
+        end
+        @test T*2 == 2*T == M*2
+        @test T/2 == 2\T == M/2
+    end
+    @test_throws ArgumentError eigvecs(UpperTriangular(big.(A)))
+end
+
+@static if COMPREHENSIVE
+@testset "l/rdiv! with lazy adjoint/transpose parent" begin
+    M = ComplexF64[1 2+3im 1im; 4-1im 5 2-im; 3+im 2im 7]
+    B = ComplexF64[1 2 3; 4 5 6]
+    # the last two parents are not BLAS compatible, and take the generic path
+    for P in (transpose(M'), adjoint(transpose(M)), transpose(big.(M)), big.(M)')
+        for W in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+            A = W(P)
+            @test B / A ≈ B / Matrix(A)
+            C = zeros(eltype(A), 3, 3)
+            @test_throws DimensionMismatch ldiv!(C, A, ones(2, 2))
+            @test_throws DimensionMismatch ldiv!(C, A, copy(transpose(B)))
+            @test_throws DimensionMismatch LinearAlgebra._rdiv!(C, ones(2, 2), A)
+            @test_throws DimensionMismatch LinearAlgebra._rdiv!(C, B, A)
+        end
+    end
+end
+end # COMPREHENSIVE
+
+@testset "log and fractional power, few square roots" begin
+    # 2x2 block of a real Schur form for which log takes a single square root
+    A = [1.0 -0.5; 0.5 1.0]
+    r, θ = hypot(1, 0.5), atan(0.5)
+    @test log(A) ≈ [log(r) -θ; θ log(r)]
+    # close to the identity, so powm needs no square roots; U = I + N with N^2 = 0
+    for ε in (1e-6, 1e-3)
+        U = UpperTriangular([1.0 ε; 0 1.0])
+        @test U^0.3 ≈ UpperTriangular([1.0 0.3ε; 0 1.0])
     end
 end
 

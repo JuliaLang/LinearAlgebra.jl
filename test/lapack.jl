@@ -7,6 +7,12 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasInt
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+
 @test_throws ArgumentError LinearAlgebra.LAPACK.chkuplo('Z')
 @test_throws ArgumentError LinearAlgebra.LAPACK.chkside('Z')
 @test_throws ArgumentError LinearAlgebra.LAPACK.chkdiag('Z')
@@ -300,6 +306,25 @@ end
             @test_throws ArgumentError LAPACK.ggsvd3!('N','X','N',A,B)
             @test_throws ArgumentError LAPACK.ggsvd3!('N','N','X',A,B)
         end
+    end
+end
+
+# xggsvd is deprecated since LAPACK 3.6.0, but still provided
+@testset "ggsvd" begin
+    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
+        # A with fewer rows than the rank of [A; B] is stored differently in R
+        for m in (5, 2)
+            A, B = rand(elty, m, 3), rand(elty, 4, 3)
+            F = LinearAlgebra.GeneralizedSVD(LAPACK.ggsvd!('U', 'V', 'Q', copy(A), copy(B))...)
+            @test F.U*F.D1*F.R*F.Q' ≈ A
+            @test F.V*F.D2*F.R*F.Q' ≈ B
+            @test sort(F.vals) ≈ sort(svdvals(A, B))
+        end
+        A, B = rand(elty, 5, 3), rand(elty, 4, 3)
+        @test_throws DimensionMismatch LAPACK.ggsvd!('N','N','N',A,rand(elty, 4, 2))
+        @test_throws ArgumentError LAPACK.ggsvd!('X','N','N',A,B)
+        @test_throws ArgumentError LAPACK.ggsvd!('N','X','N',A,B)
+        @test_throws ArgumentError LAPACK.ggsvd!('N','N','X',A,B)
     end
 end
 
@@ -1045,6 +1070,112 @@ Base.unsafe_convert(::Type{Ptr{T}}, A::NonResizableArray{T}) where {T} = pointer
     VR = LAPACK.trevc!('R', 'S', BlasInt[1, 0, 1], copy(T))[2]
     @test LAPACK.trevc!('R', 'S', BlasInt[1, 0, 1], copy(T), similar(T), NR(similar(T)))[2] ≈ VR
     @test LAPACK.trevc!('R', 'S', BlasInt[1, 0, 1], copy(T), similar(T), view(similar(T), :, :))[2] ≈ VR
+end
+
+@testset "LAPACK error code helpers" begin
+    @test_throws ArgumentError LAPACK.chkargsok(BlasInt(-1))
+    @test_throws ArgumentError LAPACK.chklapackerror(BlasInt(-1))
+    @test_throws SingularException LAPACK.chknonsingular(BlasInt(1))
+    @test_throws PosDefException LAPACK.chkposdef(BlasInt(1))
+    # the Hermitian eigensolvers only check the referenced triangle for Infs and NaNs
+    A = ComplexF64[1 2; NaN 3]
+    @test_throws ArgumentError LAPACK.syev!('N', 'L', copy(A))
+    @test LAPACK.syev!('N', 'U', copy(A)) ≈ eigvals(Hermitian(A, :U))
+end
+
+@testset "LAPACK wrappers without other callers" begin
+    Random.seed!(1234)
+    @testset for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
+        n = 4
+        A = rand(elty, n, n) + n*I
+        B = rand(elty, n, n) + n*I
+        sortλ(λ) = sort(λ, by = LinearAlgebra.eigsortby)
+        @testset "eigenvalues" begin
+            out = LAPACK.geev!('V', 'V', copy(A))
+            w = elty <: Real ? complex.(out[1], out[2]) : out[1]
+            @test sortλ(w) ≈ sortλ(eigvals(A))
+            @test_throws ArgumentError LAPACK.geevx!('N', 'N', 'V', 'E', copy(A))
+            for sense in ('V', 'B')
+                out = LAPACK.geevx!('B', 'V', 'V', sense, copy(A))
+                w = elty <: Real ? complex.(out[2], out[3]) : out[2]
+                @test sortλ(w) ≈ sortλ(eigvals(A))
+            end
+        end
+        @testset "generalized eigenvalues and Schur factorization" begin
+            μ = sortλ(eigvals(A, B))
+            for (jobvl, jobvr) in (('V', 'V'), ('N', 'N')), f in (LAPACK.ggev!, LAPACK.ggev3!)
+                out = f(jobvl, jobvr, copy(A), copy(B))
+                α = elty <: Real ? complex.(out[1], out[2]) : out[1]
+                β, vl, vr = out[end-2:end]
+                @test sortλ(α ./ β) ≈ μ
+                if elty <: Complex && jobvr == 'V'
+                    @test A*vr ≈ B*vr*Diagonal(α ./ β)
+                    @test vl'*A ≈ Diagonal(α ./ β)*vl'*B
+                end
+            end
+            S, T, α, β, Q, Z = LAPACK.gges!('V', 'V', copy(A), copy(B))
+            @test Q*S*Z' ≈ A
+            @test Q*T*Z' ≈ B
+            @test sortλ(α ./ β) ≈ μ
+        end
+        @testset "gecon!" begin
+            # the estimate of the reciprocal condition number is never too small, and it
+            # is exact for a diagonal matrix
+            for (normtype, p) in (('1', 1), ('I', Inf))
+                F = LAPACK.getrf!(copy(A))[1]
+                @test LAPACK.gecon!(normtype, F, opnorm(A, p)) >= inv(cond(A, p))*(1 - sqrt(eps(real(elty))))
+                D = Matrix(Diagonal(elty[1, 2, 4, 8]))
+                @test LAPACK.gecon!(normtype, copy(D), opnorm(D, p)) ≈ 1/8
+            end
+        end
+        @testset "singular value decompositions overwriting A" begin
+            for (m, k) in ((6, 4), (4, 6))
+                C = rand(elty, m, k)
+                U, S, Vt = LAPACK.gesdd!('O', copy(C))
+                @test U*Diagonal(S)*Vt ≈ C
+            end
+            C = rand(elty, 6, 4)
+            U, S, Vt = LAPACK.gesvd!('O', 'S', copy(C))
+            @test U*Diagonal(S)*Vt ≈ C
+            U, S, Vt = LAPACK.gesvd!('S', 'O', copy(C'))
+            @test U*Diagonal(S)*Vt ≈ C'
+            if elty <: Real
+                d, e = rand(elty, n), rand(elty, n - 1)
+                @test LAPACK.bdsdc!('U', 'N', copy(d), copy(e))[1] ≈ svdvals(Bidiagonal(d, e, :U))
+            end
+        end
+        @testset "linear systems" begin
+            C, D = rand(elty, 6, 3), rand(elty, 6, 2)
+            _, X, ssr = LAPACK.gels!('N', copy(C), copy(D))
+            @test X ≈ C \ D
+            @test ssr ≈ vec(sum(abs2, C*X - D, dims = 1))
+            U = triu(A)
+            D = rand(elty, n, 2)
+            @test LAPACK.trtrs!('U', 'N', 'N', U, copy(D)) ≈ U \ D
+            R = LAPACK.potrf!('U', A'A)[1]
+            D = zeros(elty, n, 0)
+            @test LAPACK.potrs!('U', R, D) === D
+        end
+        @testset "QR" begin
+            (F1, T1), (F2, T2) = LAPACK.geqrt3!(copy(A)), LAPACK.geqrt3!(copy(A), similar(A))
+            @test F1 == F2 && triu(T1) == triu(T2)
+            C, jpvt, tau = zeros(elty, 0, 3), zeros(BlasInt, 3), elty[]
+            @test LAPACK.geqp3!(C, jpvt, tau) === (C, tau, jpvt)
+            tau = rand(elty, n) # needs length n - 1
+            @test_throws DimensionMismatch LAPACK.ormhr!('L', 'N', 1, n, A, tau, rand(elty, n, 2))
+            @test_throws DimensionMismatch LAPACK.ormhr!('L', 'N', 1, n, A, tau[1:n-1], rand(elty, n + 1, 2))
+            @test_throws DimensionMismatch LAPACK.orgtr!('U', copy(A), tau)
+            @test_throws DimensionMismatch LAPACK.ormtr!('L', 'U', 'N', A, tau, rand(elty, n, 2))
+            @test_throws DimensionMismatch LAPACK.ormtr!('L', 'U', 'N', A, tau[1:n-1], rand(elty, n + 1, 2))
+        end
+        @testset "trexc! and trsen! with default job" begin
+            T, Q = schur(convert(Matrix{elty}, [7 2 2 1; 1 5 2 0; 0 3 9 4; 1 1 1 4]))
+            @test LAPACK.trexc!(BlasInt(1), BlasInt(2), copy(T), copy(Q)) ==
+                LAPACK.trexc!('V', BlasInt(1), BlasInt(2), copy(T), copy(Q))
+            select = BlasInt[0, 1, 0, 0]
+            @test LAPACK.trsen!(select, copy(T), copy(Q)) == LAPACK.trsen!('N', 'V', select, copy(T), copy(Q))
+        end
+    end
 end
 
 end # module TestLAPACK
