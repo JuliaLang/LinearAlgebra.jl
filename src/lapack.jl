@@ -43,6 +43,15 @@ end
 
 chklapackerror_positive(ret, f...) = throw(LAPACKException(ret))
 
+# For routines that don't check their input for Infs and NaNs: these often propagate to the
+# result, but if the routine fails instead, they are the likely cause
+function chklapackerror(ret::BlasInt, inputisfinite::Bool)
+    if ret != 0 && !inputisfinite
+        throw(ArgumentError("matrix contains Infs or NaNs"))
+    end
+    chklapackerror(ret)
+end
+
 function chknonsingular(ret::BlasInt)
     if ret > 0
         throw(SingularException(ret))
@@ -4137,6 +4146,8 @@ for (stev, stebz, stegr, stein, elty) in
             if length(ev) != n - 1
                 throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
+            chknan(dv) # for NaNs, xSTEV may return wrong results
+            chknan(ev)
             Zmat = similar(dv, $elty, (n, job != 'N' ? n : 0))
             work = Vector{$elty}(undef, max(1, 2n-2))
             info = Ref{BlasInt}()
@@ -4161,6 +4172,9 @@ for (stev, stebz, stegr, stein, elty) in
             if length(ev) != n - 1
                 throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
+            chknan(dv) # for NaNs, xSTEBZ may return wrong results
+            chknan(ev)
+            inputisfinite = all(isfinite, dv) && all(isfinite, ev)
             m = Ref{BlasInt}()
             nsplit = Vector{BlasInt}(undef, 1)
             w = similar(dv, $elty, n)
@@ -4181,7 +4195,7 @@ for (stev, stebz, stegr, stein, elty) in
                 dv, ev, m, nsplit,
                 w, iblock, isplit, work,
                 iwork, info, 1, 1)
-            chklapackerror(info[])
+            chklapackerror(info[], inputisfinite)
             (m[] == n ? w : w[1:m[]]), (m[] == n ? iblock : iblock[1:m[]]),
                 (nsplit[1] == n ? isplit : isplit[1:nsplit[1]])
         end
@@ -4198,6 +4212,8 @@ for (stev, stebz, stegr, stein, elty) in
             else
                 throw(DimensionMismatch(lazy"ev has length $ne but needs one less than dv's length, $n)"))
             end
+            chknan(dv) # for NaNs, xSTEGR may not return, or return wrong results
+            chknan(ev)
 
             abstol = Vector{$elty}(undef, 1)
             m = Ref{BlasInt}()
