@@ -6603,6 +6603,7 @@ for (gees, gges, gges3, elty) in
             @chkvalidparam 1 jobvs ('N', 'V')
             chkstride1(A)
             n     = checksquare(A)
+            chknan(A) # LAPACK may take very long to fail for NaNs, but returns NaNs for Infs
             sdim  = Vector{BlasInt}(undef, 1)
             wr    = similar(A, $elty, n)
             wi    = similar(A, $elty, n)
@@ -6753,6 +6754,7 @@ for (gees, gges, gges3, elty, relty) in
             @chkvalidparam 1 jobvs ('N', 'V')
             chkstride1(A)
             n     = checksquare(A)
+            chknan(A) # LAPACK may take very long to fail for NaNs, but returns NaNs for Infs
             sort  = 'N'
             sdim  = BlasInt(0)
             w     = similar(A, $elty, n)
