@@ -174,6 +174,9 @@ end
     @test D isa Eigen{ComplexF16, Float16, Matrix{ComplexF16}, Vector{Float16}}
     @test D.values ≈ D32.values
     @test D.vectors ≈ D32.vectors
+    # the vector type depends only on the element type, not on the values
+    E = @inferred eigen(Hermitian(ComplexF16[2 1; 1 3]))
+    @test E isa Eigen{ComplexF16, Float16, Matrix{ComplexF16}, Vector{Float16}}
 
     # ensure that different algorithms dispatch correctly
     λ, V = eigen(C; alg=LinearAlgebra.QRIteration())

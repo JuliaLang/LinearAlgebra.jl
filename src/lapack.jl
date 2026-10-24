@@ -99,11 +99,20 @@ end
 subsetrows(X::AbstractVector, Y::AbstractArray, k) = Y[1:k]
 subsetrows(X::AbstractMatrix, Y::AbstractArray, k) = Y[1:k, :]
 
-function chkfinite(A::AbstractMatrix)
+function chkfinite(A::AbstractVecOrMat)
     for a in A
         if !isfinite(a)
             throw(ArgumentError("matrix contains Infs or NaNs"))
         end
+    end
+    return true
+end
+
+# for routines that may hang or return wrong results for NaNs, but not for Infs
+function chknan(A::AbstractVecOrMat)
+    # mapreduce instead of any, which doesn't vectorize because of its early exit
+    if mapreduce(isnan, |, A; init = false)
+        throw(ArgumentError("matrix contains NaNs"))
     end
     return true
 end
@@ -1184,7 +1193,7 @@ for (gesvx, elty) in
                Ptr{$elty}, Ptr{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong),
               fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
               ldb, X, n, rcond, ferr, berr, work, iwork, info, 1, 1, 1)
-            chklapackerror(info[])
+            chkargsok(info[])
             if info[] == n + 1
                 @warn "Matrix is singular to working precision"
             else
@@ -1256,7 +1265,7 @@ for (gesvx, elty, relty) in
                Ptr{$elty}, Ptr{$relty}, Ref{BlasInt}, Clong, Clong, Clong),
               fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
               ldb, X, n, rcond, ferr, berr, work, rwork, info, 1, 1, 1)
-            chklapackerror(info[])
+            chkargsok(info[])
             if info[] == n + 1
                 @warn "Matrix is singular to working precision"
             else
@@ -1785,6 +1794,7 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             require_one_based_indexing(A)
             chkstride1(A)
             @chkvalidparam 1 job ('A', 'S', 'O', 'N')
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
             m, n   = size(A)
             minmn  = min(m, n)
             if job == 'A'
@@ -1869,6 +1879,7 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             @chkvalidparam 1 jobu ('A', 'S', 'O', 'N')
             @chkvalidparam 2 jobvt ('A', 'S', 'O', 'N')
             (jobu == jobvt == 'O') && throw(ArgumentError("jobu and jobvt cannot both be O"))
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
             m, n   = size(A)
             minmn  = min(m, n)
             S      = similar(A, $relty, minmn)
@@ -1945,6 +1956,8 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             if size(B, 2) != n
                 throw(DimensionMismatch(lazy"B has second dimension $(size(B,2)) but needs $n"))
             end
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
+            chkfinite(B)
             p = size(B, 1)
             k = Vector{BlasInt}(undef, 1)
             l = Vector{BlasInt}(undef, 1)
@@ -2075,6 +2088,8 @@ for (f, elty) in ((:dggsvd3_, :Float64),
             if size(B, 2) != n
                 throw(DimensionMismatch(lazy"B has second dimension $(size(B,2)) but needs $n"))
             end
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
+            chkfinite(B)
             p = size(B, 1)
             k = Ref{BlasInt}()
             l = Ref{BlasInt}()
@@ -2137,6 +2152,8 @@ for (f, elty, relty) in ((:zggsvd3_, :ComplexF64, :Float64),
             if size(B, 2) != n
                 throw(DimensionMismatch(lazy"B has second dimension $(size(B,2)) but needs $n"))
             end
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
+            chkfinite(B)
             p = size(B, 1)
             k = Vector{BlasInt}(undef, 1)
             l = Vector{BlasInt}(undef, 1)
@@ -5940,6 +5957,8 @@ for (bdsqr, relty, elty) in
             if length(e_) != n - 1
                 throw(DimensionMismatch(lazy"off-diagonal has length $(length(e_)) but should have length $(n - 1)"))
             end
+            chkfinite(d) # the SVD routines may not return for NaNs and Infs
+            chkfinite(e_)
             if ncvt > 0 && ldvt < n
                 throw(DimensionMismatch(lazy"leading dimension of Vt, $ldvt, must be at least $n"))
             end
@@ -6003,6 +6022,8 @@ for (bdsdc, elty) in
             chkstride1(d, e_)
             n, ldiq, ldq, ldu, ldvt = length(d), 1, 1, 1, 1
             chkuplo(uplo)
+            chkfinite(d) # the SVD routines may not return for NaNs and Infs
+            chkfinite(e_)
             if compq == 'N'
                 lwork = 6*n
             elseif compq == 'P'
@@ -6566,6 +6587,7 @@ for (gees, gges, gges3, elty) in
             @chkvalidparam 1 jobvs ('N', 'V')
             chkstride1(A)
             n     = checksquare(A)
+            chknan(A) # LAPACK may take very long to fail for NaNs, but returns NaNs for Infs
             sdim  = Vector{BlasInt}(undef, 1)
             wr    = similar(A, $elty, n)
             wi    = similar(A, $elty, n)
@@ -6716,6 +6738,7 @@ for (gees, gges, gges3, elty, relty) in
             @chkvalidparam 1 jobvs ('N', 'V')
             chkstride1(A)
             n     = checksquare(A)
+            chknan(A) # LAPACK may take very long to fail for NaNs, but returns NaNs for Infs
             sort  = 'N'
             sdim  = BlasInt(0)
             w     = similar(A, $elty, n)

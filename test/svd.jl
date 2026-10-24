@@ -327,4 +327,42 @@ end
     @test rank(svd([1.0 2.0 3.0; 4.0 5.0 6.0 ; 7.0 8.0 9.0])) == 2
 end
 
+@testset "nullspcae svd" begin
+    # Test that we can get the nullspace
+    A1 = [1.0 1.0; 2.0 0.0; -1.0 1.0] * [1.0 1.0 1.0; 1.0 -1.0 1.0]
+    N1 = nullspace(svd(A1, alg=LinearAlgebra.QRIteration()))
+    @test norm(A1*N1) < 8 * maximum(A1) * eps(eltype(A1))
+    N2 = nullspace(svd(A1, alg=LinearAlgebra.DivideAndConquer()))
+    @test norm(A1*N2) < 8 * maximum(A1) * eps(eltype(A1))
+
+    A2 = [1.0 1.0; -1.0 2.0; 3.0 3.0; 2.0 4.0] * [1.0 1.0 1.0 1.0; 1.0 -1.0 1.0 -1.0]
+    n1 = nullspace(svd(A2, alg=LinearAlgebra.QRIteration()))
+    @test norm(A2 * n1) < 8 * maximum(A2) * eps(eltype(A2))
+    n2 = nullspace(svd(A2, alg=LinearAlgebra.DivideAndConquer()))
+    @test norm(A2 * n2) < 8 * maximum(A2) * eps(eltype(A2))
+end
+
+@testset "Infs and NaNs" begin
+    # LAPACK's SVD routines may not return for them, so they are rejected beforehand
+    @testset for elty in (Float64, ComplexF64), x in (NaN, Inf)
+        A = elty[1 2 0; x 2 2; 0 1 3]
+        Id = Matrix{elty}(I, 3, 3)
+        @test_throws ArgumentError svd(A)
+        @test_throws ArgumentError svd(A; alg=LinearAlgebra.QRIteration())
+        @test_throws ArgumentError svdvals(A)
+        @test_throws ArgumentError svd(A, Id)
+        @test_throws ArgumentError svd(Id, A)
+        @test_throws ArgumentError svdvals(A, Id)
+        # svd(A, B) calls ggsvd! only for LAPACK older than 3.6
+        @test_throws ArgumentError LAPACK.ggsvd!('N', 'N', 'N', copy(A), copy(Id))
+        @test_throws ArgumentError LAPACK.ggsvd!('N', 'N', 'N', copy(Id), copy(A))
+        if elty <: Real
+            for B in (Bidiagonal(elty[1, x, 3], elty[1, 2], :U), Bidiagonal(elty[1, 2, 3], elty[x, 2], :L))
+                @test_throws ArgumentError svd(B)
+                @test_throws ArgumentError svdvals(B)
+            end
+        end
+    end
+end
+
 end # module TestSVD

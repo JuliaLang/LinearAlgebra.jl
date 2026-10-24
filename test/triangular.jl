@@ -1183,4 +1183,27 @@ end
     end
 end
 
+@testset "eigmax, eigmin, and permute and scale in eigvals and eigen" begin
+    A = [1.0 2 3; 0 -2 4; 0 0 5]
+    for T in (UpperTriangular(A), LowerTriangular(copy(A')), UnitUpperTriangular(A), UnitLowerTriangular(copy(A')))
+        @test eigmax(T) ≈ eigmax(Matrix(T))
+        @test eigmin(T) ≈ eigmin(Matrix(T))
+        @test eigvals(T; permute=false, scale=false) == eigvals(T)
+        @test eigen(T; permute=false, scale=false).values == eigen(T).values
+    end
+end
+
+@testset "eigvecs and eigen don't overwrite the parent" begin
+    for T in (Float64, ComplexF64), TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+        M = T[1 2 3; 4 5 6; 7 8 10]
+        A = TT(copy(M))
+        V = eigvecs(A)
+        @test parent(A) == M
+        F = eigen(A)
+        @test parent(A) == M
+        @test V ≈ F.vectors
+        @test A * F.vectors ≈ F.vectors * Diagonal(F.values)
+    end
+end
+
 end # module TestTriangular
