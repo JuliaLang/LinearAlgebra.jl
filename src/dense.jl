@@ -1654,7 +1654,7 @@ of multiple systems. For example: `A=factorize(A); x=A\\b; y=A\\C`.
 | Bidiagonal                 | Bidiagonal                                 |
 | UniformScaling             | UniformScaling                             |
 | Tridiagonal                | LU (see [`lu`](@ref))                      |
-| Symmetric real tridiagonal | LDLt (see [`ldlt`](@ref))                  |
+| Symmetric tridiagonal      | Pivoted LDLt (see [`ldlt`](@ref) and [`BunchPivot`](@ref)) |
 | General square             | LU (see [`lu`](@ref))                      |
 | General non-square         | QR (see [`qr`](@ref))                      |
 
@@ -1699,10 +1699,11 @@ function factorize(A::AbstractMatrix{T}) where T
                 return Bidiagonal(diag(A), diag(A, 1), :U)
             end
             if utri1
-                # TODO: enable once a specialized, non-dense bunchkaufman method exists
-                # if (herm & (T <: Complex)) | sym
-                    # return bunchkaufman(SymTridiagonal(diag(A), diag(A, -1)))
-                # end
+                # A complex Hermitian (but not symmetric) matrix cannot be represented as a
+                # SymTridiagonal, which is complex symmetric, so it is factorized by LU.
+                if sym
+                    return ldlt(SymTridiagonal(diag(A), diag(A, -1)), BunchPivot())
+                end
                 return lu(Tridiagonal(diag(A, -1), diag(A), diag(A, 1)))
             end
         end

@@ -35,6 +35,7 @@ export
     Adjoint,
     Bidiagonal,
     BunchKaufman,
+    BunchPivot,
     Cholesky,
     CholeskyPivoted,
     ColumnNorm,
@@ -47,6 +48,7 @@ export
     Hermitian,
     Hessenberg,
     LDLt,
+    LDLtPivoted,
     LQ,
     LU,
     LowerTriangular,
@@ -262,6 +264,40 @@ Note that the [element type](@ref eltype) of the matrix must admit [`norm`](@ref
 [`abs`](@ref) methods, whose respective result types must admit a [`<`](@ref) method.
 """
 struct ColumnNorm <: PivotingStrategy end
+
+"""
+    BunchPivot
+
+Block diagonal pivoting strategy for symmetric tridiagonal matrices, used by the
+[`ldlt`](@ref) factorization. At each step, either a `1×1` or a `2×2` diagonal block is
+chosen as the pivot, but rows and columns are never interchanged, so that the tridiagonal
+structure is preserved. This is the diagonal pivoting method underlying the
+[`bunchkaufman`](@ref) factorization, specialized to tridiagonal matrices, for which no
+interchanges are necessary; the resulting [`LDLtPivoted`](@ref) factorization is thus a
+memory-efficient equivalent of a [`BunchKaufman`](@ref) factorization.
+
+The pivot size is chosen according to the simplified pivoting strategy of Bunch and Marcia
+(Algorithm A1 in the reference below), which only requires local information. With
+`α = (√5 - 1)/2`, the current diagonal entries `a₁ = S[k,k]` and `a₂ = S[k+1,k+1]`, the
+off-diagonal entries `b₂ = S[k+1,k]` and `b₃ = S[k+2,k+1]` (or `b₃ = 0` if `k+1 == n`), and
+`Δ = a₁*a₂ - b₂^2`, a `1×1` pivot `a₁` is chosen if
+
+```
+abs(a₁*a₂) ≥ α*abs2(b₂)  or  abs(Δ) ≤ α*abs(a₁*b₃)  or  abs(b₂*Δ) ≤ α*abs(a₁^2*b₃),
+```
+
+and otherwise the `2×2` pivot `S[k:k+1,k:k+1]`, which is then guaranteed to be nonsingular.
+This choice bounds the element growth, which makes the factorization numerically stable also
+for indefinite matrices, where [`NoPivot`](@ref) may fail or be unstable.
+
+Note that the [element type](@ref eltype) of the matrix must admit [`abs`](@ref) and
+[`abs2`](@ref) methods, whose result types must admit a [`<`](@ref) method.
+
+# References
+J. R. Bunch and R. F. Marcia, "A simplified pivoting strategy for symmetric tridiagonal
+matrices", Numerical Linear Algebra with Applications 13 (2006), 865-867.
+"""
+struct BunchPivot <: PivotingStrategy end
 
 using Base: DimOrInd
 

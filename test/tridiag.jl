@@ -405,8 +405,11 @@ end
             if elty <: Real
                 Ts = SymTridiagonal(d, dl)
                 Fs = Array(Ts)
-                Tldlt = factorize(Ts)
+                Tldlt = ldlt(Ts)
                 @testset "symmetric tridiagonal" begin
+                    @test factorize(Ts) isa LDLtPivoted
+                    @test Matrix(factorize(Ts)) ≈ Fs
+                    @test_throws DimensionMismatch factorize(Ts)\rand(elty,n+1)
                     @test_throws DimensionMismatch Tldlt\rand(elty,n+1)
                     @test size(Tldlt) == size(Ts)
                     if elty <: AbstractFloat
@@ -712,7 +715,7 @@ end
     @test F\b == F'\b
 
     F = ldlt(Sc)
-    @test copy(Sc')\b == F'\b
+    @test copy(Sc')\b ≈ F'\b
 end
 
 @testset "symmetric and hermitian tridiagonals" begin
