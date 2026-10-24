@@ -156,7 +156,7 @@ When `check = false`, responsibility for checking the decomposition's
 validity (via [`issuccess`](@ref)) lies with the user.
 
 The following functions are available for `BunchKaufman` objects:
-[`size`](@ref), `\\`, [`inv`](@ref), [`issymmetric`](@ref),
+[`size`](@ref), `\\`, `/`, [`inv`](@ref), [`issymmetric`](@ref),
 [`ishermitian`](@ref), [`getindex`](@ref).
 
 [^Bunch1977]: J R Bunch and L Kaufman, Some stable methods for calculating inertia and solving symmetric linear systems, Mathematics of Computation 31:137 (1977), 163-179. [url](https://www.ams.org/journals/mcom/1977-31-137/S0025-5718-1977-0428694-0/).
@@ -210,8 +210,17 @@ julia> S.L * S.D * S.L' ≈ A[S.p, S.p]
 true
 ```
 """
-bunchkaufman(A::AbstractMatrix{T}, rook::Bool=false; check::Bool = true) where {T} =
-    bunchkaufman!(bkcopy_oftype(A, typeof(sqrt(oneunit(T)))), rook; check = check)
+bunchkaufman(A::AbstractMatrix, rook::Bool=false; check::Bool = true) =
+    bunchkaufman!(bkcopy_oftype(A, _bktype(_valeltype(A))), rook; check)
+
+# The element type of the copy of the matrix that is factorized. The Bunch-Kaufman algorithm is
+# closed over the floating-point and the rational numbers, but not over the integers, which
+# are therefore promoted to rationals, with BigInt to avoid overflow. Other types are promoted
+# as by `sqrt`.
+_bktype(::Type{T}) where {T<:ClosedScalar} = T
+_bktype(::Type{<:Integer}) = Rational{BigInt}
+_bktype(::Type{<:Complex{<:Integer}}) = Complex{Rational{BigInt}}
+_bktype(::Type{T}) where {T} = typeof(sqrt(oneunit(T)))
 
 BunchKaufman{T}(B::BunchKaufman) where {T} =
     BunchKaufman(convert(Matrix{T}, B.LD), B.ipiv, B.uplo, B.symmetric, B.rook, B.info)
@@ -411,6 +420,14 @@ function ldiv!(B::BunchKaufman{T,<:StridedMatrix}, R::StridedVecOrMat{T}) where 
     end
 end
 
+# The factorized matrix A is Hermitian or symmetric, so X*A = B is equivalent to A*X' = B' or
+# A*transpose(X) = transpose(B), respectively. LAPACK has no right solves, so the transposed
+# right-hand side is copied.
+function rdiv!(B::AbstractMatrix, F::BunchKaufman)
+    op = ishermitian(F) ? adjoint : transpose
+    return copyto!(B, op(ldiv!(F, copy(op(B)))))
+end
+
 function logabsdet(F::BunchKaufman)
     M = F.LD
     p = F.ipiv
@@ -460,192 +477,8 @@ end
 
 export inertia
 
-function arg_illegal(fun_name::AbstractString,
-    info::Integer,
-    waer::AbstractChar)
-    if waer == 'W'
-        @warn " ** On entry to '$(fun_name)' parameter number " *
-            "$(info) had an illegal value"
-    else
-        error(" ** On entry to '$(fun_name)' parameter number " *
-            "$(info) had an illegal value")
-    end
-end
-
-
-function cabs1(z::T) where T <: Complex
-    return abs(real(z)) + abs(imag(z))
-end
-
-
-function cabsr(z::T) where T <: Complex
-    return abs(real(z))
-end
-
-
-"""
-generic_adr1!(uplo, alpha, x, y, A, syhe) -> nothing
-
-`generic_adr1!` performs the following adjoint (symmetric or Hermitian)
-rank 1 operation
-
-`A[1:K,1:L] = alpha*x*y' + A[1:K,1:L]`
-
-in-place, where `alpha` is a scalar, `x` is a K element vector, `y`
-is an L element vector and `A` is an `NxM` matrix. Note that `y'` can
-denote either the transpose, i.e. `transpose(y)` or the conjugate
-transpose , i.e. `adjoint(y)`.
-
-`uplo` is a character, either `'U'`, `'L'` or `'F'`, indicating whether
-the matrix is stored in the upper triangular part (`uplo=='U'`), the
-lower triangular part (`uplo=='L'`), or the full storage space is used
-(`uplo=='F'`). If `uplo!='F'` then only the corresponding triangular
-part is updated. The values `'U'` or `'L'` can only be used when A is
-square (`N==M`).
-
-`syhe` is a character, either `'S'` or `'H'`, indicating whether the
-symmetric adjoint (`syhe=='S'`, and `y'==transpose(y)`) or the hermitian
-adjoint (`syhe=='H'`, and `y'==adjoint(y)`) must be used.
-"""
-function generic_adr1!(uplo::AbstractChar,
-    alpha::ClosedScalar{TR},
-    x::AbstractVector{TS},
-    y::AbstractVector{TS},
-    A::AbstractMatrix{TS},
-    syhe::AbstractChar
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-
-    # Inputs must be 1-indexed; bounds may not be checked.
-    Base.require_one_based_indexing(x, A)
-
-    # Check argument validity
-    K = length(x)
-    L = length(y)
-    N, M = size(A)
-    info = 0::BlasInt
-    if (uplo != 'U' && uplo != 'L' && uplo != 'F') || (uplo != 'F' && N != M)
-        info = (-1)::BlasInt
-    elseif K > N
-        info = (-3)::BlasInt
-    elseif L > M
-        info = (-4)::BlasInt
-    elseif syhe != 'S' && syhe != 'H'
-        info = (-6)::BlasInt
-    end
-    if info < 0
-        arg_illegal("generic_sadr1!", -info, 'E')
-    end
-
-    # Load the requested adjoining operator
-    adj_op = syhe == 'S' ? identity : conj
-
-    # Define loop range function according to the type of storage
-    # TODO: can we adjust the range without anonymous functions,
-    # but without having to write the same code thrice?
-    i_range = uplo == 'F' ? _ -> (1:K) : uplo == 'U' ? j -> (1:min(j,K)) : j -> (j:K)
-
-    # Compute rank update of A
-    for j in 1:L; @inbounds begin
-        if y[j] != 0
-            temp = alpha * adj_op(y[j])
-            for i in i_range(j)
-                A[i,j] += x[i] * temp
-            end
-        end
-    end; end
-    return
-end
-
-
-"""
-generic_mvpv!(trans, alpha, A, x, beta, y) -> nothing
-
-`generic_mvpv!` performs the following matrix-vector operation:
-
-`y[1:K] = alpha*A'*x[1:L] + beta*y[1:K]`
-
-in-place, where `alpha` and `beta` are scalars, `x` is a vector with at
-least L elements, `y` is a vector with at least K elements, and `A` is
-an `NxM` matrix. `A'` can denote the transpose, i.e. `transpose(A)` or
-the conjugate transpose, i.e. `adjoint(A)`, and then `M==K && N==L`.
-`A'` can also denote no adjoining at all, i.e. `A'==A`, and then
-`N==K && M==L`.
-
-`trans` is a character, either `'T'`, `'C'` or `'N'`, indicating whether
-`A'=transpose(A)`, `A'=adjoint(A)` or `A'=A`, respectively.
-"""
-function generic_mvpv!(trans::AbstractChar,
-    alpha::ClosedScalar{TR},
-    A::AbstractMatrix{TS},
-    x::AbstractVector{TS},
-    beta::ClosedScalar{TR},
-    y::AbstractVector{TS},
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-
-    # Inputs must be 1-indexed; bounds may not be checked.
-    Base.require_one_based_indexing(A, x, y)
-
-    # Check argument validity
-    M, N = size(A)
-    K = trans == 'N' ? M : N
-    L = trans == 'N' ? N : M
-    info = 0::BlasInt
-    if trans != 'T' && trans != 'C' && trans != 'N'
-        info = (-1)::BlasInt
-    elseif length(y) < K
-        info = (-3)::BlasInt
-    elseif length(x) < L
-        info = (-4)::BlasInt
-    end
-    if info < 0
-        arg_illegal("generic_sadr1!", -info, 'E')
-    end
-
-    #   Quick return if possible.
-    if K == 0 || (alpha == 0 && beta == 1); return; end
-
-    #   Start the operations. In this version the elements of A are
-    #   accessed sequentially with one pass through A.
-    #   First form  y := beta*y.
-    @inbounds begin
-        if beta != 1
-            if beta == 0
-                # Way less allocations and way faster for BigFloat.
-                # For Float64 there is some (acceptable IMO) performance loss.
-                y[1:K] .= 0
-            else
-                for i in 1:K; y[i] *= beta; end
-            end
-        end
-        if alpha == 0 || L == 0; return; end
-
-        if trans == 'N'
-            #   Form  y := alpha*A*x + y.
-            for j in 1:L
-                # Faster than a loop
-                axpy!(alpha*x[j], view(A, 1:K, j), view(y, 1:K))
-            end
-        else
-            #   Form  y := alpha*A**T*x + y  or  y := alpha*A**H*x + y.
-            noconj = (trans == 'T')
-            for i = 1:K
-                temp = 0
-                if noconj
-                    for j = 1:L
-                        temp = temp + A[j,i]*x[j]
-                    end
-                else
-                    for j = 1:L
-                        temp = temp + conj(A[j,i])*x[j]
-                    end
-                end
-                y[i] += alpha*temp
-            end
-        end
-    end
-    return
-end
-
+# complex 1-norm, used for pivot selection as in LAPACK
+cabs1(z::Complex) = abs(real(z)) + abs(imag(z))
 
 """
 bk_rowcol_swap!(A, k, kp, kstep, upper, herm) -> did_swap::Bool
@@ -665,50 +498,56 @@ This is an internal helper function for the main Bunch-Kaufman
 factorization function, `generic_bunchkaufman!`. As such, validity of the
 input values is not verified.
 """
-function bk_rowcol_swap!(
-    A::AbstractMatrix{TS},
-    k::Integer,
-    kp::Integer,
-    kstep::Integer,
-    upper::Bool,
-    herm::Bool
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
+function bk_rowcol_swap!(A::AbstractMatrix, k::Integer, kp::Integer, kstep::Integer,
+                         upper::Bool, herm::Bool)
     kk = upper ? k - kstep + 1 : k + kstep - 1
-    if kp != kk
-        if kp > 1
-            thisview = upper ? view(A, 1:(kp-1), :) : view(A, (kp+1):size(A,1), :)
-            Base.swapcols!(thisview, kp, kk)
-        end
-        thisrange = upper ? ((kp+1):(kk-1)) : ((kk+1):(kp-1))
-        if !herm
-            # Real/complex symmetric case
-            for j in thisrange
-                A[j,kk], A[kp,j] = A[kp,j], A[j,kk]
-            end
-            A[kk,kk], A[kp,kp] = A[kp,kp], A[kk,kk]
-        else
-            # Hermitian case
-            for j in thisrange
-                A[j,kk], A[kp,j] = conj(A[kp,j]), conj(A[j,kk])
-            end
-            A[kp,kk] = conj(A[kp,kk])
-            A[kk,kk], A[kp,kp] = real(A[kp,kp]), real(A[kk,kk])
-        end
-        if kstep == 2
-            if herm
-                # Force diagonal entry to be purely real
-                A[k,k] = real(A[k,k])
-            end
-            if upper
-                A[k-1,k], A[kp,k] = A[kp,k], A[k-1,k]
-            else
-                A[k+1,k], A[kp,k] = A[kp,k], A[k+1,k]
-            end
-        end
-        return true
-    else
-        return false
+    kp == kk && return false
+    Base.swapcols!(upper ? view(A, 1:(kp-1), :) : view(A, (kp+1):size(A,1), :), kp, kk)
+    cj = herm ? conj : identity
+    for j in (upper ? ((kp+1):(kk-1)) : ((kk+1):(kp-1)))
+        A[j,kk], A[kp,j] = cj(A[kp,j]), cj(A[j,kk])
     end
+    if herm
+        A[kp,kk] = conj(A[kp,kk])
+        A[kk,kk], A[kp,kp] = real(A[kp,kp]), real(A[kk,kk])
+    else
+        A[kk,kk], A[kp,kp] = A[kp,kp], A[kk,kk]
+    end
+    if kstep == 2
+        # Force diagonal entry to be purely real
+        herm && (A[k,k] = real(A[k,k]))
+        kx = upper ? k - 1 : k + 1
+        A[kx,k], A[kp,k] = A[kp,k], A[kx,k]
+    end
+    return true
+end
+
+# The largest complex 1-norm `rowmax` of the off-diagonal entries in row `imax` of the
+# leading (if `upper`) or trailing submatrix that ends (starts) at index `k`, and its column
+# index `jmax`. As only the upper (lower) triangle is stored, the part of the row in the other
+# triangle is read from the corresponding column.
+function _bk_rowmax(abs1::F, A::AbstractMatrix, imax::Integer, k::Integer, upper::Bool) where {F}
+    N = size(A, 1)
+    rowmax, jmax = zero(real(eltype(A))), 0
+    if imax != k
+        rowmax, jmax = findmax(abs1, upper ? view(A, imax, (imax+1):k) : view(A, imax, k:(imax-1)))
+        jmax += upper ? imax : k - 1
+    end
+    if upper ? imax > 1 : imax < N
+        stemp, itemp = findmax(abs1, upper ? view(A, 1:(imax-1), imax) : view(A, (imax+1):N, imax))
+        isless(rowmax, stemp) && ((rowmax, jmax) = (stemp, upper ? itemp : itemp + imax))
+    end
+    return rowmax, jmax
+end
+
+# The symmetric (if `cj === identity`) or Hermitian (if `cj === conj`) rank-1 update
+# `A[i,j] += α*A[i,k]*cj(A[j,k])` of the upper (if `upper`) or lower triangle of `A[inds,inds]`
+function _bk_rank1!(A::AbstractMatrix, k::Integer, α, inds::AbstractUnitRange, upper::Bool, cj::F) where {F}
+    for j in inds
+        r = upper ? (first(inds):j) : (j:last(inds))
+        axpy!(α * cj(A[j,k]), view(A, r, k), view(A, r, j))
+    end
+    return A
 end
 
 
@@ -762,31 +601,10 @@ function generic_bunchkaufman!(
     rook::Bool=false
     ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
 
-    # Inputs must be 1-indexed; bounds may not be checked.
-    Base.require_one_based_indexing(A)
-
-    # Initialize info integer as 0
-    info = 0::BlasInt
-    # Get size of matrix
-    N, N2 = size(A)
-    # Initialize permutation vector
+    require_one_based_indexing(A)
+    N = checksquare(A)
     ipiv = Vector{BlasInt}(undef, N)
-
-    # Check input correctness
-    if uplo != 'U' && uplo != 'L'
-        info = (-1)::BlasInt
-    elseif N != N2
-        info = (-2)::BlasInt
-    elseif syhe != 'S' && syhe != 'H'
-        info = (-3)::BlasInt
-    end
-    if info < 0
-        arg_illegal("generic_bunchkaufman!", -info, 'W')
-        return A, ipiv, info
-    end
-    # if rook
-    #     error("Rook pivoting not implemented yet.")
-    # end
+    info = BlasInt(0)
 
     # Initialize `alpha` for use in choosing pivot block size.
     # The exact value is
@@ -800,226 +618,121 @@ function generic_bunchkaufman!(
     alpha = TR <: AbstractFloat ? (1 + sqrt(TR(17))) / 8 : TR(16//25)
     # Use complex 1-norm for pivot selection, as in LAPACK
     abs1_fun = TS <: Real ? abs : cabs1
+    # A real matrix is factorized as symmetric, regardless of the value of `syhe`. For a
+    # Hermitian matrix, only the real part of the diagonal is used.
+    herm = syhe == 'H' && TS <: Complex
+    cj(z) = herm ? conj(z) : z
+    diag_abs(z) = herm ? abs(real(z)) : abs1_fun(z)
 
-    # Check if the matrix is symmetric of hermitian
-    if syhe == 'S' || (syhe == 'H' && TS <: Real)
-        # Use symmetric variant if matrix is real, regardless of 'syhe' value
-        syhe = 'S'
-        diag_abs_fun = abs1_fun
-    else
-        diag_abs_fun = cabsr
-    end
-
-    # Compute machine safe minimum when working with floating point numbers.
-    # LAPACK doesn't use this for diagonal pivoting though...
+    # For rook pivoting, the safe minimum, i.e., the smallest positive number whose reciprocal
+    # does not overflow, as computed by LAPACK's `dlamch('S')`. LAPACK doesn't use this for
+    # diagonal pivoting though... With rationals, all results are exact.
     if rook
-        if TR <: AbstractFloat
-            # eps(0) gives the smallest subnormal number, and eps(1) gives the floating
-            # point type epsilon. eps(0)/eps(1) gives the smallest normal number, plus
-            # possibly some rounding error.
-            sfmin = nextfloat(eps(TR(0)) / eps(TR(1)), 2)
-            small = 1 / prevfloat(typemax(TR), 2)
-            if small >= sfmin
-                # 1/sfmin may overflow, so use 'small' plus a bit as the safe minimum
-                sfmin = nextfloat(small * (1 + eps(TR(1))), 2)
-            end
-        else
-            # We're working with rationals in this case, so the all results are exact.
-            sfmin = TR(0)
-        end
+        sfmin = TR <: AbstractFloat ? max(floatmin(TR), (1 + eps(TR)) / floatmax(TR)) : TR(0)
     end
 
-    # Run factorization depending on where the data is stored
-    upper = (uplo == 'U')
-    herm = (syhe == 'H')
-    # TODO: Is this gonna inline properly?
-    @inline k_cond = upper ? k -> k >= 1 : k -> k <= N
-    @inline irange = upper ? j -> (j:-1:1) : j -> (j:N)
-    @inline conj_op = herm ? conj : identity
-    @inline diagreal_op = herm ? (j -> A[j,j] = TS(real(A[j,j]))) : _ -> ()
-    k = upper ? N : 1
     # Main loop, comments refer to the upper triangular version of the factorization.
     # The lower triangular version is analogous.
-    while k_cond(k); @inbounds begin
+    upper = (uplo == 'U')
+    k = upper ? N : 1
+    @inbounds while upper ? k >= 1 : k <= N
         kstep = 1
         knext = upper ? k - 1 : k + 1
         p = k
         #   Determine rows and columns to be interchanged and whether
         #   a 1-by-1 or 2-by-2 pivot block will be used
-        absakk = diag_abs_fun(A[k,k])
+        absakk = diag_abs(A[k,k])
         #   IMAX is the row-index of the largest off-diagonal element in
-        #    column K, and COLMAX is its absolute value.
-        #    Determine both COLMAX and IMAX.
-        if upper && k > 1
-            colmax, imax = findmax(abs1_fun, view(A, 1:(k-1), k))
-        elseif (!upper) && k < N
-            colmax, imax = findmax(abs1_fun, view(A, (k+1):N, k))
-            imax += k
-        else
-            colmax = 0
+        #   column K, and COLMAX is its absolute value.
+        colmax = zero(TR)
+        if upper ? k > 1 : k < N
+            colmax, imax = findmax(abs1_fun, upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k))
+            upper || (imax += k)
         end
-        if (max(absakk, colmax) == 0) || isnan(absakk)
+        if iszero(max(absakk, colmax)) || isnan(absakk)
             #   Column K is zero or underflow, or contains a NaN:
             #   set INFO and continue
-            if info == 0
-                info = k::BlasInt
-            end
+            info == 0 && (info = BlasInt(k))
             kp = k
-            if herm
-                # Force diagonal entry to be purely real
-                A[k,k] = real(A[k,k])
-            end
+            # Force diagonal entry to be purely real
+            herm && (A[k,k] = real(A[k,k]))
         else
             if absakk >= alpha*colmax
-            #   no interchange, use 1-by-1 pivot block
+                #   no interchange, use 1-by-1 pivot block
                 kp = k
             elseif rook
                 #   Loop until pivot found
                 while true
-                    #   Begin pivot search loop body
                     #   JMAX is the column-index of the largest off-diagonal
                     #   element in row IMAX, and ROWMAX is its absolute value.
-                    #   Determine both ROWMAX and JMAX.
-                    if imax != k
-                        thisview = upper ? view(A, imax, (imax+1):k) :
-                            view(A, imax, k:(imax-1))
-                        rowmax, jmax = findmax(abs1_fun, thisview)
-                        jmax += upper ? imax : k - 1
-                    else
-                        # LAPACK makes rowmax=0 in this case, but I believe it's
-                        # better to make rowmax=-1, so that we guarantee that jmax
-                        # will be define in the next if-block.
-                        # TODO: is this correct/safe?
-                        rowmax = 0
-                    end
-                    if (upper && imax > 1) || ((!upper) && imax < N)
-                        # Remember that we only have the upper triangular part
-                        # of the matrix. We inspect the part of the row in the
-                        # lower triangular part by traversing the corresponding
-                        # part of the transpose column.
-                        if upper
-                            stemp, itemp = findmax(abs1_fun, view(A, 1:(imax-1), imax))
-                        else
-                            stemp, itemp = findmax(abs1_fun, view(A, (imax+1):N, imax))
-                            itemp += imax
-                        end
-                        if stemp > rowmax
-                            rowmax = stemp
-                            jmax = itemp
-                        end
-                    end
+                    rowmax, jmax = _bk_rowmax(abs1_fun, A, imax, k, upper)
                     #   Equivalent to testing for (used to handle NaN and Inf)
                     #   CABS1( A( IMAX, IMAX ) ).GE.ALPHA*ROWMAX
-                    if !(diag_abs_fun(A[imax,imax]) < alpha*rowmax)
-                    #   interchange rows and columns K and IMAX,
-                    #   use 1-by-1 pivot block
+                    if !(diag_abs(A[imax,imax]) < alpha*rowmax)
+                        #   interchange rows and columns K and IMAX,
+                        #   use 1-by-1 pivot block
                         kp = imax
                         break
                     #   Equivalent to testing for ROWMAX .EQ. COLMAX,
                     #   used to handle NaN and Inf
-                    elseif (p == jmax || rowmax <= colmax)
-                    #   interchange rows and columns K+1 and IMAX,
-                    #   use 2-by-2 pivot block
+                    elseif p == jmax || rowmax <= colmax
+                        #   interchange rows and columns K+1 and IMAX,
+                        #   use 2-by-2 pivot block
                         kp = imax
                         kstep = 2
                         break
                     else
-                    #   Pivot NOT found, set variables and repeat
-                        p = imax
-                        colmax = rowmax
-                        imax = jmax
+                        #   Pivot NOT found, set variables and repeat
+                        p, colmax, imax = imax, rowmax, jmax
                     end
-                    #   End pivot search loop body
                 end
             else
-                #   JMAX is the column-index of the largest off-diagonal
-                #   element in row IMAX, and ROWMAX is its absolute value
-                # We don't really need JMAX, se we don't store it
-                thisview = upper ? view(A, imax, (imax+1):k) : view(A, imax, k:(imax-1))
-                rowmax = findmax(abs1_fun, thisview)[1]
-                if (upper && imax > 1) || ((!upper) && imax < N)
-                    # Remember that we only have the upper triangular part
-                    # of the matrix. We inspect the part of the row in the
-                    # lower triangular part by traversing the corresponding
-                    # part of the transpose column.
-                    thisview = upper ? view(A, 1:(imax-1), imax) :
-                        view(A, (imax+1):N, imax)
-                    rowmax = max(rowmax, findmax(abs1_fun, thisview)[1])
-                end
+                rowmax, _ = _bk_rowmax(abs1_fun, A, imax, k, upper)
                 if absakk >= alpha * colmax * (colmax/rowmax)
                     #   no interchange, use 1-by-1 pivot block
                     kp = k
-                elseif diag_abs_fun(A[imax,imax]) >= alpha * rowmax
+                elseif diag_abs(A[imax,imax]) >= alpha * rowmax
                     #   interchange rows and columns K and IMAX, use 1-by-1
                     #   pivot block
                     kp = imax
                 else
                     #   interchange rows and columns K-1 and IMAX, use 2-by-2
                     #   pivot block
-                    kp = imax
-                    p = imax
+                    kp = p = imax
                     kstep = 2
                 end
             end
-            #   Swap TWO rows and TWO columns
-            #   First swap
-            # The first swap only needs to be done when using rook pivoting
-            if rook && kstep == 2
-                #   Interchange rows and column K and P in the leading
-                #   submatrix A(1:k,1:k) if we have a 2-by-2 pivot
-                bk_rowcol_swap!(A, k, p, 1, upper, herm)
-            end
-            #   Second swap
-            did_swap = bk_rowcol_swap!(A, k, kp, kstep, upper, herm)
-            if herm && (!did_swap)
+            #   Swap TWO rows and TWO columns. The first swap of rows and columns K and P
+            #   in the leading submatrix A(1:k,1:k) is only needed for rook pivoting
+            #   with a 2-by-2 pivot block.
+            rook && kstep == 2 && bk_rowcol_swap!(A, k, p, 1, upper, herm)
+            if !bk_rowcol_swap!(A, k, kp, kstep, upper, herm) && herm
                 # Force diagonal entries to be purely real
                 A[k,k] = real(A[k,k])
-                if kstep == 2
-                    A[knext,knext] = real(A[knext,knext])
-                end
+                kstep == 2 && (A[knext,knext] = real(A[knext,knext]))
             end
+            # indices of the remaining leading submatrix
+            inds = upper ? (1:(k-kstep)) : ((k+kstep):N)
             if kstep == 1
                 #   1-by-1 pivot block D(k): column k now holds
                 #   W(k) = U(k)*D(k)
-                #   where U(k) is the k-th column of U
+                #   where U(k) is the k-th column of U.
+                #   Perform a rank-1 update of A(1:k-1,1:k-1) as
+                #   A := A - U(k)*D(k)*U(k)' = A - W(k)*1/D(k)*W(k)'
+                #   to store the Schur complement, and store U(k) in column k.
                 #   When rook=false, sfmin is not defined, but the short-circuit
                 #   evaluation of the conditional avoids an error.
-                if (!rook) || absakk >= sfmin
-                    #   Perform a rank-1 update of A(1:k-1,1:k-1) as
-                    #   A := A - U(k)*D(k)*U(k)' = A - W(k)*1/D(k)*W(k)'
-                    # Compute 1/D(k)
-                    r1 = !herm ? 1 / A[k,k] : 1 / real(A[k,k])
-                    # Perform rank-1 update to store the Schur complement
-                    # in a submatrix of A
-                    x = upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k)
-                    # if 'upper' this should assign by reference
-                    thisview = upper ? A : view(A, (k+1):N, (k+1):N)
-                    generic_adr1!(uplo, -r1, x, x, thisview, syhe)
-                    #   Store U(k) in column k
-                    thisrange = upper ? (1:(k-1)) : ((k+1):N)
-                    for i in thisrange
-                        A[i,k] *= r1
-                    end
+                dk = herm ? real(A[k,k]) : A[k,k]
+                if !rook || absakk >= sfmin
+                    r1 = 1 / dk
+                    _bk_rank1!(A, k, -r1, inds, upper, cj)
+                    view(A, inds, k) .*= r1
                 else
-                    # Compute D(k)
-                    r1 = !herm ? A[k,k] : real(A[k,k])
-                    #   Store U(k) in column k
-                    thisrange = upper ? (1:(k-1)) : ((k+1):N)
-                    for i in thisrange
-                        A[i,k] /= r1
-                    end
-                    #   Perform a rank-1 update of A(k+1:n,k+1:n) as
-                    #   A := A - U(k)*D(k)*U(k)**T
-                    #      = A - W(k)*(1/D(k))*W(k)**T
-                    #      = A - (W(k)/D(k))*(D(k))*(W(k)/D(K))**T
-                    # Perform rank-1 update to store the Schur complement
-                    # in a submatrix of A
-                    x = upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k)
-                    # if 'upper' this should assign by reference
-                    thisview = upper ? A : view(A, (k+1):N, (k+1):N)
-                    generic_adr1!(uplo, -r1, x, x, thisview, syhe)
+                    #   A := A - (W(k)/D(k))*(D(k))*(W(k)/D(K))'
+                    view(A, inds, k) ./= dk
+                    _bk_rank1!(A, k, -dk, inds, upper, cj)
                 end
-            elseif (upper && k > 2) || ((!upper) && k < N - 1)
+            elseif !isempty(inds)
                 #   2-by-2 pivot block D(k): columns k and k-1 now hold
                 #   ( W(k-1) W(k) ) = ( U(k-1) U(k) )*D(k)
                 #   where U(k) and U(k-1) are the k-th and (k-1)-th columns
@@ -1027,42 +740,33 @@ function generic_bunchkaufman!(
                 #   Perform a rank-2 update of A(1:k-2,1:k-2) as
                 #   A := A - ( U(k-1) U(k) )*D(k)*( U(k-1) U(k) )'
                 #   = A - ( W(k-1) W(k) )*inv(D(k))*( W(k-1) W(k) )'
-                thisrange = upper ? ((k-2):-1:1) : ((k+2):N)
-                if !herm
-                    # Real/complex symmetric case
-                    #TODO: is this way to compute the inverse backward stable?
-                    # (it probably is as it comes from LAPACK)
-                    dxk = A[knext,k]
-                    dxx = A[knext,knext] / dxk
-                    dkk = A[k,k] / dxk
-                    t = 1 / (dkk * dxx - 1)
-                    dxk = t / dxk
-                    dkx = dxk
-                else
-                    # Hermitian case
-                    # TODO: is this way to compute the inverse backward stable?
-                    # (it probably is as it is a small modification of LAPACK's
-                    # method)
-                    dxk = A[knext,k]
+                dxk = A[knext,k]
+                if herm
+                    # a small modification of LAPACK's method for the Hermitian case
                     dxx = real(A[knext,knext]) / dxk
                     dkk = real(A[k,k]) / conj(dxk)
                     t = 1 / (real(dkk * dxx) - 1)
                     dkx = t / conj(dxk)
                     dxk = t / dxk
+                else
+                    dxx = A[knext,knext] / dxk
+                    dkk = A[k,k] / dxk
+                    t = 1 / (dkk * dxx - 1)
+                    dkx = dxk = t / dxk
                 end
-                for j in thisrange
+                # The columns j have to be processed from the diagonal block outwards: the
+                # update of column j reads A[i,k] and A[i,knext] for the rows i of its stored
+                # part, which are at least as far from the diagonal block as row j, and these
+                # entries are only overwritten when column i is processed.
+                for j in (upper ? reverse(inds) : inds)
                     wknext = dxk * (dkk*A[j,knext] - A[j,k])
                     wk = dkx * (dxx*A[j,k] - A[j,knext])
-                    for i in irange(j)
-                        A[i,j] -= (A[i,k]*conj_op(wk) + A[i,knext]*conj_op(wknext))
-                    end
+                    r = upper ? (1:j) : (j:N)
+                    view(A, r, j) .-= view(A, r, k) .* cj(wk) .+ view(A, r, knext) .* cj(wknext)
                     A[j,k] = wk
                     A[j,knext] = wknext
-                    # Force diagonal entry to be purely real, but still of
-                    # complex type TS (I don't know why in LAPACK this
-                    # case, unlike the rest, enforces a complex type
-                    # explicitly).
-                    diagreal_op(j)
+                    # Force diagonal entry to be purely real
+                    herm && (A[j,j] = real(A[j,j]))
                 end
             end
         end
@@ -1074,9 +778,8 @@ function generic_bunchkaufman!(
             ipiv[knext] = -kp
         end
         #   Decrease K and return to the start of the main loop
-        # k -= upper ? kstep : -kstep
-        if upper; k -= kstep; else; k += kstep; end
-    end; end
+        k += upper ? -kstep : kstep
+    end
     return A, ipiv, info
 end
 
@@ -1108,7 +811,7 @@ function generic_syconv(
     Base.require_one_based_indexing(F.LD, F.ipiv)
 
     # Extract necessary variables
-    A, ipiv, rook = gettri ? deepcopy(F.LD) : F.LD, F.ipiv, F.rook
+    A, ipiv, rook = gettri ? copy(F.LD) : F.LD, F.ipiv, F.rook
 
     # Get size of matrix
     N = size(A)[1]
@@ -1169,51 +872,23 @@ the Bunch-Kaufman factorization of `A` is provided by `F`.
 """
 function generic_bksolve!(
     F::BunchKaufman{TS},
-    B0::AbstractVecOrMat{TS},
+    B::AbstractMatrix{TS},
     ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
 
-    # Inputs must be 1-indexed; bounds may not be checked.
-    Base.require_one_based_indexing(F.LD, F.ipiv, B0)
-
-    # Get size of matrices
-    N = size(F.LD)[1]
-    if typeof(B0) <: AbstractVector
-        N3 = size(B0)[1]
-        M = 1
-        B = view(B0, :, :)
-    else
-        N3, M = size(B0)
-        B = B0
-    end
-
-    # Initialize info integer as 0
-    info = 0::BlasInt
-
-    # Check input correctness
-    if N3 != N
-        info = (-2)::BlasInt
-    end
-    if info < 0
-        arg_illegal("generic_bksolve!", -info, 'E')
-    end
-
-    #   Quick return if possible
-    if N == 0 || M == 0; return B; end
-
-    # Extract necessary variables
     A, ipiv, symm, rook = F.LD, F.ipiv, issymmetric(F), F.rook
-
-    # Load the requested adjoining operator
-    adj_op = symm ? identity : conj
-
-    R1 = TR(1)
+    require_one_based_indexing(A, ipiv, B)
+    N = size(A, 1)
+    if size(B, 1) != N
+        throw(DimensionMismatch(lazy"matrix has dimensions $(size(A)) but right hand side has first dimension $(size(B, 1))"))
+    end
+    (N == 0 || size(B, 2) == 0) && return B
     upper = (F.uplo == 'U')
-    @inline kcond1 = upper ? k -> k >= 1 : k -> k <= N
-    @inline kcond2 = upper ? k -> k <= N : k -> k >= 1
-    @inline knext = upper ? k -> k - 1 : k -> k + 1
-    @inline knext2 = upper ? k -> k + 1 : k -> k - 1
+
+    #   First solve U*D*X = B, overwriting B with X.
+    #   K is the main loop index, decreasing from N to 1 in steps of
+    #   1 or 2, depending on the size of the diagonal blocks.
     k = upper ? N : 1
-    while kcond1(k); @inbounds begin
+    @inbounds while upper ? k >= 1 : k <= N
         kp = ipiv[k]
         if kp > 0
             #   1 x 1 diagonal block
@@ -1221,92 +896,96 @@ function generic_bksolve!(
             Base.swaprows!(B, k, kp)
             #   Multiply by inv(U(K)), where U(K) is the transformation
             #   stored in column K of A.
-            Aview = upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k)
-            Bview = upper ? B : view(B, (k+1):N, :)
-            generic_adr1!('F', -R1, Aview, view(B, k, :), Bview, 'S')
+            rows = upper ? (1:(k-1)) : ((k+1):N)
+            _bk_rank1_rhs!(B, view(A, rows, k), rows, k)
             #   Multiply by the inverse of the diagonal block.
             s = symm ? 1 / A[k,k] : 1 / real(A[k,k])
-            for j in 1:M; B[k,j] *= s; end
-            if upper; k -= 1; else; k += 1; end
+            view(B, k, :) .*= s
+            k += upper ? -1 : 1
         else
             #   2 x 2 diagonal block
             #   Interchange rows K and -IPIV(K) THEN K-1 and -IPIV(K-1)
-            # The first interchange is only needed when rook pivoting is used
-            if rook; Base.swaprows!(B, k, -kp); end
-            kx = knext(k)
+            #   The first interchange is only needed when rook pivoting is used
+            kx = upper ? k - 1 : k + 1
+            rook && Base.swaprows!(B, k, -kp)
             Base.swaprows!(B, kx, -ipiv[kx])
             #   Multiply by inv(U(K)), where U(K) is the transformation
             #   stored in columns K-1 and K of A.
-            Aview = upper ? view(A, 1:(k-2), k) : view(A, (k+2):N, k)
-            Bview = upper ? B : view(B, (k+2):N, :)
-            generic_adr1!('F', -R1, Aview, view(B, k, :), Bview, 'S')
-            Aview = upper ? view(A, 1:(k-2), kx) : view(A, (k+2):N, kx)
-            generic_adr1!('F', -R1, Aview, view(B, kx, :), Bview, 'S')
+            rows = upper ? (1:(k-2)) : ((k+2):N)
+            _bk_rank1_rhs!(B, view(A, rows, k), rows, k)
+            _bk_rank1_rhs!(B, view(A, rows, kx), rows, kx)
             #   Multiply by the inverse of the diagonal block.
             axk = A[kx,k]
+            caxk = symm ? axk : conj(axk)
             axx = A[kx,kx] / axk
-            akk = A[k,k] / adj_op(axk)
+            akk = A[k,k] / caxk
             denom = axx*akk - 1
-            for j in 1:M
+            for j in axes(B, 2)
                 bx = B[kx,j] / axk
-                bk = B[k,j] / adj_op(axk)
+                bk = B[k,j] / caxk
                 B[kx,j] = (akk*bx - bk) / denom
                 B[k,j] = (axx*bk - bx) / denom
             end
-            if upper; k -= 2; else; k += 2; end
+            k += upper ? -2 : 2
         end
-    end; end
+    end
     #   Next solve U'*X = B, overwriting B with X.
     #   K is the main loop index, increasing from 1 to N in steps of
     #   1 or 2, depending on the size of the diagonal blocks.
     k = upper ? 1 : N
-    while kcond2(k); @inbounds begin
-        Aview = upper ? view(A, 1:(k-1), k) : view(A, (k+1):N, k)
-        Bview = upper ? view(B, 1:(k-1), :) : view(B, (k+1):N, :)
-        B_row = view(B, k, :)
+    @inbounds while upper ? k <= N : k >= 1
         kp = ipiv[k]
+        rows = upper ? (1:(k-1)) : ((k+1):N)
+        #   Multiply by inv(U'(K)), where U(K) is the transformation
+        #   stored in column K of A.
+        _bk_dotsub!(view(B, k, :), view(B, rows, :), view(A, rows, k), symm)
         if kp > 0
             #   1 x 1 diagonal block
-            #   Multiply by inv(U**T(K)), where U(K) is the transformation
-            #   stored in column K of A.
-            if symm
-                generic_mvpv!('T', -R1, Bview, Aview, R1, B_row)
-            else
-                conj!(B_row)
-                generic_mvpv!('C', -R1, Bview, Aview, R1, B_row)
-                conj!(B_row)
-            end
             #   Interchange rows K and IPIV(K).
             Base.swaprows!(B, k, kp)
-            if upper; k += 1; else; k -= 1; end
+            k += upper ? 1 : -1
         else
             #   2 x 2 diagonal block
-            #   Multiply by inv(U**T(K+1)), where U(K+1) is the transformation
-            #   stored in columns K and K+1 of A.
-            kx = knext2(k)
-            if symm
-                generic_mvpv!('T', -R1, Bview, Aview, R1, B_row)
-                Aview = upper ? view(A, 1:(k-1), kx) : view(A, (k+1):N, kx)
-                B_row = view(B, kx, :)
-                generic_mvpv!('T', -R1, Bview, Aview, R1, B_row)
-            elseif k > 1
-                conj!(B_row)
-                generic_mvpv!('C', -R1, Bview, Aview, R1, B_row)
-                conj!(B_row)
-                Aview = upper ? view(A, 1:(k-1), kx) : view(A, (k+1):N, kx)
-                B_row = view(B, kx, :)
-                conj!(B_row)
-                generic_mvpv!('C', -R1, Bview, Aview, R1, B_row)
-                conj!(B_row)
-            end
+            #   Multiply by inv(U'(K+1)), where U(K+1) is the transformation
+            #   stored in column K+1 of A.
+            kx = upper ? k + 1 : k - 1
+            _bk_dotsub!(view(B, kx, :), view(B, rows, :), view(A, rows, kx), symm)
             #   Interchange rows K and -IPIV(K) THEN K+1 and -IPIV(K+1).
-            # The second interchange is only needed when rook pivoting is used
+            #   The second interchange is only needed when rook pivoting is used
             Base.swaprows!(B, k, -kp)
-            if rook; Base.swaprows!(B, kx, -ipiv[kx]); end
-            if upper; k += 2; else; k -= 2; end
+            rook && Base.swaprows!(B, kx, -ipiv[kx])
+            k += upper ? 2 : -2
         end
-    end; end
+    end
     return B
+end
+# a vector is solved as a matrix with a single column
+function generic_bksolve!(F::BunchKaufman{TS}, b::AbstractVector{TS}) where TS <: ClosedScalar{TR} where TR <: ClosedReal
+    generic_bksolve!(F, view(b, :, :))
+    return b
+end
+
+# B[rows,:] -= x*transpose(B[k,:])
+function _bk_rank1_rhs!(B::AbstractMatrix, x::AbstractVector, rows::AbstractUnitRange, k::Integer)
+    for j in axes(B, 2)
+        axpy!(-B[k,j], x, view(B, rows, j))
+    end
+    return B
+end
+
+# b -= transpose(B)*a (if `symm`) or b -= transpose(B)*conj(a). This simple loop is faster
+# than `mul!` or `dot` for the non-BLAS number types that this code is used for.
+_bk_dotsub!(b::AbstractVector, B::AbstractMatrix, a::AbstractVector, symm::Bool) =
+    _bk_dotsub!(b, B, a, symm ? identity : conj)
+function _bk_dotsub!(b::AbstractVector, B::AbstractMatrix, a::AbstractVector, cj::F) where {F}
+    for c in eachindex(b)
+        t = zero(eltype(b))
+        for j in eachindex(a)
+            t += B[j,c] * cj(a[j])
+        end
+        b[c] -= t
+    end
+    return b
 end
 
 
@@ -1538,57 +1217,12 @@ function bunchkaufman_native!(A::AbstractMatrix{TS},
 end
 
 
-"""
-Overload 'bunchkaufman.jl' methods through multiple dispatch
-"""
-
+# Overload 'bunchkaufman.jl' methods through multiple dispatch
 function bunchkaufman!(A::AbstractMatrix{TS},
     rook::Bool = false;
     check::Bool = true
     ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
     return bunchkaufman_native!(A, rook; check)
-end
-
-function bunchkaufman(A::AbstractMatrix{TS},
-    rook::Bool = false;
-    check::Bool = true
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-    return bunchkaufman!(bkcopy_oftype(A, TS), rook; check)
-end
-
-function bunchkaufman(A::AbstractMatrix{TS},
-    rook::Bool = false;
-    check::Bool = true
-    ) where TS <:Union{TI, Complex{TI}} where TI <: Integer
-
-    # Identity whether matrix is symmetric or Hermitian or none
-    if A isa Symmetric
-        TA = Symmetric
-    elseif A isa Hermitian
-        TA = Hermitian
-    else
-        TA = Nothing
-    end
-
-    # Create a rational copy of input integer matrix, as the Bunch-Kaufman
-    # algorithm is closed over the rationals but not over the integers.
-    # We promote input to BigInt to avoid overflow problems
-    if TA == Nothing
-        if TS <: Integer
-            M = Rational{BigInt}.(bkcopy_oftype(A, TS))
-        else
-            M = Complex{Rational{BigInt}}.(bkcopy_oftype(A, TS))
-        end
-    else
-        if TS <: Integer
-            M = TA(Rational{BigInt}.(bkcopy_oftype(A, TS)), Symbol(A.uplo))
-        else
-            M = TA(Complex{Rational{BigInt}}.(bkcopy_oftype(A, TS)),
-                Symbol(A.uplo))
-        end
-    end
-
-    return bunchkaufman_native!(M, rook; check)
 end
 
 function ldiv!(B::BunchKaufman{TS},
