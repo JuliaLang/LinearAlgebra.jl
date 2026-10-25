@@ -1323,4 +1323,17 @@ end
     end
 end
 
+@testset "Tridiagonal corner cases" begin
+    # cholesky of a non-Hermitian matrix
+    T = Tridiagonal([1.0, 2], [3.0, 4, 5], [6.0, 7])
+    @test_throws PosDefException cholesky(T)
+    @test !issuccess(cholesky(T; check = false))
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(2))
+    # zero pivot without a row interchange
+    S = Tridiagonal([0.0, 1], [0.0, 1, 1], [1.0, 1])
+    @test_throws SingularException(1) ldiv!(copy(S), ones(3))
+    M = [1 2; 2 3]
+    @test_throws "asymmetric value" LinearAlgebra.fillband!(SymTridiagonal([M, M], [M]), [1 2; 3 4], 0, 0)
+end
+
 end # module TestTridiagonal

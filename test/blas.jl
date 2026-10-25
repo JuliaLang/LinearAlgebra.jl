@@ -7,6 +7,13 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 using Test, LinearAlgebra, Random
 using LinearAlgebra: BlasReal, BlasComplex
 using Libdl: dlsym, dlopen
+
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+
 fabs(x::Real) = abs(x)
 fabs(x::Complex) = abs(real(x)) + abs(imag(x))
 
@@ -797,6 +804,78 @@ end
           (Cstring, Int32, Int32, Cstring),
           libpath, Int32(0), Int32(0), C_NULL)
     @test length(BLAS.lbt_get_config().loaded_libs) == length(cfg0.loaded_libs)
+end
+
+@testset "allocating and pointer BLAS wrappers" begin
+    @testset for elty in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
+        x = elty[1, -2, 3]
+        # complex for complex elty, so that conj(α) differs from α in her2k
+        α = elty <: Real ? elty(2) : elty(2, -1)
+        @test BLAS.asum(3, x, 1) ≈ sum(fabs, x)
+        @test BLAS.iamax(3, x, 1) == 3
+        A = elty[2 1 0; 1 3 1; 0 1 4]
+        # band storage of A, with one superdiagonal and one subdiagonal
+        @test BLAS.gbmv('N', 3, 1, 1, α, elty[0 1 1; 2 3 4; 1 1 0], x) ≈ α*A*x
+        # M is not symmetric, so that only the triangle selected by uplo determines the result,
+        # and B and C are not square, so that side and trans determine the shape of the result
+        M = elty[2 1 5; -1 3 1; 4 -2 4]
+        B = elty[1 2; -1 0; 3 1]
+        C = elty[0 1; 2 -1; 1 1]
+        for uplo in ('U', 'L')
+            tri = uplo == 'U' ? triu : tril
+            S = Symmetric(M, Symbol(uplo))
+            @test BLAS.symm('L', uplo, α, M, B) ≈ α*S*B
+            @test BLAS.symm('R', uplo, α, M, copy(transpose(B))) ≈ α*transpose(B)*S
+            @test tri(BLAS.syr2k(uplo, 'N', α, B, C)) ≈ tri(α*B*transpose(C) + α*C*transpose(B))
+            @test tri(BLAS.syr2k(uplo, 'T', α, B, C)) ≈ tri(α*transpose(B)*C + α*transpose(C)*B)
+            if elty <: Real
+                @test BLAS.symv(uplo, α, M, x) ≈ α*S*x
+            else
+                # the imaginary part of the diagonal is not read, as in getindex of Hermitian
+                N = M + im*elty[1 1 0; -1 -2 2; 1 3 3]
+                H = Hermitian(N, Symbol(uplo))
+                @test BLAS.hemv(uplo, α, N, x) ≈ α*H*x
+                @test BLAS.hemm('L', uplo, α, N, B) ≈ α*H*B
+                @test BLAS.hemm('R', uplo, α, N, copy(B')) ≈ α*B'*H
+                Bc, Cc = B + im*C, C - im*B
+                @test tri(BLAS.herk(uplo, 'N', real(α), Bc)) ≈ tri(real(α)*Bc*Bc')
+                @test tri(BLAS.herk(uplo, 'C', real(α), Bc)) ≈ tri(real(α)*Bc'*Bc)
+                @test tri(BLAS.her2k(uplo, 'N', α, Bc, Cc)) ≈ tri(α*Bc*Cc' + conj(α)*Cc*Bc')
+                @test tri(BLAS.her2k(uplo, 'C', α, Bc, Cc)) ≈ tri(α*Bc'*Cc + conj(α)*Cc'*Bc)
+            end
+        end
+        if elty <: Real
+            # upper band storage of A
+            @test BLAS.sbmv('U', 1, α, elty[0 1 1; 2 3 4], x) ≈ α*A*x
+            @test_throws DimensionMismatch BLAS.symv!('U', α, A, x[1:2], zero(elty), similar(x))
+            @test_throws DimensionMismatch BLAS.spr!('U', α, x, zeros(elty, 5))
+        else
+            H = A + im*elty[0 1 0; -1 0 1; 0 -1 0]
+            # upper band storage of H
+            @test BLAS.hbmv('U', 1, α, elty[0 1+im 1+im; 2 3 4], x) ≈ α*H*x
+            @test_throws DimensionMismatch BLAS.hemv!('U', α, H, x[1:2], zero(elty), similar(x))
+        end
+    end
+end
+
+@testset "libblastrampoline forwarding queries" begin
+    cfg = BLAS.lbt_get_config()
+    for interface in (:ilp64, :lp64)
+        libs = filter(lib -> lib.interface == interface, cfg.loaded_libs)
+        forwarded = String[]
+        for lib in libs
+            funcs = BLAS.lbt_forwarded_funcs(cfg, lib)
+            @test funcs ⊆ cfg.exported_symbols
+            @test all(f -> BLAS.lbt_find_backing_library(f, interface; config = cfg) == lib, funcs)
+            append!(forwarded, funcs)
+        end
+        # symbols that no library of this interface provides
+        for f in first(setdiff(cfg.exported_symbols, forwarded), 10)
+            @test BLAS.lbt_find_backing_library(f, interface; config = cfg) === nothing
+        end
+    end
+    @test_throws ArgumentError BLAS.lbt_find_backing_library("dgemm_", :foo; config = cfg)
+    @test_throws ArgumentError BLAS.lbt_find_backing_library("not_a_blas_symbol", :ilp64; config = cfg)
 end
 
 end # module TestBLAS
