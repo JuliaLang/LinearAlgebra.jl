@@ -43,11 +43,11 @@ end
 
 chklapackerror_positive(ret, f...) = throw(LAPACKException(ret))
 
-# For routines that don't check their input for Infs and NaNs: these often propagate to the
-# result, but if the routine fails instead, they are the likely cause
-function chklapackerror(ret::BlasInt, inputisfinite::Bool)
-    if ret != 0 && !inputisfinite
-        throw(ArgumentError("matrix contains Infs or NaNs"))
+# For routines that don't check their input for Infs: these often propagate to the result, but
+# if the routine fails instead, they are the likely cause. NaNs are rejected before the call.
+function chklapackerror(ret::BlasInt, inputhasinf::Bool)
+    if ret != 0 && inputhasinf
+        throw(ArgumentError("matrix contains Infs"))
     end
     chklapackerror(ret)
 end
@@ -4174,7 +4174,7 @@ for (stev, stebz, stegr, stein, elty) in
             end
             chknan(dv) # for NaNs, xSTEBZ may return wrong results
             chknan(ev)
-            inputisfinite = all(isfinite, dv) && all(isfinite, ev)
+            inputhasinf = mapreduce(isinf, |, dv; init = false) | mapreduce(isinf, |, ev; init = false)
             m = Ref{BlasInt}()
             nsplit = Vector{BlasInt}(undef, 1)
             w = similar(dv, $elty, n)
@@ -4195,7 +4195,7 @@ for (stev, stebz, stegr, stein, elty) in
                 dv, ev, m, nsplit,
                 w, iblock, isplit, work,
                 iwork, info, 1, 1)
-            chklapackerror(info[], inputisfinite)
+            chklapackerror(info[], inputhasinf)
             (m[] == n ? w : w[1:m[]]), (m[] == n ? iblock : iblock[1:m[]]),
                 (nsplit[1] == n ? isplit : isplit[1:nsplit[1]])
         end

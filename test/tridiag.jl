@@ -1296,7 +1296,7 @@ end
     @test eigvals(S)[3] == Inf
     @test eigvals(S, -10, 10) ≈ [1, 3]
     @test all(isnan, eigvecs(S, [1.0]))
-    @test_throws ArgumentError eigvals(S, 1:1)
+    @test_throws ArgumentError("matrix contains Infs") eigvals(S, 1:1)
 end
 
 @testset "eigen sorting" begin
