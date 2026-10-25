@@ -316,8 +316,8 @@ end
         for m in (5, 2)
             A, B = rand(elty, m, 3), rand(elty, 4, 3)
             F = LinearAlgebra.GeneralizedSVD(LAPACK.ggsvd!('U', 'V', 'Q', copy(A), copy(B))...)
-            @test F.U*F.D1*F.R*F.Q' ≈ A
-            @test F.V*F.D2*F.R*F.Q' ≈ B
+            @test F.U*F.D1*F.R0*F.Q' ≈ A
+            @test F.V*F.D2*F.R0*F.Q' ≈ B
             @test sort(F.vals) ≈ sort(svdvals(A, B))
         end
         A, B = rand(elty, 5, 3), rand(elty, 4, 3)
