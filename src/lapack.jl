@@ -100,10 +100,9 @@ subsetrows(X::AbstractVector, Y::AbstractArray, k) = Y[1:k]
 subsetrows(X::AbstractMatrix, Y::AbstractArray, k) = Y[1:k, :]
 
 function chkfinite(A::AbstractVecOrMat)
-    for a in A
-        if !isfinite(a)
-            throw(ArgumentError("matrix contains Infs or NaNs"))
-        end
+    # mapreduce instead of a loop with an early exit, which doesn't vectorize
+    if !mapreduce(isfinite, &, A; init = true)
+        throw(ArgumentError("matrix contains Infs or NaNs"))
     end
     return true
 end

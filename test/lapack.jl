@@ -1047,4 +1047,22 @@ Base.unsafe_convert(::Type{Ptr{T}}, A::NonResizableArray{T}) where {T} = pointer
     @test LAPACK.trevc!('R', 'S', BlasInt[1, 0, 1], copy(T), similar(T), view(similar(T), :, :))[2] ≈ VR
 end
 
+@testset "chkfinite and chknan" begin
+    for T in (Float32, Float64, ComplexF32, ComplexF64)
+        A = rand(T, 4, 3)
+        @test LAPACK.chkfinite(A) && LAPACK.chkfinite(T[]) && LAPACK.chkfinite(view(A, 1:2:3, :))
+        @test LAPACK.chknan(A) && LAPACK.chknan(T[])
+        for x in (NaN, Inf, -Inf), y in (T <: Complex ? (x, complex(0, x)) : (x,))
+            B = copy(A)
+            B[2, 3] = y
+            @test_throws ArgumentError("matrix contains Infs or NaNs") LAPACK.chkfinite(B)
+            if isnan(x)
+                @test_throws ArgumentError("matrix contains NaNs") LAPACK.chknan(B)
+            else
+                @test LAPACK.chknan(B)
+            end
+        end
+    end
+end
+
 end # module TestLAPACK
