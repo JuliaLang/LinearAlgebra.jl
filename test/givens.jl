@@ -155,7 +155,10 @@ end
     @test c ≈ 3/5 && s ≈ 4/5 && r ≈ 5tiny
     for (f, g) in ((complex(T(3), T(4))*tiny, complex(T(1), -T(2))*tiny), # tiny f and g
                    (complex(T(3), T(4))*tiny, zero(Complex{T})),          # tiny f, zero g
-                   (complex(T(2)), complex(floatmax(T)/4, floatmax(T)/8))) # |f| << |g|
+                   (complex(T(2)), complex(floatmax(T)/4, floatmax(T)/8)),  # |f| << |g|
+                   # the same with |f| ≤ 1, which zlartg normalizes differently; before the
+                   # exceptional cases for Inf, only givensAlgorithm(1, Inf) reached this
+                   (complex(T(1)/2, -T(1)/4), complex(floatmax(T)/4, floatmax(T)/8)))
         c, s, r = givensAlgorithm(f, g)
         h = hypot(abs(f), abs(g))
         @test c ≈ abs(f)/h
