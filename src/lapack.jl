@@ -126,6 +126,9 @@ function chknan(A::AbstractVecOrMat)
     return true
 end
 
+# for checking the input after a routine failed, see chklapackerror(ret, inputhasinf)
+_hasinf(A::AbstractVecOrMat) = mapreduce(isinf, |, A; init = false)
+
 function chkuplofinite(A::AbstractMatrix, uplo::AbstractChar)
     require_one_based_indexing(A)
     chkuplo(uplo)
@@ -4174,7 +4177,7 @@ for (stev, stebz, stegr, stein, elty) in
             end
             chknan(dv) # for NaNs, xSTEBZ may return wrong results
             chknan(ev)
-            inputhasinf = mapreduce(isinf, |, dv; init = false) | mapreduce(isinf, |, ev; init = false)
+            inputhasinf = _hasinf(dv) | _hasinf(ev)
             m = Ref{BlasInt}()
             nsplit = Vector{BlasInt}(undef, 1)
             w = similar(dv, $elty, n)
