@@ -4177,7 +4177,7 @@ for (stev, stebz, stegr, stein, elty) in
             end
             chknan(dv) # for NaNs, xSTEBZ may return wrong results
             chknan(ev)
-            inputhasinf = _hasinf(dv) | _hasinf(ev)
+            inputhasinf = _hasinf(dv) || _hasinf(ev)
             m = Ref{BlasInt}()
             nsplit = Vector{BlasInt}(undef, 1)
             w = similar(dv, $elty, n)
