@@ -622,8 +622,8 @@ The basis is orthonormalized in place by block classical Gram-Schmidt with
 reorthogonalization, which is accurate here because the matrix being orthonormalized
 contains an identity block, so that its smallest singular value is at least one.
 
-!!! compat "Julia 1.14"
-    The `nullspace!` function requires at least Julia 1.14.
+!!! compat "Julia 1.15"
+    The `nullspace!` function requires at least Julia 1.15.
 """
 function nullspace!(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps(real(float(eltype(F)))) * iszero(atol))
     m, n = size(F)
