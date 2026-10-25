@@ -610,6 +610,93 @@ function nullspace(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps(
 end
 
 """
+    nullspace!(F::QRPivoted; atol::Real=0, rtol::Real=min(n,m)*ϵ)
+
+Like [`nullspace(::QRPivoted)`](@ref), but reuses the memory of the pivoted QR factorization
+`F = qr(A, ColumnNorm())` of an `m×n` matrix `A`, which is overwritten. If `m ≥ n`, the
+returned orthonormal basis is a view into `F.factors`, and the computation allocates almost
+no memory; otherwise, only the `n×(n-r)` result is allocated, where `r` is the numerical rank.
+`F` must not be used afterwards.
+
+The basis is orthonormalized in place by block classical Gram-Schmidt with
+reorthogonalization, which is accurate here because the matrix being orthonormalized
+contains an identity block, so that its smallest singular value is at least one.
+
+!!! compat "Julia 1.14"
+    The `nullspace!` function requires at least Julia 1.14.
+"""
+function nullspace!(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps(real(float(eltype(F)))) * iszero(atol))
+    m, n = size(F)
+    T = eltype(F)
+    (m == 0 || n == 0) && return Matrix{T}(I, n, n)
+    r = rank(F; atol, rtol)
+    k = n - r
+    A = F.factors
+    # Y = [R₁₁ \ R₁₂; -I], which spans the same space as [-R₁₁ \ R₁₂; I]; if m ≥ n, the
+    # columns r+1:n of F.factors have room for it and already hold R₁₂ in their top rows
+    if m ≥ n
+        Y = view(A, 1:n, r+1:n)
+    else
+        Y = zeros(T, n, k)
+        copyto!(view(Y, 1:r, :), view(A, 1:r, r+1:n))
+    end
+    ldiv!(UpperTriangular(view(A, 1:r, 1:r)), view(Y, 1:r, :))
+    Y₂ = view(Y, r+1:n, :)
+    fill!(Y₂, zero(T))
+    for j in 1:k
+        Y₂[j, j] = -one(T)
+    end
+    Base.invpermuterows!(Y, F.p)
+    k == 0 && return Y
+    # workspace for the orthonormalization, taken from storage of F that is no longer
+    # needed: the columns 1:r of F.factors (R₁₁ has been used) and τ
+    b = min(k, T <: Complex ? 64 : 32)
+    H = m ≥ k && r ≥ b ? view(A, 1:k, 1:b) : similar(Y, k, b)
+    h = length(F.τ) ≥ b ? view(F.τ, 1:b) : similar(Y, b)
+    return _bcgs2!(Y, H, h, b)
+end
+
+# In-place orthonormalization of the columns of Y by block classical Gram-Schmidt with
+# reorthogonalization (BCGS2), with blocks of b columns; H (k×b) and h (b) are workspace.
+# Accurate as long as Y is not too ill-conditioned.
+function _bcgs2!(Y::AbstractMatrix, H::AbstractMatrix, h::AbstractVector, b::Integer)
+    k = size(Y, 2)
+    for j₀ in 1:b:k
+        J = j₀:min(j₀+b-1, k)
+        W = view(Y, :, J)
+        if j₀ == 1
+            _cgs2!(W, h)
+        else
+            Q = view(Y, :, 1:j₀-1)
+            Hⱼ = view(H, 1:j₀-1, 1:length(J))
+            # each pass projects out the previous blocks and then orthonormalizes the block
+            for _ in 1:2
+                mul!(Hⱼ, Q', W)
+                mul!(W, Q, Hⱼ, -1, 1)
+                _cgs2!(W, h)
+            end
+        end
+    end
+    return Y
+end
+# column-wise CGS2; h is workspace of length ≥ size(W, 2)
+function _cgs2!(W::AbstractMatrix, h::AbstractVector)
+    for j in axes(W, 2)
+        w = view(W, :, j)
+        if j > 1
+            Q = view(W, :, 1:j-1)
+            hⱼ = view(h, 1:j-1)
+            for _ in 1:2
+                mul!(hⱼ, Q', w)
+                mul!(w, Q, hⱼ, -1, 1)
+            end
+        end
+        rmul!(w, inv(norm(w)))
+    end
+    return W
+end
+
+"""
     cond(F::Union{QR,QRCompactWY,QRPivoted}, p::Real=2)
 
 Condition number in the operator 2-norm of the matrix `A` from its QR factorization

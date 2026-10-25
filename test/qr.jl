@@ -608,6 +608,50 @@ end
     @test size(nullspace(F; atol=1.01), 2) == 2
 end
 
+@testset "nullspace!(::QRPivoted)" begin
+    qrcopy(F) = QRPivoted(copy(F.factors), copy(F.τ), copy(F.p))
+    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64, BigFloat)
+        ε = eps(real(elty))
+        # square/tall (result shares memory with F) and wide (result is allocated); the
+        # nullities include ones larger than the block size of the orthonormalization
+        sizes = ((n, n1-1, n1+2), (3n, n1, 2n), (100, 10, 90), (90, 60, 100), (n1+2, n1+2, n), (n, n1, n1))
+        for (m, k, nc) in (elty === BigFloat ? sizes[[1, 2, 5, 6]] : sizes)
+            A = convert(Matrix{elty}, randn(m, k) * randn(k, nc))
+            F = qr(A, ColumnNorm())
+            N = nullspace(F)
+            N! = nullspace!(qrcopy(F))
+            @test size(N!) == size(N)
+            @test eltype(N!) == elty
+            @test norm(A * N!, Inf) ≤ 100 * nc * ε * opnorm(A, Inf)
+            @test N!' * N! ≈ I atol = 100 * ε
+            @test N! * N!' ≈ N * N'
+            if m ≥ nc
+                G = qrcopy(F)
+                @test parent(nullspace!(G)) === G.factors
+            end
+        end
+        @test nullspace!(qr(zeros(elty, 3, 3), ColumnNorm())) == -Matrix(I, 3, 3)
+        @test nullspace!(qr(zeros(elty, 0, 3), ColumnNorm())) == Matrix(I, 3, 3)
+        @test size(nullspace!(qr(zeros(elty, 3, 0), ColumnNorm()))) == (0, 0)
+        @test size(nullspace!(qr(elty[1 0; 0 1; 1 1], ColumnNorm()))) == (2, 0)
+    end
+    # tolerances are forwarded to rank
+    F = qr([1.0 0.0; 0.0 0.9], ColumnNorm())
+    @test size(nullspace!(qrcopy(F)), 2) == 0
+    @test size(nullspace!(qrcopy(F); rtol=0.95), 2) == 1
+    @test abs.(nullspace!(qrcopy(F); atol=0.95)) ≈ [0.0; 1.0;;]
+    @test size(nullspace!(qrcopy(F); atol=1.01), 2) == 2
+    # memory reuse: no n×(n-r) buffer for m ≥ n, only the result for m < n
+    for (m, nc, r) in ((200, 150, 60), (300, 200, 190), (100, 150, 60))
+        A = randn(m, r) * randn(r, nc)
+        F = qr(A, ColumnNorm())
+        nullspace!(qrcopy(F))
+        G = qrcopy(F)
+        bytes = @allocated nullspace!(G)
+        @test bytes < (m ≥ nc ? 1 : 2) * sizeof(Float64) * nc * (nc - r)
+    end
+end
+
 @testset "cond of QR factorizations" begin
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         ε = eps(real(elty))
