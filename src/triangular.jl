@@ -357,6 +357,9 @@ end
     return A
 end
 
+_zero_triangular_half_str(::Type{<:UpperOrUnitUpperTriangular}) = "lower"
+_zero_triangular_half_str(::Type{<:LowerOrUnitLowerTriangular}) = "upper"
+
 @noinline function throw_setindex_structuralzero_error(T::DataType, @nospecialize(x))
     Ts = _zero_triangular_half_str(T)
     Tn = nameof(T)
@@ -1388,20 +1391,19 @@ end
 
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
-# trevc! overwrites its argument, so pass a dense copy, which also has the zeros and the unit
-# diagonal of A, and not the parent of A
-function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
+# permute and scale, as for general matrices, have no effect on triangular ones
+function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
     vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
+function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
     eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
 end
-function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
+function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
     vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
+function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
     eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
 end
 
@@ -2991,14 +2993,14 @@ end
 # permute and scale, as for general matrices, have no effect on triangular ones
 eigvals(A::AbstractTriangular; permute::Bool=true, scale::Bool=true, sortby = eigsortby) = sorteig!(diag(A), sortby)
 # fallback for unknown types
-function eigvecs(A::AbstractTriangular{<:BlasFloat}; sortby = eigsortby)
+function eigvecs(A::AbstractTriangular{<:BlasFloat}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
     if istriu(A)
         eigvecs(UpperTriangular(Matrix(A)); sortby)
     else # istril(A)
         eigvecs(LowerTriangular(Matrix(A)); sortby)
     end
 end
-function eigvecs(A::AbstractTriangular{T}; sortby = eigsortby) where T
+function eigvecs(A::AbstractTriangular{T}; permute::Bool=true, scale::Bool=true, sortby = eigsortby) where T
     TT = promote_type(T, Float32)
     if TT <: BlasFloat
         return eigvecs(convert(AbstractMatrix{TT}, A); sortby)
