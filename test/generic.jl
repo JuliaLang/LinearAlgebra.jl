@@ -1139,4 +1139,52 @@ end
     @test_throws DimensionMismatch fn([I; ones(BigInt, 1, 2)])
 end
 
+@testset "_valeltype" begin
+    # the element types are only known at run time
+    for (A, T) in Any[([1, 2], Int), (Real[1, 2.0], Float64), (Real[], Real),
+                      (Symmetric(Real[1 2; 2.0 3]), Int)]
+        @test LinearAlgebra._valeltype(A) == T
+    end
+end
+
+@testset "wrapper character case conversion" begin
+    @test LinearAlgebra._uppercase('n') == 'N'
+    @test LinearAlgebra._lowercase('N') == 'n'
+    @test_throws ArgumentError LinearAlgebra._uppercase('x')
+    @test_throws ArgumentError LinearAlgebra._lowercase('x')
+end
+
+@testset "checkbounds of a Broadcasted with a BandIndex" begin
+    A = [1 2; 3 4]
+    bc = Broadcast.instantiate(Broadcast.broadcasted(+, A, A))
+    @test checkbounds(bc, LinearAlgebra.BandIndex(1, 1)) === nothing
+    @test_throws BoundsError checkbounds(bc, LinearAlgebra.BandIndex(1, 2))
+end
+
+@testset "versioninfo without relevant environment variables" begin
+    vars = ("JULIA_NUM_THREADS", "MKL_DYNAMIC", "MKL_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS", "GOTO_NUM_THREADS", "OMP_NUM_THREADS")
+    withenv((v => nothing for v in vars)...) do
+        @test occursin(r"Relevant environment variables:\n\s+\[none\]", sprint(LinearAlgebra.versioninfo))
+    end
+end
+
+@testset "peakflops in parallel" begin
+    @test LinearAlgebra.peakflops(64, ntrials=1, parallel=true) > 0
+end
+
+@testset "generic helpers corner cases" begin
+    # MulAddMul with α == 1 and β != 0, constructed at run time
+    m = LinearAlgebra.MulAddMul(Base.inferencebarrier(1), Base.inferencebarrier(2))
+    @test m isa LinearAlgebra.MulAddMul{true,false}
+    @test m.alpha == 1 && m.beta == 2
+    @test_throws ArgumentError @macroexpand LinearAlgebra.@stable_muladdmul foo(1)
+    # generic fallbacks, for an array type without specialized methods
+    @test !issymmetric(Test.GenericArray(ones(ComplexF64, 2, 3)))
+    @test !ishermitian(Test.GenericArray(ones(2, 3)))
+    x, y = BigFloat[1, 2], BigFloat[1, 2, 3]
+    @test_throws BoundsError axpy!(2, x, 1:2, y, 3:4)
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApply!(ones(2, 3), [1.0, 2], 1.0)
+end
+
 end # module TestGeneric

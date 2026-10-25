@@ -1562,4 +1562,45 @@ end
     @test abs(H) isa Hermitian
 end
 
+@testset "isone of a large matrix" begin
+    # matrices of at least ISONE_CUTOFF bytes are checked column by column
+    n = isqrt(LinearAlgebra.ISONE_CUTOFF ÷ sizeof(Float64))
+    A = Matrix{Float64}(I, n, n)
+    @test sizeof(A) >= LinearAlgebra.ISONE_CUTOFF
+    @test isone(A)
+    A[n, 1] = 1
+    @test !isone(A)
+    A[n, 1] = 0
+    A[2, 2] = 2
+    @test !isone(A)
+end
+
+@testset "haszero" begin
+    for (T, h) in Any[(Float64, true), (Union{Missing,Int}, true), (Real, false), (String, false)]
+        @test LinearAlgebra.haszero(T) == h
+    end
+end
+
+@testset "cis of a matrix with a non-hardware element type" begin
+    A = [1.0 2; 3 4]
+    for M in (Float16.(A), Matrix{Real}(A))
+        @test cis(M) ≈ exp(im*A)
+    end
+end
+
+@testset "factorize a triangular matrix that is not strided" begin
+    B = [1 0 0; 2 3 0; 4 5 6]
+    L = view(B, [1, 2, 3], :)
+    @test LinearAlgebra.getstructure(L) == (false, false, true, true, false, false)
+    @test factorize(L) isa LowerTriangular
+    @test factorize(L) == LowerTriangular(B)
+    U = view(Matrix(B'), [1, 2, 3], :)
+    @test factorize(U) isa UpperTriangular
+    @test factorize(U) == UpperTriangular(B')
+end
+
+@testset "cond rethrows errors other than singularity" begin
+    @test_throws OverflowError cond(Rational{Int8}[100 99; 99 98], 1)
+end
+
 end # module TestDense

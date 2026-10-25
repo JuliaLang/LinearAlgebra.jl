@@ -100,4 +100,16 @@ b2 = bitrand(v1)
 b1 = bitrand(n1, n1)
 @check_bit_operation diag(b1)
 
+@testset "istriu/istril of tall BitMatrix" begin
+    # columns that span several chunks, with a nonzero only in a middle chunk
+    A = falses(200, 200)
+    A[100, 1] = true
+    @test !istriu(A) && istril(A)
+    @test istriu(A) == istriu(Matrix(A))
+    A = falses(200, 200)
+    A[100, 200] = true
+    @test !istril(A) && istriu(A)
+    @test istril(A) == istril(Matrix(A))
+end
+
 end # module
