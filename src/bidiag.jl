@@ -124,33 +124,33 @@ uplo(B::Bidiagonal) = sym_uplo(B.uplo)
 
 _offdiagind(uplo) = uplo == 'U' ? 1 : -1
 
-@inline function Base.isassigned(A::Bidiagonal, i::Int, j::Int)
+@inline function Base.isassigned(A::Bidiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.dv, i)
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         return @inbounds isassigned(A.ev, A.uplo == 'U' ? i : j)
     else
         return true
     end
 end
 
-@inline function Base.isstored(A::Bidiagonal, i::Int, j::Int)
+@inline function Base.isstored(A::Bidiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.dv, i)
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         return @inbounds Base.isstored(A.ev, A.uplo == 'U' ? i : j)
     else
         return false
     end
 end
 
-@inline function getindex(A::Bidiagonal{T}, i::Int, j::Int) where T
+@inline function getindex(A::Bidiagonal{T}, i::Signed, j::Signed) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds A.dv[i]
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         return @inbounds A.ev[A.uplo == 'U' ? i : j]
     else
         return diagzero(A, i, j)
@@ -169,11 +169,11 @@ end
     end
 end
 
-@inline function setindex!(A::Bidiagonal, x, i::Integer, j::Integer)
+@inline function setindex!(A::Bidiagonal, x, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         @inbounds A.dv[i] = x
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         @inbounds A.ev[A.uplo == 'U' ? i : j] = x
     elseif !iszero(x)
         throw(ArgumentError(LazyString(lazy"cannot set entry ($i, $j) off the ",
@@ -469,8 +469,8 @@ function rmul!(B::Bidiagonal, x::Number)
         row, col = 1 + isupper, 1 + !isupper
         # ensure that zeros are preserved on scaling
         y = B[row,col] * x
-        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off ",
-            lazy"the tridiagonal band to a nonzero value ($y)")))
+        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off the ",
+            isupper ? "upper" : "lower", " bidiagonal band to a nonzero value ($y)")))
     end
     rmul!(B.dv, x)
     rmul!(B.ev, x)
@@ -482,8 +482,8 @@ function lmul!(x::Number, B::Bidiagonal)
         row, col = 1 + isupper, 1 + !isupper
         # ensure that zeros are preserved on scaling
         y = x * B[row,col]
-        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off ",
-            lazy"the tridiagonal band to a nonzero value ($y)")))
+        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off the ",
+            isupper ? "upper" : "lower", " bidiagonal band to a nonzero value ($y)")))
     end
     lmul!(x, B.dv)
     lmul!(x, B.ev)
@@ -1448,8 +1448,9 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
 end
 
 # Eigensystems
-eigvals(M::Bidiagonal; sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
-function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
+# permute and scale, as for general matrices, have no effect on bidiagonal ones
+eigvals(M::Bidiagonal; permute::Bool=true, scale::Bool=true, sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
+function eigvecs(M::Bidiagonal{T}; permute::Bool=true, scale::Bool=true, sortby=eigsortby) where T
     n = length(M.dv)
     Q = Matrix{T}(undef, n,n)
     blks = [0; findall(iszero, M.ev); n]
@@ -1475,7 +1476,7 @@ function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
     end
     return isnothing(sortby) ? Q : sorteig!(copy(M.dv), Q, sortby)[2]
 end
-eigen(M::Bidiagonal; sortby=eigsortby) = Eigen(sorteig!(eigvals(M; sortby=nothing), eigvecs(M; sortby=nothing), sortby)...)
+eigen(M::Bidiagonal; permute::Bool=true, scale::Bool=true, sortby=eigsortby) = Eigen(sorteig!(eigvals(M; sortby=nothing), eigvecs(M; sortby=nothing), sortby)...)
 
 Base._sum(A::Bidiagonal, ::Colon) = sum(A.dv) + sum(A.ev)
 function Base._sum(A::Bidiagonal, dims::Integer)

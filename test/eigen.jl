@@ -5,7 +5,7 @@ module TestEigen
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
-using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, UtiAUi!
+using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, UtiAUi!, eigtype
 
 n = 10
 
@@ -46,8 +46,8 @@ aimg  = randn(n,n)/2
             @test eigvals(f) === f.values
 
             if all(isreal, eigvals(f))
-                @test eigmin(f) == minimum(eigvals(f))
-                @test eigmax(f) == maximum(eigvals(f))
+                @test eigmin(f) == minimum(real, eigvals(f))
+                @test eigmax(f) == maximum(real, eigvals(f))
             else
                 @test_throws MethodError eigmin(f)
                 @test_throws MethodError eigmax(f)
@@ -70,8 +70,10 @@ aimg  = randn(n,n)/2
             num_fact = eigen(one(eltya))
             @test num_fact.values[1] == one(eltya)
             h = asym
-            @test minimum(eigvals(h)) ≈ eigmin(h)
-            @test maximum(eigvals(h)) ≈ eigmax(h)
+            @test minimum(real, eigvals(h)) ≈ eigmin(h)
+            @test maximum(real, eigvals(h)) ≈ eigmax(h)
+            @test eigmin(h) isa real(eigtype(eltya))
+            @test eigmax(h) isa real(eigtype(eltya))
             @test_throws DomainError eigmin(a - a')
             @test_throws DomainError eigmax(a - a')
         end
@@ -92,8 +94,8 @@ aimg  = randn(n,n)/2
             @test eigvals(f) === f.values
 
             if all(isreal, eigvals(f))
-                @test eigmin(f) == minimum(eigvals(f))
-                @test eigmax(f) == maximum(eigvals(f))
+                @test eigmin(f) == minimum(real, eigvals(f))
+                @test eigmax(f) == maximum(real, eigvals(f))
             else
                 @test_throws MethodError eigmin(f)
                 @test_throws MethodError eigmax(f)
@@ -279,23 +281,80 @@ end
         D = Diagonal(T[1,2,4])
         A = Array(D)
         B = eigen(A)
-        @test B isa Eigen{Float16, Float16, Matrix{Float16}, Vector{Float16}}
-        @test B.values isa Vector{Float16}
-        @test B.vectors isa Matrix{Float16}
+        @test B isa Eigen{T, T, Matrix{T}, Vector{T}}
+        @test B.values == D.diag
     end
     D = Diagonal(ComplexF16[im,2,4])
     A = Array(D)
     B = eigen(A)
-    @test B isa Eigen{Float16, ComplexF16, Matrix{Float16}, Vector{ComplexF16}}
-    @test B.values isa Vector{ComplexF16}
-    @test B.vectors isa Matrix{Float16}
+    @test B isa Eigen{ComplexF16, ComplexF16, Matrix{ComplexF16}, Vector{ComplexF16}}
+    @test B.values == D.diag
+end
+
+@testset "Float16 values match the factorizations" begin
+    A = Float16[2 1 0; 1 3 1; 0 1 4]    # symmetric positive definite
+    N = Float16[1 2 0; 3 4 1; 0 1 2]    # nonsymmetric, real eigenvalues
+    for T in (Float16, ComplexF16)
+        R = real(T)
+        H = Hermitian(T.(A))
+        B = T.(Diagonal(Float16[3, 2, 1]))
+        # value-only functions return half precision, like `eigen` and `svd`
+        for (v, v32) in ((eigvals(T.(N)), eigvals(eigtype(T).(N))),
+                         (eigvals(H), eigvals(Hermitian(eigtype(T).(A)))),
+                         (eigvals(H, 1:2), eigvals(Hermitian(eigtype(T).(A)), 1:2)),
+                         (eigvals(H, 0, 10), eigvals(Hermitian(eigtype(T).(A)), 0, 10)),
+                         (eigvals(T.(N), B), eigvals(eigtype(T).(N), eigtype(T).(B))),
+                         (eigvals(H, Hermitian(B)), eigvals(Hermitian(eigtype(T).(A)), Hermitian(eigtype(T).(B)))),
+                         (eigvals(Tridiagonal(T.(A))), eigvals(Tridiagonal(eigtype(T).(A)))),
+                         (eigvals(Hermitian(Tridiagonal(T.(A)))), eigvals(Hermitian(Tridiagonal(eigtype(T).(A))))),
+                         (svdvals(T.(N)), svdvals(eigtype(T).(N))),
+                         (svdvals(H), svdvals(Hermitian(eigtype(T).(A)))),
+                         (svdvals(UpperTriangular(T.(N))), svdvals(UpperTriangular(eigtype(T).(N)))),
+                         (svdvals(Bidiagonal(T.(N), :U)), svdvals(Bidiagonal(eigtype(T).(N), :U))),
+                         (svdvals(T.(N), B), svdvals(eigtype(T).(N), eigtype(T).(B))),
+                         (svdvals(T.(N[:, 1])), svdvals(eigtype(T).(N[:, 1]))))
+            @test eltype(v) <: Union{Float16, ComplexF16}
+            @test v ≈ v32 rtol=1e-2
+        end
+        @test eigvals(T.(N)) ≈ eigen(T.(N)).values
+        @test eigvals(H) ≈ eigen(H).values
+        @test svdvals(T.(N)) ≈ svd(T.(N)).S
+        @test eigmax(H) isa Float16
+        @test eigmin(T.(A)) isa Float16
+        @test eigmax(H) ≈ maximum(eigvals(H))
+        # factorizations with index ranges, intervals, or a second matrix
+        for F in (eigen(H, 1:2), eigen(H, 0, 10), eigen(T.(N), B), eigen(H, Hermitian(B)))
+            @test eltype(F.values) <: Union{Float16, ComplexF16}
+            @test eltype(F.vectors) <: Union{Float16, ComplexF16}
+        end
+        @test eigen(H, 1:2).values ≈ eigvals(H, 1:2)
+        # generalized problem with a dense or an indefinite diagonal right-hand side
+        for B2 in (Matrix(B), T.(Diagonal(Float16[3, -2, 1])))
+            F = eigen(T.(N), B2)
+            @test eltype(F.values) <: Union{Float16, ComplexF16}
+            @test T.(N) * F.vectors ≈ B2 * F.vectors * Diagonal(F.values) rtol=1e-2
+            @test eltype(eigvals(T.(N), B2)) <: Union{Float16, ComplexF16}
+        end
+    end
+    S = SymTridiagonal(Float16[2, 3, 4], Float16[1, 1])
+    S32 = SymTridiagonal(Float32[2, 3, 4], Float32[1, 1])
+    for (v, v32) in ((eigvals(S), eigvals(S32)), (eigvals(S, 1:2), eigvals(S32, 1:2)),
+                     (eigvals(S, 0, 10), eigvals(S32, 0, 10)), (eigen(S).values, eigen(S32).values),
+                     (eigen(S, 1:2).values, eigen(S32, 1:2).values), (eigen(S, 0, 10).values, eigen(S32, 0, 10).values))
+        @test v isa Vector{Float16}
+        @test v ≈ v32 rtol=1e-2
+    end
+    @test eigen(S).vectors isa Matrix{Float16}
+    @test eigmax(S) isa Float16
+    # mixed precision promotes as before
+    @test eigvals(A, Float64.(A)) isa Vector{Float64}
+    @test eigvals(A, Int.(Matrix(I, 3, 3))) isa Vector{Float16}
+    @test svdvals(A, Float32.(A)) isa Vector{Float32}
 end
 
 @testset "complex eigen inference (#52289)" begin
     A = ComplexF64[1.0 0.0; 0.0 8.0]
-    TC = Eigen{ComplexF64, ComplexF64, Matrix{ComplexF64}, Vector{ComplexF64}}
-    TR = Eigen{ComplexF64, Float64, Matrix{ComplexF64}, Vector{Float64}}
-    λ, v = @inferred Union{TR,TC} eigen(A)
+    λ, v = @inferred eigen(A)
     @test λ == [1.0, 8.0]
 end
 
@@ -312,6 +371,112 @@ end
     @test_throws ArgumentError det(F)
     @test_throws ArgumentError inv(F)
     @test_throws ArgumentError isposdef(F)
+end
+
+@testset "abstract eltypes are promoted according to the stored values (#287)" begin
+    # the working precision is determined by the stored values, not by `eltype(A)` alone
+    A = Real[1.0 big(floatmax(Float64))+1; 1.0 big(1.0)]
+    @test LinearAlgebra.eigtype(A) === BigFloat
+    @test LinearAlgebra.eigtype(Real[1 2f0; 3 4]) === Float32
+    @test LinearAlgebra.eigtype(Real[1 2; 3 4]) === Float64
+    @test LinearAlgebra.eigtype(Any[1 2.0; 3 4]) === Float64
+    @test LinearAlgebra.eigtype(Matrix{Real}(undef, 0, 0)) === Float64
+    # results agree with those for the corresponding concretely typed matrix
+    for (A, Ac) in ((Real[1 2f0; 3 4], Float32[1 2; 3 4]),
+                    (Any[1 2.0; 3 4], [1.0 2; 3 4]))
+        @test eigvals(A) == eigvals(Ac)
+        @test eltype(eigen(A).vectors) === eltype(eigen(Ac).vectors)
+        @test svdvals(A) == svdvals(Ac)
+        @test schur(A).T == schur(Ac).T
+        @test hessenberg(A).H == hessenberg(Ac).H
+        @test exp(A) == exp(Ac)
+    end
+    # complex values in a `Number` matrix used to throw an `InexactError`
+    A = Number[1 im; 1 2]
+    Ac = ComplexF64[1 im; 1 2]
+    @test eigvals(A) == eigvals(Ac)
+    @test eigen(A).vectors == eigen(Ac).vectors
+    @test schur(A).T == schur(Ac).T
+    @test svdvals(A) == svdvals(Ac)
+    @test eigvals(Real[1 2; 3 4], Number[1 0; 0 im]) == eigvals([1.0 2; 3 4], ComplexF64[1 0; 0 im])
+    @test eigvals(Hermitian(Number[2 im; -im 2])) == eigvals(Hermitian(ComplexF64[2 im; -im 2]))
+    @test eigvals(Symmetric(Real[2 1; 1 2f0])) == eigvals(Symmetric(Float32[2 1; 1 2]))
+    # values in the triangle that is not referenced by the wrapper do not affect the result
+    S = Symmetric(Real[2.0 1; 1 2])
+    S.data[2,1] = big(7)
+    @test LinearAlgebra.eigtype(S) === Float64
+    @test eigvals(S) == eigvals(Symmetric([2.0 1; 1 2]))
+    @test eigvals(Matrix{Real}(undef, 0, 0)) == Float64[]
+end
+
+@testset "complex matrices yield complex eigenvalues (#974)" begin
+    for T in (ComplexF32, ComplexF64, Complex{Int})
+        S = eigtype(T)
+        D = T[1 0; 0 2]    # diagonal
+        H = T[1 1; 1 2]    # hermitian
+        G = T[1 2; 3 4]    # neither
+        P = T[2 0; 0 1]    # positive definite
+        for A in (D, H, G)
+            F = @inferred eigen(A)
+            @test F.values isa Vector{S}
+            @test A * F.vectors ≈ F.vectors * Diagonal(F.values)
+            @test @inferred(eigvals(A)) isa Vector{S}
+            @test eigvals(A) ≈ F.values
+            F = @inferred eigen(A, P)
+            @test F.values isa Vector{S}
+            @test A * F.vectors ≈ P * F.vectors * Diagonal(F.values)
+            @test @inferred(eigvals(A, P)) isa Vector{S}
+            @test eigvals(A, P) ≈ F.values
+            if T <: BlasComplex
+                @test @inferred(eigvals!(copy(A))) isa Vector{T}
+                @test eigen!(copy(A)).values isa Vector{T}
+                @test @inferred(eigvals!(copy(A), copy(P))) isa Vector{T}
+                @test eigen!(copy(A), copy(P)).values isa Vector{T}
+            end
+        end
+        # the hermitian fast path returns exactly real values
+        @test all(isreal, eigvals(H))
+        @test eigvals(H) == eigvals(Hermitian(H))
+        @test eigvals(Hermitian(H)) isa Vector{real(S)}
+        @test eigen(Hermitian(H)).values isa Vector{real(S)}
+        @test eigmin(H) isa real(S)
+        @test eigmax(H) isa real(S)
+        @test eigmin(H) ≈ eigmin(Hermitian(H))
+        @test eigmax(H) ≈ eigmax(Hermitian(H))
+        @test eigmin(eigen(H)) === minimum(eigvals(Hermitian(H)))
+        @test eigmax(eigen(H, P)) ≈ maximum(eigvals(Hermitian(H), Hermitian(P)))
+        # non-Hermitian complex matrices throw even if their computed eigenvalues happen to
+        # be real (G's are), as whether they are exactly real is subject to rounding
+        @test_throws DomainError eigmax(G)
+        @test_throws DomainError eigmin(G)
+    end
+    @test @inferred(eigvals(1.0 + 0im)) === 1.0 + 0im
+    @test eigvals(2.0) === 2.0
+    @test eigmax(1.0 + 0im) === 1.0
+    @test_throws DomainError eigmax(1.0 + 1im)
+    @test eigen(ComplexF16[1 0; 0 2]).values isa Vector{ComplexF16}
+    @test eigen(ComplexF16[1 1; 1 2]).vectors isa Matrix{ComplexF16}
+    @test eigen(Float16[1 1; 1 2]).values isa Vector{Float16}
+end
+
+@testset "generalized eigenproblem and Schur form with Infs and NaNs" begin
+    # LAPACK's generalized eigenvalue and Schur routines may take very long to fail for them,
+    # return wrong results or corrupt memory, so they are rejected beforehand
+    @testset for elty in (Float64, ComplexF64), x in (NaN, Inf)
+        A = elty[1 2 0; x 2 2; 0 1 3]
+        B = elty[2 1 0; 1 2 1; 0 1 2]
+        for (X, Y) in ((A, B), (B, A))
+            @test_throws ArgumentError eigvals(X, Y)
+            @test_throws ArgumentError eigen(X, Y)
+            @test_throws ArgumentError schur(X, Y)
+            # called only for LAPACK older than 3.6
+            @test_throws ArgumentError LAPACK.ggev!('N', 'V', copy(X), copy(Y))
+            @test_throws ArgumentError LAPACK.gges!('V', 'V', copy(X), copy(Y))
+        end
+    end
+    # xGGEV wrote to the column after the eigenvectors for a NaN eigenvalue (#1808)
+    @test_throws ArgumentError eigen([NaN 2; 1 2], [2.0 1; 1 2])
+    @test_throws ArgumentError eigen([Inf 2; 1 2], [2.0 1; 1 2])
 end
 
 end # module TestEigen

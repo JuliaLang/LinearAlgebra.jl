@@ -134,7 +134,7 @@ let n = 10
         @test size(H.Q) == size(A)
         @test size(H) == size(A)
         @test_throws FieldError H.Z
-        @test convert(Array, H) ≈ A
+        @test Array(H) ≈ A
         @test (H.Q * H.H) * H.Q' ≈ A ≈ (Matrix(H.Q) * Matrix(H.H)) * Matrix(H.Q)'
         @test (H.Q' * A) * H.Q ≈ H.H
         #getindex for HessenbergQ
@@ -153,12 +153,12 @@ let n = 10
         @test q == H.Q
         @test h == H.H
 
-        @test convert(Array, 2 * H) ≈ 2 * A ≈ convert(Array, H * 2)
-        @test convert(Array, H + 2I) ≈ A + 2I ≈ convert(Array, 2I + H)
-        @test convert(Array, H + (2+4im)I) ≈ A + (2+4im)I ≈ convert(Array, (2+4im)I + H)
-        @test convert(Array, H - 2I) ≈ A - 2I ≈ -convert(Array, 2I - H)
-        @test convert(Array, -H) == -convert(Array, H)
-        @test convert(Array, 2*(H + (2+4im)I)) ≈ 2A + (4+8im)I
+        @test Array(2 * H) ≈ 2 * A ≈ Array(H * 2)
+        @test Array(H + 2I) ≈ A + 2I ≈ Array(2I + H)
+        @test Array(H + (2+4im)I) ≈ A + (2+4im)I ≈ Array((2+4im)I + H)
+        @test Array(H - 2I) ≈ A - 2I ≈ -Array(2I - H)
+        @test Array(-H) == -Array(H)
+        @test Array(2*(H + (2+4im)I)) ≈ 2A + (4+8im)I
 
         b = convert(Vector{eltype(H)}, b_)
         B = convert(Matrix{eltype(H)}, B_)
@@ -217,7 +217,7 @@ end
     n = 10
     A = Tridiagonal(rand(n-1), rand(n), rand(n-1))
     H = hessenberg(A)
-    @test convert(Array, H) ≈ A
+    @test Array(H) ≈ A
 end
 
 # check logdet on a matrix that has a positive determinant
@@ -423,6 +423,24 @@ end
         end
     end
 
+    # `uplo` only means something for the symmetric factorization; for the general one the
+    # layout is fixed and `ormhr!` ignores it, so the generic methods must too (#1782)
+    @testset "uplo is ignored for the general factorization: n=$n" for n in (1, 2, 5, 8)
+        F = hessenberg(randn(n, n))
+        QL = F.Q
+        QU = LinearAlgebra.HessenbergQ{Float64,Matrix{Float64},Vector{Float64},false}('U', F.factors, F.τ)
+        @test Matrix(QU) == Matrix(QL)
+        for Q in (QL, QU)
+            Qb = convert(LinearAlgebra.AbstractQ{BigFloat}, Q)
+            @test Matrix(Qb) ≈ Matrix(QL) rtol=1e-12
+            B = big.(randn(n, 3)); C = big.(randn(3, n))
+            @test lmul!(Qb, copy(B)) ≈ Matrix(QL) * B rtol=1e-12
+            @test lmul!(Qb', copy(B)) ≈ Matrix(QL)' * B rtol=1e-12
+            @test rmul!(copy(C), Qb) ≈ C * Matrix(QL) rtol=1e-12
+            @test rmul!(copy(C), Qb') ≈ C * Matrix(QL)' rtol=1e-12
+        end
+    end
+
     @testset "dimension mismatch" begin
         for Q in hessenbergQs(randn(6, 6))
             @test_throws DimensionMismatch lmul!(Q, big.(randn(5, 2)))
@@ -431,6 +449,19 @@ end
             @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q')
         end
     end
+end
+
+@testset "Hessenberg corner cases" begin
+    @test dot(Float64[], UpperHessenberg(zeros(0, 0)), Float64[]) === 0.0
+    A = [4.0 1 2; 1 3 0; 2 1 5]
+    F = hessenberg(A) + 2I
+    @test F.μ == 2
+    @test Matrix(F) ≈ A + 2I
+    @test occursin("\nwith shift μI for μ = 2\nQ factor:", sprint(show, "text/plain", F))
+    @test !occursin("with shift", sprint(show, "text/plain", hessenberg(A)))
+    # scaling that would change the eltype of F.H
+    @test_throws MethodError hessenberg(A) * (1 + 2im)
+    @test_throws MethodError (1 + 2im) * hessenberg(A)
 end
 
 end # module TestHessenberg

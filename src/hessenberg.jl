@@ -96,16 +96,16 @@ function Matrix{T}(H::UpperHessenberg) where T
     return triu!(copyto!(Matrix{T}(undef, m, n), H.data), -1)
 end
 
-Base.isassigned(H::UpperHessenberg, i::Int, j::Int) =
-    i <= j+1 ? isassigned(H.data, i, j) : true
+Base.isassigned(H::UpperHessenberg, i::Signed, j::Signed) =
+    i - oneunit(i) <= j ? isassigned(H.data, i, j) : true
 
-Base.@propagate_inbounds getindex(H::UpperHessenberg{T}, i::Int, j::Int) where {T} =
-    i <= j+1 ? convert(T, H.data[i,j]) : zero(T)
+Base.@propagate_inbounds getindex(H::UpperHessenberg{T}, i::Signed, j::Signed) where {T} =
+    i - oneunit(i) <= j ? convert(T, H.data[i,j]) : zero(T)
 
 Base._reverse(A::UpperHessenberg, dims) = reverse!(Matrix(A); dims)
 
-Base.@propagate_inbounds function setindex!(A::UpperHessenberg, x, i::Integer, j::Integer)
-    if i > j+1
+Base.@propagate_inbounds function setindex!(A::UpperHessenberg, x, i::Signed, j::Signed)
+    if i - oneunit(i) > j
         iszero(x) || throw(ArgumentError(LazyString("cannot set index in the lower triangular part ",
             lazy"($i, $j) of an UpperHessenberg matrix to a nonzero value ($x)")))
     else
@@ -571,13 +571,13 @@ julia> q == F.Q && h == F.H
 true
 ```
 """
-hessenberg(A::AbstractMatrix{T}) where T =
-    hessenberg!(eigencopy_oftype(A, eigtype(T)))
+hessenberg(A::AbstractMatrix) =
+    hessenberg!(eigencopy_oftype(A, eigtype(A)))
 
 function show(io::IO, mime::MIME"text/plain", F::Hessenberg)
     summary(io, F)
     if !iszero(F.μ)
-        print("\nwith shift μI for μ = ", F.μ)
+        print(io, "\nwith shift μI for μ = ", F.μ)
     end
     println(io, "\nQ factor:")
     show(io, mime, F.Q)

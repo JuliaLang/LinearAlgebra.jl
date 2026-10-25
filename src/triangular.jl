@@ -232,13 +232,13 @@ _shouldforwardindex(U::LowerTriangular, row::Integer, col::Integer) = row >= col
 _shouldforwardindex(U::UnitUpperTriangular, row::Integer, col::Integer) = row < col
 _shouldforwardindex(U::UnitLowerTriangular, row::Integer, col::Integer) = row > col
 
-Base.isassigned(A::UpperOrLowerTriangular, i::Int, j::Int) =
+Base.isassigned(A::UpperOrLowerTriangular, i::Signed, j::Signed) =
     _shouldforwardindex(A, i, j) ? isassigned(A.data, i, j) : true
 
-Base.isstored(A::UpperOrLowerTriangular, i::Int, j::Int) =
+Base.isstored(A::UpperOrLowerTriangular, i::Signed, j::Signed) =
     _shouldforwardindex(A, i, j) ? Base.isstored(A.data, i, j) : false
 
-@propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Int, j::Int) where {T}
+@propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Signed, j::Signed) where {T}
     if _shouldforwardindex(A, i, j)
         A.data[i,j]
     else
@@ -246,7 +246,7 @@ Base.isstored(A::UpperOrLowerTriangular, i::Int, j::Int) =
         ifelse(i == j, oneunit(T), zero(T))
     end
 end
-@propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, i::Int, j::Int)
+@propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j]
     else
@@ -293,7 +293,7 @@ end
         lazy"cannot set index ($i, $j) on the diagonal of a $Tn matrix to a non-unit value ($x)"))
 end
 
-@propagate_inbounds function setindex!(A::UpperTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::UpperTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -307,7 +307,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -325,7 +325,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::LowerTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::LowerTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -339,7 +339,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -356,6 +356,9 @@ end
     end
     return A
 end
+
+_zero_triangular_half_str(::Type{<:UpperOrUnitUpperTriangular}) = "lower"
+_zero_triangular_half_str(::Type{<:LowerOrUnitLowerTriangular}) = "upper"
 
 @noinline function throw_setindex_structuralzero_error(T::DataType, @nospecialize(x))
     Ts = _zero_triangular_half_str(T)
@@ -1303,6 +1306,10 @@ for (cty, aty, bty) in ((:UpperTriangular, :UpperTriangular, :UpperTriangular),
     end
 end
 
+# inverse is generally dense: only strided parents keep their array type
+_inv_identity(A::UpperOrLowerTriangularStrided, ::Type{S}) where {S} = copyto!(similar(A, S, size(A)), I)
+_inv_identity(A::AbstractTriangular, ::Type{S}) where {S} = Matrix{S}(I, size(A))
+
 for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
                             (:UnitLowerTriangular, 'L', 'U'),
                             (:UpperTriangular, 'U', 'N'),
@@ -1315,7 +1322,7 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
         function inv(A::$t{T}) where {T}
             S = typeof(inv(oneunit(T)))
             if S <: BlasFloat || S === T # i.e. A is unitless
-                $t(ldiv!(convert(AbstractArray{S}, A), Matrix{S}(I, size(A))))
+                $t(ldiv!(convert(AbstractArray{S}, A), _inv_identity(A, S)))
             else
                 J = (one(T)*I)(size(A, 1))
                 $t(ldiv!(similar(A, S, size(A)), A, J))
@@ -1384,25 +1391,20 @@ end
 
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
-function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+# permute and scale, as for general matrices, have no effect on triangular ones
+function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
+    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
 end
-function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
+    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
 end
 
 ####################
@@ -1850,7 +1852,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
                 for i in axes(B,1)[2:end]
                     C[i,k] = oA \ B[i,k] - _ustrip(conj(A[i,1])) * C1
                 end
-                for j in axes(A,2)
+                for j in axes(A,2)[2:end]
                     Cj = C[j,k]
                     for i in j+1:lastindex(A,1)
                         C[i,k] -= _ustrip(conj(A[i,j])) * Cj
@@ -2987,16 +2989,17 @@ end
 # End of auxiliary functions for matrix square root
 
 # Generic eigensystems
-eigvals(A::AbstractTriangular; sortby = eigsortby) = sorteig!(diag(A), sortby)
+# permute and scale, as for general matrices, have no effect on triangular ones
+eigvals(A::AbstractTriangular; permute::Bool=true, scale::Bool=true, sortby = eigsortby) = sorteig!(diag(A), sortby)
 # fallback for unknown types
-function eigvecs(A::AbstractTriangular{<:BlasFloat}; sortby = eigsortby)
+function eigvecs(A::AbstractTriangular{<:BlasFloat}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
     if istriu(A)
         eigvecs(UpperTriangular(Matrix(A)); sortby)
     else # istril(A)
         eigvecs(LowerTriangular(Matrix(A)); sortby)
     end
 end
-function eigvecs(A::AbstractTriangular{T}; sortby = eigsortby) where T
+function eigvecs(A::AbstractTriangular{T}; permute::Bool=true, scale::Bool=true, sortby = eigsortby) where T
     TT = promote_type(T, Float32)
     if TT <: BlasFloat
         return eigvecs(convert(AbstractMatrix{TT}, A); sortby)
@@ -3026,7 +3029,7 @@ function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     return abs_det, sgn
 end
 
-eigen(A::AbstractTriangular; sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
+eigen(A::AbstractTriangular; permute::Bool=true, scale::Bool=true, sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
 
 # Generic singular systems
 for func in (:svd, :svd!, :svdvals)

@@ -342,6 +342,7 @@ qr!(A::AbstractMatrix) = qr!(A, NoPivot())
 @deprecate qr!(A::AbstractMatrix, ::Val{false}) qr!(A, NoPivot())
 
 _qreltype(::Type{T}) where T = typeof(zero(T)/sqrt(abs2(one(T))))
+_qreltype(A::AbstractArray) = _qreltype(_valeltype(A))
 
 """
     qr(A, pivot = NoPivot(); blocksize) -> F
@@ -426,9 +427,9 @@ true
     elementary reflectors, so that the `Q` and `R` matrices can be stored
     compactly rather than two separate dense matrices.
 """
-function qr(A::AbstractMatrix{T}, arg...; kwargs...) where T
+function qr(A::AbstractMatrix, arg...; kwargs...)
     require_one_based_indexing(A)
-    AA = copy_similar(A, _qreltype(T))
+    AA = copy_similar(A, _qreltype(A))
     return _qr(AA, arg...; kwargs...)
 end
 # TODO: remove in Julia v2.0
@@ -529,13 +530,13 @@ size(F::Union{QR,QRCompactWY,QRPivoted}) = size(getfield(F, :factors))
 size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :factors), dim)
 
 
-function ldiv!(A::QRCompactWY{T}, b::AbstractVector{T}) where {T}
+function ldiv!(A::QRCompactWY, b::AbstractVector)
     require_one_based_indexing(b)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), b), 1:size(A, 2)))
     return b
 end
-function ldiv!(A::QRCompactWY{T}, B::AbstractMatrix{T}) where {T}
+function ldiv!(A::QRCompactWY, B::AbstractMatrix)
     require_one_based_indexing(B)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), B), 1:size(A, 2), 1:size(B, 2)))
@@ -571,14 +572,73 @@ function rank(A::QRPivoted; atol::Real=0, rtol::Real=min(size(A)...) * eps(real(
     return something(findfirst(i -> abs(A.factors[i,i]) <= tol, 1:m), m+1) - 1
 end
 
+"""
+    nullspace(F::QRPivoted; atol::Real=0, rtol::Real=min(n,m)*ϵ)
+
+Compute an orthonormal basis for the nullspace of the matrix `A` from its pivoted QR
+factorization `F = qr(A, ColumnNorm())`. The numerical rank `r` is determined as in
+[`rank(::QRPivoted)`](@ref) with the tolerances `atol` and `rtol`. Writing
+`A[:, F.p] = Q * [R₁₁ R₁₂; 0 R₂₂]` with `R₁₁` of size `r×r`, the columns of
+`[-R₁₁ \\ R₁₂; I]` (with rows permuted back by `F.p`) span the nullspace, and they are
+orthonormalized before being returned.
+
+Like [`rank(::QRPivoted)`](@ref), this is typically faster than the SVD-based
+[`nullspace`](@ref) method for matrices but may be less reliable for ill-conditioned matrices.
+
+!!! compat "Julia 1.14"
+    The `nullspace(::QRPivoted)` method requires at least Julia 1.14.
+"""
+function nullspace(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps(real(float(eltype(F)))) * iszero(atol))
+    m, n = size(F)
+    T = eltype(F)
+    (m == 0 || n == 0) && return Matrix{T}(I, n, n)
+    r = rank(F; atol, rtol)
+    # the upper triangle of F.factors holds R; reading it directly avoids the copy in F.R
+    R = F.factors
+    # A[:, p] * [-R₁₁ \ R₁₂; I] = Q * [0; R₂₂] ≈ 0
+    Y = zeros(T, n, n - r)
+    Y₁ = view(Y, 1:r, :)
+    Y₁ .= .-view(R, 1:r, r+1:n)
+    ldiv!(UpperTriangular(view(R, 1:r, 1:r)), Y₁)
+    for j in 1:n-r
+        Y[r+j, j] = one(T)
+    end
+    # undo the column pivoting in place; then orthonormalize, which commutes with
+    # row permutations (up to column signs)
+    Base.invpermuterows!(Y, copy(F.p))
+    return Matrix(qr!(Y).Q)
+end
+
+"""
+    cond(F::Union{QR,QRCompactWY,QRPivoted}, p::Real=2)
+
+Condition number in the operator 2-norm of the matrix `A` from its QR factorization
+`F = qr(A)` or `F = qr(A, ColumnNorm())`, computed as `cond(F.R, 2)`. This is exact since
+neither `F.Q` nor the column permutation changes 2-norms. Other values of `p` are not
+supported, because the QR factorization does not preserve the operator `1`- and `Inf`-norms;
+use `cond(A, p)` or `cond(Matrix(F), p)` instead.
+
+!!! compat "Julia 1.14"
+    The `cond` methods for QR factorizations require at least Julia 1.14.
+"""
+function cond(F::Union{QR,QRCompactWY,QRPivoted}, p::Real=2)
+    p == 2 || throw(ArgumentError(lazy"only the 2-norm condition number can be computed from a QR factorization, got p = $p; use cond(A, p) or cond(Matrix(F), p) instead"))
+    return cond(F.R, 2)
+end
+
+# In-place solves store the right-hand side in the first m rows of B and overwrite
+# B with the n-row solution, so B must have exactly max(m, n) rows.
+function _check_qr_ldiv_rhs(A, B::AbstractVecOrMat)
+    m, n = size(A)
+    size(B, 1) == max(m, n) ||
+        throw(DimensionMismatch(lazy"B has $(size(B, 1)) rows, but needs exactly $(max(m, n))"))
+end
+
 # Julia implementation similar to xgelsy
 function ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractMatrix{T}, rcond::Real) where {T<:BlasFloat}
     require_one_based_indexing(B)
+    _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
-
-    if m > size(B, 1) || n > size(B, 1)
-        throw(DimensionMismatch(lazy"B has leading dimension $(size(B, 1)) but needs at least $(max(m, n))"))
-    end
 
     if length(A.factors) == 0 || length(B) == 0
         return B, 0
@@ -656,7 +716,7 @@ ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractVector{T}) where {T<:BlasFloat
 ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractMatrix{T}) where {T<:BlasFloat} =
     ldiv!(A, B, min(size(A)...)*eps(real(T)))[1]
 
-function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
+function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix) where T
     m, n = size(A)
     minmn = min(m,n)
     mB, nB = size(B)
@@ -684,7 +744,7 @@ function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
         end
         ldiv!(UpperTriangular(view(R, :, 1:minmn)), view(B, 1:minmn, :))
         if n > m # Apply elementary transformation to solution
-            B[m + 1:mB,1:nB] .= zero(T)
+            fill!(view(B, m + 1:mB, 1:nB), zero(eltype(B)))
             for j = 1:nB
                 for k = 1:m
                     vBj = B[k,j]'
@@ -704,7 +764,9 @@ function _wide_qr_ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
 end
 
 
-function ldiv!(A::QR{T}, B::AbstractMatrix{T}) where T
+function ldiv!(A::QR, B::AbstractMatrix)
+    require_one_based_indexing(B)
+    _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
     m < n && return _wide_qr_ldiv!(A, B)
 
@@ -779,7 +841,7 @@ function (\)(A::Union{QR{T},QRCompactWY{T},QRPivoted{T}}, BIn::VecOrMat{Complex{
 #                                                 |x4|y4|
     B = reshape(copy(transpose(reinterpret(T, reshape(BIn, (1, length(BIn)))))), size(BIn, 1), 2*size(BIn, 2))
 
-    X = _zeros(T, B, n)
+    X = _zeros(T, B, A)
     X[1:size(B, 1), :] = B
 
     ldiv!(A, X)

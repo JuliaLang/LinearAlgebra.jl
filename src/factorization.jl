@@ -101,7 +101,8 @@ end
 convert(::Type{T}, f::T) where {T<:Factorization} = f
 convert(::Type{T}, f::Factorization) where {T<:Factorization} = T(f)::T
 
-convert(::Type{T}, f::Factorization) where {T<:AbstractArray} = T(f)::T
+# a factorization is not an array; use `Matrix(F)`, `Array(F)` or `AbstractMatrix(F)` instead
+@deprecate(convert(::Type{T}, f::Factorization) where {T<:AbstractArray}, T(f), false)
 
 ### General promotion rules
 Factorization{T}(F::Factorization{T}) where {T} = F

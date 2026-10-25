@@ -389,6 +389,30 @@ end
         @test B[1] ≈ C[1] ≈ A[1] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))
         @test B[2:end] ≈ C[2:end] ≈ A[2:end] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))*x[2:end]
     end
+    # the two kernels agree with each other and with the definition, also for non-commutative
+    # elements
+    for T in (Float64, ComplexF64, Quaternion{Float64})
+        x = randn(T, 6)
+        τ = randn(T)
+        A = randn(T, 6, 3)
+        v = [one(T); x[2:end]]
+        H = I - v*conj(τ)*v'
+        B = LinearAlgebra.reflectorApplyNumeric!(x, τ, copy(A))
+        C = LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+        @test B ≈ C ≈ H*A
+        @test LinearAlgebra.reflectorApply!(x, τ, copy(A)) == B   # numeric elements: `dot`-based kernel
+    end
+    # elements of `A` that are vectors: apply the reflector to each component
+    x = randn(6)
+    τ = randn()
+    A1, A2 = randn(6, 3), randn(6, 3)
+    A = [SizedArray{(2,)}([A1[i, j], A2[i, j]]) for i in axes(A1, 1), j in axes(A1, 2)]
+    B = LinearAlgebra.reflectorApply!(x, τ, copy(A))
+    @test B == LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+    @test all(b -> b isa SizedArray{(2,),Float64}, B)
+    B1, B2 = LinearAlgebra.reflectorApply!(x, τ, copy(A1)), LinearAlgebra.reflectorApply!(x, τ, copy(A2))
+    @test all(i -> B[i].data ≈ [B1[i], B2[i]], eachindex(B))
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApplyLoop!(x[1:5], τ, copy(A))
 end
 
 @testset "axp(b)y! for element type without commutative multiplication" begin
@@ -509,6 +533,14 @@ end
     end
 end
 
+@testset "norm correctly promotes abstractly-typed vectors" begin
+    v = Real[1, randn(), 2f0, big(π)]
+    w = Number[1, randn(ComplexF64), 2f0, big(π)]
+    for p in (1, 2, Inf), x in (v, w)
+        @test norm(x, p) == norm(big.(x), p)
+    end
+end
+
 @testset "Issue 14657" begin
     @test det([true false; false true]) == det(Matrix(1I, 2, 2))
 end
@@ -527,6 +559,47 @@ end
     @test [[1, 2], [3, 4]] ≈ [[1.0-eps(), 2.0+eps()], [3.0+2eps(), 4.0-1e8eps()]]
     @test [[1, 2], [3, 4]] ≉ [[1.0-eps(), 2.0+eps()], [3.0+2eps(), 4.0-1e9eps()]]
     @test [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]] ≈ [[1,2, [3,4]], 5.0, [6im, [7.0, 8.0]]]
+end
+
+@testset "promote_leaf_eltypes with non-concrete eltypes (issue #1083)" begin
+    P = LinearAlgebra.promote_leaf_eltypes
+    # abstract eltypes are narrowed to the promoted types of the leaves
+    for T in (Any, Number, Real, AbstractFloat, Union{Number,Missing}, Union{Real,Missing},
+              Union{AbstractFloat,Missing}, Union{AbstractFloat,Int}, Union{Float32,Float64},
+              Union{Int,Float64})
+        @test P(T[824.9999999999999]) === Float64
+        @test T[824.9999999999999] ≈ [825]
+        @test [825] ≈ T[824.9999999999999]
+        @test T[824.9999999999999] ≉ [825] rtol=0
+    end
+    @test P(Real[1, 2.0]) === Float64
+    @test P(Number[1, 2.0f0]) === Float32
+    @test P(Number[1, 2.0im]) === ComplexF64
+    @test P(Real[1, 2//3]) === Rational{Int}
+    @test P(Real[1.0f0, big(2.0)]) === BigFloat
+    @test P(Tuple{Real,Real}((1, 2.0))) === Float64
+    # nested arrays with abstract element types
+    @test P(Vector{Real}[[1, 2.0], [3]]) === Float64
+    @test P(AbstractVector{Real}[Real[1, 2.0f0], Int[3]]) === Float32
+    @test P(Vector{Number}[Number[1], Number[2, 3.0im]]) === ComplexF64
+    @test P(Vector{Any}[Any[1], Any[2, [3.0im]]]) === ComplexF64
+    @test Vector{Real}[Real[1.0, 2.0], Real[3.0]] ≈ [[1.0, 2.0], [3.0 + 1e-10]]
+    # empty arrays with abstract or bottom eltypes
+    @test P(Number[]) === Bool
+    @test P(Vector{Real}[]) === Bool
+    @test P(Union{}[]) === Bool
+    @test AbstractFloat[] ≈ Int[]
+    # concrete eltypes still short-circuit, and remain inferrable
+    @test @inferred(P([1.0, 2.0])) === Float64
+    @test @inferred(P([[1.0f0], [2.0f0]])) === Float32
+    @test @inferred(P((1.0, 2.0))) === Float64
+    @test @inferred(P((1, 2.0))) === Float64
+    @test @inferred(P((1, (2.0f0, 3)))) === Float32
+    @test @inferred(P(AbstractVector{Float64}[[1.0]])) === Float64
+    @test P(Complex{Real}[1 + 2im]) === Complex{Real}
+    # UniformScaling comparisons
+    @test Real[1.0 0; 0 1.0+1e-10] ≈ I
+    @test Real[1.0 0; 0 1.0+1e-10] ≉ I(2) rtol=0
 end
 
 @testset "Issue 40128" begin
@@ -559,6 +632,49 @@ Base.adjoint(a::ModInt{n}) where {n} = ModInt{n}(conj(a))
 Base.transpose(a::ModInt{n}) where {n} = a  # see Issue 20978
 LinearAlgebra.Adjoint(a::ModInt{n}) where {n} = adjoint(a)
 LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
+
+@testset "scalar type of the right-hand side in ldiv" begin
+    _scalartype = LinearAlgebra._scalartype
+    @test _scalartype(Float64) === Float64
+    @test _scalartype(Complex{Int}) === Complex{Int}
+    @test _scalartype(Furlong{1,Float64}) === Furlong{1,Float64}
+    @test _scalartype(ModInt{2}) === ModInt{2}          # a scalar type that is not a `Number`
+    @test _scalartype(Vector{Float64}) === Float64      # vector-valued elements
+    @test _scalartype(Vector{Vector{ComplexF32}}) === ComplexF32
+    @test _scalartype(Any) === Any
+    # homogeneous containers of a concrete scalar type are not iterated by `promote_leaf_eltypes`
+    @test LinearAlgebra.promote_leaf_eltypes(ModInt{2}.([1, 0])) === ModInt{2}
+    @test LinearAlgebra.promote_leaf_eltypes((ModInt{2}(1), ModInt{2}(0))) === ModInt{2}
+    # the factorization is promoted to the scalar type of the solution, keeping its units
+    A = [4.0 1.0; 1.0 3.0]
+    x = lu(Float32.(A)) \ Furlong.([1.0, 2.0])
+    @test x isa Vector{Furlong{1,Float64}}
+    @test map(x -> x.val, x) ≈ A \ [1.0, 2.0]
+    @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
+    # vector-valued right-hand side (#904): the elements of `b` are (static) vectors
+    b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
+    @test _scalartype(eltype(b)) === Float64
+    X = A \ [1.0 2.0; 3.0 4.0]   # the same system, component by component
+    for F in (lu(A), lu(Float32.(A)), cholesky(A), qr(A))
+        x = F \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+        @test all(((y, z),) -> y.data ≈ z.data, zip(A * x, b))
+    end
+    @test ldiv!(lu(A), copy(b)) isa Vector{<:SizedArray{(2,),Float64}}
+    # the generic `\` derives the solution type from the scalar type of the right-hand side
+    for M in (A, Float32.(A), [4 1; 1 3], Tridiagonal(A), hessenberg(A))
+        x = M \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+    end
+    # least squares, through the pivoted QR
+    At = [A; 1.0 1.0]
+    Xt = At \ [1.0 2.0; 3.0 4.0; 1.0 2.0]
+    x = At \ vcat(b, [b[1]])
+    @test x isa Vector{<:SizedArray{(2,),Float64}}
+    @test all(i -> x[i].data ≈ Xt[i, :], 1:2)
+end
 
 @testset "Issue 22042" begin
     A = [ModInt{2}(1) ModInt{2}(0); ModInt{2}(1) ModInt{2}(1)]
@@ -1021,6 +1137,54 @@ end
     @test_throws DimensionMismatch fn([I; ones(1, 2)])
     @test_throws DimensionMismatch fn([I ones(BigInt, 2, 1)])
     @test_throws DimensionMismatch fn([I; ones(BigInt, 1, 2)])
+end
+
+@testset "_valeltype" begin
+    # the element types are only known at run time
+    for (A, T) in Any[([1, 2], Int), (Real[1, 2.0], Float64), (Real[], Real),
+                      (Symmetric(Real[1 2; 2.0 3]), Int)]
+        @test LinearAlgebra._valeltype(A) == T
+    end
+end
+
+@testset "wrapper character case conversion" begin
+    @test LinearAlgebra._uppercase('n') == 'N'
+    @test LinearAlgebra._lowercase('N') == 'n'
+    @test_throws ArgumentError LinearAlgebra._uppercase('x')
+    @test_throws ArgumentError LinearAlgebra._lowercase('x')
+end
+
+@testset "checkbounds of a Broadcasted with a BandIndex" begin
+    A = [1 2; 3 4]
+    bc = Broadcast.instantiate(Broadcast.broadcasted(+, A, A))
+    @test checkbounds(bc, LinearAlgebra.BandIndex(1, 1)) === nothing
+    @test_throws BoundsError checkbounds(bc, LinearAlgebra.BandIndex(1, 2))
+end
+
+@testset "versioninfo without relevant environment variables" begin
+    vars = ("JULIA_NUM_THREADS", "MKL_DYNAMIC", "MKL_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS", "GOTO_NUM_THREADS", "OMP_NUM_THREADS")
+    withenv((v => nothing for v in vars)...) do
+        @test occursin(r"Relevant environment variables:\n\s+\[none\]", sprint(LinearAlgebra.versioninfo))
+    end
+end
+
+@testset "peakflops in parallel" begin
+    @test LinearAlgebra.peakflops(64, ntrials=1, parallel=true) > 0
+end
+
+@testset "generic helpers corner cases" begin
+    # MulAddMul with α == 1 and β != 0, constructed at run time
+    m = LinearAlgebra.MulAddMul(Base.inferencebarrier(1), Base.inferencebarrier(2))
+    @test m isa LinearAlgebra.MulAddMul{true,false}
+    @test m.alpha == 1 && m.beta == 2
+    @test_throws ArgumentError @macroexpand LinearAlgebra.@stable_muladdmul foo(1)
+    # generic fallbacks, for an array type without specialized methods
+    @test !issymmetric(Test.GenericArray(ones(ComplexF64, 2, 3)))
+    @test !ishermitian(Test.GenericArray(ones(2, 3)))
+    x, y = BigFloat[1, 2], BigFloat[1, 2, 3]
+    @test_throws BoundsError axpy!(2, x, 1:2, y, 3:4)
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApply!(ones(2, 3), [1.0, 2], 1.0)
 end
 
 end # module TestGeneric

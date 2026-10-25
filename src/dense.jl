@@ -5,8 +5,6 @@
 ## BLAS cutoff threshold constants
 
 #TODO const DOT_CUTOFF = 128
-const ASUM_CUTOFF = 32
-const NRM2_CUTOFF = 32
 
 # Generic cross-over constant based on benchmarking on a single thread with an i7 CPU @ 2.5GHz
 # L1 cache: 32K, L2 cache: 256K, L3 cache: 6144K
@@ -100,12 +98,6 @@ function norm(x::StridedVector{T}, rx::Union{UnitRange{TI},AbstractRange{TI}}) w
     end
     GC.@preserve x BLAS.nrm2(length(rx), pointer(x)+(first(rx)-1)*sizeof(T), step(rx))
 end
-
-norm1(x::Union{Array{T},StridedVector{T}}) where {T<:BlasReal} =
-    length(x) < ASUM_CUTOFF ? generic_norm1(x) : BLAS.asum(x)
-
-norm2(x::Union{Array{T},StridedVector{T}}) where {T<:BlasFloat} =
-    length(x) < NRM2_CUTOFF ? generic_norm2(x) : BLAS.nrm2(x)
 
 # Conservative assessment of types that have zero(T) defined for themselves
 """
@@ -423,7 +415,9 @@ end
 function diagm_container(size, kv::Pair{<:Integer,<:AbstractVector}...)
     T = promote_type(map(x -> eltype(x.second), kv)...)
     # For some type `T`, `zero(T)` is not a `T` and `zeros(T, ...)` fails.
-    U = promote_type(T, typeof(zero(T)))
+    # The type assertion helps inference when `T` is not a constant type: otherwise `U`
+    # is inferred as `Any` and `zeros(U, ...)` may also dispatch to `zeros(dims::Integer...)`.
+    U = promote_type(T, typeof(zero(T)))::Type
     return zeros(U, diagm_size(size, kv...)...)
 end
 diagm_container(size, kv::Pair{<:Integer,<:BitVector}...) =
@@ -590,7 +584,14 @@ kron(a::AdjointAbsVec, b::AdjointAbsVec) = adjoint(kron(adjoint(a), adjoint(b)))
 kron(a::AdjOrTransAbsVec, b::AdjOrTransAbsVec) = transpose(kron(transpose(a), transpose(b)))
 
 # Matrix power
-(^)(A::AbstractMatrix, p::Integer) = p < 0 ? power_by_squaring(inv(A), -p) : power_by_squaring(A, p)
+function (^)(A::AbstractMatrix, p::Integer)
+    if p < 0
+        invA = inv(A) # prevents overflow with typemin(p)
+        return invA * power_by_squaring(invA, -(p+1))
+    else
+        return power_by_squaring(A, p)
+    end
+end
 function (^)(A::AbstractMatrix{T}, p::Integer) where T<:Integer
     # make sure that e.g. [1 1;1 0]^big(3)
     # gets promotes in a similar way as 2^big(3)
@@ -599,29 +600,37 @@ function (^)(A::AbstractMatrix{T}, p::Integer) where T<:Integer
 end
 function integerpow(A::AbstractMatrix{T}, p) where T
     TT = promote_op(^, T, typeof(p))
-    return (TT == T ? A : convert(AbstractMatrix{TT}, A))^Integer(p)
+    A2 = convert(AbstractMatrix{TT}, A)
+    if typemin(Int) ≤ p ≤ typemax(Int)
+        return A2^Int(p)
+    else
+        return A2^BigInt(p)
+    end
 end
 function schurpow(A::AbstractMatrix, p)
+    T = promote_op(^, eltype(A), typeof(p))
     if istriu(A)
+        cA = convert(AbstractMatrix{complex(float(T))}, A)
         # Integer part
-        retmat = A ^ floor(Integer, p)
+        retmat = integerpow(cA, floor(p))
         # Real part
         if p - floor(p) == 0.5
             # special case: A^0.5 === sqrt(A)
-            retmat = retmat * sqrt(A)
+            retmat = retmat * sqrt(cA)
         else
-            retmat = retmat * powm!(UpperTriangular(float.(A)), real(p - floor(p)))
+            retmat = retmat * powm!(UpperTriangular(copy(cA)), real(p - floor(p)))
         end
     else
-        S,Q,d = Schur{Complex}(schur(A))
+        rA = convert(AbstractMatrix{float(T)}, A)
+        S, Q, d = Schur{Complex}(schur(rA))
         # Integer part
-        R = S ^ floor(Integer, p)
+        R = integerpow(S, floor(p))
         # Real part
         if p - floor(p) == 0.5
             # special case: A^0.5 === sqrt(A)
             R = R * sqrt(S)
         else
-            R = R * powm!(UpperTriangular(float.(S)), real(p - floor(p)))
+            R = R * powm!(UpperTriangular(copy(S)), real(p - floor(p)))
         end
         retmat = Q * R * Q'
     end
@@ -710,7 +719,7 @@ julia> exp(A)
  0.0      2.71828
 ```
 """
-exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(eltype(A))))
+exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(A)))
 exp(A::AdjointAbsMat) = adjoint(exp(parent(A)))
 exp(A::TransposeAbsMat) = transpose(exp(parent(A)))
 
@@ -1148,7 +1157,6 @@ function inv(A::StridedMatrix{T}) where T
         Ai = tril!(parent(inv(LowerTriangular(A))))
     else
         Ai = inv!(lu(A))
-        Ai = convert(typeof(parent(Ai)), Ai)
     end
     return Ai
 end
@@ -1637,17 +1645,18 @@ verify/rule out each property. It will short-circuit as soon as it can rule out
 symmetry/triangular structure. The return value can be reused for efficient solving
 of multiple systems. For example: `A=factorize(A); x=A\\b; y=A\\C`.
 
-| Properties of `A`          | type of factorization                          |
-|:---------------------------|:-----------------------------------------------|
+| Properties of `A`          | type of factorization                      |
+|:---------------------------|:-------------------------------------------|
 | Dense Symmetric/Hermitian  | Bunch-Kaufman (see [`bunchkaufman`](@ref)) |
-| Sparse Symmetric/Hermitian | LDLt (see [`ldlt`](@ref))      |
-| Triangular                 | Triangular                                     |
-| Diagonal                   | Diagonal                                       |
-| Bidiagonal                 | Bidiagonal                                     |
-| Tridiagonal                | LU (see [`lu`](@ref))            |
-| Symmetric real tridiagonal | LDLt (see [`ldlt`](@ref))      |
-| General square             | LU (see [`lu`](@ref))            |
-| General non-square         | QR (see [`qr`](@ref))            |
+| Sparse Symmetric/Hermitian | LDLt (see [`ldlt`](@ref))                  |
+| Triangular                 | Triangular                                 |
+| Diagonal                   | Diagonal                                   |
+| Bidiagonal                 | Bidiagonal                                 |
+| UniformScaling             | UniformScaling                             |
+| Tridiagonal                | LU (see [`lu`](@ref))                      |
+| Symmetric real tridiagonal | LDLt (see [`ldlt`](@ref))                  |
+| General square             | LU (see [`lu`](@ref))                      |
+| General non-square         | QR (see [`qr`](@ref))                      |
 
 # Examples
 ```jldoctest
@@ -1780,7 +1789,7 @@ end
 ## Moore-Penrose pseudoinverse
 
 """
-    pinv(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    pinv(M; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
     pinv(M, rtol::Real) = pinv(M; rtol=rtol) # to be deprecated in Julia 2.0
 
 Computes the Moore-Penrose pseudoinverse.
@@ -1834,9 +1843,10 @@ true
 
 [^KY88]: Konstantinos Konstantinides and Kung Yao, "Statistical analysis of effective singular values in matrix rank determination", IEEE Transactions on Acoustics, Speech and Signal Processing, 36(5), 1988, 757-763. [doi:10.1109/29.1585](https://doi.org/10.1109/29.1585)
 """
-function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(oneunit(T))))*min(size(A)...))*iszero(atol)) where T
+function pinv(A::AbstractMatrix{T}; atol::Number=zero(real(T)), rtol::Real = (eps(real(float(one(T))))*min(size(A)...))*iszero(atol)) where T
     m, n = size(A)
-    Tout = typeof(zero(T)/sqrt(oneunit(T) + oneunit(T)))
+    # inverse units of `T`, numeric type promoted as by a `sqrt` (Int -> Float64)
+    Tout = typeof(inv(oneunit(T)) / sqrt(one(T) + one(T)))
     if m == 0 || n == 0
         return similar(A, Tout, (n, m))
     end
@@ -1844,8 +1854,8 @@ function pinv(A::AbstractMatrix{T}; atol::Real=0, rtol::Real = (eps(real(float(o
         dA = diagview(A)
         maxabsA = maximum(abs, dA)
         tol = max(rtol * maxabsA, atol)
-        B = fill!(similar(A, Tout, (n, m)), 0)
-        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(x)).(dA)
+        B = fill!(similar(A, Tout, (n, m)), zero(Tout))
+        diagview(B) .= (x -> abs(x) > tol ? pinv(x) : zero(Tout)).(dA)
         return B
     end
     SVD         = svd(A)
@@ -1864,16 +1874,22 @@ end
 ## Basis for null space
 
 """
-    nullspace(M; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    nullspace(M; atol::Number=0, rtol::Real=atol>0 ? 0 : min(n,m)*ϵ)
     nullspace(M, rtol::Real) = nullspace(M; rtol=rtol) # to be deprecated in Julia 2.0
+    nullspace(S::SVD; atol::Number=0, rtol::Real=atol>0 ? 0 : min(n,m)*ϵ)
 
-Computes a basis for the nullspace of `M` by including the singular
+Computes a basis for the nullspace of `M` by returning the (orthonormal) singular
 vectors of `M` whose singular values have magnitudes smaller than `max(atol, rtol*σ₁)`,
 where `σ₁` is `M`'s largest singular value.
 
 By default, the relative tolerance `rtol` is `n*ϵ`, where `n`
 is the size of the smallest dimension of `M`, and `ϵ` is the [`eps`](@ref) of
 the element type of `M`.
+
+Instead of a matrix `M`, you can pass an [`SVD`](@ref) factorization object `S`,
+as is returned by the [`svd`](@ref) function. This is useful, for example, if you want to re-use
+an existing SVD result, or if you want to use lower-level `svd` options to have more control
+over the SVD algorithm.
 
 # Examples
 ```jldoctest
@@ -1884,6 +1900,12 @@ julia> M = [1 0 0; 0 1 0; 0 0 0]
  0  0  0
 
 julia> nullspace(M)
+3×1 Matrix{Float64}:
+ 0.0
+ 0.0
+ 1.0
+
+julia> nullspace(svd(M, alg=LinearAlgebra.QRIteration()))
 3×1 Matrix{Float64}:
  0.0
  0.0
@@ -1902,13 +1924,11 @@ julia> nullspace(M, atol=0.95)
  1.0
 ```
 """
-function nullspace(A::AbstractVecOrMat; atol::Real=0, rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(oneunit(eltype(A))))))*iszero(atol))
+function nullspace(A::AbstractVecOrMat; atol::Number=zero(real(eltype(A))), rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
     SVD = svd(A; full=true)
-    tol = max(atol, SVD.S[1]*rtol)
-    indstart = sum(s -> s .> tol, SVD.S) + 1
-    return copy((@view SVD.Vt[indstart:end,:])')
+    return nullspace(SVD; atol, rtol)
 end
 
 """

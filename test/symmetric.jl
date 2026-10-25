@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.Quaternions
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 Random.seed!(1010)
 
@@ -46,10 +47,9 @@ end
 
 @testset "Core functionality" begin
     n = 10
-    areal = randn(n,n)/2
-    aimg  = randn(n,n)/2
-    @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
-        a = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
+    @testset for eltya in (Float64, ComplexF64, BigFloat,
+                           (@static COMPREHENSIVE ? (Float32, ComplexF32, Int) : ())...)
+        a = eltya == Int ? rand(1:7, n, n) : randn(eltya, n, n)
         asym = transpose(a) + a                 # symmetric indefinite
         aherm = a' + a                 # Hermitian indefinite
         apos  = a' * a                 # Hermitian positive definite
@@ -314,6 +314,10 @@ end
                     d, v = eigen(aherm)
                     @test aherm*v[:,1] ≈ d[1]*v[:,1]
                     @test v*Diagonal(d)*v' ≈ aherm
+                    # eigenvalues of a complex matrix are complex unless it's wrapped in Hermitian (#974)
+                    @test eltype(d) == float(eltya)
+                    @test d ≈ eigvals(Hermitian(aherm))
+                    d = real(d)
                     @test isequal(eigvals(aherm[1]), eigvals(aherm[1:1,1:1])[1])
                     @test abs.(eigen(Hermitian(aherm), 1:2).vectors'v[:,1:2]) ≈ Matrix(I, 2, 2)
                     @test abs.(eigen(Hermitian(aherm), d[1] - 1, (d[2] + d[3])/2).vectors'v[:,1:2]) ≈ Matrix(I, 2, 2)
@@ -447,9 +451,7 @@ end
                 msymal = Matrix(symal)
                 @test_throws DimensionMismatch dot(symau, mtype(zeros(eltya, n-1, n-1)))
                 for eltyc in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
-                    creal = randn(n, n)/2
-                    cimag = randn(n, n)/2
-                    c = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(creal, cimag) : creal)
+                    c = eltyc == Int ? rand(1:7, n, n) : randn(eltyc, n, n)
                     symcu = mtype(c, :U)
                     symcl = mtype(c, :L)
                     msymcu = Matrix(symcu)
@@ -484,9 +486,7 @@ end
                 msymau = Matrix(symau)
                 msymal = Matrix(symal)
                 for eltyc in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
-                    creal = randn(n, n)/2
-                    cimag = randn(n, n)/2
-                    c = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(creal, cimag) : creal)
+                    c = eltyc == Int ? rand(1:7, n, n) : randn(eltyc, n, n)
                     symcu = mtype(c, :U)
                     symcl = mtype(c, :L)
                     msymcu = Matrix(symcu)
@@ -730,7 +730,8 @@ end
 end
 
 @testset "$HS solver with $RHS RHS - $T" for HS in (Hermitian, Symmetric),
-        RHS in (Hermitian, Symmetric, Diagonal, UpperTriangular, LowerTriangular),
+        RHS in (Symmetric, Diagonal, UpperTriangular,
+                (@static COMPREHENSIVE ? (Hermitian, LowerTriangular) : ())...),
         T   in (Float64, ComplexF64)
     D = rand(T, 10, 10); D = D'D
     A = HS(D)
@@ -916,9 +917,10 @@ end
 end
 
 @testset "Multiplications symmetric/hermitian for T=$T and S=$S for size n=$n" for T in
-        (Float16, Float32, Float64, BigFloat, Quaternion{Float64}),
-        S in (T <: Quaternion ? (Quaternion{Float64},) : (ComplexF16, ComplexF32, ComplexF64, Quaternion{Float64})),
-        n in (2, 3, 4)
+        (Float64, (@static COMPREHENSIVE ? (Float16, Float32, BigFloat, Quaternion{Float64}) : ())...),
+        S in (T <: Quaternion ? (Quaternion{Float64},) :
+              (ComplexF64, (@static COMPREHENSIVE ? (ComplexF16, ComplexF32, Quaternion{Float64}) : ())...)),
+        n in (3, (@static COMPREHENSIVE ? (2, 4) : ())...)
     let A = transpose(Symmetric(rand(S, n, n))), Bv = Vector(rand(T, n)), Bm = Matrix(rand(T, n,n))
         @test A * Bv ≈ Matrix(A) * Bv
         @test A * Bm ≈ Matrix(A) * Bm
@@ -1023,8 +1025,10 @@ end
 end
 
 @testset "hermitian part" begin
-    for T in [Float32, Complex{Float32}, Int32, Rational{Int32},
-              Complex{Int32}, Complex{Rational{Int32}}]
+    # one real floating-point type and one complex non-floating-point type cover both
+    # branches below; the other types run in comprehensive mode
+    for T in (Float32, Complex{Int32},
+              (@static COMPREHENSIVE ? (Complex{Float32}, Int32, Rational{Int32}, Complex{Rational{Int32}}) : ())...)
         f, f!, t = hermitianpart, hermitianpart!, T <: Real ? transpose : adjoint
         X = T[1 2 3; 4 5 6; 7 8 9]
         T <: Complex && (X .+= im .* X)
@@ -1289,7 +1293,7 @@ end
 
 @testset "asin/acos/acosh/tanh for matrix outside the real domain" begin
     M = [0 2;2 0] #eigenvalues are ±2
-    for T ∈ (Float32, Float64, ComplexF32, ComplexF64)
+    for T ∈ (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         M2 = Hermitian(T.(M))
         @test sin(asin(M2)) ≈ M2
         @test cos(acos(M2)) ≈ M2
@@ -1299,7 +1303,7 @@ end
 end
 
 @testset "type inference of matrix functions" begin
-    for T ∈ (Float32, Float64, ComplexF32, ComplexF64)
+    for T ∈ (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         a = randn(T, 2, 2)
         syma = Symmetric(a)
         symtria = SymTridiagonal(syma)
@@ -1402,6 +1406,68 @@ Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
     @test zero(Symmetric(rand(4, 4))) isa Symmetric
     @test iszero(zero(Hermitian(rand(ComplexF64, 4, 4))))
     @test zero(Hermitian(rand(ComplexF64, 4, 4))) isa Hermitian
+end
+
+@testset "logabsdet of a Hermitian matrix has a real sign" begin
+    for T in (Float64, ComplexF64, Complex{BigFloat}), uplo in (:U, :L)
+        # indefinite, with a 2-by-2 pivot in the Bunch-Kaufman factorization
+        A = T <: Complex ? T[0 1+2im 3; 1-2im 0 1im; 3 -1im 0] : T[0 1 3; 1 0 1; 3 1 0]
+        for H in (Hermitian(A, uplo), Hermitian(T[2 0; 0 -3], uplo))
+            l, s = @inferred logabsdet(H)
+            @test s isa real(T)
+            @test s ≈ sign(det(H))
+            @test exp(l) * s ≈ det(H)
+            @test l ≈ logabsdet(Matrix(H))[1]
+        end
+    end
+end
+
+# an element type that is neither a number nor a matrix, with its own symmetric_type
+struct SymEltype end
+Base.transpose(x::SymEltype) = x
+Base.adjoint(x::SymEltype) = x
+LinearAlgebra.symmetric_type(::Type{SymEltype}) = SymEltype
+LinearAlgebra.hermitian_type(::Type{SymEltype}) = SymEltype
+
+@testset "symmetric_type/hermitian_type for a custom eltype" begin
+    @test LinearAlgebra.symmetric_type(Matrix{SymEltype}) == Symmetric{SymEltype, Matrix{SymEltype}}
+    @test LinearAlgebra.hermitian_type(Matrix{SymEltype}) == Hermitian{SymEltype, Matrix{SymEltype}}
+    M = fill(SymEltype(), 2, 2)
+    @test LinearAlgebra.symmetric(M, :U) isa Symmetric{SymEltype, Matrix{SymEltype}}
+    @test LinearAlgebra.hermitian(M, :U) isa Hermitian{SymEltype, Matrix{SymEltype}}
+end
+
+@testset "Symmetric/Hermitian corner cases" begin
+    A = [1.0 2; 3 4]
+    for W in (Symmetric, Hermitian)
+        # destination of a different shape: elements are copied in linear order
+        @test copyto!(zeros(1, 4), W(A)) == reshape(vec(Matrix(W(A))), 1, 4)
+        S = W([1.0 2; 2 3], :U)
+        @test_throws ArgumentError kron!(W(zeros(4, 4), :L), S, S)
+        @test_throws ArgumentError kron!(W(zeros(4, 4), :U), W(A, :L), W(A, :L))
+    end
+    # a nonreal entry in the stored lower triangle
+    C = ComplexF64[1 0; im 1]
+    @test !isreal(Symmetric(C, :L))
+    @test !isreal(Hermitian(C, :L))
+    @test isreal(Symmetric(C, :U)) && isreal(Hermitian(C, :U))
+end
+
+@testset "det and logdet with NaN" begin
+    # Bunch-Kaufman reports a NaN pivot like a zero pivot, which must not give a zero determinant
+    for A in (Symmetric([1.0 2; 2 NaN]), Hermitian(ComplexF64[1 2im; -2im NaN]), Symmetric(ComplexF64[1 2; 2 NaN]))
+        @test isnan(det(A))
+        @test isnan(logdet(A))
+        @test isnan(first(logabsdet(A)))
+    end
+    # the generic implementation
+    @test isnan(det(bunchkaufman(Symmetric(big.([1.0 2; 2 NaN])); check=false)))
+    # singular matrices still have a zero determinant
+    for A in (Symmetric([1.0 2 3; 2 4 6; 3 6 10]), Hermitian(ComplexF64[1 1im; -1im 1]))
+        @test det(A) == 0
+        @test logdet(A) == -Inf
+        @test logabsdet(A) == (-Inf, 0)
+    end
 end
 
 end # module TestSymmetric

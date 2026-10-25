@@ -43,6 +43,15 @@ end
 
 chklapackerror_positive(ret, f...) = throw(LAPACKException(ret))
 
+# For routines that don't check their input for Infs: these often propagate to the result, but
+# if the routine fails instead, they are the likely cause. NaNs are rejected before the call.
+function chklapackerror(ret::BlasInt, inputhasinf::Bool)
+    if ret != 0 && inputhasinf
+        throw(ArgumentError("matrix contains Infs"))
+    end
+    chklapackerror(ret)
+end
+
 function chknonsingular(ret::BlasInt)
     if ret > 0
         throw(SingularException(ret))
@@ -99,14 +108,24 @@ end
 subsetrows(X::AbstractVector, Y::AbstractArray, k) = Y[1:k]
 subsetrows(X::AbstractMatrix, Y::AbstractArray, k) = Y[1:k, :]
 
-function chkfinite(A::AbstractMatrix)
-    for a in A
-        if !isfinite(a)
-            throw(ArgumentError("matrix contains Infs or NaNs"))
-        end
+function chkfinite(A::AbstractVecOrMat)
+    if !mapreduce(isfinite, &, A; init = true)
+        throw(ArgumentError("matrix contains Infs or NaNs"))
     end
     return true
 end
+
+# for routines that may hang or return wrong results for NaNs, but not for Infs
+function chknan(A::AbstractVecOrMat)
+    # mapreduce instead of any, which doesn't vectorize because of its early exit
+    if mapreduce(isnan, |, A; init = false)
+        throw(ArgumentError("matrix contains NaNs"))
+    end
+    return true
+end
+
+# for checking the input after a routine failed, see chklapackerror(ret, inputhasinf)
+_hasinf(A::AbstractVecOrMat) = mapreduce(isinf, |, A; init = false)
 
 function chkuplofinite(A::AbstractMatrix, uplo::AbstractChar)
     require_one_based_indexing(A)
@@ -1184,7 +1203,7 @@ for (gesvx, elty) in
                Ptr{$elty}, Ptr{BlasInt}, Ref{BlasInt}, Clong, Clong, Clong),
               fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
               ldb, X, n, rcond, ferr, berr, work, iwork, info, 1, 1, 1)
-            chklapackerror(info[])
+            chkargsok(info[])
             if info[] == n + 1
                 @warn "Matrix is singular to working precision"
             else
@@ -1256,7 +1275,7 @@ for (gesvx, elty, relty) in
                Ptr{$elty}, Ptr{$relty}, Ref{BlasInt}, Clong, Clong, Clong),
               fact, trans, n, nrhs, A, lda, AF, ldaf, ipiv, equed, R, C, B,
               ldb, X, n, rcond, ferr, berr, work, rwork, info, 1, 1, 1)
-            chklapackerror(info[])
+            chkargsok(info[])
             if info[] == n + 1
                 @warn "Matrix is singular to working precision"
             else
@@ -1317,6 +1336,12 @@ The no-equilibration, no-transpose simplification of `gesvx!`.
 """
 gesvx!(A::AbstractMatrix, B::AbstractVecOrMat)
 
+function _chk_lwork(work::AbstractVector, lwork::Integer)
+    if lwork == -1 ? isempty(work) : length(work) < lwork
+        throw(DimensionMismatch(lazy"work has length $(length(work)), but lwork is $lwork"))
+    end
+end
+
 for (gelsd, gelsy, elty) in
     ((:dgelsd_,:dgelsy_,:Float64),
      (:sgelsd_,:sgelsy_,:Float32))
@@ -1330,38 +1355,49 @@ for (gelsd, gelsy, elty) in
         # *     .. Array Arguments ..
         #       INTEGER            IWORK( * )
         #       DOUBLE PRECISION   A( LDA, * ), B( LDB, * ), S( * ), WORK( * )
+        function gelsd!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, s::AbstractVector{$elty},
+                        rcond::Real, work::AbstractVector{$elty}, lwork::Integer,
+                        iwork::AbstractVector{BlasInt})
+            require_one_based_indexing(A, B, s, work, iwork)
+            chkstride1(A, B, s, work, iwork)
+            m, n = size(A)
+            if length(s) < min(m, n)
+                throw(DimensionMismatch(lazy"s has length $(length(s)), but needs at least $(min(m, n))"))
+            end
+            _chk_lwork(work, lwork)
+            isempty(iwork) && throw(DimensionMismatch("iwork must not be empty"))
+            rnk  = Ref{BlasInt}()
+            info = Ref{BlasInt}()
+            ccall((@blasfunc($gelsd), libblastrampoline), Cvoid,
+                  (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
+                   Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                   Ptr{$elty}, Ref{$elty}, Ref{BlasInt}, Ptr{$elty},
+                   Ref{BlasInt}, Ptr{BlasInt}, Ptr{BlasInt}),
+                  m, n, size(B,2),
+                  A, max(1,stride(A,2)), B, max(1,stride(B,2)),
+                  s, $elty(rcond), rnk, work,
+                  lwork, iwork, info)
+            chklapackerror(info[])
+            B, rnk[]
+        end
         function gelsd!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, rcond::Real=-one($elty))
             require_one_based_indexing(A, B)
-            chkstride1(A, B)
+            chkstride1(A)
             m, n  = size(A)
             if size(B, 1) != m
                 throw(DimensionMismatch(lazy"B has leading dimension $(size(B,1)) but needs $m"))
             end
-            newB = [B; zeros($elty, max(0, n - size(B, 1)), size(B, 2))]
+            newB  = [B; zeros($elty, max(0, n - size(B, 1)), size(B, 2))]
             s     = similar(A, $elty, min(m, n))
-            rnk   = Ref{BlasInt}()
-            info  = Ref{BlasInt}()
             work  = Vector{$elty}(undef, 1)
-            lwork = BlasInt(-1)
             iwork = Vector{BlasInt}(undef, 1)
-            for i = 1:2  # first call returns lwork as work[1] and iwork length as iwork[1]
-                ccall((@blasfunc($gelsd), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$elty}, Ref{$elty}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{BlasInt}, Ptr{BlasInt}),
-                      m, n, size(B,2),
-                      A, max(1,stride(A,2)), newB, max(1,stride(B,2),n),
-                      s, $elty(rcond), rnk, work,
-                      lwork, iwork, info)
-                chklapackerror(info[])
-                if i == 1
-                    lwork = BlasInt(real(work[1]))
-                    resize!(work, lwork)
-                    resize!(iwork, iwork[1])
-                end
-            end
-            subsetrows(B, newB, n), rnk[]
+            # workspace query returns lwork as work[1] and iwork length as iwork[1]
+            gelsd!(A, newB, s, rcond, work, BlasInt(-1), iwork)
+            lwork = BlasInt(real(work[1]))
+            resize!(work, lwork)
+            resize!(iwork, iwork[1])
+            _, rnk = gelsd!(A, newB, s, rcond, work, lwork, iwork)
+            subsetrows(B, newB, n), rnk
         end
 
         #       SUBROUTINE DGELSY( M, N, NRHS, A, LDA, B, LDB, JPVT, RCOND, RANK,
@@ -1373,40 +1409,45 @@ for (gelsd, gelsy, elty) in
         # *     .. Array Arguments ..
         #       INTEGER            JPVT( * )
         #       DOUBLE PRECISION   A( LDA, * ), B( LDB, * ), WORK( * )
+        function gelsy!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, jpvt::AbstractVector{BlasInt},
+                        rcond::Real, work::AbstractVector{$elty}, lwork::Integer)
+            require_one_based_indexing(A, B, jpvt, work)
+            chkstride1(A, B, jpvt, work)
+            m, n = size(A)
+            if length(jpvt) < n
+                throw(DimensionMismatch(lazy"jpvt has length $(length(jpvt)), but needs at least $n"))
+            end
+            _chk_lwork(work, lwork)
+            rnk  = Ref{BlasInt}()
+            info = Ref{BlasInt}()
+            ccall((@blasfunc($gelsy), libblastrampoline), Cvoid,
+                (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
+                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
+                 Ref{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ptr{BlasInt}),
+                m, n, size(B,2), A,
+                max(1,stride(A,2)), B, max(1,stride(B,2)), jpvt,
+                $elty(rcond), rnk, work, lwork,
+                info)
+            chklapackerror(info[])
+            B, rnk[]
+        end
         function gelsy!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, rcond::Real=eps($elty))
             require_one_based_indexing(A, B)
             chkstride1(A)
-            m = size(A, 1)
-            n = size(A, 2)
-            nrhs = size(B, 2)
+            m, n = size(A)
             if size(B, 1) != m
                 throw(DimensionMismatch(lazy"B has leading dimension $(size(B,1)) but needs $m"))
             end
             newB = [B; zeros($elty, max(0, n - size(B, 1)), size(B, 2))]
-            lda = max(1, stride(A,2))
-            ldb = max(1, stride(newB,2))
             jpvt = zeros(BlasInt, n)
-            rnk = Ref{BlasInt}()
             work = Vector{$elty}(undef, 1)
-            lwork = BlasInt(-1)
-            info = Ref{BlasInt}()
-            for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gelsy), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                     Ref{$elty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{BlasInt}),
-                    m, n, nrhs, A,
-                    lda, newB, ldb, jpvt,
-                    $elty(rcond), rnk, work, lwork,
-                    info)
-                chklapackerror(info[])
-                if i == 1
-                    lwork = BlasInt(work[1])
-                    resize!(work, lwork)
-                end
-            end
-            subsetrows(B, newB, n), rnk[]
+            # workspace query returns lwork as work[1]
+            gelsy!(A, newB, jpvt, rcond, work, BlasInt(-1))
+            lwork = BlasInt(work[1])
+            resize!(work, lwork)
+            _, rnk = gelsy!(A, newB, jpvt, rcond, work, lwork)
+            subsetrows(B, newB, n), rnk
         end
     end
 end
@@ -1425,40 +1466,52 @@ for (gelsd, gelsy, elty, relty) in
         #       INTEGER            IWORK( * )
         #       DOUBLE PRECISION   RWORK( * ), S( * )
         #       COMPLEX*16         A( LDA, * ), B( LDB, * ), WORK( * )
+        function gelsd!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, s::AbstractVector{$relty},
+                        rcond::Real, work::AbstractVector{$elty}, lwork::Integer,
+                        rwork::AbstractVector{$relty}, iwork::AbstractVector{BlasInt})
+            require_one_based_indexing(A, B, s, work, rwork, iwork)
+            chkstride1(A, B, s, work, rwork, iwork)
+            m, n = size(A)
+            if length(s) < min(m, n)
+                throw(DimensionMismatch(lazy"s has length $(length(s)), but needs at least $(min(m, n))"))
+            end
+            _chk_lwork(work, lwork)
+            isempty(rwork) && throw(DimensionMismatch("rwork must not be empty"))
+            isempty(iwork) && throw(DimensionMismatch("iwork must not be empty"))
+            rnk  = Ref{BlasInt}()
+            info = Ref{BlasInt}()
+            ccall((@blasfunc($gelsd), libblastrampoline), Cvoid,
+                  (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
+                   Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$relty},
+                   Ref{$relty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                   Ptr{$relty}, Ptr{BlasInt}, Ptr{BlasInt}),
+                  m, n, size(B,2), A,
+                  max(1,stride(A,2)), B, max(1,stride(B,2)), s,
+                  $relty(rcond), rnk, work, lwork,
+                  rwork, iwork, info)
+            chklapackerror(info[])
+            B, rnk[]
+        end
         function gelsd!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, rcond::Real=-one($relty))
             require_one_based_indexing(A, B)
-            chkstride1(A, B)
+            chkstride1(A)
             m, n  = size(A)
             if size(B, 1) != m
                 throw(DimensionMismatch(lazy"B has leading dimension $(size(B,1)) but needs $m"))
             end
-            newB = [B; zeros($elty, max(0, n - size(B, 1)), size(B, 2))]
+            newB  = [B; zeros($elty, max(0, n - size(B, 1)), size(B, 2))]
             s     = similar(A, $relty, min(m, n))
-            rnk   = Ref{BlasInt}()
-            info  = Ref{BlasInt}()
             work  = Vector{$elty}(undef, 1)
-            lwork = BlasInt(-1)
             rwork = Vector{$relty}(undef, 1)
             iwork = Vector{BlasInt}(undef, 1)
-            for i = 1:2  # first call returns lwork as work[1], rwork length as rwork[1] and iwork length as iwork[1]
-                ccall((@blasfunc($gelsd), libblastrampoline), Cvoid,
-                      (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                       Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{$relty},
-                       Ref{$relty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                       Ptr{$relty}, Ref{BlasInt}, Ref{BlasInt}),
-                      m, n, size(B,2), A,
-                      max(1,stride(A,2)), newB, max(1,stride(B,2),n), s,
-                      $relty(rcond), rnk, work, lwork,
-                      rwork, iwork, info)
-                chklapackerror(info[])
-                if i == 1
-                    lwork = BlasInt(real(work[1]))
-                    resize!(work, lwork)
-                    resize!(rwork, BlasInt(rwork[1]))
-                    resize!(iwork, iwork[1])
-                end
-            end
-            subsetrows(B, newB, n), rnk[]
+            # workspace query returns lwork as work[1], rwork length as rwork[1] and iwork length as iwork[1]
+            gelsd!(A, newB, s, rcond, work, BlasInt(-1), rwork, iwork)
+            lwork = BlasInt(real(work[1]))
+            resize!(work, lwork)
+            resize!(rwork, BlasInt(rwork[1]))
+            resize!(iwork, iwork[1])
+            _, rnk = gelsd!(A, newB, s, rcond, work, lwork, rwork, iwork)
+            subsetrows(B, newB, n), rnk
         end
 
         #       SUBROUTINE ZGELSY( M, N, NRHS, A, LDA, B, LDB, JPVT, RCOND, RANK,
@@ -1471,65 +1524,147 @@ for (gelsd, gelsy, elty, relty) in
         #       INTEGER            JPVT( * )
         #       DOUBLE PRECISION   RWORK( * )
         #       COMPLEX*16         A( LDA, * ), B( LDB, * ), WORK( * )
+        function gelsy!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, jpvt::AbstractVector{BlasInt},
+                        rcond::Real, work::AbstractVector{$elty}, lwork::Integer,
+                        rwork::AbstractVector{$relty})
+            require_one_based_indexing(A, B, jpvt, work, rwork)
+            chkstride1(A, B, jpvt, work, rwork)
+            m, n = size(A)
+            if length(jpvt) < n
+                throw(DimensionMismatch(lazy"jpvt has length $(length(jpvt)), but needs at least $n"))
+            end
+            if length(rwork) < 2n
+                throw(DimensionMismatch(lazy"rwork has length $(length(rwork)), but needs at least $(2n)"))
+            end
+            _chk_lwork(work, lwork)
+            rnk  = Ref{BlasInt}()
+            info = Ref{BlasInt}()
+            ccall((@blasfunc($gelsy), libblastrampoline), Cvoid,
+                (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
+                 Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
+                 Ref{$relty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
+                 Ptr{$relty}, Ptr{BlasInt}),
+                m, n, size(B,2), A,
+                max(1,stride(A,2)), B, max(1,stride(B,2)), jpvt,
+                $relty(rcond), rnk, work, lwork,
+                rwork, info)
+            chklapackerror(info[])
+            B, rnk[]
+        end
         function gelsy!(A::AbstractMatrix{$elty}, B::AbstractVecOrMat{$elty}, rcond::Real=eps($relty))
             require_one_based_indexing(A, B)
-            chkstride1(A, B)
+            chkstride1(A)
             m, n = size(A)
-            nrhs = size(B, 2)
             if size(B, 1) != m
                 throw(DimensionMismatch(lazy"B has leading dimension $(size(B,1)) but needs $m"))
             end
-            newB = [B; zeros($elty, max(0, n - size(B, 1)), size(B, 2))]
-            lda = max(1, m)
-            ldb = max(1, m, n)
-            jpvt = zeros(BlasInt, n)
-            rnk = Ref{BlasInt}(1)
-            work = Vector{$elty}(undef, 1)
-            lwork = BlasInt(-1)
+            newB  = [B; zeros($elty, max(0, n - size(B, 1)), size(B, 2))]
+            jpvt  = zeros(BlasInt, n)
+            work  = Vector{$elty}(undef, 1)
             rwork = Vector{$relty}(undef, 2n)
-            info = Ref{BlasInt}()
-            for i = 1:2  # first call returns lwork as work[1]
-                ccall((@blasfunc($gelsy), libblastrampoline), Cvoid,
-                    (Ref{BlasInt}, Ref{BlasInt}, Ref{BlasInt}, Ptr{$elty},
-                     Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt}, Ptr{BlasInt},
-                     Ref{$relty}, Ref{BlasInt}, Ptr{$elty}, Ref{BlasInt},
-                     Ptr{$relty}, Ptr{BlasInt}),
-                    m, n, nrhs, A,
-                    lda, newB, ldb, jpvt,
-                    $relty(rcond), rnk, work, lwork,
-                    rwork, info)
-                chklapackerror(info[])
-                if i == 1
-                    lwork = BlasInt(real(work[1]))
-                    resize!(work, lwork)
-                end
-            end
-            subsetrows(B, newB, n), rnk[]
+            # workspace query returns lwork as work[1]
+            gelsy!(A, newB, jpvt, rcond, work, BlasInt(-1), rwork)
+            lwork = BlasInt(real(work[1]))
+            resize!(work, lwork)
+            _, rnk = gelsy!(A, newB, jpvt, rcond, work, lwork, rwork)
+            subsetrows(B, newB, n), rnk
         end
     end
 end
 
 """
-    gelsd!(A, B, rcond) -> (B, rnk)
+    gelsd!(A, B, rcond=-1) -> (X, rnk)
 
-Computes the least norm solution of `A * X = B` by finding the `SVD`
-factorization of `A`, then dividing-and-conquering the problem. `B`
-is overwritten with the solution `X`. Singular values below `rcond`
-will be treated as zero. Returns the solution in `B` and the effective rank
-of `A` in `rnk`.
+Computes the minimum-norm solution `X` of the (possibly rank-deficient) least squares
+problem `min ‖A * X - B‖₂` using the singular value decomposition (SVD) of `A`, computed
+by a divide-and-conquer method. Singular values `s[i] ≤ rcond * s[1]` are treated as zero;
+if `rcond < 0`, machine precision is used instead. Returns the solution `X` and the
+effective rank `rnk` of `A`.
+
+`A` is overwritten. `B` is *not* overwritten: since LAPACK requires a right-hand side buffer
+with `max(size(A)...)` rows, `B` is copied into a newly allocated buffer, and the solution
+`X` is returned as a newly allocated array.
+
+For allocation-free use, see the low-level method
+`gelsd!(A, B, s, rcond, work, lwork, [rwork,] iwork)`.
 """
 gelsd!(A::AbstractMatrix, B::AbstractVecOrMat, rcond::Real)
 
 """
-    gelsy!(A, B, rcond) -> (B, rnk)
+    gelsd!(A, B, s, rcond, work, lwork, iwork) -> (B, rnk)
+    gelsd!(A, B, s, rcond, work, lwork, rwork, iwork) -> (B, rnk)
 
-Computes the least norm solution of `A * X = B` by finding the full `QR`
-factorization of `A`, then dividing-and-conquering the problem. `B`
-is overwritten with the solution `X`. Singular values below `rcond`
-will be treated as zero. Returns the solution in `B` and the effective rank
-of `A` in `rnk`.
+Low-level, non-allocating interface to LAPACK's `xGELSD`, with arguments in LAPACK order.
+The second method is for complex `A`. All arrays must be provided by the caller:
+
+- `A`: overwritten.
+- `B`: right-hand side buffer with at least `max(size(A)...)` rows. On input, its first
+  `size(A, 1)` rows contain the right-hand side; on output, its first `size(A, 2)` rows
+  contain the solution. For `size(A, 1) < size(A, 2)`, the right-hand side must be padded
+  by the caller.
+- `s`: real vector of length at least `min(size(A)...)`; on output, contains the singular
+  values of `A` in decreasing order.
+- `work`, `lwork`: workspace of length at least `lwork`.
+- `rwork`, `iwork`: real and integer workspaces.
+
+If `lwork == -1`, a workspace query is performed instead: the optimal `lwork` is returned
+in `work[1]`, the minimal length of `iwork` in `iwork[1]` and, for complex `A`, the minimal
+length of `rwork` in `rwork[1]`. The workspaces must be at least as large as reported by
+the query; only their being nonempty is checked on the Julia side.
+
+Returns `B` and the effective rank `rnk` of `A`.
+
+!!! compat "Julia 1.14"
+    This method requires at least Julia 1.14.
+"""
+gelsd!(A::AbstractMatrix, B::AbstractVecOrMat, s::AbstractVector, rcond::Real, work::AbstractVector, lwork::Integer, iwork::AbstractVector)
+
+"""
+    gelsy!(A, B, rcond=eps(real(eltype(A)))) -> (X, rnk)
+
+Computes the minimum-norm solution `X` of the (possibly rank-deficient) least squares
+problem `min ‖A * X - B‖₂` using a complete orthogonal factorization of `A`, which is
+obtained from a `QR` factorization with column pivoting. The effective rank `rnk` of `A`
+is determined as the order of the largest leading triangular submatrix of the `R` factor
+whose estimated condition number is less than `1/rcond`. Returns the solution `X` and the
+effective rank `rnk` of `A`.
+
+`A` is overwritten with its complete orthogonal factorization. `B` is *not* overwritten:
+since LAPACK requires a right-hand side buffer with `max(size(A)...)` rows, `B` is copied
+into a newly allocated buffer, and the solution `X` is returned as a newly allocated array.
+
+For allocation-free use, see the low-level method
+`gelsy!(A, B, jpvt, rcond, work, lwork[, rwork])`.
 """
 gelsy!(A::AbstractMatrix, B::AbstractVecOrMat, rcond::Real)
+
+"""
+    gelsy!(A, B, jpvt, rcond, work, lwork) -> (B, rnk)
+    gelsy!(A, B, jpvt, rcond, work, lwork, rwork) -> (B, rnk)
+
+Low-level, non-allocating interface to LAPACK's `xGELSY`, with arguments in LAPACK order.
+The second method is for complex `A`. All arrays must be provided by the caller:
+
+- `A`: overwritten with its complete orthogonal factorization.
+- `B`: right-hand side buffer with at least `max(size(A)...)` rows. On input, its first
+  `size(A, 1)` rows contain the right-hand side; on output, its first `size(A, 2)` rows
+  contain the solution. For `size(A, 1) < size(A, 2)`, the right-hand side must be padded
+  by the caller.
+- `jpvt`: integer vector of length at least `size(A, 2)`. On input, `jpvt[j] ≠ 0` moves
+  column `j` of `A` to the front, while `jpvt[j] == 0` leaves it free, so pass zeros for
+  unrestricted pivoting. On output, the factorization is that of `A[:, jpvt]`.
+- `work`, `lwork`: workspace of length at least `lwork`.
+- `rwork`: real workspace of length at least `2 * size(A, 2)`; only for complex `A`.
+
+If `lwork == -1`, a workspace query is performed instead, and the optimal `lwork` is
+returned in `work[1]`.
+
+Returns `B` and the effective rank `rnk` of `A`.
+
+!!! compat "Julia 1.14"
+    This method requires at least Julia 1.14.
+"""
+gelsy!(A::AbstractMatrix, B::AbstractVecOrMat, jpvt::AbstractVector, rcond::Real, work::AbstractVector, lwork::Integer)
 
 for (gglse, elty) in ((:dgglse_, :Float64),
                       (:sgglse_, :Float32),
@@ -1669,6 +1804,7 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             require_one_based_indexing(A)
             chkstride1(A)
             @chkvalidparam 1 job ('A', 'S', 'O', 'N')
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
             m, n   = size(A)
             minmn  = min(m, n)
             if job == 'A'
@@ -1753,6 +1889,7 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             @chkvalidparam 1 jobu ('A', 'S', 'O', 'N')
             @chkvalidparam 2 jobvt ('A', 'S', 'O', 'N')
             (jobu == jobvt == 'O') && throw(ArgumentError("jobu and jobvt cannot both be O"))
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
             m, n   = size(A)
             minmn  = min(m, n)
             S      = similar(A, $relty, minmn)
@@ -1829,6 +1966,8 @@ for (geev, gesvd, gesdd, ggsvd, elty, relty) in
             if size(B, 2) != n
                 throw(DimensionMismatch(lazy"B has second dimension $(size(B,2)) but needs $n"))
             end
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
+            chkfinite(B)
             p = size(B, 1)
             k = Vector{BlasInt}(undef, 1)
             l = Vector{BlasInt}(undef, 1)
@@ -1959,6 +2098,8 @@ for (f, elty) in ((:dggsvd3_, :Float64),
             if size(B, 2) != n
                 throw(DimensionMismatch(lazy"B has second dimension $(size(B,2)) but needs $n"))
             end
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
+            chkfinite(B)
             p = size(B, 1)
             k = Ref{BlasInt}()
             l = Ref{BlasInt}()
@@ -2021,6 +2162,8 @@ for (f, elty, relty) in ((:zggsvd3_, :ComplexF64, :Float64),
             if size(B, 2) != n
                 throw(DimensionMismatch(lazy"B has second dimension $(size(B,2)) but needs $n"))
             end
+            chkfinite(A) # the SVD routines may not return for NaNs and Infs
+            chkfinite(B)
             p = size(B, 1)
             k = Vector{BlasInt}(undef, 1)
             l = Vector{BlasInt}(undef, 1)
@@ -2192,6 +2335,8 @@ for (geevx, ggev, ggev3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
+            chkfinite(A) # for Infs or NaNs, LAPACK may take very long to fail, or corrupt memory (#1808)
+            chkfinite(B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2256,6 +2401,8 @@ for (geevx, ggev, ggev3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
+            chkfinite(A) # for Infs or NaNs, LAPACK may take very long to fail, or corrupt memory (#1808)
+            chkfinite(B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2407,6 +2554,8 @@ for (geevx, ggev, ggev3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
+            chkfinite(A) # for Infs or NaNs, LAPACK may take very long to fail, or corrupt memory (#1808)
+            chkfinite(B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2472,6 +2621,8 @@ for (geevx, ggev, ggev3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"A has dimensions $(size(A)), and B has dimensions $(size(B)), but A and B must have the same size"))
             end
+            chkfinite(A) # for Infs or NaNs, LAPACK may take very long to fail, or corrupt memory (#1808)
+            chkfinite(B)
             ldvl = 0
             if jobvl == 'V'
                 ldvl = n
@@ -2835,7 +2986,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
                 end
             end
             if n < size(A,2)
-                reshape(resize!(vec(A), m * n), m, n)
+                A[:,1:n]
             else
                 A
             end
@@ -2871,7 +3022,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
                 end
             end
             if n < size(A,2)
-                reshape(resize!(vec(A), m * n), m, n)
+                A[:,1:n]
             else
                 A
             end
@@ -3742,24 +3893,22 @@ for (trcon, trevc, trrfs, elty) in
                 end
             end
 
-            VLn = size(VL, 1)
-            VRn = size(VR, 1)
             #Decide what exactly to return
             if howmny == 'S' #compute selected eigenvectors
                 if side == 'L' #left eigenvectors only
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
+                    return select, (m[] == size(VL, 2) ? VL : VL[:, 1:m[]])
                 elseif side == 'R' #right eigenvectors only
-                    return select, reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return select, (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 else #side == 'B' #both eigenvectors
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return select, (m[] == size(VL, 2) ? VL : VL[:, 1:m[]]), (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 end
             else #compute all eigenvectors
                 if side == 'L' #left eigenvectors only
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
+                    return (m[] == size(VL, 2) ? VL : VL[:, 1:m[]])
                 elseif side == 'R' #right eigenvectors only
-                    return reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 else #side == 'B' #both eigenvectors
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return (m[] == size(VL, 2) ? VL : VL[:, 1:m[]]), (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 end
             end
         end
@@ -3891,24 +4040,22 @@ for (trcon, trevc, trrfs, elty, relty) in
                 end
             end
 
-            VLn = size(VL, 1)
-            VRn = size(VR, 1)
             #Decide what exactly to return
             if howmny == 'S' #compute selected eigenvectors
                 if side == 'L' #left eigenvectors only
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
+                    return select, (m[] == size(VL, 2) ? VL : VL[:, 1:m[]])
                 elseif side == 'R' #right eigenvectors only
-                    return select, reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return select, (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 else #side == 'B' #both eigenvectors
-                    return select, reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return select, (m[] == size(VL, 2) ? VL : VL[:, 1:m[]]), (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 end
             else #compute all eigenvectors
                 if side == 'L' #left eigenvectors only
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[])
+                    return (m[] == size(VL, 2) ? VL : VL[:, 1:m[]])
                 elseif side == 'R' #right eigenvectors only
-                    return reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 else #side == 'B' #both eigenvectors
-                    return reshape(resize!(vec(VL), VLn * m[]), VLn, m[]), reshape(resize!(vec(VR), VRn * m[]), VRn, m[])
+                    return (m[] == size(VL, 2) ? VL : VL[:, 1:m[]]), (m[] == size(VR, 2) ? VR : VR[:, 1:m[]])
                 end
             end
         end
@@ -4008,6 +4155,8 @@ for (stev, stebz, stegr, stein, elty) in
             if length(ev) != n - 1
                 throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
+            chknan(dv) # for NaNs, xSTEV may return wrong results
+            chknan(ev)
             Zmat = similar(dv, $elty, (n, job != 'N' ? n : 0))
             work = Vector{$elty}(undef, max(1, 2n-2))
             info = Ref{BlasInt}()
@@ -4032,6 +4181,9 @@ for (stev, stebz, stegr, stein, elty) in
             if length(ev) != n - 1
                 throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
+            chknan(dv) # for NaNs, xSTEBZ may return wrong results
+            chknan(ev)
+            inputhasinf = _hasinf(dv) || _hasinf(ev)
             m = Ref{BlasInt}()
             nsplit = Vector{BlasInt}(undef, 1)
             w = similar(dv, $elty, n)
@@ -4052,8 +4204,9 @@ for (stev, stebz, stegr, stein, elty) in
                 dv, ev, m, nsplit,
                 w, iblock, isplit, work,
                 iwork, info, 1, 1)
-            chklapackerror(info[])
-            resize!(w, m[]), resize!(iblock, m[]), resize!(isplit, nsplit[1])
+            chklapackerror(info[], inputhasinf)
+            (m[] == n ? w : w[1:m[]]), (m[] == n ? iblock : iblock[1:m[]]),
+                (nsplit[1] == n ? isplit : isplit[1:nsplit[1]])
         end
 
         function stegr!(jobz::AbstractChar, range::AbstractChar, dv::AbstractVector{$elty}, ev::AbstractVector{$elty}, vl::Real, vu::Real, il::Integer, iu::Integer)
@@ -4068,14 +4221,16 @@ for (stev, stebz, stegr, stein, elty) in
             else
                 throw(DimensionMismatch(lazy"ev has length $ne but needs one less than dv's length, $n)"))
             end
+            chknan(dv) # for NaNs, xSTEGR may not return, or return wrong results
+            chknan(ev)
 
             abstol = Vector{$elty}(undef, 1)
             m = Ref{BlasInt}()
             w = similar(dv, $elty, n)
             ldz = jobz == 'N' ? 1 : n
             Zn = range == 'I' ? iu-il+1 : n
-            Z = similar(dv, $elty, ldz * Zn)
-            isuppz = similar(dv, BlasInt, 2 * Zn)
+            Z = similar(dv, $elty, ldz, Zn)
+            isuppz = Vector{BlasInt}(undef, 2 * Zn)
             work = Vector{$elty}(undef, 1)
             lwork = BlasInt(-1)
             iwork = Vector{BlasInt}(undef, 1)
@@ -4103,7 +4258,7 @@ for (stev, stebz, stegr, stein, elty) in
                     resize!(iwork, liwork)
                 end
             end
-            return resize!(w, m[]), reshape(resize!(Z, ldz * m[]), ldz, m[])
+            return (m[] == n ? w : w[1:m[]]), (m[] == Zn ? Z : Z[:, 1:m[]])
         end
 
         function stein!(dv::AbstractVector{$elty}, ev_in::AbstractVector{$elty}, w_in::AbstractVector{$elty}, iblock_in::AbstractVector{BlasInt}, isplit_in::AbstractVector{BlasInt})
@@ -5405,11 +5560,11 @@ for (syev, syevr, syevd, sygvd, elty) in
             W = similar(A, $elty, n)
             ldz = n
             if jobz == 'N'
-                Z = similar(A, $elty, 0)
+                Z = similar(A, $elty, ldz, 0)
             elseif jobz == 'V'
-                Z = similar(A, $elty, ldz * n)
+                Z = similar(A, $elty, ldz, range == 'I' ? iu - il + 1 : n)
             end
-            isuppz = similar(A, BlasInt, 2*n)
+            isuppz = Vector{BlasInt}(undef, 2*n)
             work   = Vector{$elty}(undef, 1)
             lwork  = BlasInt(-1)
             iwork  = Vector{BlasInt}(undef, 1)
@@ -5438,7 +5593,7 @@ for (syev, syevr, syevd, sygvd, elty) in
                 end
             end
             zm = jobz == 'V' ? m[] : 0
-            resize!(W, m[]), reshape(sizehint!(resize!(Z, ldz * zm), ldz * zm), ldz, zm)
+            (m[] == n ? W : W[1:m[]]), (zm == size(Z, 2) ? Z : Z[:, 1:zm])
         end
         syevr!(jobz::AbstractChar, A::AbstractMatrix{$elty}) =
             syevr!(jobz, 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
@@ -5608,12 +5763,12 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
             W = similar(A, $relty, n)
             if jobz == 'N'
                 ldz = 1
-                Z = similar(A, $elty, 0)
+                Z = similar(A, $elty, ldz, 0)
             elseif jobz == 'V'
                 ldz = n
-                Z = similar(A, $elty, ldz * n)
+                Z = similar(A, $elty, ldz, range == 'I' ? iu - il + 1 : n)
             end
-            isuppz = similar(A, BlasInt, 2*n)
+            isuppz = Vector{BlasInt}(undef, 2*n)
             work   = Vector{$elty}(undef, 1)
             lwork  = BlasInt(-1)
             rwork  = Vector{$relty}(undef, 1)
@@ -5648,7 +5803,7 @@ for (syev, syevr, syevd, sygvd, elty, relty) in
                 end
             end
             zm = jobz == 'V' ? m[] : 0
-            resize!(W, m[]), reshape(sizehint!(resize!(Z, ldz * zm), ldz * zm), ldz, zm)
+            (m[] == n ? W : W[1:m[]]), (zm == size(Z, 2) ? Z : Z[:, 1:zm])
         end
         syevr!(jobz::AbstractChar, A::AbstractMatrix{$elty}) =
             syevr!(jobz, 'A', 'U', A, 0.0, 0.0, 0, 0, -1.0)
@@ -5827,6 +5982,8 @@ for (bdsqr, relty, elty) in
             if length(e_) != n - 1
                 throw(DimensionMismatch(lazy"off-diagonal has length $(length(e_)) but should have length $(n - 1)"))
             end
+            chkfinite(d) # the SVD routines may not return for NaNs and Infs
+            chkfinite(e_)
             if ncvt > 0 && ldvt < n
                 throw(DimensionMismatch(lazy"leading dimension of Vt, $ldvt, must be at least $n"))
             end
@@ -5890,6 +6047,8 @@ for (bdsdc, elty) in
             chkstride1(d, e_)
             n, ldiq, ldq, ldu, ldvt = length(d), 1, 1, 1, 1
             chkuplo(uplo)
+            chkfinite(d) # the SVD routines may not return for NaNs and Infs
+            chkfinite(e_)
             if compq == 'N'
                 lwork = 6*n
             elseif compq == 'P'
@@ -6453,6 +6612,7 @@ for (gees, gges, gges3, elty) in
             @chkvalidparam 1 jobvs ('N', 'V')
             chkstride1(A)
             n     = checksquare(A)
+            chknan(A) # LAPACK may take very long to fail for NaNs, but returns NaNs for Infs
             sdim  = Vector{BlasInt}(undef, 1)
             wr    = similar(A, $elty, n)
             wi    = similar(A, $elty, n)
@@ -6498,6 +6658,8 @@ for (gees, gges, gges3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
+            chkfinite(A) # for Infs or NaNs, LAPACK may take very long to fail, or return wrong results
+            chkfinite(B)
             sdim = BlasInt(0)
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
@@ -6550,6 +6712,8 @@ for (gees, gges, gges3, elty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
+            chkfinite(A) # for Infs or NaNs, LAPACK may take very long to fail, or return wrong results
+            chkfinite(B)
             sdim = BlasInt(0)
             alphar = similar(A, $elty, n)
             alphai = similar(A, $elty, n)
@@ -6603,6 +6767,7 @@ for (gees, gges, gges3, elty, relty) in
             @chkvalidparam 1 jobvs ('N', 'V')
             chkstride1(A)
             n     = checksquare(A)
+            chknan(A) # LAPACK may take very long to fail for NaNs, but returns NaNs for Infs
             sort  = 'N'
             sdim  = BlasInt(0)
             w     = similar(A, $elty, n)
@@ -6650,6 +6815,8 @@ for (gees, gges, gges3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
+            chkfinite(A) # for Infs or NaNs, LAPACK may take very long to fail, or return wrong results
+            chkfinite(B)
             sdim = BlasInt(0)
             alpha = similar(A, $elty, n)
             beta = similar(A, $elty, n)
@@ -6703,6 +6870,8 @@ for (gees, gges, gges3, elty, relty) in
             if n != m
                 throw(DimensionMismatch(lazy"dimensions of A, ($n,$n), and B, ($m,$m), must match"))
             end
+            chkfinite(A) # for Infs or NaNs, LAPACK may take very long to fail, or return wrong results
+            chkfinite(B)
             sdim = BlasInt(0)
             alpha = similar(A, $elty, n)
             beta = similar(A, $elty, n)

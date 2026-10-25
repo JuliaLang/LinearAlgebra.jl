@@ -134,6 +134,8 @@ end
 # as is the LAPACK default (for complex λ — LAPACK sorts by λ for the Hermitian/Symmetric case)
 eigsortby(λ::Real) = λ
 eigsortby(λ::Complex) = (real(λ),imag(λ))
+# generic fallback for other number types, e.g. dimensionful quantities
+eigsortby(λ::Number) = (real(λ),imag(λ))
 function sorteig!(λ::AbstractVector, X::AbstractMatrix, sortby::Union{Function,Nothing}=eigsortby)
     if sortby !== nothing && !issorted(λ, by=sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
@@ -143,6 +145,11 @@ function sorteig!(λ::AbstractVector, X::AbstractMatrix, sortby::Union{Function,
     return λ, X
 end
 sorteig!(λ::AbstractVector, sortby::Union{Function,Nothing}=eigsortby) = sortby === nothing ? λ : sort!(λ, by=sortby)
+
+# Complex matrices that are not `Hermitian`-typed get complex eigenvalues, even when the
+# Hermitian solver is used internally, so that the return type does not depend on values.
+_complexvalues(F::Eigen) = Eigen(complex(F.values), F.vectors)
+_complexvalues(F::GeneralizedEigen) = GeneralizedEigen(complex(F.values), F.vectors)
 
 # similar to geevx! (specifically zgeevx), normalize eigenvectors to unit length
 # and make largest component real and positive
@@ -192,7 +199,7 @@ end
 function eigen!(A::StridedMatrix{T}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where T<:BlasComplex
     n = size(A, 2)
     n == 0 && return Eigen(zeros(T, 0), zeros(T, 0, 0))
-    ishermitian(A) && return eigen!(Hermitian(A), sortby=sortby)
+    ishermitian(A) && return _complexvalues(eigen!(Hermitian(A), sortby=sortby))
     E = LAPACK.geevx!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), 'N', 'V', 'N', A)
     eval, evec = E[2], E[4]
     return Eigen(sorteig!(eval, evec, sortby)...)
@@ -219,6 +226,14 @@ make rows and columns more equal in norm. The default is `true` for both options
 By default, the eigenvalues and vectors are sorted lexicographically by `(real(λ),imag(λ))`.
 A different comparison function `by(λ)` can be passed to `sortby`, or you can pass
 `sortby=nothing` to leave the eigenvalues in an arbitrary order.
+
+For a matrix with complex elements, the eigenvalues are always complex, even if the matrix
+happens to be Hermitian (or diagonal with real entries). To obtain real eigenvalues, wrap
+the matrix in [`Hermitian`](@ref).
+
+!!! compat "Julia 1.14"
+    Prior to Julia 1.14, the eigenvalues of a complex Hermitian matrix that was not wrapped
+    in `Hermitian` were returned as real numbers.
 
 # Examples
 ```jldoctest
@@ -258,16 +273,17 @@ function eigen(A::AbstractMatrix{T}; permute::Bool=true, scale::Bool=true, sortb
 end
 function eigen(A::AbstractMatrix{T}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T <: Union{Float16,Complex{Float16}}}
     E = _eigen(A; permute, scale, sortby)
-    values = convert(AbstractVector{isreal(E.values) ? Float16 : Complex{Float16}}, E.values)
-    vectors = convert(AbstractMatrix{isreal(E.vectors) ? Float16 : Complex{Float16}}, E.vectors)
+    values = convert(AbstractVector{eltype(E.values) <: Real ? Float16 : Complex{Float16}}, E.values)
+    vectors = convert(AbstractMatrix{eltype(E.vectors) <: Real ? Float16 : Complex{Float16}}, E.vectors)
     return Eigen(values, vectors)
 end
 function _eigen(A::AbstractMatrix{T}; permute=true, scale=true, sortby=eigsortby) where {T}
-    isdiag(A) && return eigen(Diagonal{eigtype(T)}(diag(A)); sortby)
+    isdiag(A) && return eigen(Diagonal{eigtype(A)}(diag(A)); sortby)
     if ishermitian(A)
-        eigen!(eigencopy_oftype(Hermitian(A), eigtype(T)); sortby)
+        F = eigen!(eigencopy_oftype(Hermitian(A), eigtype(A)); sortby)
+        T <: Complex ? _complexvalues(F) : F
     else
-        eigen!(eigencopy_oftype(A, eigtype(T)); permute, scale, sortby)
+        eigen!(eigencopy_oftype(A, eigtype(A)); permute, scale, sortby)
     end
 end
 
@@ -294,8 +310,11 @@ eigvecs(A::Union{Number, AbstractMatrix}; kws...) =
 eigvecs(F::Union{Eigen, GeneralizedEigen}) = F.vectors
 
 eigvals(F::Union{Eigen, GeneralizedEigen}) = F.values
-eigmin(F::Union{Eigen, GeneralizedEigen}) = minimum(eigvals(F))
-eigmax(F::Union{Eigen, GeneralizedEigen}) = maximum(eigvals(F))
+eigmin(F::Union{Eigen, GeneralizedEigen}) = _realextremum(minimum, eigvals(F))
+eigmax(F::Union{Eigen, GeneralizedEigen}) = _realextremum(maximum, eigvals(F))
+_realextremum(f, v) = f(v)
+# complex-typed but real-valued, e.g., from a Hermitian solver; otherwise error as before
+_realextremum(f, v::AbstractVector{<:Complex}) = all(isreal, v) ? f(real, v) : f(v)
 
 """
     eigvals!(A; permute::Bool=true, scale::Bool=true, sortby) -> values
@@ -331,12 +350,24 @@ function eigvals!(A::StridedMatrix{<:BlasReal}; permute::Bool=true, scale::Bool=
     return sorteig!(iszero(valsim) ? valsre : complex.(valsre, valsim), sortby)
 end
 function eigvals!(A::StridedMatrix{<:BlasComplex}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
-    ishermitian(A) && return eigvals!(Hermitian(A); sortby)
+    ishermitian(A) && return complex(eigvals!(Hermitian(A); sortby))
     return sorteig!(LAPACK.geevx!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), 'N', 'N', 'N', A)[2], sortby)
 end
 
 # promotion type to use for eigenvalues of a Matrix{T}
 eigtype(T) = promote_type(Float32, typeof(zero(T)/sqrt(abs2(one(T)))))
+# for arrays with an abstract eltype, take the promoted type of the stored values into account
+eigtype(A::AbstractArray) = eigtype(_valeltype(A))
+
+# Half-precision input is computed in single precision (LAPACK has no half-precision
+# routines); convert the results back so that they match the input precision, as
+# done for the factorizations `eigen`, `svd` and `cholesky`.
+_tohalf(::Type, x) = x
+_tohalf(::Type{<:Union{Float16,Complex{Float16}}}, x::AbstractArray{<:Real}) = convert(AbstractArray{Float16}, x)
+_tohalf(::Type{<:Union{Float16,Complex{Float16}}}, x::AbstractArray{<:Complex}) = convert(AbstractArray{ComplexF16}, x)
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::Eigen) = Eigen(_tohalf(T, F.values), _tohalf(T, F.vectors))
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::GeneralizedEigen) =
+    GeneralizedEigen(_tohalf(T, F.values), _tohalf(T, F.vectors))
 
 """
     eigvals(A; permute::Bool=true, scale::Bool=true, sortby) -> values
@@ -346,6 +377,9 @@ Return the eigenvalues of `A`.
 For general non-symmetric matrices it is possible to specify how the matrix is balanced
 before the eigenvalue calculation. The `permute`, `scale`, and `sortby` keywords are
 the same as for [`eigen`](@ref).
+
+As for [`eigen`](@ref), the eigenvalues of a matrix with complex elements are complex,
+unless the matrix is wrapped in [`Hermitian`](@ref).
 
 # Examples
 ```jldoctest
@@ -361,7 +395,7 @@ julia> eigvals(diag_matrix)
 ```
 """
 eigvals(A::AbstractMatrix{T}; kws...) where T =
-    eigvals!(eigencopy_oftype(A, eigtype(T)); kws...)
+    _tohalf(T, eigvals!(eigencopy_oftype(A, eigtype(A)); kws...))
 
 """
 For a scalar input, `eigvals` will return a scalar.
@@ -372,7 +406,7 @@ julia> eigvals(-2)
 -2
 ```
 """
-eigvals(x::Number; kwargs...) = imag(x) == 0 ? real(x) : x
+eigvals(x::Number; kwargs...) = x
 
 """
     eigmax(A; permute::Bool=true, scale::Bool=true)
@@ -405,7 +439,8 @@ Stacktrace:
 function eigmax(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
     v = eigvals(A; permute, scale, sortby=nothing)
     if eltype(v) <: Complex
-        throw(DomainError(A, "`A` cannot have complex eigenvalues."))
+        ishermitian(A) || throw(DomainError(A, "`A` cannot have complex eigenvalues."))
+        return maximum(real, v)
     end
     return maximum(v)
 end
@@ -441,7 +476,8 @@ Stacktrace:
 function eigmin(A::Union{Number, AbstractMatrix}; permute::Bool=true, scale::Bool=true)
     v = eigvals(A; permute, scale, sortby=nothing)
     if eltype(v) <: Complex
-        throw(DomainError(A, "`A` cannot have complex eigenvalues."))
+        ishermitian(A) || throw(DomainError(A, "`A` cannot have complex eigenvalues."))
+        return minimum(real, v)
     end
     return minimum(v)
 end
@@ -489,7 +525,7 @@ function eigen!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function
 end
 
 function eigen!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function,Nothing}=eigsortby) where T<:BlasComplex
-    ishermitian(A) && isposdef(B) && return eigen!(Hermitian(A), Hermitian(B), sortby=sortby)
+    ishermitian(A) && isposdef(B) && return _complexvalues(eigen!(Hermitian(A), Hermitian(B), sortby=sortby))
     if LAPACK.version() < v"3.6.0"
         alpha, beta, _, vr = LAPACK.ggev!('N', 'V', A, B)
     else
@@ -545,8 +581,8 @@ true
 ```
 """
 function eigen(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
-    eigen!(copy_similar(A, S), copy_similar(B, S); kws...)
+    S = promote_type(eigtype(A), _valeltype(B))
+    _tohalf(promote_type(TA, TB), eigen!(copy_similar(A, S), copy_similar(B, S); kws...))
 end
 eigen(A::Number, B::Number) = eigen(fill(A,1,1), fill(B,1,1))
 
@@ -607,7 +643,7 @@ function eigvals!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Functi
     return sorteig!((iszero(alphai) ? alphar : complex.(alphar, alphai))./beta, sortby)
 end
 function eigvals!(A::StridedMatrix{T}, B::StridedMatrix{T}; sortby::Union{Function,Nothing}=eigsortby) where T<:BlasComplex
-    ishermitian(A) && isposdef(B) && return sorteig!(eigvals!(Hermitian(A), Hermitian(B)), sortby)
+    ishermitian(A) && isposdef(B) && return complex(sorteig!(eigvals!(Hermitian(A), Hermitian(B)), sortby))
     if LAPACK.version() < v"3.6.0"
         alpha, beta, vl, vr = LAPACK.ggev!('N', 'N', A, B)
     else
@@ -640,8 +676,8 @@ julia> eigvals(A,B)
 ```
 """
 function eigvals(A::AbstractMatrix{TA}, B::AbstractMatrix{TB}; kws...) where {TA,TB}
-    S = promote_type(eigtype(TA), TB)
-    return eigvals!(copy_similar(A, S), copy_similar(B, S); kws...)
+    S = promote_type(eigtype(A), _valeltype(B))
+    return _tohalf(promote_type(TA, TB), eigvals!(copy_similar(A, S), copy_similar(B, S); kws...))
 end
 
 """

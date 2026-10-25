@@ -5,13 +5,16 @@ module TestQR
 isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra, Random
-using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, rmul!, lmul!
+using LinearAlgebra: BlasComplex, BlasFloat, BlasReal, QRPivoted, QRCompactWY, rmul!, lmul!
 using LinearAlgebra: QRCompactWYQ, QRPackedQ, _lqmul!, _rqmul!
 
 const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
 const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.Furlongs
+using Main.LinearAlgebraTestHelpers.SizedArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 n = 10
 
@@ -32,14 +35,14 @@ bimg  = randn(n,2)/2
 squareQ(Q::LinearAlgebra.AbstractQ) = Q*I
 rectangularQ(Q::LinearAlgebra.AbstractQ) = Matrix(Q)
 
-@testset for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Int)
+@testset for eltya in (Float64, ComplexF64, BigFloat, Int, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
     raw_a = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(areal, aimg) : areal)
     raw_a2 = eltya == Int ? rand(1:7, n, n) : convert(Matrix{eltya}, eltya <: Complex ? complex.(a2real, a2img) : a2real)
     asym = raw_a' + raw_a                  # symmetric indefinite
     apd  = raw_a' * raw_a                 # symmetric positive-definite
     ε = εa = eps(abs(float(one(eltya))))
 
-    @testset for eltyb in (Float32, Float64, ComplexF32, ComplexF64, Int)
+    @testset for eltyb in (Float64, ComplexF64, Int, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         raw_b = eltyb == Int ? rand(1:5, n, 2) : convert(Matrix{eltyb}, eltyb <: Complex ? complex.(breal, bimg) : breal)
         εb = eps(abs(float(one(eltyb))))
         ε = max(εa, εb)
@@ -512,6 +515,30 @@ end
     @test x ≈ xf
 end
 
+@testset "ldiv! checks the size of the right-hand side (LinearAlgebra.jl#616)" begin
+    for T in (Float64, ComplexF64, BigFloat)
+        # tall: the right-hand side must have exactly m rows
+        A = randn(T, 5, 3)
+        for F in (LinearAlgebra.qrfactUnblocked!(copy(A)), qr(A, ColumnNorm()))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 6))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 4))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 6, 2))
+            b = randn(T, 5)
+            @test ldiv!(F, copy(b))[1:3] ≈ A \ b
+        end
+        # wide: the right-hand side must have exactly n rows to hold the solution
+        W = randn(T, 3, 5)
+        for F in (LinearAlgebra.qrfactUnblocked!(copy(W)), qr(W, ColumnNorm()))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 3))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 4, 2))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 6))
+            @test_throws DimensionMismatch ldiv!(F, randn(T, 6, 2))
+            b = randn(T, 3)
+            @test W * ldiv!(F, [b; zeros(T, 2)]) ≈ b
+        end
+    end
+end
+
 @testset "issue #53451" begin
     # in the issue it was noted that QR factorizations of zero-column matrices
     # were possible, but zero row-matrices errored, because LAPACK does not
@@ -546,6 +573,59 @@ end
 
     @test rank(qr([1.0 2.0; 2.0 4.0], ColumnNorm())) == 1
     @test rank(qr([1.0 2.0 3.0; 4.0 5.0 6.0 ; 7.0 8.0 9.0], ColumnNorm())) == 2
+end
+
+@testset "nullspace(::QRPivoted)" begin
+    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
+        ε = eps(real(elty))
+        # tall rank-deficient, wide, full column rank
+        for (m, k, nc) in ((n, n1-1, n1+2), (n1+2, n1+2, n), (n, n1, n1))
+            A = convert(Matrix{elty}, randn(m, k) * randn(k, nc))
+            F = qr(A, ColumnNorm())
+            N = nullspace(F)
+            @test eltype(N) == elty
+            @test size(N) == (nc, nc - rank(F))
+            @test size(N, 2) == size(nullspace(A), 2)
+            @test norm(A * N, Inf) ≤ 100 * nc * ε * opnorm(A, Inf)
+            @test N' * N ≈ I atol = 100 * ε
+            # same subspace as the SVD-based result: compare orthogonal projectors,
+            # whose perturbation scales with the condition of the nonzero part of A
+            Ns = nullspace(A)
+            s = svdvals(A)
+            κ = s[1] / s[nc - size(N, 2)]
+            @test norm(N * N' - Ns * Ns', Inf) ≤ 100 * nc * ε * κ
+        end
+        @test nullspace(qr(zeros(elty, 3, 3), ColumnNorm())) == Matrix(I, 3, 3)
+        @test nullspace(qr(zeros(elty, 0, 3), ColumnNorm())) == Matrix(I, 3, 3)
+        @test size(nullspace(qr(zeros(elty, 3, 0), ColumnNorm()))) == (0, 0)
+    end
+    # tolerances are forwarded to rank
+    F = qr([1.0 0.0; 0.0 0.9], ColumnNorm())
+    @test size(nullspace(F), 2) == 0
+    @test size(nullspace(F; rtol=0.95), 2) == 1
+    @test size(nullspace(F; atol=0.95), 2) == 1
+    @test abs.(nullspace(F; atol=0.95)) ≈ [0.0; 1.0;;]
+    @test size(nullspace(F; atol=1.01), 2) == 2
+end
+
+@testset "cond of QR factorizations" begin
+    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
+        ε = eps(real(elty))
+        for A in (convert(Matrix{elty}, areal), convert(Matrix{elty}, areal[:, 1:n1]),
+                  convert(Matrix{elty}, areal[1:n1, :]))
+            κ = cond(A)
+            for F in (qr(A), qr(A, ColumnNorm()))
+                @test cond(F) ≈ κ rtol = 100 * ε * κ
+                @test cond(F, 2) ≈ κ rtol = 100 * ε * κ
+                @test_throws ArgumentError cond(F, 1)
+                @test_throws ArgumentError cond(F, Inf)
+            end
+        end
+    end
+    for A in (zeros(2, 2), [0.0 0.0; 1.0 1.0])
+        @test cond(qr(A, ColumnNorm())) == Inf
+        @test cond(qr(A)) == Inf
+    end
 end
 
 @testset "generic lmul!/rmul! with QRPackedQ and its adjoint" begin
@@ -817,6 +897,80 @@ end
         @test _rqmul!(copy(A), Q, Val(false)) ≈ A * Qref
         @test _rqmul!(copy(A), Q, Val(true)) ≈ A * Qref'
     end
+end
+
+@testset "abstract eltypes are promoted according to the stored values (#287)" begin
+    A = Real[1.0 big(floatmax(Float64))+1; 1.0 big(1.0)]
+    F = qr(A)
+    @test F isa QR{BigFloat}
+    @test all(isfinite, F.R)
+    @test F.Q * F.R ≈ convert(Matrix{BigFloat}, A)
+    @test qr(Number[1 im; 1 2]).R ≈ qr(ComplexF64[1 im; 1 2]).R
+end
+
+@testset "right-hand sides with a different eltype than the factorization" begin
+    A = [4.0 1.0 2.0; 1.0 3.0 0.5; 2.0 0.5 5.0]
+    b = [1.0, 2.0, 3.0]
+    B = [1.0 2.0; 3.0 4.0; 5.0 6.0]
+    # the right-hand side carries units, the factorization does not
+    for (M, rhs) in ((A, b), (A, B), (A[:, 1:2], b), (A[:, 1:2], B), (A[1:2, :], b[1:2]), (A[1:2, :], B[1:2, :]))
+        X = M \ rhs
+        for F in (qr(M), qr(M, ColumnNorm()), LinearAlgebra.qrfactUnblocked!(copy(M)))
+            # `qr` without pivoting does not support wide systems
+            F isa QRCompactWY && size(M, 1) < size(M, 2) && continue
+            x = F \ Furlong.(rhs)
+            @test x isa Array{Furlong{1,Float64},ndims(rhs)}
+            @test map(x -> x.val, x) ≈ X
+        end
+    end
+    # vector-valued elements of the right-hand side (#904): the solution is the solution for
+    # each component
+    for (M, rhs) in ((A, B), (A[:, 1:2], B), (A[1:2, :], B[1:2, :]))
+        m, n = size(M)
+        X = M \ rhs
+        bs = [SizedArray{(2,)}(rhs[i, :]) for i in 1:m]
+        Bs = [SizedArray{(2,)}([rhs[i, j], -rhs[i, j]]) for i in 1:m, j in axes(rhs, 2)]
+        for F in (qr(M), qr(M, ColumnNorm()), LinearAlgebra.qrfactUnblocked!(copy(M)))
+            F isa QRCompactWY && m < n && continue
+            # `ldiv!` needs a buffer of the size of the solution for wide systems
+            x = ldiv!(F, vcat(bs, fill(zero(bs[1]), max(n - m, 0))))
+            @test x isa Vector{<:SizedArray{(2,),Float64}}
+            @test map(x -> x.data[1], x[1:n]) ≈ X[:, 1]
+            @test map(x -> x.data[2], x[1:n]) ≈ X[:, 2]
+            Y = ldiv!(F, vcat(Bs, fill(zero(bs[1]), max(n - m, 0), size(Bs, 2))))
+            @test Y isa Matrix{<:SizedArray{(2,),Float64}}
+            @test map(y -> y.data[1], Y[1:n, :]) ≈ X
+            @test map(y -> y.data[2], Y[1:n, :]) ≈ -X
+            Q = F.Q
+            y = lmul!(Q, copy(bs))
+            @test all(i -> y[i].data ≈ (Q * rhs)[i, :], 1:m)
+            y = lmul!(Q', copy(bs))
+            @test all(i -> y[i].data ≈ (Q' * rhs)[i, :], 1:m)
+        end
+    end
+end
+
+@testset "powers of Q from square, tall and wide matrices" begin
+    for T in (Float64, ComplexF64, BigFloat), sz in ((5, 5), (6, 3), (3, 6))
+        Q = qr(randn(T, sz...)).Q
+        Qm = Q*I
+        @test size(Qm) == (sz[1], sz[1])
+        for p in (-3, -2, -1, 0, 1, 2, 3, 4)
+            @test (Q^p)::Matrix{T} ≈ Qm^p
+            @test (Q'^p)::Matrix{T} ≈ Qm'^p
+        end
+    end
+end
+
+@testset "ldiv! corner cases" begin
+    # rank-revealing solve with an empty factorization or right hand side
+    F = qr([1.0 2; 3 4; 5 6], ColumnNorm())
+    B = zeros(3, 0)
+    @test ldiv!(F, B, 1e-8) === (B, 0)
+    G = qr(zeros(3, 0), ColumnNorm())
+    C = ones(3, 2)
+    @test ldiv!(G, C, 1e-8) === (C, 0)
+    @test_throws DimensionMismatch ldiv!(qr([1.0 2; 3 4])', ones(3))
 end
 
 end # module TestQR
