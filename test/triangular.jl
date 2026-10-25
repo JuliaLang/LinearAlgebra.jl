@@ -1215,7 +1215,11 @@ end
         half = TT === UpperTriangular ? "lower" : "upper"
         @test_throws "cannot set indices in the $half triangular part" fill!(TT(zeros(2, 2)), 1)
         T = TT(A)
-        @test copyto!(zeros(4, 4), T) == copyto!(zeros(4, 4), Matrix(T))
+        # destination of a different shape: the elements, also the zeros, are copied in
+        # linear order, and the rest is left alone
+        D = copyto!(ones(4, 4), T)
+        @test D == copyto!(ones(4, 4), Matrix(T))
+        @test vec(D)[1:9] == vec(Matrix(T)) && all(isone, vec(D)[10:end])
         # scaling with a parent that is not strided
         T = TT(Tri)
         M = Matrix(T)
