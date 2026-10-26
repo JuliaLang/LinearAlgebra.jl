@@ -107,9 +107,12 @@ function givensAlgorithm(f::T, g::T) where T<:AbstractFloat
                 if scalepar < safmx2u || count >= 20 break end
             end
             if scalepar >= safmx2u
-                # scaling failed, so f and/or g is infinite, see the exceptional cases in
-                # Bindel et al., "On Computing Givens Rotations Reliably and Efficiently",
-                # ACM TOMS 28(2), 2002. Only the infinite ones among f1, g1 are still large.
+                # Scaling failed, so f and/or g is infinite. Return the limit of the finite
+                # case below if it exists, else NaNs, as in section 2.4 of Bindel et al.,
+                # "On Computing Givens Rotations Reliably and Efficiently", ACM TOMS 28(2),
+                # 2002. Note that the finite case follows the sign convention of LAPACK's
+                # slartg, not the paper's (section 3 there), e.g. (-2, -Inf) -> (0, -1, Inf).
+                # Only the infinite ones among f1, g1 are still large.
                 finf = abs(f1) >= safmx2u
                 ginf = abs(g1) >= safmx2u
                 if finf && ginf # no meaningful rotation
@@ -268,10 +271,11 @@ function givensAlgorithm(f::Complex{T}, g::Complex{T}) where T<:AbstractFloat
     return cs, sn, r
 end
 
-# Exceptional cases of zlartg for infinite f and/or g, see Bindel et al., "On Computing
-# Givens Rotations Reliably and Efficiently", ACM TOMS 28(2), 2002. The rotation is the
-# limit of the finite case. fs and gs are f and g scaled down such that exactly their
-# infinite components are still ≥ big in magnitude.
+# Exceptional cases of zlartg for infinite f and/or g: return the limit of the finite case
+# if it exists, else NaNs, as in section 2.4 of Bindel et al., "On Computing Givens
+# Rotations Reliably and Efficiently", ACM TOMS 28(2), 2002. (zlartg computes the same
+# rotation as the paper's Algorithm 1.) fs and gs are f and g scaled down such that exactly
+# their infinite components are still ≥ big in magnitude.
 function _givensAlgorithm_inf(f::Complex{T}, g::Complex{T}, fs, gs, big) where T<:AbstractFloat
     onepar = one(T)
     T0 = typeof(onepar) # dimensionless
@@ -288,8 +292,9 @@ function _givensAlgorithm_inf(f::Complex{T}, g::Complex{T}, fs, gs, big) where T
     elseif finf # limit as |f| → ∞
         return onepar, czero, f
     end
-    # limit as |g| → ∞: cs = 0, sn = sign(f)*conj(sign(g)), r = sign(f)*∞
-    gdir = complex(gr, gi) / sqrt(gr*gr + gi*gi)
+    # limit as |g| → ∞: cs = 0, sn = sign(f)*conj(sign(g)), r = sign(f)*∞.
+    # If both parts of g are infinite, sign(g) and hence sn have no limit.
+    gdir = gr != 0 && gi != 0 ? complex(T0(NaN), T0(NaN)) : complex(gr, gi)
     inf = abs(real(g)) + abs(imag(g))
     f == 0 && return zeropar, conj(gdir), complex(inf)
     # direction of f, scaled first to avoid overflow in abs

@@ -186,7 +186,6 @@ end
                                   (CT(-Inf, Inf), CT(0, 1), 1, 0, CT(-Inf, Inf)),
                                   (CT(1, 2), CT(Inf, 0), 0, CT(1, 2)/sqrt(T(5)), CT(Inf, Inf)),
                                   (CT(0, -3), CT(1, -Inf), 0, 1, CT(0, -Inf)),
-                                  (CT(-2, 0), CT(-Inf, -Inf), 0, CT(1, -1)/sqrt(T(2)), CT(-Inf, 0)),
                                   (CT(0), CT(1, -Inf), 0, CT(0, 1), CT(Inf, 0)))
             c, s, ρ = givensAlgorithm(f, g)
             @test c isa T && s isa CT && ρ isa CT
@@ -196,15 +195,21 @@ end
             c, s, r = givensAlgorithm(f, g)
             @test isnan(c) && isnan(s) && isnan(r)
         end
+        # both parts of g infinite: sign(g), and hence s, has no limit
+        for (f, r) in ((CT(-2, 0), CT(-Inf, 0)), (CT(1, 1), CT(Inf, Inf)), (CT(0), CT(Inf)))
+            c, s, ρ = givensAlgorithm(f, CT(-Inf, -Inf))
+            @test c == 0 && isnan(s) && ρ == r
+        end
     end
 end
 
 # The exceptional cases should be the limits of the finite cases: compare the result for
 # infinite inputs to the result where each infinite component is replaced by a huge value.
 @testset "givensAlgorithm - non-finite inputs are limits of large inputs" begin
-    # replace ±Inf components by ±M
-    finitize(x::Real, M) = isinf(x) ? copysign(M, x) : x
-    finitize(z::Complex, M) = complex(finitize(real(z), M), finitize(imag(z), M))
+    # Replace ±Inf real parts by ±M and ±Inf imaginary parts by ±Mi, so that Mi = M and
+    # Mi = M/2 approach an infinite complex number from different directions.
+    finitize(x::Real, M, Mi=M) = isinf(x) ? copysign(M, x) : x
+    finitize(z::Complex, M, Mi=M) = complex(finitize(real(z), M), finitize(imag(z), Mi))
     # does x (computed with huge values M) approximate the limit y (computed with Inf)?
     # The finite inputs are O(1), so the finite results converge like O(1/M).
     function islimit(x::Real, y::Real, M)
@@ -213,7 +218,6 @@ end
     end
     islimit(x::Complex, y::Complex, M) =
         islimit(real(x), real(y), M) && islimit(imag(x), imag(y), M)
-    islimit(x::Tuple, y::Tuple, M) = all(islimit(a, b, M) for (a, b) in zip(x, y))
 
     function check(f, g, T)
         res = givensAlgorithm(f, g)
@@ -225,9 +229,16 @@ end
                 c2, = givensAlgorithm(finitize(f, M), finitize(g, M/2))
                 @test isfinite(c1) && isfinite(c2) && !(c1 ≈ c2)
             else
-                resM = givensAlgorithm(finitize(f, M), finitize(g, M))
-                @test all(isfinite, resM)
-                @test islimit(resM, res, M)
+                res1 = givensAlgorithm(finitize(f, M), finitize(g, M))
+                res2 = givensAlgorithm(finitize(f, M, M/2), finitize(g, M, M/2))
+                @test all(isfinite, res1) && all(isfinite, res2)
+                for (x, x1, x2) in zip(res, res1, res2)
+                    if isnan(x) # no limit: huge inputs from different directions disagree
+                        @test !isapprox(x1, x2; atol=sqrt(eps(T)))
+                    else
+                        @test islimit(x1, x, M) && islimit(x2, x, M)
+                    end
+                end
             end
         end
     end
