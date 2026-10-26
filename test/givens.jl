@@ -221,7 +221,8 @@ end
 
     function check(f, g, T)
         res = givensAlgorithm(f, g)
-        for M in (T(1e10), sqrt(floatmax(T)), floatmax(T)/4)
+        # 1e300 is not representable in Float32
+        for M in filter(isfinite, (T(1e10), T(1e300), sqrt(floatmax(T)), floatmax(T)/4))
             if isinf(f) && isinf(g)
                 # no limit: the rotation for huge inputs depends on their ratio
                 @test all(isnan, res)
@@ -243,13 +244,15 @@ end
         end
     end
 
-    vals = (Inf, -Inf, 3, -2, 0)
+    # every sign and position (f, g, real and imaginary parts) of infinities, alone and
+    # combined, together with finite values of either sign and zeros of either sign
+    vals = (Inf, -Inf, 3, -2, 0.0, -0.0)
     @testset for T in (Float32, Float64, BigFloat)
         for f in vals, g in vals
             (isinf(f) || isinf(g)) && check(T(f), T(g), T)
         end
     end
-    @testset for T in (Float32, Float64)
+    @testset for T in (Float32, Float64, BigFloat)
         cvals = [complex(T(a), T(b)) for a in vals for b in vals]
         for f in cvals, g in cvals
             (isinf(f) || isinf(g)) && check(f, g, T)
