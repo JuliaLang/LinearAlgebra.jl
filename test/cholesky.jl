@@ -13,6 +13,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 function unary_ops_tests(a, ca, tol; n=size(a, 1))
     @test inv(ca)*a ≈ Matrix(I, n, n)
@@ -61,7 +62,8 @@ end
     breal = randn(n,2)/2
     bimg  = randn(n,2)/2
 
-    for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Complex{BigFloat}, Quaternion{Float64}, Int)
+    for eltya in (Float64, ComplexF64, BigFloat, Complex{BigFloat}, Quaternion{Float64}, Int,
+                  (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         a = if eltya == Int
             rand(1:7, n, n)
         elseif eltya <: Real
@@ -166,7 +168,7 @@ end
             @test cpapd.P*cpapd.L*cpapd.U*cpapd.P' ≈ apd
         end
 
-        for eltyb in (Float32, Float64, ComplexF32, ComplexF64, Int)
+        for eltyb in (Float64, ComplexF64, Int, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
             b = if eltya <: Quaternion
                 convert(Matrix{eltya}, Quaternion.(breal, bimg, bimg, bimg))
             elseif eltyb == Int
@@ -750,6 +752,14 @@ end
     @test C.U ≈ cholesky(BigFloat[4 2; 2 3]).U
     @test cholesky(Real[4 2; 2 3f0]) isa Cholesky{Float32}
     @test cholesky(Number[2 im; -im 2]).U ≈ cholesky(ComplexF64[2 im; -im 2]).U
+end
+
+@testset "generic Cholesky of an indefinite matrix, lower" begin
+    A = Hermitian(big.([3.0 2; 2 0]), :L)
+    C = cholesky(A; check = false)
+    @test !issuccess(C)
+    @test C.info == 2
+    @test_throws PosDefException cholesky(A)
 end
 
 end # module TestCholesky

@@ -17,6 +17,7 @@ using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 const n=12 # Size of matrix problem to test
 Random.seed!(1)
@@ -32,7 +33,8 @@ LinearAlgebra.ishermitian(N::NotDiagonal) = ishermitian(N.a)
 LinearAlgebra.istriu(N::NotDiagonal) = istriu(N.a)
 LinearAlgebra.istril(N::NotDiagonal) = istril(N.a)
 
-@testset for relty in (Float32, Float64, BigFloat), elty in (relty, Complex{relty})
+@testset for (relty, elty) in ((Float64, Float64), (Float64, ComplexF64), (BigFloat, BigFloat),
+        (@static COMPREHENSIVE ? ((Float32, Float32), (Float32, ComplexF32), (BigFloat, Complex{BigFloat})) : ())...)
     dd=convert(Vector{elty}, randn(n))
     vv=convert(Vector{elty}, randn(n))
     UU=convert(Matrix{elty}, randn(n,n))
@@ -678,7 +680,7 @@ end
             return randn(type, sz...)
         end
     end
-    types = (Float64, Int, ComplexF64)
+    types = (Float64, ComplexF64, (@static COMPREHENSIVE ? (Int,) : ())...)
     for ta in types
         D = Diagonal(_randomarray(ta, Val(1)))
         M = Matrix(D)
@@ -689,36 +691,38 @@ end
             for (T, rtype) in zip(Tmats, restypes)
                 adjtype = (rtype == LowerTriangular) ? UpperTriangular : LowerTriangular
 
-                # Triangular * Diagonal
-                R = T * D
                 TA = Array(T)
-                @test R ≈ TA * M
-                @test isa(R, rtype)
+                # Triangular mul/div Diagonal
+                R = T * D
+                @test R::rtype ≈ TA * M
+                R = T \ D
+                @test R::rtype ≈ TA \ M
+                R = T / D
+                @test R::rtype ≈ TA / M
 
-                # Diagonal * Triangular
+                # Diagonal mul/rdiv Triangular
                 R = D * T
-                @test R ≈ M * TA
-                @test isa(R, rtype)
+                @test R::rtype ≈ M * TA
+                R = D / T
+                @test R::rtype ≈ M / TA
+                R = D \ T
+                @test R::rtype ≈ M \ TA
 
                 # Adjoint of Triangular * Diagonal
                 R = T' * D
-                @test R ≈ TA' * M
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ TA' * M
 
                 # Diagonal * Adjoint of Triangular
                 R = D * T'
-                @test R ≈ M * TA'
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ M * TA'
 
                 # Transpose of Triangular * Diagonal
                 R = transpose(T) * D
-                @test R ≈ transpose(TA) * M
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ transpose(TA) * M
 
                 # Diagonal * Transpose of Triangular
                 R = D * transpose(T)
-                @test R ≈ M * transpose(TA)
-                @test isa(R, adjtype)
+                @test R::adjtype ≈ M * transpose(TA)
             end
         end
     end
@@ -1479,6 +1483,9 @@ end
     @test lmul!(0.2, copy(D)) ≈ lmul!(0.2, Array(D))
     @test_throws ArgumentError rmul!(D, NaN)
     @test_throws ArgumentError lmul!(NaN, D)
+    msg = "cannot set index (2, 1) off the diagonal band to a nonzero value (NaN)"
+    @test_throws msg rmul!(D, NaN)
+    @test_throws msg lmul!(NaN, D)
     D = Diagonal(rand(1))
     @test all(isnan, rmul!(copy(D), NaN))
     @test all(isnan, lmul!(NaN, copy(D)))
@@ -1645,6 +1652,43 @@ end
         @test rmul!(op(copy(M)), D) == Matrix(op(M)) * D
         @test lmul!(D, op(copy(M))) == D * Matrix(op(M))
     end
+end
+
+@testset "Diagonal corner cases" begin
+    # 1x1 matrices have no off-diagonal zeros
+    @test minimum(Diagonal([3])) == 3
+    @test maximum(Diagonal([-3])) == -3
+    @test minimum(Diagonal([3, 4])) == 0 && maximum(Diagonal([-3, -4])) == 0
+    @test_throws ArgumentError opnorm(Diagonal([1.0, 2, 3]), 3)
+end
+
+@testset "Diagonal and tridiagonal division size checks" begin
+    D = Diagonal([1.0, 2, 3])
+    S = Tridiagonal([1.0, 2], [3.0, 4, 5], [6.0, 7])
+    @test_throws DimensionMismatch ldiv!(similar(S), Diagonal([1.0, 2]), S)
+    @test_throws DimensionMismatch ldiv!(Tridiagonal(zeros(1), zeros(2), zeros(1)), D, S)
+    @test_throws DimensionMismatch LinearAlgebra._rdiv!(similar(S), S, Diagonal([1.0, 2]))
+    @test_throws DimensionMismatch LinearAlgebra._rdiv!(Tridiagonal(zeros(1), zeros(2), zeros(1)), S, D)
+end
+
+@testset "kron! of Diagonal with matrix entries into a dense matrix" begin
+    # the entries have no zero, so the off-diagonal blocks are computed explicitly
+    A = Diagonal([[1 2; 3 4], [5 6; 7 8]])
+    B = Diagonal([[1 0; 0 2], [0 1; 1 0]])
+    C = Matrix{Matrix{Int}}(undef, 4, 4)
+    @test kron!(C, A, B) === C
+    @test C == kron(A, B)
+    @test C[1, 1] == [1 4; 3 8] && C[1, 2] == zeros(Int, 2, 2)
+end
+
+@testset "Diagonal eigen and cholesky errors" begin
+    @test_throws ArgumentError eigen(Diagonal([[1.0 NaN; 0 1], [1.0 0; 0 1]]))
+    @test_throws ArgumentError eigen(Diagonal([1.0, Inf]), Diagonal([1.0, 2]))
+    @test_throws ArgumentError eigen(Diagonal([1.0, 2]), Diagonal([1.0, 0]))
+    @test_throws ArgumentError eigen([1.0 2; 3 4], Diagonal([1.0, 0]))
+    D = Diagonal([1.0+im, 2])
+    @test_throws PosDefException cholesky(D, RowMaximum())
+    @test !issuccess(cholesky(D, RowMaximum(); check = false))
 end
 
 end # module TestDiagonal

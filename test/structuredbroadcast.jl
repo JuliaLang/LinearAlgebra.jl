@@ -646,4 +646,13 @@ end
     end
 end
 
+@testset "similar for a Diagonal broadcast, and iszerodefined" begin
+    D = Diagonal([1, 2])
+    bc = Broadcast.instantiate(Broadcast.broadcasted(+, D, D))
+    @test similar(bc, Float64) isa Diagonal{Float64}
+    @test size(similar(bc, Float64)) == (2, 2)
+    @test !LinearAlgebra.iszerodefined(Base.inferencebarrier(Tuple{Int}))
+    @test tuple.(D) == [(1,) (0,); (0,) (2,)]
+end
+
 end
