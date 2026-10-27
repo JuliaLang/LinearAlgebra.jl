@@ -266,17 +266,16 @@ function _ipiv2perm_bk(v::AbstractVector{T}, maxi::Integer, uplo::AbstractChar, 
     return p
 end
 
-function getproperty(B::BunchKaufman{TS},
-    d::Symbol) where TS <: ClosedScalar{TR} where TR <: ClosedReal
+function getproperty(B::BunchKaufman, d::Symbol)
     n = size(B, 1)
     if d === :p
         return _ipiv2perm_bk(getfield(B, :ipiv), n, getfield(B, :uplo), B.rook)
     elseif d === :P
-        return Matrix{TS}(I, n, n)[:,invperm(B.p)]
+        return Matrix{eltype(B)}(I, n, n)[:,invperm(B.p)]
     elseif d === :L || d === :U || d === :D
         if d === :D
             _, od, md = generic_syconv(B, false)
-        elseif typeof(B) <: BunchKaufman{T,<:StridedMatrix} where {T<:BlasFloat}
+        elseif B isa BunchKaufman{<:BlasFloat,<:StridedMatrix}
             # We use LAPACK whenever we can
             if getfield(B, :rook)
                 LUD, _ = LAPACK.syconvf_rook!(getfield(B, :uplo), 'C',
@@ -549,8 +548,7 @@ end
 
 
 """
-generic_bunchkaufman!(uplo, A, syhe, rook::Bool=false) ->
-LD<:AbstractMatrix, ipiv<:AbstractVector{Integer}, info::BlasInt
+    generic_bunchkaufman!(uplo, A, syhe, rook=false) -> LD, ipiv, info
 
 Computes the Bunch-Kaufman factorization of a symmetric or Hermitian
 matrix `A` of size `NxN` as `P'*U*D*U'*P` or `P'*L*D*L'*P`, depending on
@@ -596,8 +594,9 @@ function generic_bunchkaufman!(
     A::AbstractMatrix{TS},
     syhe::AbstractChar,
     rook::Bool=false
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-
+    ) where {TS <: ClosedScalar}
+    
+    TR = real(TS)
     require_one_based_indexing(A)
     N = checksquare(A)
     ipiv = Vector{BlasInt}(undef, N)
@@ -867,11 +866,7 @@ generic_bksolve!(F, B) -> X<:AbstractVecOrMat
 `generic_bksolve!` solves a system of linear equations `A*X = B` where
 the Bunch-Kaufman factorization of `A` is provided by `F`.
 """
-function generic_bksolve!(
-    F::BunchKaufman{TS},
-    B::AbstractMatrix{TS},
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-
+function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS <: ClosedScalar}
     A, ipiv, symm, rook = F.LD, F.ipiv, issymmetric(F), F.rook
     require_one_based_indexing(A, ipiv, B)
     N = size(A, 1)
@@ -957,7 +952,7 @@ function generic_bksolve!(
     return B
 end
 # a vector is solved as a matrix with a single column
-function generic_bksolve!(F::BunchKaufman{TS}, b::AbstractVector{TS}) where TS <: ClosedScalar{TR} where TR <: ClosedReal
+function generic_bksolve!(F::BunchKaufman{T}, b::AbstractVector{T}) where {T <: ClosedScalar}
     generic_bksolve!(F, view(b, :, :))
     return b
 end
@@ -1027,10 +1022,7 @@ to `0`.
     throws an error), or a positive tolerance (absolute or relative) is
     specified.
 """
-function inertia(B::BunchKaufman{TS};
-    atol::TR = TR(0),
-    rtol::TR = TR(0)
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
+function inertia(B::BunchKaufman{TS}; atol::TR = TR(0), rtol::TR = TR(0)) where TS <: ClosedScalar{TR} where TR <: ClosedReal
 
     # Check if matrix is complex symmetric
     get_inertia = !(issymmetric(B) && TS <: Complex)
@@ -1187,11 +1179,8 @@ end
 `bunchkaufman_native!` is the same as [`bunchkaufman!`](@ref), but it performs
 the factorization in native Julia code instead of calling LAPACK.
 """
-function bunchkaufman_native!(A::AbstractMatrix{TS},
-    rook::Bool = false;
-    check::Bool = true,
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-    if A isa RealHermSymComplexSym{TR}
+function bunchkaufman_native!(A::AbstractMatrix{TS}, rook::Bool = false; check::Bool = true) where {TS <: ClosedScalar}
+    if A isa RealHermSymComplexSym{real(TS)}
         syhe = 'S'
     elseif ishermitian(A)
         syhe = 'H'
@@ -1215,28 +1204,11 @@ end
 
 
 # Overload 'bunchkaufman.jl' methods through multiple dispatch
-function bunchkaufman!(A::AbstractMatrix{TS},
-    rook::Bool = false;
-    check::Bool = true
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-    return bunchkaufman_native!(A, rook; check)
-end
+bunchkaufman!(A::AbstractMatrix{<:ClosedScalar}, rook::Bool = false; check::Bool = true) =
+    bunchkaufman_native!(A, rook; check)
 
-function ldiv!(B::BunchKaufman{TS},
-    R::AbstractVecOrMat{TS}
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-    return generic_bksolve!(B, R)
-end
+ldiv!(B::BunchKaufman{TS}, R::AbstractVecOrMat{TS}) where {TS <: ClosedScalar} =
+    generic_bksolve!(B, R)
 
-function inv(B::BunchKaufman{TS}) where TS <: ClosedScalar{TR} where TR <: ClosedReal
-    # I don't think there's value in implementing tha LAPACK in-place inverse
-    # functions `dsytri`, `chetri`, etc., unless of course an efficient
-    # in-place inverse function `inv!` is needed.
-    # TODO: reduce the operation count of the inverse by not computing the
-    # lower/upper triangular part.
-    if issymmetric(B)
-        return copytri!(B \ I, B.uplo)
-    else
-        return copytri!(B \ I, B.uplo, true)
-    end
-end
+inv(B::BunchKaufman{<:ClosedScalar}) =
+    issymmetric(B) ? copytri!(B \ I, B.uplo) : copytri!(B \ I, B.uplo, true)
