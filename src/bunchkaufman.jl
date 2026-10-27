@@ -433,9 +433,6 @@ function logabsdet(F::BunchKaufman)
     p = F.ipiv
     n = size(F.LD, 1)
 
-    if !issuccess(F)
-        return eltype(F)(-Inf), zero(eltype(F))
-    end
     s = one(real(eltype(F)))
     i = 1
     abs_det = zero(real(eltype(F)))

@@ -357,6 +357,9 @@ end
     return A
 end
 
+_zero_triangular_half_str(::Type{<:UpperOrUnitUpperTriangular}) = "lower"
+_zero_triangular_half_str(::Type{<:LowerOrUnitLowerTriangular}) = "upper"
+
 @noinline function throw_setindex_structuralzero_error(T::DataType, @nospecialize(x))
     Ts = _zero_triangular_half_str(T)
     Tn = nameof(T)
@@ -1388,25 +1391,20 @@ end
 
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
-function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+# permute and scale, as for general matrices, have no effect on triangular ones
+function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
+    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
 end
-function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
+    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
 end
 
 ####################
@@ -2991,16 +2989,17 @@ end
 # End of auxiliary functions for matrix square root
 
 # Generic eigensystems
-eigvals(A::AbstractTriangular; sortby = eigsortby) = sorteig!(diag(A), sortby)
+# permute and scale, as for general matrices, have no effect on triangular ones
+eigvals(A::AbstractTriangular; permute::Bool=true, scale::Bool=true, sortby = eigsortby) = sorteig!(diag(A), sortby)
 # fallback for unknown types
-function eigvecs(A::AbstractTriangular{<:BlasFloat}; sortby = eigsortby)
+function eigvecs(A::AbstractTriangular{<:BlasFloat}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
     if istriu(A)
         eigvecs(UpperTriangular(Matrix(A)); sortby)
     else # istril(A)
         eigvecs(LowerTriangular(Matrix(A)); sortby)
     end
 end
-function eigvecs(A::AbstractTriangular{T}; sortby = eigsortby) where T
+function eigvecs(A::AbstractTriangular{T}; permute::Bool=true, scale::Bool=true, sortby = eigsortby) where T
     TT = promote_type(T, Float32)
     if TT <: BlasFloat
         return eigvecs(convert(AbstractMatrix{TT}, A); sortby)
@@ -3030,7 +3029,7 @@ function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     return abs_det, sgn
 end
 
-eigen(A::AbstractTriangular; sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
+eigen(A::AbstractTriangular; permute::Bool=true, scale::Bool=true, sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
 
 # Generic singular systems
 for func in (:svd, :svd!, :svdvals)

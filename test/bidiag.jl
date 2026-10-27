@@ -997,6 +997,13 @@ end
         @test lmul!(0.2, copy(T)) ≈ lmul!(0.2, Array(T))
         @test_throws ArgumentError rmul!(T, NaN)
         @test_throws ArgumentError lmul!(NaN, T)
+        msg = if T.uplo == 'U'
+            "cannot set index (2, 1) off the upper bidiagonal band to a nonzero value (NaN)"
+        else
+            "cannot set index (1, 2) off the lower bidiagonal band to a nonzero value (NaN)"
+        end
+        @test_throws msg rmul!(T, NaN)
+        @test_throws msg lmul!(NaN, T)
     end
     for T in (Bidiagonal(rand(1), rand(0), :U), Bidiagonal(rand(1), rand(0), :L))
         @test all(isnan, rmul!(copy(T), NaN))
@@ -1319,6 +1326,28 @@ end
         @test ones(5, 5) / t(Bidiagonal(ones(5), ones(4), :L)) ≈ [float(isodd(j)) for i in 1:5, j in 1:5]
         @test rdiv!(ones(5,5), t(Bidiagonal(ones(5), ones(4), :U))) ≈ [float(isodd(j)) for i in 1:5, j in 1:5]
     end
+end
+
+@testset "eigmax, eigmin, and permute and scale in eigvals, eigvecs and eigen" begin
+    for B in (Bidiagonal([1.0, -2, 5], [2.0, 4], :U), Bidiagonal([1.0, -2, 5], [2.0, 4], :L))
+        @test eigmax(B) ≈ eigmax(Matrix(B))
+        @test eigmin(B) ≈ eigmin(Matrix(B))
+        @test eigvals(B; permute=false, scale=false) == eigvals(B)
+        @test eigen(B; permute=false, scale=false).values == eigen(B).values
+        @test eigvecs(B; permute=false, scale=false) == eigvecs(B)
+    end
+end
+
+@testset "Bidiagonal corner cases" begin
+    @test promote_rule(Tridiagonal{Float64, Vector{Float64}}, Bidiagonal{Int, Vector{Int}}) == Tridiagonal{Float64}
+    U = Bidiagonal([1, 2, 3], [4, 5], :U)
+    L = Bidiagonal([1, 2, 3], [4, 5], :L)
+    @test_throws "cannot set the lower bidiagonal band to a nonzero value for uplo=:U" copyto!(copy(U), L)
+    @test_throws "cannot set the upper bidiagonal band to a nonzero value for uplo=:L" copyto!(copy(L), U)
+    @test_throws DimensionMismatch LinearAlgebra._rdiv!(zeros(2, 3), rand(3, 3), Bidiagonal([1.0, 2, 3], [4.0, 5], :U))
+    E = Bidiagonal(Float64[], Float64[], :U)
+    @test sum(E; dims = 1) == zeros(1, 0)
+    @test sum(E; dims = 2) == zeros(0, 1)
 end
 
 end # module TestBidiagonal
