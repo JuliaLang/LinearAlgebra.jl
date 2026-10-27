@@ -584,7 +584,14 @@ kron(a::AdjointAbsVec, b::AdjointAbsVec) = adjoint(kron(adjoint(a), adjoint(b)))
 kron(a::AdjOrTransAbsVec, b::AdjOrTransAbsVec) = transpose(kron(transpose(a), transpose(b)))
 
 # Matrix power
-(^)(A::AbstractMatrix, p::Integer) = p < 0 ? power_by_squaring(inv(A), -p) : power_by_squaring(A, p)
+function (^)(A::AbstractMatrix, p::Integer)
+    if p < 0
+        invA = inv(A) # prevents overflow with typemin(p)
+        return invA * power_by_squaring(invA, -(p+1))
+    else
+        return power_by_squaring(A, p)
+    end
+end
 function (^)(A::AbstractMatrix{T}, p::Integer) where T<:Integer
     # make sure that e.g. [1 1;1 0]^big(3)
     # gets promotes in a similar way as 2^big(3)
@@ -593,13 +600,19 @@ function (^)(A::AbstractMatrix{T}, p::Integer) where T<:Integer
 end
 function integerpow(A::AbstractMatrix{T}, p) where T
     TT = promote_op(^, T, typeof(p))
-    return (TT == T ? A : convert(AbstractMatrix{TT}, A))^Integer(p)
+    A2 = convert(AbstractMatrix{TT}, A)
+    if typemin(Int) ≤ p ≤ typemax(Int)
+        return A2^Int(p)
+    else
+        return A2^BigInt(p)
+    end
 end
 function schurpow(A::AbstractMatrix, p)
+    T = promote_op(^, eltype(A), typeof(p))
     if istriu(A)
-        cA = complex(float(A))
+        cA = convert(AbstractMatrix{complex(float(T))}, A)
         # Integer part
-        retmat = cA ^ floor(Integer, p)
+        retmat = integerpow(cA, floor(p))
         # Real part
         if p - floor(p) == 0.5
             # special case: A^0.5 === sqrt(A)
@@ -608,9 +621,10 @@ function schurpow(A::AbstractMatrix, p)
             retmat = retmat * powm!(UpperTriangular(copy(cA)), real(p - floor(p)))
         end
     else
-        S, Q, d = Schur{Complex}(schur(A))
+        rA = convert(AbstractMatrix{float(T)}, A)
+        S, Q, d = Schur{Complex}(schur(rA))
         # Integer part
-        R = S ^ floor(Integer, p)
+        R = integerpow(S, floor(p))
         # Real part
         if p - floor(p) == 0.5
             # special case: A^0.5 === sqrt(A)

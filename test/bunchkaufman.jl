@@ -13,6 +13,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+using Main.LinearAlgebraTestHelpers.Quaternions
 
 n = 10
 
@@ -273,6 +274,177 @@ end
         B = bunchkaufman(Symmetric(A, ul))
         @test A ≈ Array(B) ≈ Matrix(B) ≈ AbstractArray(B) ≈ AbstractMatrix(B)
     end
+end
+
+@testset "generic Bunch-Kaufman solve" begin
+    for T in (BigFloat, Rational{BigInt}, Complex{Rational{BigInt}}), uplo in (:U, :L), rook in (false, true)
+        A = T.([0 1 2 0; 1 0 3 1; 2 3 1 0; 0 1 0 2])
+        F = bunchkaufman(Symmetric(A, uplo), rook)
+        # ldiv! returns its argument, also for a vector
+        b = T.([1, 2, 3, 4])
+        x = copy(b)
+        @test ldiv!(F, x) === x
+        @test A * x == b || A * x ≈ b
+        X = T.([1 2; 3 4; 5 6; 7 8])
+        Y = copy(X)
+        @test ldiv!(F, Y) === Y
+        @test A * Y == X || A * Y ≈ X
+        @test_throws DimensionMismatch F \ T.([1, 2, 3])
+        @test_throws DimensionMismatch ldiv!(F, zeros(T, 5, 2))
+    end
+end
+
+@testset "matrices with an abstract element type" begin
+    # the element type is determined by the stored values
+    for (A, T) in ((Union{Float32,Float64}[2.0 1.0; 1.0 1.5], Float64),
+                   (AbstractFloat[2.0 1.0; 1.0 1.5], Float64),
+                   (Real[2 1; 1 1.5], Float64),
+                   (Real[2//1 1//2; 1//2 3//2], Rational{Int}),
+                   (Hermitian(Number[2 im; -im 3]), Complex{Rational{BigInt}}))
+        F = bunchkaufman(A)
+        @test F isa BunchKaufman{T}
+        @test Matrix(A) * (F \ [1, 2]) ≈ [1, 2]
+    end
+    # without stored values, the element type is promoted as by division
+    @test bunchkaufman(Matrix{Real}(undef, 0, 0)) isa BunchKaufman{Float64}
+end
+
+@testset "generic Bunch-Kaufman for plain matrices" begin
+    # a complex symmetric, non-Hermitian matrix is factorized as symmetric
+    A = Complex{BigFloat}.([1 2im 0; 2im 3 1; 0 1 2im])
+    F = bunchkaufman(A)
+    @test issymmetric(F)
+    @test F.U * F.D * transpose(F.U) ≈ A[F.p, F.p]
+    @test_throws ArgumentError bunchkaufman(BigFloat.([1 2; 3 4]))
+end
+
+@testset "rook pivoting with a pivot below the safe minimum" begin
+    x = Float16(1e-6) # a subnormal number
+    for uplo in (:U, :L)
+        A = Symmetric(Float16[x x 0; x 1 1; 0 1 3], uplo)
+        F = bunchkaufman(A, true)
+        @test F.ipiv == 1:3
+        M = uplo === :U ? F.U * F.D * F.U' : F.L * F.D * F.L'
+        @test M ≈ Matrix(A)[F.p, F.p]
+    end
+end
+
+@testset "inertia with zero eigenvalues" begin
+    # 2x2 block with two eigenvalues below the tolerance
+    @test inertia(bunchkaufman(Symmetric([0 1e-3; 1e-3 0])); atol=1.0) == (0, 0, 2)
+    # 2x2 block with one eigenvalue below the tolerance, whose sign is that of the trace
+    F = bunchkaufman(Symmetric([0.5 1; 1 0.1]))
+    @test F.ipiv == [-1, -1]
+    @test inertia(F; atol=0.7) == (1, 0, 1)
+    @test inertia(bunchkaufman(Symmetric(-[0.5 1; 1 0.1])); atol=0.7) == (0, 1, 1)
+    # 1x1 block below the default tolerance
+    @test inertia(bunchkaufman(Symmetric([1 0; 0 1e-20]))) == (1, 0, 1)
+    # only the number of zero eigenvalues is defined for complex symmetric matrices
+    @test inertia(bunchkaufman(Symmetric(ComplexF64[1 0; 0 1e-20]))) == (nothing, nothing, 1)
+end
+
+@testset "right division (#1032)" begin
+    # the example from the issue
+    A = rand(3, 3)
+    A = A' * A
+    @test A / bunchkaufman(A) ≈ I
+    for T in (Float64, ComplexF64, BigFloat, Complex{BigFloat}, Rational{BigInt}, Complex{Rational{BigInt}}),
+            W in (Symmetric, Hermitian), uplo in (:U, :L), rook in (false, true)
+        T <: Real && W === Hermitian && continue
+        M = T.([0 1 2 0; 1 0 3 1; 2 3 1 0; 0 1 0 2] .+ (T <: Complex ? im .* [0 1 0 2; 1 0 1 0; 0 1 0 1; 2 0 1 0] : 0))
+        M = W === Hermitian ? M + M' : M + transpose(M)
+        A = W(M, uplo)
+        F = bunchkaufman(A, rook)
+        B = T.([1 2 0 1; 3 4 1 0; 5 6 2 2])
+        X = B / F
+        @test X * Matrix(A) == B || X * Matrix(A) ≈ B
+        @test X == B / Matrix(A) || X ≈ B / Matrix(A)
+        Y = copy(B)
+        @test rdiv!(Y, F) === Y
+        @test Y == X
+        b = T.([1, 2, 3, 4])
+        # a row vector gives a 1×n matrix, as for other factorizations
+        @test size(b' / F) == (1, 4)
+        @test (b' / F) * Matrix(A) == b' || (b' / F) * Matrix(A) ≈ b'
+        @test transpose(b) / F * Matrix(A) == transpose(b) || transpose(b) / F * Matrix(A) ≈ transpose(b)
+        @test_throws DimensionMismatch T.(ones(2, 3)) / F
+    end
+    # complex right-hand side with a real factorization
+    A = Symmetric([2.0 1 0; 1 0 3; 0 3 1])
+    B = [1.0+2im 0 1; 3 4im 1]
+    @test B / bunchkaufman(A) ≈ B / Matrix(A)
+end
+
+@testset "sign of logabsdet" begin
+    M = [0 1+2im 3; 1-2im 0 1im; 3 -1im 0]
+    for T in (ComplexF64, Complex{BigFloat}), uplo in (:U, :L), rook in (false, true)
+        A = T.(M)
+        # the sign has the element type, and for a Hermitian matrix it is real-valued, also with
+        # 2-by-2 pivots
+        F = bunchkaufman(Hermitian(A, uplo), rook)
+        @test any(<(0), F.ipiv)
+        l, s = @inferred logabsdet(F)
+        @test s isa T && s == -1
+        @test l ≈ log(12)
+        S = Symmetric(A, uplo)
+        l, s = @inferred logabsdet(bunchkaufman(S, rook))
+        @test l ≈ log(abs(det(Matrix(S))))
+        @test s ≈ sign(det(Matrix(S)))
+        # a singular matrix
+        F0 = bunchkaufman(Hermitian(zeros(T, 2, 2), uplo), rook; check=false)
+        @test isequal(@inferred(logabsdet(F0)), (real(T)(-Inf), zero(T)))
+    end
+    # the logarithm of a rational determinant is a floating-point number, and so is the sign of a
+    # complex rational number
+    for (T, TS) in ((Rational{BigInt}, Rational{BigInt}), (Complex{Rational{BigInt}}, Complex{BigFloat}))
+        F = bunchkaufman(Hermitian(T.([2 1; 1 -3])))
+        l, s = @inferred logabsdet(F)
+        @test l isa BigFloat && l ≈ log(7)
+        @test s isa TS && s == -1
+        F0 = bunchkaufman(Hermitian(zeros(T, 2, 2)); check=false)
+        @test isequal(@inferred(logabsdet(F0)), (big(-Inf), zero(TS)))
+    end
+end
+
+@testset "Hermitian matrices of quaternions" begin
+    # the real 4n×4n matrix of the map x -> A*x has each eigenvalue of a Hermitian A four times
+    realmat(q) = [q.s -q.v1 -q.v2 -q.v3; q.v1 q.s -q.v3 q.v2; q.v2 q.v3 q.s -q.v1; q.v3 -q.v2 q.v1 q.s]
+    realmat(A::AbstractMatrix) = hvcat(size(A, 2), (realmat(A[i,j]) for i in axes(A, 1) for j in axes(A, 2))...)
+    for n in (1, 2, 5, 8), zerodiag in (false, true), uplo in (:U, :L), rook in (false, true)
+        n == 1 && zerodiag && continue
+        B = randn(Quaternion{Float64}, n, n)
+        M = B + B'
+        # a zero diagonal enforces 2-by-2 pivots
+        zerodiag && foreach(i -> M[i,i] = 0, 1:n)
+        F = bunchkaufman(Hermitian(M, uplo), rook)
+        @test F isa BunchKaufman{Quaternion{Float64}}
+        @test ishermitian(F) && !issymmetric(F)
+        zerodiag && @test any(<(0), F.ipiv)
+        @test Matrix(F) ≈ M
+        b = randn(Quaternion{Float64}, n)
+        X = randn(Quaternion{Float64}, 2, n)
+        @test M * (F \ b) ≈ b
+        @test (X / F) * M ≈ X
+        @test inv(F) * M ≈ I
+        λ = eigvals(Symmetric(realmat(M)))
+        np, nn = count(>(0), λ) ÷ 4, count(<(0), λ) ÷ 4
+        @test inertia(F) == (np, nn, 0)
+        l, s = @inferred logabsdet(F)
+        @test l ≈ sum(log ∘ abs, λ) / 4
+        @test s === (-1.0)^nn
+    end
+    M = let B = randn(Quaternion{Float64}, 4, 4); B + B'; end
+    # a plain Hermitian matrix is factorized as Hermitian
+    @test ishermitian(bunchkaufman(M))
+    # integer quaternions are promoted as by division
+    Mi = let B = Quaternion.(rand(-3:3, 4, 4), rand(-3:3, 4, 4), 0, 1); B + B'; end
+    @test bunchkaufman(Hermitian(Mi); check=false) isa BunchKaufman{Quaternion{Float64}}
+    # the symmetric factorization requires commuting entries
+    @test_throws ArgumentError bunchkaufman(Symmetric(M))
+    S = let B = randn(Quaternion{Float64}, 4, 4); B + transpose(B); end
+    @test_throws ArgumentError bunchkaufman(S)
+    # the real type of the generic code must be floating-point or rational
+    @test_throws ArgumentError bunchkaufman!([2 1; 1 2])
 end
 
 end # module TestBunchKaufman
