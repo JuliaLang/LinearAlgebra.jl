@@ -595,7 +595,7 @@ function generic_bunchkaufman!(
     syhe::AbstractChar,
     rook::Bool=false
     ) where {TS <: ClosedScalar}
-    
+
     TR = real(TS)
     require_one_based_indexing(A)
     N = checksquare(A)
