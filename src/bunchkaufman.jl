@@ -14,7 +14,7 @@ const ClosedScalar = Union{T, Complex{T}} where T <: ClosedReal
 # The generic code also supports other number types with a closed real type, like quaternions,
 # but only for Hermitian matrices, as their multiplication need not commute. Since the real type
 # can't be dispatched on, it is checked when factorizing.
-function _bk_checktype(::Type{TS}) where {TS<:Number}
+function _bk_checktype(::Type{TS}) where {TS <: Number}
     real(TS) <: ClosedReal || throw(ArgumentError(lazy"the generic Bunch-Kaufman \
         factorization requires a floating-point or rational real type, but the element type is $TS"))
     return nothing
@@ -613,11 +613,11 @@ function generic_bunchkaufman!(
     A::AbstractMatrix{TS},
     syhe::AbstractChar,
     rook::Bool=false
-    ) where {TS<:Number}
+    ) where {TS <: Number}
 
+    TR = real(TS)
     require_one_based_indexing(A)
     N = checksquare(A)
-    TR = real(TS)
     ipiv = Vector{BlasInt}(undef, N)
     info = BlasInt(0)
 
@@ -823,7 +823,7 @@ triangular factor will be computed in-place in said copy.
 function generic_syconv(
     F::BunchKaufman{TS},
     gettri::Bool=true
-    ) where {TS<:Number}
+    ) where {TS <: Number}
 
     # Inputs must be 1-indexed; bounds may not be checked.
     Base.require_one_based_indexing(F.LD, F.ipiv)
@@ -975,7 +975,7 @@ function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS 
     return B
 end
 # a vector is solved as a matrix with a single column
-function generic_bksolve!(F::BunchKaufman{TS}, b::AbstractVector{TS}) where {TS<:Number}
+function generic_bksolve!(F::BunchKaufman{T}, b::AbstractVector{T}) where {T <: Number}
     generic_bksolve!(F, view(b, :, :))
     return b
 end
@@ -1023,11 +1023,11 @@ less or equal than `max(atol, rtol*s₁)`, where `s₁` is an upper bound of
 the largest singular value of `B.D`, `σ₁` (more specifically,
 `0.5*s₁ <= σ₁ <= s₁` for real matrices and other number types except for
 complex numbers, and `0.35*s₁ <= σ₁ <= s₁` for complex matrices). `atol`
-and `rtol` are the absolute and relative tolerances, respectively. The default relative tolerance is `n*ϵ`, where
-`n` is the size of  of `A`, and `ϵ` is the [`eps`](@ref) of the number
-type of `A`, if this type is a subtype of `AbstractFloat`. In any other
-case (if the number type of `A` is `Rational`, for example) `ϵ` is set
-to `0`.
+and `rtol` are the absolute and relative tolerances, respectively. The
+default relative tolerance is `n*ϵ`, where `n` is the size of  of `A`, and
+`ϵ` is the [`eps`](@ref) of the number type of `A`, if this type is a
+subtype of `AbstractFloat`. In any other case (if the number type of `A` is
+`Rational`, for example) `ϵ` is set to `0`.
 
 !!! note
     Numerical inertia can be a sensitive and imprecise characterization of
@@ -1047,10 +1047,7 @@ to `0`.
     throws an error), or a positive tolerance (absolute or relative) is
     specified.
 """
-function inertia(B::BunchKaufman{TS};
-    atol::Real = 0,
-    rtol::Real = 0
-    ) where {TS<:Number}
+function inertia(B::BunchKaufman{TS}; atol::Real = 0, rtol::Real = 0) where {TS <: Number}
     TR = real(TS)
     atol, rtol = TR(atol), TR(rtol)
 
@@ -1209,7 +1206,7 @@ end
 `bunchkaufman_native!` is the same as [`bunchkaufman!`](@ref), but it performs
 the factorization in native Julia code instead of calling LAPACK.
 """
-function bunchkaufman_native!(A::AbstractMatrix{TS}, rook::Bool = false; check::Bool = true) where {TS<:Number}
+function bunchkaufman_native!(A::AbstractMatrix{TS}, rook::Bool = false; check::Bool = true) where {TS <: Number}
     _bk_checktype(TS)
     if A isa RealHermSymComplexSym{real(TS)}
         syhe = 'S'
