@@ -1266,6 +1266,7 @@ _ldiv!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
     generic_mattridiv!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
+ldiv!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _ldiv!(B, A, B)
 function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
     if istriu(A)
         _ldiv!(B, uppertriangular(A), B)
@@ -1273,6 +1274,7 @@ function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
         _ldiv!(B, lowertriangular(A), B)
     end
 end
+rdiv!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _rdiv!(A, A, B)
 function rdiv!(A::AbstractMatrix, B::AbstractTriangular)
     if istriu(B)
         _rdiv!(A, A, uppertriangular(B))
