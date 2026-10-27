@@ -11,6 +11,14 @@
 const ClosedReal = T where T <: Union{AbstractFloat, Rational}
 # Similarly, we also use a closed scalar type
 const ClosedScalar = Union{T, Complex{T}} where T <: ClosedReal
+# The generic code also supports other number types with a closed real type, like quaternions,
+# but only for Hermitian matrices, as their multiplication need not commute. Since the real type
+# can't be dispatched on, it is checked when factorizing.
+function _bk_checktype(::Type{TS}) where {TS <: Number}
+    real(TS) <: ClosedReal || throw(ArgumentError(lazy"the generic Bunch-Kaufman \
+        factorization requires a floating-point or rational real type, but the element type is $TS"))
+    return nothing
+end
 ##--------------------------------------------------------------------------------
 
 """
@@ -144,6 +152,8 @@ Here, `U` and `L` are respectively upper and lower triangular, `P` is a
 permutation matrix, and `D` is block diagonal with 1-by-1 and 2-by-2 blocks.
 Note that if `A` is complex symmetric then `U'` and `L'` denote
 the unconjugated transposes, i.e. `transpose(U)` and `transpose(L)`.
+For other number types than real and complex numbers, like quaternions,
+only Hermitian matrices are supported.
 
 Iterating the decomposition produces the components `S.D`, `S.U` or `S.L`
 as appropriate given `S.uplo`, and `S.p`.
@@ -216,11 +226,11 @@ bunchkaufman(A::AbstractMatrix, rook::Bool=false; check::Bool = true) =
 # The element type of the copy of the matrix that is factorized. The Bunch-Kaufman algorithm is
 # closed over the floating-point and the rational numbers, but not over the integers, which
 # are therefore promoted to rationals, with BigInt to avoid overflow. Other types are promoted
-# as by `sqrt`.
+# as by division.
 _bktype(::Type{T}) where {T<:ClosedScalar} = T
 _bktype(::Type{<:Integer}) = Rational{BigInt}
 _bktype(::Type{<:Complex{<:Integer}}) = Complex{Rational{BigInt}}
-_bktype(::Type{T}) where {T} = typeof(sqrt(oneunit(T)))
+_bktype(::Type{T}) where {T} = typeof(oneunit(T) / oneunit(T))
 
 BunchKaufman{T}(B::BunchKaufman) where {T} =
     BunchKaufman(convert(Matrix{T}, B.LD), B.ipiv, B.uplo, B.symmetric, B.rook, B.info)
@@ -427,18 +437,28 @@ function rdiv!(B::AbstractMatrix, F::BunchKaufman)
     return copyto!(B, op(ldiv!(F, copy(op(B)))))
 end
 
-function logabsdet(F::BunchKaufman)
+# The sign of a factor of the determinant. The determinant of a Hermitian matrix is real, so its
+# sign is taken from the real part. This also covers number types other than real and complex
+# numbers, like quaternions, whose matrices are always factorized as Hermitian and for which
+# `sign` need not be defined.
+_bk_sgn(x::Union{Real,Complex}, herm::Bool) = herm ? sign(real(x)) : sign(x)
+_bk_sgn(x::Number, herm::Bool) = sign(real(x))
+
+function logabsdet(F::BunchKaufman{T}) where {T}
     M = F.LD
     p = F.ipiv
-    n = size(F.LD, 1)
-
-    s = one(real(eltype(F)))
+    n = size(M, 1)
+    herm = ishermitian(F)
+    # The sign has the type of the sign of an element, which is complex for complex matrices, as
+    # these may be complex symmetric. For a complex Hermitian matrix, it is real-valued.
+    s = one(typeof(_bk_sgn(one(T), false)))
+    # zero, with the type of the logarithm, which is a floating-point type also for rationals
+    abs_det = log(one(real(T)))
     i = 1
-    abs_det = zero(real(eltype(F)))
     while i <= n
         if p[i] > 0
             elm = M[i,i]
-            s *= sign(elm)
+            s *= _bk_sgn(elm, herm)
             abs_det += log(abs(elm))
             i += 1
         else
@@ -447,15 +467,13 @@ function logabsdet(F::BunchKaufman)
             # always large for 2x2 pivots.
             if F.uplo == 'U'
                 elm = M[i, i + 1]*(M[i,i]/M[i, i + 1]*M[i + 1, i + 1] -
-                    (issymmetric(F) ? M[i, i + 1] : conj(M[i, i + 1])))
-                s *= sign(elm)
-                abs_det += log(abs(elm))
+                    (herm ? conj(M[i, i + 1]) : M[i, i + 1]))
             else
                 elm = M[i + 1,i]*(M[i, i]/M[i + 1, i]*M[i + 1, i + 1] -
-                    (issymmetric(F) ? M[i + 1, i] : conj(M[i + 1, i])))
-                s *= sign(elm)
-                abs_det += log(abs(elm))
+                    (herm ? conj(M[i + 1, i]) : M[i + 1, i]))
             end
+            s *= _bk_sgn(elm, herm)
+            abs_det += log(abs(elm))
             i += 2
         end
     end
@@ -587,14 +605,15 @@ factorization. However, rook pivoting guarantees that the entries of
 
 This function implements the factorization algorithm entirely in
 native Julia, so it supports any number type representing real or
-complex numbers.
+complex numbers, and Hermitian matrices of other number types with a
+floating-point or rational real type, like quaternions.
 """
 function generic_bunchkaufman!(
     uplo::AbstractChar,
     A::AbstractMatrix{TS},
     syhe::AbstractChar,
     rook::Bool=false
-    ) where {TS <: ClosedScalar}
+    ) where {TS <: Number}
 
     TR = real(TS)
     require_one_based_indexing(A)
@@ -612,11 +631,12 @@ function generic_bunchkaufman!(
     # 2x2 block in the D factor has a positive-negative eigenvalue pair, as long
     # as the approximation lies in (0,1).
     alpha = TR <: AbstractFloat ? (1 + sqrt(TR(17))) / 8 : TR(16//25)
-    # Use complex 1-norm for pivot selection, as in LAPACK
-    abs1_fun = TS <: Real ? abs : cabs1
+    # Use complex 1-norm for pivot selection, as in LAPACK, and the absolute value for other
+    # number types
+    abs1_fun = TS <: Complex ? cabs1 : abs
     # A real matrix is factorized as symmetric, regardless of the value of `syhe`. For a
     # Hermitian matrix, only the real part of the diagonal is used.
-    herm = syhe == 'H' && TS <: Complex
+    herm = syhe == 'H' && !(TS <: Real)
     cj(z) = herm ? conj(z) : z
     diag_abs(z) = herm ? abs(real(z)) : abs1_fun(z)
 
@@ -753,10 +773,12 @@ function generic_bunchkaufman!(
                 # The columns j have to be processed from the diagonal block outwards: the
                 # update of column j reads A[i,k] and A[i,knext] for the rows i of its stored
                 # part, which are at least as far from the diagonal block as row j, and these
-                # entries are only overwritten when column i is processed.
+                # entries are only overwritten when column i is processed. The row of W*inv(D(k))
+                # is computed with the factors in the order of the matrix product, which matters
+                # for number types whose multiplication does not commute.
                 for j in (upper ? reverse(inds) : inds)
-                    wknext = dxk * (dkk*A[j,knext] - A[j,k])
-                    wk = dkx * (dxx*A[j,k] - A[j,knext])
+                    wknext = (A[j,knext]*dkk - A[j,k]) * dxk
+                    wk = (A[j,k]*dxx - A[j,knext]) * dkx
                     r = upper ? (1:j) : (j:N)
                     view(A, r, j) .-= view(A, r, k) .* cj(wk) .+ view(A, r, knext) .* cj(wknext)
                     A[j,k] = wk
@@ -801,7 +823,7 @@ triangular factor will be computed in-place in said copy.
 function generic_syconv(
     F::BunchKaufman{TS},
     gettri::Bool=true
-    ) where TS <: ClosedScalar{TR} where TR <: ClosedReal
+    ) where {TS <: Number}
 
     # Inputs must be 1-indexed; bounds may not be checked.
     Base.require_one_based_indexing(F.LD, F.ipiv)
@@ -866,7 +888,7 @@ generic_bksolve!(F, B) -> X<:AbstractVecOrMat
 `generic_bksolve!` solves a system of linear equations `A*X = B` where
 the Bunch-Kaufman factorization of `A` is provided by `F`.
 """
-function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS <: ClosedScalar}
+function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS <: Number}
     A, ipiv, symm, rook = F.LD, F.ipiv, issymmetric(F), F.rook
     require_one_based_indexing(A, ipiv, B)
     N = size(A, 1)
@@ -906,15 +928,16 @@ function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS 
             rows = upper ? (1:(k-2)) : ((k+2):N)
             _bk_rank1_rhs!(B, view(A, rows, k), rows, k)
             _bk_rank1_rhs!(B, view(A, rows, kx), rows, kx)
-            #   Multiply by the inverse of the diagonal block.
+            #   Multiply by the inverse of the diagonal block, from the left, which matters for
+            #   number types whose multiplication does not commute.
             axk = A[kx,k]
             caxk = symm ? axk : conj(axk)
             axx = A[kx,kx] / axk
             akk = A[k,k] / caxk
             denom = axx*akk - 1
             for j in axes(B, 2)
-                bx = B[kx,j] / axk
-                bk = B[k,j] / caxk
+                bx = axk \ B[kx,j]
+                bk = caxk \ B[k,j]
                 B[kx,j] = (akk*bx - bk) / denom
                 B[k,j] = (axx*bk - bx) / denom
             end
@@ -952,7 +975,7 @@ function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS 
     return B
 end
 # a vector is solved as a matrix with a single column
-function generic_bksolve!(F::BunchKaufman{T}, b::AbstractVector{T}) where {T <: ClosedScalar}
+function generic_bksolve!(F::BunchKaufman{T}, b::AbstractVector{T}) where {T <: Number}
     generic_bksolve!(F, view(b, :, :))
     return b
 end
@@ -965,15 +988,16 @@ function _bk_rank1_rhs!(B::AbstractMatrix, x::AbstractVector, rows::AbstractUnit
     return B
 end
 
-# b -= transpose(B)*a (if `symm`) or b -= transpose(B)*conj(a). This simple loop is faster
-# than `mul!` or `dot` for the non-BLAS number types that this code is used for.
+# b -= transpose(transpose(a)*B) (if `symm`) or b -= transpose(a'*B), with the factors in this
+# order for number types whose multiplication does not commute. This simple loop is faster than
+# `mul!` or `dot` for the non-BLAS number types that this code is used for.
 _bk_dotsub!(b::AbstractVector, B::AbstractMatrix, a::AbstractVector, symm::Bool) =
     _bk_dotsub!(b, B, a, symm ? identity : conj)
 function _bk_dotsub!(b::AbstractVector, B::AbstractMatrix, a::AbstractVector, cj::F) where {F}
     for c in eachindex(b)
         t = zero(eltype(b))
         for j in eachindex(a)
-            t += B[j,c] * cj(a[j])
+            t += cj(a[j]) * B[j,c]
         end
         b[c] -= t
     end
@@ -993,16 +1017,17 @@ matrices the inertia is not defined. in that case `np` and `nn` are set
 to `nothing`, but the function still returns the number of zero
 eigenvalues. The inertia is computed by counting the eigenvalues signs
 of `B.D`. The number of zero eigenvalues is computed as the number of
-estimated eigenvalues with complex 1-norm (defined as `|re(.)|+|im(.)|`)
+estimated eigenvalues with complex 1-norm (defined as `|re(.)|+|im(.)|`,
+and as the absolute value for real numbers and other number types)
 less or equal than `max(atol, rtol*s₁)`, where `s₁` is an upper bound of
 the largest singular value of `B.D`, `σ₁` (more specifically,
-`0.5*s₁ <= σ₁ <= s₁` for real matrices and `0.35*s₁ <= σ₁ <= s₁` for
-complex matrices). `atol` and `rtol` are the absolute and relative
-tolerances, respectively. The default relative tolerance is `n*ϵ`, where
-`n` is the size of  of `A`, and `ϵ` is the [`eps`](@ref) of the number
-type of `A`, if this type is a subtype of `AbstractFloat`. In any other
-case (if the number type of `A` is `Rational`, for example) `ϵ` is set
-to `0`.
+`0.5*s₁ <= σ₁ <= s₁` for real matrices and other number types except for
+complex numbers, and `0.35*s₁ <= σ₁ <= s₁` for complex matrices). `atol`
+and `rtol` are the absolute and relative tolerances, respectively. The
+default relative tolerance is `n*ϵ`, where `n` is the size of  of `A`, and
+`ϵ` is the [`eps`](@ref) of the number type of `A`, if this type is a
+subtype of `AbstractFloat`. In any other case (if the number type of `A` is
+`Rational`, for example) `ϵ` is set to `0`.
 
 !!! note
     Numerical inertia can be a sensitive and imprecise characterization of
@@ -1022,7 +1047,9 @@ to `0`.
     throws an error), or a positive tolerance (absolute or relative) is
     specified.
 """
-function inertia(B::BunchKaufman{TS}; atol::TR = TR(0), rtol::TR = TR(0)) where TS <: ClosedScalar{TR} where TR <: ClosedReal
+function inertia(B::BunchKaufman{TS}; atol::Real = 0, rtol::Real = 0) where {TS <: Number}
+    TR = real(TS)
+    atol, rtol = TR(atol), TR(rtol)
 
     # Check if matrix is complex symmetric
     get_inertia = !(issymmetric(B) && TS <: Complex)
@@ -1041,9 +1068,9 @@ function inertia(B::BunchKaufman{TS}; atol::TR = TR(0), rtol::TR = TR(0)) where 
         rtol = TR <: AbstractFloat ? (N * eps(TR)) : TR(0)
     end
 
-    # We use the complex 1-norm for complex matrices
+    # We use the complex 1-norm for complex matrices, and the absolute value otherwise
     real_matrix = (TS <: Real)
-    abs1_fun = real_matrix ? abs : cabs1
+    abs1_fun = TS <: Complex ? cabs1 : abs
     real_fun = real_matrix ? identity : real
 
     # Check if we must track the largest singular value
@@ -1054,7 +1081,7 @@ function inertia(B::BunchKaufman{TS}; atol::TR = TR(0), rtol::TR = TR(0)) where 
     # matrices we use the small denominator approximation 12/17, in order to not
     # increase the denominator size too much in computations. The error of this
     # approximation is ≤0.2%, and we still get a valid lower bound.
-    c = real_matrix ? TR(1) : (TR <: AbstractFloat ? 1/sqrt(TR(2)) : TR(12//17))
+    c = TS <: Complex ? (TR <: AbstractFloat ? 1/sqrt(TR(2)) : TR(12//17)) : TR(1)
 
     # First pass, estimate largest singular value and group together size-1 blocks
     D = B.D
@@ -1179,12 +1206,17 @@ end
 `bunchkaufman_native!` is the same as [`bunchkaufman!`](@ref), but it performs
 the factorization in native Julia code instead of calling LAPACK.
 """
-function bunchkaufman_native!(A::AbstractMatrix{TS}, rook::Bool = false; check::Bool = true) where {TS <: ClosedScalar}
+function bunchkaufman_native!(A::AbstractMatrix{TS}, rook::Bool = false; check::Bool = true) where {TS <: Number}
+    _bk_checktype(TS)
     if A isa RealHermSymComplexSym{real(TS)}
         syhe = 'S'
     elseif ishermitian(A)
         syhe = 'H'
     elseif issymmetric(A)
+        # the symmetric factorization requires that the multiplication commutes
+        TS <: Union{Real,Complex} || throw(ArgumentError(lazy"the Bunch-Kaufman decomposition \
+            of a symmetric, non-Hermitian matrix requires real or complex numbers, but the \
+            element type is $TS"))
         syhe = 'S'
     else
         throw(ArgumentError("Bunch-Kaufman decomposition is only valid for " *
@@ -1204,11 +1236,11 @@ end
 
 
 # Overload 'bunchkaufman.jl' methods through multiple dispatch
-bunchkaufman!(A::AbstractMatrix{<:ClosedScalar}, rook::Bool = false; check::Bool = true) =
+bunchkaufman!(A::AbstractMatrix{<:Number}, rook::Bool = false; check::Bool = true) =
     bunchkaufman_native!(A, rook; check)
 
-ldiv!(B::BunchKaufman{TS}, R::AbstractVecOrMat{TS}) where {TS <: ClosedScalar} =
+ldiv!(B::BunchKaufman{TS}, R::AbstractVecOrMat{TS}) where {TS <: Number} =
     generic_bksolve!(B, R)
 
-inv(B::BunchKaufman{<:ClosedScalar}) =
+inv(B::BunchKaufman) =
     issymmetric(B) ? copytri!(B \ I, B.uplo) : copytri!(B \ I, B.uplo, true)
