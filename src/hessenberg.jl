@@ -569,7 +569,7 @@ hessenberg(A::AbstractMatrix) =
 function show(io::IO, mime::MIME"text/plain", F::Hessenberg)
     summary(io, F)
     if !iszero(F.μ)
-        print("\nwith shift μI for μ = ", F.μ)
+        print(io, "\nwith shift μI for μ = ", F.μ)
     end
     println(io, "\nQ factor:")
     show(io, mime, F.Q)
