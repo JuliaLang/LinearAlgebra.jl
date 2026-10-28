@@ -136,6 +136,15 @@ bimg  = randn(n,2)/2
                 @test @inferred(nullspace(b[1, 1:0]')) == Matrix(I, 0, 0)
                 @test size(@inferred nullspace(transpose(a[:, 1]))) == (n, n - 1)
                 @test size(@inferred nullspace(transpose(b[1, :]))) == (2, 1)
+                # tall and wide matrices, and their adjoints
+                for M in (a[:, 1:n1], a[1:n1, :])
+                    for X in (M, M')
+                        N = nullspace(X)
+                        @test size(N) == (size(X, 2), size(X, 2) - rank(X))
+                        @test norm(X * N, Inf) ≤ 300ε * norm(X, Inf)
+                        @test N' * N ≈ I
+                    end
+                end
             end
         end
     end # for eltyb
@@ -1601,6 +1610,14 @@ end
 
 @testset "cond rethrows errors other than singularity" begin
     @test_throws OverflowError cond(Rational{Int8}[100 99; 99 98], 1)
+end
+
+@testset "nullspace of a tall matrix does not compute the full U" begin
+    A = randn(400, 20)
+    nullspace(A)
+    # the full SVD would allocate the 400×400 matrix U
+    @test (@allocated nullspace(A)) < sizeof(Float64) * 400 * 400
+    @test size(nullspace(A)) == (20, 0)
 end
 
 end # module TestDense
