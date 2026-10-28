@@ -15,8 +15,9 @@ const ClosedScalar = Union{T, Complex{T}} where T <: ClosedReal
 # but only for Hermitian matrices, as their multiplication need not commute. Since the real type
 # can't be dispatched on, it is checked when factorizing.
 function _bk_checktype(::Type{TS}) where {TS <: Number}
-    real(TS) <: ClosedReal || throw(ArgumentError(lazy"the generic Bunch-Kaufman \
-        factorization requires a floating-point or rational real type, but the element type is $TS"))
+    real(TS) <: ClosedReal || throw(ArgumentError(LazyString(
+        "the generic Bunch-Kaufman factorization requires a floating-point or rational ",
+        lazy"real type, but the element type is $TS")))
     return nothing
 end
 ##--------------------------------------------------------------------------------
@@ -1214,9 +1215,9 @@ function bunchkaufman_native!(A::AbstractMatrix{TS}, rook::Bool = false; check::
         syhe = 'H'
     elseif issymmetric(A)
         # the symmetric factorization requires that the multiplication commutes
-        TS <: Union{Real,Complex} || throw(ArgumentError(lazy"the Bunch-Kaufman decomposition \
-            of a symmetric, non-Hermitian matrix requires real or complex numbers, but the \
-            element type is $TS"))
+        TS <: Union{Real,Complex} || throw(ArgumentError(LazyString(
+            "the Bunch-Kaufman decomposition of a symmetric, non-Hermitian matrix requires ",
+            lazy"real or complex numbers, but the element type is $TS")))
         syhe = 'S'
     else
         throw(ArgumentError("Bunch-Kaufman decomposition is only valid for " *
