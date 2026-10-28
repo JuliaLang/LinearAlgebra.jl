@@ -616,6 +616,7 @@ Like [`nullspace(::QRPivoted)`](@ref), but reuses the memory of the pivoted QR f
 `F = qr(A, ColumnNorm())` of an `m×n` matrix `A`, which is overwritten. If `m ≥ n`, the
 returned orthonormal basis is a view into `F.factors`, and the computation allocates almost
 no memory; otherwise, only the `n×(n-r)` result is allocated, where `r` is the numerical rank.
+In either case, the result is a `SubArray` of a `Matrix` if `F.factors` is a `Matrix`.
 `F` must not be used afterwards.
 
 The basis is orthonormalized in place by block classical Gram-Schmidt with
@@ -625,8 +626,9 @@ orthonormalized is below `1/ϵ`. Because of its identity block, all singular val
 are at least one and its condition number is at most `√(1 + ‖R₁₁⁻¹R₁₂‖²)`, which is
 modest in practice, but column pivoting only bounds it exponentially in the rank.
 Therefore, if `‖R₁₁⁻¹R₁₂‖` exceeds `1/(100ϵ)`, `Y` is orthonormalized by a Householder
-QR factorization instead, and the result is a newly allocated `Matrix`. In that regime, the
-basis is orthonormal, but `A` times it is accurate only to about `ϵ‖R₁₁⁻¹R₁₂‖‖A‖`.
+QR factorization instead, and the result is a view of a newly allocated `Matrix`. In that
+regime, the basis is orthonormal, but `A` times it is accurate only to about
+`ϵ‖R₁₁⁻¹R₁₂‖‖A‖`.
 
 !!! compat "Julia 1.15"
     The `nullspace!` function requires at least Julia 1.15.
@@ -634,7 +636,8 @@ basis is orthonormal, but `A` times it is accurate only to about `ϵ‖R₁₁�
 function nullspace!(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps(real(float(eltype(F)))) * iszero(atol))
     m, n = size(F)
     T = eltype(F)
-    (m == 0 || n == 0) && return Matrix{T}(I, n, n)
+    # the result is always a view (of F.factors if possible), for type stability
+    (m == 0 || n == 0) && return view(Matrix{T}(I, n, n), 1:n, 1:n)
     r = rank(F; atol, rtol)
     k = n - r
     A = F.factors
@@ -643,7 +646,7 @@ function nullspace!(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps
     if m ≥ n
         Y = view(A, 1:n, r+1:n)
     else
-        Y = zeros(T, n, k)
+        Y = view(zeros(T, n, k), 1:n, 1:k)
         copyto!(view(Y, 1:r, :), view(A, 1:r, r+1:n))
     end
     ldiv!(UpperTriangular(view(A, 1:r, 1:r)), view(Y, 1:r, :))
@@ -658,7 +661,7 @@ function nullspace!(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps
     end
     Base.invpermuterows!(Y, F.p)
     k == 0 && return Y
-    householder && return Matrix(qr!(Y).Q)
+    householder && return view(Matrix(qr!(Y).Q), 1:n, 1:k)
     # workspace for the orthonormalization, taken from storage of F that is no longer
     # needed: the columns 1:r of F.factors (R₁₁ has been used) and τ
     b = min(k, T <: Complex ? 64 : 32)

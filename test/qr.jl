@@ -662,11 +662,17 @@ end
         @test norm(A * N) ≤ 100 * r * ε * norm(A)
         # above the threshold: Householder, which keeps the basis orthonormal
         for r in (T === Float32 ? (30, 40) : (60, 70))
-            N = nullspace!(adversarial(r, 5))
-            @test N isa Matrix{T}
+            F = adversarial(r, 5)
+            N = nullspace!(F)
+            @test parent(N) isa Matrix{T} && parent(N) !== F.factors
             @test size(N) == (r + 5, 5)
             @test N' * N ≈ I atol = 100 * ε
         end
+    end
+    # the result is a view in all cases: shared with F, allocated (m < n), empty and full rank
+    for (m, nc) in ((10, 6), (6, 10), (0, 3), (10, 3))
+        A = m == 10 && nc == 3 ? randn(m, nc) : randn(m, 2) * randn(2, nc)
+        @test (@inferred nullspace!(qr(A, ColumnNorm()))) isa SubArray{Float64,2,Matrix{Float64}}
     end
     # memory reuse: no n×(n-r) buffer for m ≥ n, only the result for m < n
     for (m, nc, r) in ((200, 150, 60), (300, 200, 190), (100, 150, 60))
