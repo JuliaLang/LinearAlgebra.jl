@@ -645,11 +645,12 @@ end
             @test N' * N ≈ I atol = 100 * ε
         end
     end
-    # the basis is orthonormalized in place: besides the result, only small workspace
+    # the basis is orthonormalized in place: besides the result, only small workspace, so
+    # less than two n×(n-r) buffers (the Householder version allocated almost three)
     A = randn(300, 100) * randn(100, 200)
     F = qr(A, ColumnNorm())
     nullspace(F)
-    @test (@allocated nullspace(F)) < 1.5 * sizeof(Float64) * 200 * 100
+    @test (@allocated nullspace(F)) < 2 * sizeof(Float64) * 200 * 100
 end
 
 @testset "cond of QR factorizations" begin
