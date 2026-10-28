@@ -1276,6 +1276,29 @@ end
     @test F.vectors ≈ Fdense.vectors
 end
 
+@testset "eigen of SymTridiagonal with Infs or NaNs" begin
+    # for NaNs, LAPACK's tridiagonal eigensolvers may not return, or return wrong results
+    for (dv, ev) in (([NaN, 1.0], [1.0]), ([1.0, NaN, 3], [1.0, 2]), ([1.0, 2, 3], [NaN, 2]))
+        S = SymTridiagonal(dv, ev)
+        @test_throws ArgumentError eigvals(S)
+        @test_throws ArgumentError eigvals(S, 1:1)
+        @test_throws ArgumentError eigvals(S, -10, 10)
+        @test_throws ArgumentError eigen(S)
+        # but xSTEIN returns NaNs
+        @test all(isnan, eigvecs(S, [1.0]))
+    end
+    @test_throws ArgumentError LAPACK.stev!('N', [NaN, 1.0], [1.0])
+    @test_throws ArgumentError LAPACK.stegr!('N', 'A', [NaN, 1.0], [1.0], 0.0, 0.0, 0, 0)
+    @test_throws ArgumentError LAPACK.stebz!('A', 'E', 0.0, 0.0, 0, 0, -1.0, [NaN, 1.0], [1.0])
+    # Infs give the limits, or NaNs, or the error points to them
+    S = SymTridiagonal([1.0, Inf, 3], [1.0, 2])
+    @test eigvals(S)[1:2] ≈ [1, 3]
+    @test eigvals(S)[3] == Inf
+    @test eigvals(S, -10, 10) ≈ [1, 3]
+    @test all(isnan, eigvecs(S, [1.0]))
+    @test_throws ArgumentError("matrix contains Infs") eigvals(S, 1:1)
+end
+
 @testset "eigen sorting" begin
     B = SymTridiagonal([3, 4, 1, 2],[1, 0, 2]) #block diagonal matrix to hit 'B' ordering of stebz!
     fB = Float64.(B)
@@ -1298,6 +1321,19 @@ end
         @test fact == eigen!(fB, 2, 4; sortby = eigsortby)
         @test fact == Eigen(sorteig!(fact.values, fact.vectors)...)
     end
+end
+
+@testset "Tridiagonal corner cases" begin
+    # cholesky of a non-Hermitian matrix
+    T = Tridiagonal([1.0, 2], [3.0, 4, 5], [6.0, 7])
+    @test_throws PosDefException cholesky(T)
+    @test !issuccess(cholesky(T; check = false))
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(2))
+    # zero pivot without a row interchange
+    S = Tridiagonal([0.0, 1], [0.0, 1, 1], [1.0, 1])
+    @test_throws SingularException(1) ldiv!(copy(S), ones(3))
+    M = [1 2; 2 3]
+    @test_throws "asymmetric value" LinearAlgebra.fillband!(SymTridiagonal([M, M], [M]), [1 2; 3 4], 0, 0)
 end
 
 end # module TestTridiagonal

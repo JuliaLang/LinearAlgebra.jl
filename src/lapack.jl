@@ -43,6 +43,15 @@ end
 
 chklapackerror_positive(ret, f...) = throw(LAPACKException(ret))
 
+# For routines that don't check their input for Infs: these often propagate to the result, but
+# if the routine fails instead, they are the likely cause. NaNs are rejected before the call.
+function chklapackerror(ret::BlasInt, inputhasinf::Bool)
+    if ret != 0 && inputhasinf
+        throw(ArgumentError("matrix contains Infs"))
+    end
+    chklapackerror(ret)
+end
+
 function chknonsingular(ret::BlasInt)
     if ret > 0
         throw(SingularException(ret))
@@ -100,10 +109,8 @@ subsetrows(X::AbstractVector, Y::AbstractArray, k) = Y[1:k]
 subsetrows(X::AbstractMatrix, Y::AbstractArray, k) = Y[1:k, :]
 
 function chkfinite(A::AbstractVecOrMat)
-    for a in A
-        if !isfinite(a)
-            throw(ArgumentError("matrix contains Infs or NaNs"))
-        end
+    if !mapreduce(isfinite, &, A; init = true)
+        throw(ArgumentError("matrix contains Infs or NaNs"))
     end
     return true
 end
@@ -116,6 +123,9 @@ function chknan(A::AbstractVecOrMat)
     end
     return true
 end
+
+# for checking the input after a routine failed, see chklapackerror(ret, inputhasinf)
+_hasinf(A::AbstractVecOrMat) = mapreduce(isinf, |, A; init = false)
 
 function chkuplofinite(A::AbstractMatrix, uplo::AbstractChar)
     require_one_based_indexing(A)
@@ -4145,6 +4155,8 @@ for (stev, stebz, stegr, stein, elty) in
             if length(ev) != n - 1
                 throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
+            chknan(dv) # for NaNs, xSTEV may return wrong results
+            chknan(ev)
             Zmat = similar(dv, $elty, (n, job != 'N' ? n : 0))
             work = Vector{$elty}(undef, max(1, 2n-2))
             info = Ref{BlasInt}()
@@ -4169,6 +4181,9 @@ for (stev, stebz, stegr, stein, elty) in
             if length(ev) != n - 1
                 throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
+            chknan(dv) # for NaNs, xSTEBZ may return wrong results
+            chknan(ev)
+            inputhasinf = _hasinf(dv) || _hasinf(ev)
             m = Ref{BlasInt}()
             nsplit = Vector{BlasInt}(undef, 1)
             w = similar(dv, $elty, n)
@@ -4189,7 +4204,7 @@ for (stev, stebz, stegr, stein, elty) in
                 dv, ev, m, nsplit,
                 w, iblock, isplit, work,
                 iwork, info, 1, 1)
-            chklapackerror(info[])
+            chklapackerror(info[], inputhasinf)
             (m[] == n ? w : w[1:m[]]), (m[] == n ? iblock : iblock[1:m[]]),
                 (nsplit[1] == n ? isplit : isplit[1:nsplit[1]])
         end
@@ -4206,6 +4221,8 @@ for (stev, stebz, stegr, stein, elty) in
             else
                 throw(DimensionMismatch(lazy"ev has length $ne but needs one less than dv's length, $n)"))
             end
+            chknan(dv) # for NaNs, xSTEGR may not return, or return wrong results
+            chknan(ev)
 
             abstol = Vector{$elty}(undef, 1)
             m = Ref{BlasInt}()

@@ -1422,6 +1422,37 @@ end
     end
 end
 
+# an element type that is neither a number nor a matrix, with its own symmetric_type
+struct SymEltype end
+Base.transpose(x::SymEltype) = x
+Base.adjoint(x::SymEltype) = x
+LinearAlgebra.symmetric_type(::Type{SymEltype}) = SymEltype
+LinearAlgebra.hermitian_type(::Type{SymEltype}) = SymEltype
+
+@testset "symmetric_type/hermitian_type for a custom eltype" begin
+    @test LinearAlgebra.symmetric_type(Matrix{SymEltype}) == Symmetric{SymEltype, Matrix{SymEltype}}
+    @test LinearAlgebra.hermitian_type(Matrix{SymEltype}) == Hermitian{SymEltype, Matrix{SymEltype}}
+    M = fill(SymEltype(), 2, 2)
+    @test LinearAlgebra.symmetric(M, :U) isa Symmetric{SymEltype, Matrix{SymEltype}}
+    @test LinearAlgebra.hermitian(M, :U) isa Hermitian{SymEltype, Matrix{SymEltype}}
+end
+
+@testset "Symmetric/Hermitian corner cases" begin
+    A = [1.0 2; 3 4]
+    for W in (Symmetric, Hermitian)
+        # destination of a different shape: elements are copied in linear order
+        @test copyto!(zeros(1, 4), W(A)) == reshape(vec(Matrix(W(A))), 1, 4)
+        S = W([1.0 2; 2 3], :U)
+        @test_throws ArgumentError kron!(W(zeros(4, 4), :L), S, S)
+        @test_throws ArgumentError kron!(W(zeros(4, 4), :U), W(A, :L), W(A, :L))
+    end
+    # a nonreal entry in the stored lower triangle
+    C = ComplexF64[1 0; im 1]
+    @test !isreal(Symmetric(C, :L))
+    @test !isreal(Hermitian(C, :L))
+    @test isreal(Symmetric(C, :U)) && isreal(Hermitian(C, :U))
+end
+
 @testset "det and logdet with NaN" begin
     # Bunch-Kaufman reports a NaN pivot like a zero pivot, which must not give a zero determinant
     for A in (Symmetric([1.0 2; 2 NaN]), Hermitian(ComplexF64[1 2im; -2im NaN]), Symmetric(ComplexF64[1 2; 2 NaN]))
