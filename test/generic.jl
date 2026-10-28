@@ -595,6 +595,11 @@ end
     @test @inferred(P((1.0, 2.0))) === Float64
     @test @inferred(P((1, 2.0))) === Float64
     @test @inferred(P((1, (2.0f0, 3)))) === Float32
+    @test @inferred(P(((1, 2), (3.0, (4.0f0,))))) === Float64
+    @test @inferred(P((1, ((2.0f0, (3,)), 4im)))) === ComplexF32
+    @test @inferred(P(ntuple(i -> isodd(i) ? i : (Float32(i),), 40))) === Float32
+    @test @inferred(P(())) === Bool
+    @test @inferred(P(((),))) === Bool
     @test @inferred(P(AbstractVector{Float64}[[1.0]])) === Float64
     @test P(Complex{Real}[1 + 2im]) === Complex{Real}
     # UniformScaling comparisons
