@@ -641,6 +641,33 @@ end
     @test size(nullspace!(qrcopy(F); rtol=0.95), 2) == 1
     @test abs.(nullspace!(qrcopy(F); atol=0.95)) ≈ [0.0; 1.0;;]
     @test size(nullspace!(qrcopy(F); atol=1.01), 2) == 2
+    # worst case of column pivoting: R₁₁ = I - triu(ones, 1) has (R₁₁⁻¹)ᵢⱼ = 2^(j-i-1), so
+    # ‖R₁₁ \ R₁₂‖ grows like 2^r; beyond about 1/ε, Gram-Schmidt loses orthogonality
+    @testset "Householder fallback for large ‖R₁₁ \\ R₁₂‖ ($T)" for T in (Float32, Float64)
+        function adversarial(r, k)
+            R = zeros(T, r + k, r + k)
+            R[1:r, 1:r] = I - triu(ones(T, r, r), 1)
+            R[1:r, r+1:end] .= one(T)
+            return QRPivoted(R, zeros(T, r + k), collect(1:r+k)) # τ = 0: Q = I, no pivoting
+        end
+        ε = eps(T)
+        # below the threshold ‖R₁₁ \\ R₁₂‖ ≤ 1/(100ε): Gram-Schmidt, which also keeps the
+        # residual small; the result shares memory with F
+        r = floor(Int, -log2(ε)) - 8
+        A = Matrix(adversarial(r, 5))
+        F = adversarial(r, 5)
+        N = nullspace!(F)
+        @test parent(N) === F.factors
+        @test N' * N ≈ I atol = 100 * ε
+        @test norm(A * N) ≤ 100 * r * ε * norm(A)
+        # above the threshold: Householder, which keeps the basis orthonormal
+        for r in (T === Float32 ? (30, 40) : (60, 70))
+            N = nullspace!(adversarial(r, 5))
+            @test N isa Matrix{T}
+            @test size(N) == (r + 5, 5)
+            @test N' * N ≈ I atol = 100 * ε
+        end
+    end
     # memory reuse: no n×(n-r) buffer for m ≥ n, only the result for m < n
     for (m, nc, r) in ((200, 150, 60), (300, 200, 190), (100, 150, 60))
         A = randn(m, r) * randn(r, nc)

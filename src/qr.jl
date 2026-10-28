@@ -619,8 +619,14 @@ no memory; otherwise, only the `n×(n-r)` result is allocated, where `r` is the 
 `F` must not be used afterwards.
 
 The basis is orthonormalized in place by block classical Gram-Schmidt with
-reorthogonalization, which is accurate here because the matrix being orthonormalized
-contains an identity block, so that its smallest singular value is at least one.
+reorthogonalization (BCGS2). This keeps the columns orthonormal to working precision as
+long as the condition number of the matrix `Y = [R₁₁ \\ R₁₂; -I]` (rows un-pivoted) being
+orthonormalized is below `1/ϵ`. Because of its identity block, all singular values of `Y`
+are at least one and its condition number is at most `√(1 + ‖R₁₁⁻¹R₁₂‖²)`, which is
+modest in practice, but column pivoting only bounds it exponentially in the rank.
+Therefore, if `‖R₁₁⁻¹R₁₂‖` exceeds `1/(100ϵ)`, `Y` is orthonormalized by a Householder
+QR factorization instead, and the result is a newly allocated `Matrix`. In that regime, the
+basis is orthonormal, but `A` times it is accurate only to about `ϵ‖R₁₁⁻¹R₁₂‖‖A‖`.
 
 !!! compat "Julia 1.15"
     The `nullspace!` function requires at least Julia 1.15.
@@ -641,6 +647,10 @@ function nullspace!(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps
         copyto!(view(Y, 1:r, :), view(A, 1:r, r+1:n))
     end
     ldiv!(UpperTriangular(view(A, 1:r, 1:r)), view(Y, 1:r, :))
+    # BCGS2 loses orthogonality once ϵ * cond(Y) is no longer small, where
+    # cond(Y) ≤ √(1 + ‖R₁₁ \ R₁₂‖²); fall back to Householder before that. Below this
+    # threshold BCGS2 is preferable: its residual ‖A * N‖ is never larger than Householder's
+    householder = 100 * eps(real(T)) * norm(view(Y, 1:r, :)) > 1
     Y₂ = view(Y, r+1:n, :)
     fill!(Y₂, zero(T))
     for j in 1:k
@@ -648,6 +658,7 @@ function nullspace!(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps
     end
     Base.invpermuterows!(Y, F.p)
     k == 0 && return Y
+    householder && return Matrix(qr!(Y).Q)
     # workspace for the orthonormalization, taken from storage of F that is no longer
     # needed: the columns 1:r of F.factors (R₁₁ has been used) and τ
     b = min(k, T <: Complex ? 64 : 32)
