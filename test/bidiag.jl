@@ -1360,4 +1360,31 @@ end
     @test isnan(L[2,2]) && L[3,3] ≈ log(3)
 end
 
+@testset "svd keywords and nullspace" begin
+    for T in (Float32, Float64, ComplexF64, Int), uplo in (:U, :L)
+        # singular, with a nullspace of dimension one
+        B = Bidiagonal(T[1, 2, 0, 4, 0], T[1, 1, 1, 1], uplo)
+        A = Matrix(B)
+        ε = eps(real(float(T)))
+        for kw in ((;), (; full = true), (; full = false),
+                   (; alg = LinearAlgebra.DivideAndConquer()), (; alg = LinearAlgebra.QRIteration()))
+            F = svd(B; kw...)
+            @test F.U * Diagonal(F.S) * F.Vt ≈ A
+            @test F.S ≈ svdvals(A)
+            @test F.U' * F.U ≈ I
+            @test F.Vt * F.Vt' ≈ I
+        end
+        N = nullspace(B)
+        Nd = nullspace(A)
+        @test size(N) == size(Nd) == (5, 1)
+        @test norm(A * N) ≤ 100 * ε * norm(A)
+        @test N * N' ≈ Nd * Nd'
+    end
+    B = Bidiagonal([3.0, 2.0, 1.0], [1.0, 1.0], :U)
+    @test svd(B; atol = 1.5).S ≈ svd(Matrix(B); atol = 1.5).S
+    @test svd(B; rtol = 0.5).S ≈ svd(Matrix(B); rtol = 0.5).S
+    @test svd!(copy(B); full = true).S ≈ svdvals(Matrix(B))
+    @test_throws ArgumentError svd(B; alg = LinearAlgebra.RobustRepresentations())
+end
+
 end # module TestBidiagonal
