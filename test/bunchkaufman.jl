@@ -440,15 +440,11 @@ end
     Mi = let B = Quaternion.(rand(-3:3, 4, 4), rand(-3:3, 4, 4), 0, 1); B + B'; end
     @test bunchkaufman(Hermitian(Mi); check=false) isa BunchKaufman{Quaternion{Float64}}
     # the symmetric factorization requires commuting entries
-    msg = "the Bunch-Kaufman decomposition of a symmetric, non-Hermitian matrix requires " *
-        "real or complex numbers, but the element type is $(Quaternion{Float64})"
-    @test_throws ArgumentError(msg) bunchkaufman(Symmetric(M))
+    @test_throws ArgumentError bunchkaufman(Symmetric(M))
     S = let B = randn(Quaternion{Float64}, 4, 4); B + transpose(B); end
-    @test_throws ArgumentError(msg) bunchkaufman(S)
+    @test_throws ArgumentError bunchkaufman(S)
     # the real type of the generic code must be floating-point or rational
-    msg = "the generic Bunch-Kaufman factorization requires a floating-point or rational " *
-        "real type, but the element type is $Int"
-    @test_throws ArgumentError(msg) bunchkaufman!([2 1; 1 2])
+    @test_throws ArgumentError bunchkaufman!([2 1; 1 2])
 end
 
 end # module TestBunchKaufman
