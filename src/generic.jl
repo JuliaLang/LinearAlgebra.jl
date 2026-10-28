@@ -2115,7 +2115,11 @@ promote_leaf_eltypes(x::T) where {T} = T
 promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T} =
     (isconcretetype(T) && !(T <: Union{AbstractArray,Tuple})) ? T : _promote_leaf_eltypes(x)
 promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = _promote_leaf_eltypes(x)
-_promote_leaf_eltypes(x::Tuple) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+# recursion on the tuple instead of mapreduce, so that the leaf type of a (nested) tuple of
+# concrete types is computed from its type and remains inferrable
+_promote_leaf_eltypes(::Tuple{}) = Bool
+_promote_leaf_eltypes(x::Tuple) =
+    promote_type(promote_leaf_eltypes(first(x)), _promote_leaf_eltypes(Base.tail(x)))
 function _promote_leaf_eltypes(x::AbstractArray)
     # loop instead of mapreduce, to avoid a dynamic call to promote_type for every element
     T = Bool
