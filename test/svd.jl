@@ -340,6 +340,21 @@ end
     @test norm(A2 * n1) < 8 * maximum(A2) * eps(eltype(A2))
     n2 = nullspace(svd(A2, alg=LinearAlgebra.DivideAndConquer()))
     @test norm(A2 * n2) < 8 * maximum(A2) * eps(eltype(A2))
+
+    # wide matrices: the thin SVD lacks the nullspace, the full SVD has it
+    for W in ([1.0 0 0; 0 1 0], randn(3, 7), randn(5, 2) * randn(2, 8), randn(7, 3)')
+        Nd = nullspace(W)
+        @test_throws ArgumentError nullspace(svd(W))
+        for alg in (LinearAlgebra.QRIteration(), LinearAlgebra.DivideAndConquer())
+            N = nullspace(svd(W; full = true, alg))
+            @test size(N) == size(Nd)
+            @test N * N' ≈ Nd * Nd'
+        end
+    end
+    # tall matrices: thin and full SVDs both have the complete V
+    for T in (A2, randn(7, 3))
+        @test size(nullspace(svd(T))) == size(nullspace(svd(T; full = true))) == size(nullspace(T))
+    end
 end
 
 @testset "ldiv! with all singular values below the tolerance" begin
