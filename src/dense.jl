@@ -1927,9 +1927,9 @@ julia> nullspace(M, atol=0.95)
 function nullspace(A::AbstractVecOrMat; atol::Number=zero(real(eltype(A))), rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
-    # only V is needed, and the thin SVD has all of V unless m < n; this avoids
-    # computing the m×m matrix U of the full SVD for tall matrices
-    SVD = svd(A; full = m < n)
+    # only V is needed: the thin SVD avoids computing the m×m matrix U of the full SVD
+    # for tall matrices, and for wide ones nullspace(::SVD) completes its V cheaply
+    SVD = svd(A)
     return nullspace(SVD; atol, rtol)
 end
 
