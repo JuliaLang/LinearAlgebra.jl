@@ -605,17 +605,18 @@ function integerpow(A::AbstractMatrix{T}, p) where T
 end
 function schurpow(A::AbstractMatrix, p)
     if istriu(A)
+        cA = complex(float(A))
         # Integer part
-        retmat = A ^ floor(Integer, p)
+        retmat = cA ^ floor(Integer, p)
         # Real part
         if p - floor(p) == 0.5
             # special case: A^0.5 === sqrt(A)
-            retmat = retmat * sqrt(A)
+            retmat = retmat * sqrt(cA)
         else
-            retmat = retmat * powm!(UpperTriangular(float.(A)), real(p - floor(p)))
+            retmat = retmat * powm!(UpperTriangular(copy(cA)), real(p - floor(p)))
         end
     else
-        S,Q,d = Schur{Complex}(schur(A))
+        S, Q, d = Schur{Complex}(schur(A))
         # Integer part
         R = S ^ floor(Integer, p)
         # Real part
@@ -623,7 +624,7 @@ function schurpow(A::AbstractMatrix, p)
             # special case: A^0.5 === sqrt(A)
             R = R * sqrt(S)
         else
-            R = R * powm!(UpperTriangular(float.(S)), real(p - floor(p)))
+            R = R * powm!(UpperTriangular(copy(S)), real(p - floor(p)))
         end
         retmat = Q * R * Q'
     end
