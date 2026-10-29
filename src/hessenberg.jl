@@ -456,6 +456,10 @@ end
 # preserve the wrapper for eigensolves with UpperHessenberg
 eigencopy_oftype(H::UpperHessenberg, S) = UpperHessenberg(eigencopy_oftype(H.data, S))
 
+# LAPACK has no SVD for Hessenberg matrices, so use the dense one
+svd!(H::UpperHessenberg; kwargs...) = svd!(triu!(H.data, -1); kwargs...)
+svdvals!(H::UpperHessenberg) = svdvals!(triu!(H.data, -1))
+
 schur!(H::UpperHessenberg{T}) where {T<:BlasFloat} = Schur(LinearAlgebra.LAPACK.hseqr!(H.data)...)
 
 ######################################################################################

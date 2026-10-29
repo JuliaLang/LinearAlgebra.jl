@@ -347,6 +347,23 @@ end
     end
 end
 
+@testset "singular value decomposition" begin
+    @testset for T in (Float16, Float64, ComplexF64)
+        # the entries of A below the subdiagonal are not part of H
+        A = T[1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 17]
+        H = UpperHessenberg(A)
+        M = Matrix(H)
+        @test svdvals(H) ≈ svdvals(M)
+        F = svd(H)
+        @test F.S ≈ svdvals(M)
+        @test F.U * Diagonal(F.S) * F.Vt ≈ M
+        @test size(svd(H; full=true).U) == (4, 4)
+        @test cond(H) ≈ cond(M)
+        @test opnorm(H, 2) ≈ opnorm(M, 2)
+        @test H.data == A
+    end
+end
+
 @testset "generic multiplication with HessenbergQ and its adjoint" begin
     hessenbergQs(A) = (hessenberg(A).Q, hessenberg(Hermitian(A'A, :U)).Q, hessenberg(Hermitian(A'A, :L)).Q)
 
