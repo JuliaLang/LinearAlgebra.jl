@@ -1681,6 +1681,38 @@ end
     @test C[1, 1] == [1 4; 3 8] && C[1, 2] == zeros(Int, 2, 2)
 end
 
+@testset "nullspace" begin
+    for T in (Float16, Float32, Float64, ComplexF64, Int, BigFloat)
+        for d in ([1, 0, 2, 0, 0, 3], [0, 0, 0], [1, 2, 3], [0], [5], [1e-20, 1, 0, -2])
+            D = Diagonal(convert(Vector{T}, T <: Integer ? round.(Int, d) : d))
+            N = @inferred nullspace(D)
+            # the generic path through the SVD, which nullspace(D) used before
+            Ns = nullspace(svd(D))
+            @test N isa Matrix{eltype(Ns)}
+            @test size(N) == size(Ns)
+            @test N * N' ≈ Ns * Ns'
+            @test norm(D * N) ≤ 10 * eps(real(float(one(T)))) * max(1, opnorm(D))
+            @test N' * N ≈ I
+            # tolerances
+            for kw in ((atol = 1.5,), (rtol = 0.5,), (atol = 0.5, rtol = 0.1))
+                Nk = nullspace(D; kw...)
+                Nks = nullspace(svd(D); kw...)
+                @test size(Nk) == size(Nks)
+                @test Nk * Nk' ≈ Nks * Nks'
+            end
+        end
+    end
+    for T in (Float16, Float64, ComplexF32, Int)
+        @test @inferred(nullspace(Diagonal(T[]))) isa Matrix{eltype(svd(Diagonal(T[1])).Vt)}
+        @test size(nullspace(Diagonal(T[]))) == (0, 0)
+    end
+    @test nullspace(Diagonal([1.0, 0.0, 2.0, 0.0])) == [0 0; 1 0; 0 0; 0 1]
+    # only the result is allocated, not the n×n matrices of the SVD
+    D = Diagonal([isodd(i) ? 0.0 : 1.0 + i for i in 1:200])
+    nullspace(D)
+    @test (@allocated nullspace(D)) < 2 * sizeof(Float64) * 200 * 100
+end
+
 @testset "Diagonal eigen and cholesky errors" begin
     @test_throws ArgumentError eigen(Diagonal([[1.0 NaN; 0 1], [1.0 0; 0 1]]))
     @test_throws ArgumentError eigen(Diagonal([1.0, Inf]), Diagonal([1.0, 2]))

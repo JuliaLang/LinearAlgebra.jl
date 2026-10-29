@@ -1152,6 +1152,22 @@ function svd(D::Diagonal{T}) where {T<:Number}
     return SVD(U, S, Vt)
 end
 
+# the singular values are |dᵢ|, and the unit vectors eᵢ with |dᵢ| below the rank tolerance
+# (as in rank(::SVD)) span the nullspace
+function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(oneunit(T)))))*iszero(atol)) where {T<:Number}
+    n = size(D, 1)
+    Td = _ortho_eltype(T)
+    n == 0 && return zeros(Td, 0, 0)
+    d = D.diag
+    tol = max(atol, rtol*maximum(abs, d))
+    inds = findall(x -> !(abs(x) > tol), d)
+    N = zeros(Td, n, length(inds))
+    for (j, i) in enumerate(inds)
+        N[i, j] = oneunit(Td)
+    end
+    return N
+end
+
 *(x::AdjointAbsVec,   D::Diagonal, y::AbstractVector) = _mapreduce_prod(*, x, D, y)
 *(x::TransposeAbsVec, D::Diagonal, y::AbstractVector) = _mapreduce_prod(*, x, D, y)
 /(u::AdjointAbsVec, D::Diagonal) = (D' \ u')'
