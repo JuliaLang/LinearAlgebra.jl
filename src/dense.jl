@@ -1927,7 +1927,7 @@ julia> nullspace(M, atol=0.95)
 function nullspace(A::AbstractVecOrMat; atol::Number=zero(real(eltype(A))), rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
     (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
-    SVD = svd(A; full=true)
+    SVD = svd(A)
     return nullspace(SVD; atol, rtol)
 end
 
