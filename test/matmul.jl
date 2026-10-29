@@ -454,6 +454,24 @@ end
     end
 end
 
+@testset "allocations in Symmetric/Hermitian matmul without BLAS (issue #53951)" begin
+    for n in (1, 2, 3, 6), T in (Float64, ComplexF64)
+        A = rand(T, n, n)
+        B = rand(T, n, n)
+        C = zeros(T, n, n)
+        for W in (Symmetric, Hermitian), uplo in (:U, :L), t in (adjoint, transpose, Symmetric, Hermitian)
+            WA = W(A, uplo)
+            Bt = t(B)
+            mul!(C, WA, Bt)
+            @test 0 == @allocations mul!(C, WA, Bt)
+            @test C ≈ Matrix(WA) * Matrix(Bt)
+            mul!(C, Bt, WA)
+            @test 0 == @allocations mul!(C, Bt, WA)
+            @test C ≈ Matrix(Bt) * Matrix(WA)
+        end
+    end
+end
+
 @testset "mixed Blas-non-Blas matmul" begin
     AA = rand(-10:10, 6, 6)
     BB = ones(Float64, 6, 6)
