@@ -641,11 +641,15 @@ Matrix(F::SVD) = Array(AbstractArray(F))
 Array(F::SVD) = Matrix(F)
 
 function nullspace(F::SVD; atol::Number=zero(real(eltype(F))), rtol::Real = (min(size(F.U, 1), size(F.V, 1))*eps(real(float(oneunit(eltype(F))))))*iszero(atol))
-    # the thin SVD of a matrix with more columns than rows lacks the right singular
-    # vectors that span the nullspace
-    k, n = size(F.Vt)
-    k < n && throw(ArgumentError(lazy"the nullspace cannot be computed from the thin SVD of a matrix with more columns ($n) than rows ($k); use svd(A; full = true)"))
     r = rank(F; atol, rtol)
+    k, n = size(F.Vt)
+    if k < n
+        # the thin SVD of a matrix with more columns than rows lacks some right singular
+        # vectors that span the nullspace. Since F.V has orthonormal columns, the first k
+        # columns of the Q factor of its QR decomposition are those of F.V up to sign,
+        # and the remaining ones complete it to an orthonormal basis
+        return qr(F.V).Q[:, r+1:n]
+    end
     indstart = r + 1 # nullspace starts after the numerical rank + 1
     return copy((@view F.Vt[indstart:end,:])')
 end

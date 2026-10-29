@@ -1889,8 +1889,7 @@ the element type of `M`.
 Instead of a matrix `M`, you can pass an [`SVD`](@ref) factorization object `S`,
 as is returned by the [`svd`](@ref) function. This is useful, for example, if you want to re-use
 an existing SVD result, or if you want to use lower-level `svd` options to have more control
-over the SVD algorithm. If `M` has more columns than rows, `S` must be the full SVD,
-`svd(M; full = true)`, since the thin SVD lacks the singular vectors that span the nullspace.
+over the SVD algorithm.
 
 # Examples
 ```jldoctest
