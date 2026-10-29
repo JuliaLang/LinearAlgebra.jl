@@ -1,3 +1,59 @@
+LinearAlgebra v1.14 Release Notes
+=======================
+
+- Eigenvalues are now sorted by default for all matrix types, including `Diagonal` and triangular matrices, and all `eigen`, `eigvals` and `eigvecs` methods accept the `sortby` keyword argument ([#1477](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1477), [#1595](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1595), [#1626](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1626), [#1645](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1645), [#1608](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1608))
+- `eigen` and `eigvals` of a complex matrix now always return complex eigenvalues, even if the matrix happens to be Hermitian, which makes them type-stable. Wrap the matrix in `Hermitian` to obtain real eigenvalues ([#1717](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1717))
+- `eigvals` and `svdvals` now return `Float16` results for `Float16` input, consistent with `eigen` and `svd` ([#1718](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1718))
+- `eigvecs` of triangular matrices now returns eigenvectors normalized to unit length, like for all other matrix types ([#1603](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1603))
+- For arrays with an abstract element type (e.g., `Matrix{Real}`), factorizations, eigen- and singular value decompositions, `lu` and `\` now determine the working element type from the stored values instead of from the abstract element type alone ([#1710](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1710), [#1744](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1744))
+- Added the matrix absolute value `abs(A) = sqrt(A'A)` for matrices and `UniformScaling` ([#1680](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1680), [#1699](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1699))
+- `lq` now works for generic element types, and multiplication with the `Q` factors of `QRCompactWY`, `LQ` and `Hessenberg` factorizations falls back to generic implementations for non-BLAS element types ([#1701](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1701), [#1702](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1702), [#1704](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1704))
+- `AbstractQ` objects are now displayed with their entries like matrices, computing only the columns that are shown ([#1705](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1705))
+- `convert(::Type{<:AbstractArray}, F)` for `Factorization`s and `AbstractQ`s is deprecated in favor of the explicit `Matrix(F)`, `Array(F)` or `AbstractMatrix(F)` ([#1712](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1712))
+- `lowrankupdate[!]` and `lowrankdowndate[!]` now also accept a matrix `V` to compute rank-k up- and downdates of a `Cholesky` factorization of `A ± V*V'` in a single pass ([#1731](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1731))
+- `nullspace` now accepts an `SVD` object, which allows reusing an existing factorization or choosing the SVD algorithm ([#1576](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1576))
+- `sqrt(A)` accepts a `check` keyword argument; by default, it now throws an error if the computed square root of a non-Hermitian matrix with multiple zero eigenvalues does not satisfy `X^2 ≈ A` ([#1558](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1558))
+- Left division now supports right-hand sides whose elements are themselves vectors (e.g., a `Vector` of static vectors) ([#1446](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1446))
+- `\` with LAPACK-based factorizations now preserves the array type of strided right-hand sides instead of always returning an `Array` ([#1746](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1746))
+- The public function `matprod_dest` has been removed. The destination arrays of `*`, `\` and `/` are now uniformly allocated via `LinearAlgebra.matop_dest(op, A, B)`, which packages may specialize, also for `UpperHessenberg` matrices and `Factorization`s ([#1578](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1578), [#1587](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1587), [#1591](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1591), [#1606](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1606))
+- The new public functions `nzrows`, `nzcols` and `nonzeroinds` return the indices of the nonzero entries in a column, row or vector, respectively. Sparse array types may specialize them to speed up generic matrix multiplication ([#1539](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1539))
+- Structured broadcasting has been extended to `Symmetric` and `Hermitian` matrices, and broadcasting with zero-absorbing operations such as `*` now preserves the structure of banded matrices ([#1607](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1607), [#1636](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1636), [#1549](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1549))
+- Triangular solves with `Diagonal` matrices now return triangular matrices ([#1758](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1758))
+- `I * X` now works for arrays of any dimension, and `factorize(::UniformScaling)` is now defined ([#1657](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1657), [#1759](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1759))
+- `hermitianpart` now supports numbers ([#1445](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1445))
+- Constructing an `Adjoint` of an `Adjoint`, or a `Transpose` of a `Transpose`, now throws an `ArgumentError`; use `adjoint` and `transpose` instead ([#1739](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1739))
+- `SymTridiagonal` now requires the off-diagonal to have exactly one element fewer than the diagonal ([#1569](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1569))
+- `checksquare` now throws a `DimensionMismatch` for arguments that are not matrices ([#1476](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1476))
+- LinearAlgebra no longer re-exports names that are already exported by Base, such as `copyto!`, `kron`, `transpose`, `\` and `/` ([#1537](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1537), [#1540](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1540))
+- `eigvals` of `UpperHessenberg` matrices now uses LAPACK's Hessenberg eigensolver and is about twice as fast ([#1557](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1557))
+- The eigensolvers for `SymTridiagonal` matrices now use the same strategy as LAPACK's `syevr`, falling back to bisection and inverse iteration if the default algorithm fails ([#1493](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1493))
+- `norm(A, 2)` and `norm(A, 1)` for arrays of numbers now use faster native implementations ([#1719](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1719), [#1724](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1724))
+- `lu` now allocates the pivot vector with the same array type as the input ([#1647](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1647))
+- `LAPACK.gelsd!` and `LAPACK.gelsy!` gained non-allocating methods that accept preallocated workspace arrays ([#1714](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1714))
+- BLAS calls into OpenBLAS can now be cancelled via Julia's task cancellation mechanism ([#1672](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1672))
+
+LinearAlgebra v1.13 Release Notes
+=======================
+
+- `lu!(F::LU, A)` now reuses the storage of an existing `LU` factorization `F` to factorize a matrix `A` of the same size, for general dense matrices ([#1131](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1131))
+- `svd` and `svd!` accept the keyword arguments `atol` and `rtol` to truncate small singular values, and `ldiv!(::SVD, B; atol, rtol)` allows stable SVD-based least-squares solves. `pinv` now also accepts an `SVD` object and returns the `SVD` of the pseudoinverse ([#1387](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1387), [#1398](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1398))
+- New lower-level methods `mul!(C, tA, A, B, α, β)` and `mul!(C, tA, tB, A, B, α, β)`, where `tA` and `tB` are the characters `'N'`, `'T'` or `'C'`, supersede the non-public `generic_matvecmul!` and `generic_matmatmul!`. Packages providing their own storage types are advised to overload these instead of 5-arg `mul!` ([#1671](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1671))
+- `eigvecs(A, eigvals)` now computes the eigenvectors of a `Symmetric` or `Hermitian` matrix `A` corresponding to the given eigenvalues ([#1268](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1268))
+- `eigmin` and `eigmax` now accept `Eigen` and `GeneralizedEigen` objects ([#1468](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1468))
+- `eigen` of `UpperHessenberg` matrices now uses LAPACK and is about 50% faster than the dense eigensolver ([#1599](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1599))
+- `cholesky` now supports `Tridiagonal` matrices as well as `Hermitian`/`Symmetric` wrappers of `Bidiagonal`, `Tridiagonal` and `SymTridiagonal` matrices, returning `Bidiagonal` factors ([#1409](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1409))
+- The functions `fillstored!` to fill the stored entries of a structured matrix, `fillband!` to fill a range of bands of a matrix, and `uplo` to access the stored triangle of `Symmetric`, `Hermitian` and `Bidiagonal` matrices are now public ([#1333](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1333), [#1345](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1345), [#1440](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1440))
+- `BLAS.set_num_threads` and `BLAS.get_num_threads` are now public ([#1581](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1581))
+- On Apple Silicon, the default number of BLAS threads now excludes the efficiency cores, and is one less than the total number of cores on chips without efficiency cores ([#1686](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1686))
+- `UpperHessenberg` matrices now support structured broadcasting, which preserves their structure where possible ([#1325](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1325))
+- `adjoint` and `transpose` of block `Diagonal` and `Bidiagonal` matrices are now lazy, so the result shares memory with the original matrix ([#1368](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1368))
+- Comparing a matrix with a `UniformScaling` using `==` now checks the elements for equality, which fixes comparisons of block matrices ([#1369](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1369))
+- `AbstractQ` objects can now be converted with `AbstractMatrix(Q)` and `AbstractArray(Q)` ([#1470](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1470))
+- `convert` from an `AbstractMatrix` to `Bidiagonal`, `Tridiagonal` and `SymTridiagonal` is now supported ([#1212](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1212))
+- The 3-arg `dot(x, A, y)` now has an efficient method for all `Symmetric` and `Hermitian` matrices `A` ([#1410](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1410))
+- Generic (non-BLAS) implementations of `syrk` and `herk` speed up products like `A'A` for non-BLAS element types ([#1249](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1249))
+- `SingularException` now shows a more descriptive error message ([#1204](https://github.com/JuliaLang/LinearAlgebra.jl/pull/1204))
+
 LinearAlgebra v1.12 Release Notes
 =======================
 
