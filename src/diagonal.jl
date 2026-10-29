@@ -1152,8 +1152,6 @@ function svd(D::Diagonal{T}) where {T<:Number}
     return SVD(U, S, Vt)
 end
 
-# the singular values are |dᵢ|, and the unit vectors eᵢ with |dᵢ| below the rank tolerance
-# (as in rank(::SVD)) span the nullspace
 function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(oneunit(T)))))*iszero(atol)) where {T<:Number}
     n = size(D, 1)
     Td = _ortho_eltype(T)
