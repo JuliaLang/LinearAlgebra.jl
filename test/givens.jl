@@ -155,12 +155,108 @@ end
     @test c ≈ 3/5 && s ≈ 4/5 && r ≈ 5tiny
     for (f, g) in ((complex(T(3), T(4))*tiny, complex(T(1), -T(2))*tiny), # tiny f and g
                    (complex(T(3), T(4))*tiny, zero(Complex{T})),          # tiny f, zero g
-                   (complex(T(2)), complex(floatmax(T)/4, floatmax(T)/8))) # |f| << |g|
+                   (complex(T(2)), complex(floatmax(T)/4, floatmax(T)/8)),  # |f| << |g|
+                   # the same with |f| ≤ 1, which zlartg normalizes differently; before the
+                   # exceptional cases for Inf, only givensAlgorithm(1, Inf) reached this
+                   (complex(T(1)/2, -T(1)/4), complex(floatmax(T)/4, floatmax(T)/8)))
         c, s, r = givensAlgorithm(f, g)
         h = hypot(abs(f), abs(g))
         @test c ≈ abs(f)/h
         @test s ≈ f/abs(f)*conj(g)/h
         @test r ≈ f/abs(f)*h
+    end
+end
+
+# exceptional cases, see Bindel et al., "On Computing Givens Rotations Reliably and Efficiently"
+@testset "givensAlgorithm - non-finite inputs" begin
+    for T in (Float32, Float64, BigFloat)
+        for (f, g, cs, sn, r) in ((Inf, 2, 1, 0, Inf), (-Inf, 2, 1, 0, -Inf),
+                                  (2, Inf, 0, 1, Inf), (-2, -Inf, 0, -1, Inf))
+            res = givensAlgorithm(T(f), T(g))
+            @test res isa NTuple{3,T}
+            @test res == (cs, sn, r)
+        end
+        for (f, g) in ((Inf, Inf), (-Inf, Inf), (NaN, 1), (1, NaN), (NaN, Inf))
+            @test all(isnan, givensAlgorithm(T(f), T(g)))
+        end
+    end
+    for T in (Float32, Float64)
+        CT = Complex{T}
+        for (f, g, cs, sn, r) in ((CT(Inf, 1), CT(2, 3), 1, 0, CT(Inf, 1)),
+                                  (CT(-Inf, Inf), CT(0, 1), 1, 0, CT(-Inf, Inf)),
+                                  (CT(1, 2), CT(Inf, 0), 0, CT(1, 2)/sqrt(T(5)), CT(Inf, Inf)),
+                                  (CT(0, -3), CT(1, -Inf), 0, 1, CT(0, -Inf)),
+                                  (CT(0), CT(1, -Inf), 0, CT(0, 1), CT(Inf, 0)))
+            c, s, ρ = givensAlgorithm(f, g)
+            @test c isa T && s isa CT && ρ isa CT
+            @test c == cs && s ≈ sn && ρ == r
+        end
+        for (f, g) in ((CT(Inf), CT(0, Inf)), (CT(NaN), CT(1)), (CT(1), CT(1, NaN)))
+            c, s, r = givensAlgorithm(f, g)
+            @test isnan(c) && isnan(s) && isnan(r)
+        end
+        # both parts of g infinite: sign(g), and hence s, has no limit
+        for (f, r) in ((CT(-2, 0), CT(-Inf, 0)), (CT(1, 1), CT(Inf, Inf)), (CT(0), CT(Inf)))
+            c, s, ρ = givensAlgorithm(f, CT(-Inf, -Inf))
+            @test c == 0 && isnan(s) && ρ == r
+        end
+    end
+end
+
+# The exceptional cases should be the limits of the finite cases: compare the result for
+# infinite inputs to the result where each infinite component is replaced by a huge value.
+@testset "givensAlgorithm - non-finite inputs are limits of large inputs" begin
+    # Replace ±Inf real parts by ±M and ±Inf imaginary parts by ±Mi, so that Mi = M and
+    # Mi = M/2 approach an infinite complex number from different directions.
+    finitize(x::Real, M, Mi=M) = isinf(x) ? copysign(M, x) : x
+    finitize(z::Complex, M, Mi=M) = complex(finitize(real(z), M), finitize(imag(z), Mi))
+    # does x (computed with huge values M) approximate the limit y (computed with Inf)?
+    # The finite inputs are O(1), so the finite results converge like O(1/M).
+    function islimit(x::Real, y::Real, M)
+        isinf(y) ? sign(x) == sign(y) && abs(x) >= M/10 :
+            isapprox(x, y; atol=sqrt(eps(typeof(x))) + 10/M)
+    end
+    islimit(x::Complex, y::Complex, M) =
+        islimit(real(x), real(y), M) && islimit(imag(x), imag(y), M)
+
+    function check(f, g, T)
+        res = givensAlgorithm(f, g)
+        # 1e300 is not representable in Float32
+        for M in filter(isfinite, (T(1e10), T(1e300), sqrt(floatmax(T)), floatmax(T)/4))
+            if isinf(f) && isinf(g)
+                # no limit: the rotation for huge inputs depends on their ratio
+                @test all(isnan, res)
+                c1, = givensAlgorithm(finitize(f, M), finitize(g, M))
+                c2, = givensAlgorithm(finitize(f, M), finitize(g, M/2))
+                @test isfinite(c1) && isfinite(c2) && !(c1 ≈ c2)
+            else
+                res1 = givensAlgorithm(finitize(f, M), finitize(g, M))
+                res2 = givensAlgorithm(finitize(f, M, M/2), finitize(g, M, M/2))
+                @test all(isfinite, res1) && all(isfinite, res2)
+                for (x, x1, x2) in zip(res, res1, res2)
+                    if isnan(x) # no limit: huge inputs from different directions disagree
+                        @test !isapprox(x1, x2; atol=sqrt(eps(T)))
+                    else
+                        @test islimit(x1, x, M) && islimit(x2, x, M)
+                    end
+                end
+            end
+        end
+    end
+
+    # every sign and position (f, g, real and imaginary parts) of infinities, alone and
+    # combined, together with finite values of either sign and zeros of either sign
+    vals = (Inf, -Inf, 3, -2, 0.0, -0.0)
+    @testset for T in (Float32, Float64, BigFloat)
+        for f in vals, g in vals
+            (isinf(f) || isinf(g)) && check(T(f), T(g), T)
+        end
+    end
+    @testset for T in (Float32, Float64, BigFloat)
+        cvals = [complex(T(a), T(b)) for a in vals for b in vals]
+        for f in cvals, g in cvals
+            (isinf(f) || isinf(g)) && check(f, g, T)
+        end
     end
 end
 
