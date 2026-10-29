@@ -792,8 +792,9 @@ end
         N = nullspace(cholesky(zeros(elty, 3, 3), RowMaximum(); check = false))
         @test N isa Matrix{elty}
         @test N * N' == I
-        # the generic pivoted Cholesky does not support empty matrices
-        elty <: BigFloat || @test size(nullspace(cholesky(zeros(elty, 0, 0), RowMaximum()))) == (0, 0)
+        # the generic pivoted Cholesky does not support empty matrices; check = false since
+        # LAPACK.pstrf! leaves the rank of an empty matrix undefined
+        elty <: BigFloat || @test size(nullspace(cholesky(zeros(elty, 0, 0), RowMaximum(); check = false))) == (0, 0)
     end
     # tolerances apply to the pivots abs2(U[i,i]), and the rank is at most F.rank
     F = cholesky([1.0 0.0; 0.0 0.81], RowMaximum())
