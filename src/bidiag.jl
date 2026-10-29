@@ -272,13 +272,25 @@ end
 
 #Singular values
 svdvals!(M::Bidiagonal{<:BlasReal}) = LAPACK.bdsdc!(M.uplo, 'N', M.dv, M.ev)[1]
-function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false)
-    d, e, U, Vt, Q, iQ = LAPACK.bdsdc!(M.uplo, 'I', M.dv, M.ev)
-    SVD(U, d, Vt)
+# M is square, so the full and the thin SVD coincide and `full` has no effect
+function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Real=0, rtol::Real=0)
+    d, U, Vt = _svd!(M, alg)
+    d[_count_svdvals(d, atol, rtol)+1:end] .= 0
+    return SVD(U, d, Vt)
 end
-function svd(M::Bidiagonal; kw...)
-    svd!(copy(M), kw...)
+_svd!(M::Bidiagonal{<:BlasReal}, alg::Algorithm) =
+    throw(ArgumentError("Unsupported value for `alg` keyword."))
+function _svd!(M::Bidiagonal{<:BlasReal}, ::DivideAndConquer)
+    d, _, U, Vt, _, _ = LAPACK.bdsdc!(M.uplo, 'I', M.dv, M.ev)
+    return d, U, Vt
 end
+function _svd!(M::Bidiagonal{T}, ::QRIteration) where {T<:BlasReal}
+    n = size(M, 1)
+    d, Vt, U, _ = LAPACK.bdsqr!(M.uplo, M.dv, M.ev, Matrix{T}(I, n, n), Matrix{T}(I, n, n), Matrix{T}(undef, n, 0))
+    return d, U, Vt
+end
+# other element types use the generic method, which computes the SVD of a dense copy
+svd(M::Bidiagonal{<:BlasReal}; kw...) = svd!(copy(M); kw...)
 
 ###################
 #     opnorm      #
