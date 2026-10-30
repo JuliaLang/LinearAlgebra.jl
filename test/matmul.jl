@@ -555,7 +555,7 @@ end
     A0 = randn(complex(T), 10, 10)
     B0 = randn(T, 10, 10)
     @testset "Combination Mat{$(complex(T))} Mat{$T}" for Bax1 in (1:5, 2:2:10), Bax2 in (1:5, 2:2:10)
-        B = view(A0, Bax1, Bax2)
+        B = view(B0, Bax1, Bax2)
         tB = transpose(B)
         Bd, tBd = copy(B), copy(tB)
         for Aax1 in (1:5, 2:2:10, (:)), Aax2 in (1:5, 2:2:10)
@@ -618,6 +618,37 @@ end
                 _M2 = op(M_view_noncont)
                 testmatmul(_M2, v_view_noncont)
             end
+        end
+    end
+end
+
+@testset "mixed complex-real matmul with non-contiguous or negatively strided arrays" for T in (Float64, (@static COMPREHENSIVE ? (Float32,) : ())...)
+    n = 5
+    # views equal to M, with stride(·, 1) == 2 or with stride(·, 2) < 0, respectively
+    rowstep(M::AbstractMatrix) = (P = zeros(eltype(M), 2size(M, 1), size(M, 2)); P[1:2:end, :] = M; view(P, 1:2:size(P, 1), :))
+    colrev(M::AbstractMatrix) = (P = zeros(eltype(M), size(M)); P[:, end:-1:1] = M; view(P, :, size(P, 2):-1:1))
+    # views equal to v, with stride 2 or -1, respectively
+    step2(v::AbstractVector) = (P = zeros(eltype(v), 2length(v)); P[1:2:end] = v; view(P, 1:2:length(P)))
+    rev(v::AbstractVector) = (P = zeros(eltype(v), length(v)); P[end:-1:1] = v; view(P, length(P):-1:1))
+    A, B, C = rand(complex(T), n, n), rand(T, n, n), rand(complex(T), n, n)
+    x, xc, y = rand(T, n), rand(complex(T), n), rand(complex(T), n)
+    α, β = 2, 3
+    @testset for fA in (copy, rowstep, colrev), opA in (identity, transpose, adjoint)
+        # complex matrix x real matrix
+        for fB in (copy, rowstep, colrev), opB in (identity, transpose), fC in (copy, rowstep, colrev)
+            Cv = fC(C)
+            @test mul!(Cv, opA(fA(A)), opB(fB(B)), α, β) ≈ α * opA(A) * opB(B) + β * C
+            # nothing is written outside of the view
+            @test count(!iszero, parent(Cv)) == count(!iszero, Cv)
+        end
+        # complex matrix x real vector, and real matrix x complex vector
+        for fx in (copy, step2, rev), fy in (copy, step2, rev)
+            yv = fy(y)
+            @test mul!(yv, opA(fA(A)), fx(x), α, β) ≈ α * opA(A) * x + β * y
+            @test count(!iszero, parent(yv)) == count(!iszero, yv)
+            yv = fy(y)
+            @test mul!(yv, opA(fA(B)), fx(xc), α, β) ≈ α * opA(B) * xc + β * y
+            @test count(!iszero, parent(yv)) == count(!iszero, yv)
         end
     end
 end
