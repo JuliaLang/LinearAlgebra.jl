@@ -631,6 +631,67 @@ end
     end
 end
 
+@testset "svd(::SymTridiag)" begin
+    for T in (Float32, Float64)
+        n = 10
+        A = SymTridiagonal(randn(T, n), randn(T, n - 1))
+        F = svd(A)
+        @test F.U * Diagonal(F.S) * F.Vt ≈ A                # reconstruction — load-bearing
+        @test F.U' * F.U ≈ I                                  # orthogonality
+        @test F.Vt * F.Vt' ≈ I
+        @test issorted(F.S; rev=true)                         # descending
+        @test F.S ≈ svdvals(A)                                # parity with sibling
+        @test eltype(F.S) == T
+        @test eltype(F.U) == T
+
+        F! = svd!(copy(A))
+        @test F!.U * Diagonal(F!.S) * F!.Vt ≈ A
+        @test F!.S ≈ F.S
+    end
+
+    # Int: eigtype promotion and inference
+    Ai = SymTridiagonal([1, 2, 3, 4], [1, 1, 1])
+    @test @inferred(svd(Ai)).S isa Vector{Float64}
+    @test svd(Ai).U * Diagonal(svd(Ai).S) * svd(Ai).Vt ≈ Matrix(Ai)
+
+    # empty: guard must fire before eigen (eigen([]) throws)
+    Ae = SymTridiagonal(Float64[], Float64[])
+    Fe = svd(Ae)
+    @test size(Fe.U) == (0, 0) && isempty(Fe.S) && size(Fe.Vt) == (0, 0)
+    @test @inferred(svd(SymTridiagonal(Int[], Int[]))).S isa Vector{Float64}
+
+    # zero eigenvalue: catches the sign(0) trap
+    Az = SymTridiagonal([1.0, 0.0, -2.0, 3.0], zeros(3))
+    Fz = svd(Az)
+    @test Fz.U * Diagonal(Fz.S) * Fz.Vt ≈ Matrix(Az)
+    @test Fz.U' * Fz.U ≈ I                                  # fails if sign(0)=0
+
+    # full kwarg: no-op for square, must not error
+    @test svd(Ai; full=true).S ≈ svd(Ai).S
+    @test svd(Ai; full=false).S ≈ svd(Ai).S
+
+    # complex falls through cleanly to dense
+    Ac = SymTridiagonal(randn(ComplexF64, 5), randn(ComplexF64, 4))
+    Fc = svd(Ac)
+    @test Fc.U * Diagonal(Fc.S) * Fc.Vt ≈ Matrix(Ac)
+
+    # Float16: promotes to Float32 for the eigendecomposition, matches dense svd
+    A16 = SymTridiagonal(Float16[1, 2, 3, 4], Float16[1, 1, 1])
+    F16 = svd(A16)
+    @test eltype(F16.S) == Float32
+    @test eltype(F16.U) == Float32
+    @test eltype(F16.Vt) == Float32
+    @test F16.U * Diagonal(F16.S) * F16.Vt ≈ Matrix{Float32}(A16)
+    @test F16.U' * F16.U ≈ I
+    @test F16.Vt * F16.Vt' ≈ I
+    @test F16.S ≈ svdvals(A16)
+
+    # downstream consumers accept the SVD struct
+    Ad = SymTridiagonal([1.0, 2.0, 3.0], [1.0, 1.0])
+    Fd = svd(Ad)
+    @test rank(Fd) == 3
+end
+
 @testset "sum, mapreduce" begin
     T = Tridiagonal([1,2], [1,2,3], [7,8])
     Tdense = Matrix(T)
