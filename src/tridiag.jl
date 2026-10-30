@@ -311,43 +311,6 @@ eigvals(A::SymTridiagonal{T}, vl::Real, vu::Real) where T =
 eigmax(A::SymTridiagonal) = eigvals(A, size(A, 1):size(A, 1))[1]
 eigmin(A::SymTridiagonal) = eigvals(A, 1:1)[1]
 
-"""
-    cond(A::SymTridiagonal, p::Real=2)
-
-Condition number of `A` for the operator `p`-norm, with `p ∈ {1, 2, Inf}` (default `2`).
-
-For the 2-norm, the singular values of a symmetric matrix are `|λ_i|`, so `cond₂(A)` is
-computed via the tridiagonal eigensolver rather than the generic SVD. For *definite*
-matrices (all eigenvalues same sign), only `eigmin`/`eigmax` are needed (each a single
-subset-eigenvalue call via LAPACK `stegr!`). For indefinite matrices, the full spectrum
-is computed via `stev!` (still O(n²), not the O(n³) of dense SVD).
-"""
-function cond(A::SymTridiagonal{T}, p::Real=2) where {T<:BlasReal}
-    if p == 2
-        n = checksquare(A)
-        n == 0 && return zero(real(eigtype(T)))
-        # Singular values of a symmetric matrix are |eigenvalues|.
-        λmin = eigmin(A)
-        λmax = eigmax(A)
-        (iszero(λmin) || iszero(λmax)) && return oftype(real(λmax), Inf)
-        # Definite case: only two eigenvalues needed.
-        if signbit(λmin) == signbit(λmax)
-            return max(abs(λmin), abs(λmax)) / min(abs(λmin), abs(λmax))
-        end
-        # Indefinite: min|λ| is interior, so we need the full spectrum.
-        λs = eigvals(A)
-        amax = maximum(abs, λs)
-        amin = minimum(abs, λs)
-        return iszero(amin) ? oftype(real(λmax), Inf) : amax / amin
-    elseif p == 1 || p == Inf
-        # Defer to the generic AbstractMatrix path; inv/opnorm for SymTridiagonal
-        # is not specialized here and would still be O(n³) — left for a follow-up.
-        invoke(cond, Tuple{AbstractMatrix,Real}, A, p)
-    else
-        throw(ArgumentError(lazy"p-norm must be 1, 2 or Inf, got $p"))
-    end
-end
-
 #Compute selected eigenvectors only corresponding to particular eigenvalues
 """
     eigvecs(A::Union{Symmetric, Hermitian, SymTridiagonal}[, eigvals])::Matrix
@@ -388,7 +351,14 @@ julia> eigvecs(A, [1.])
 eigvecs(A::SymTridiagonal{<:BlasFloat,<:StridedVector}, eigvals::StridedVector{<:Real}) = LAPACK.stein!(A.dv, A.ev, eigvals)
 
 function svdvals!(A::SymTridiagonal)
+    isempty(A) && return real(eltype(A))[]
     vals = eigvals!(A)
+    return sort!(map!(abs, vals, vals); rev=true)
+end
+
+function svdvals(A::SymTridiagonal)
+    isempty(A) && return real(eltype(A))[]
+    vals = eigvals(A)
     return sort!(map!(abs, vals, vals); rev=true)
 end
 

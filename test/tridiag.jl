@@ -605,6 +605,19 @@ end
     @test svdvals(SymTridiagonal([1,2,1], [1,1])) ≈ [3,1,0]
     # test that dependent methods such as `cond` also work
     @test cond(SymTridiagonal([1,2,3], [0,0])) ≈ 3
+
+    # parity with the dense path, across eltypes and sizes
+    for T in (Float32, Float64), n in (0, 1, 2, 10, 50)
+        A = SymTridiagonal(randn(T, n), randn(T, max(n - 1, 0)))
+        s = svdvals(A)
+        @test s ≈ svdvals(Matrix(A))
+        @test issorted(s, rev = true)
+        @test eltype(s) == T
+    end
+    Z = SymTridiagonal(zeros(4), zeros(3))
+    @test svdvals(Z) == zeros(4)
+    @test svdvals(SymTridiagonal(Float64[], Float64[])) == Float64[]
+    @test svdvals!(SymTridiagonal(Float64[], Float64[])) == Float64[]
 end
 
 @testset "sum, mapreduce" begin
