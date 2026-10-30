@@ -1529,6 +1529,7 @@ for (fname, elty) in ((:dger_,:Float64),
     @eval begin
         function ger!(α::$elty, x::AbstractVector{$elty}, y::AbstractVector{$elty}, A::AbstractMatrix{$elty})
             require_one_based_indexing(A, x, y)
+            chkstride1(A)
             m, n = size(A)
             if m != length(x) || n != length(y)
                 throw(DimensionMismatch(lazy"A has size ($m,$n), x has length $(length(x)), y has length $(length(y))"))
@@ -1558,6 +1559,7 @@ for (fname, elty) in ((:zgeru_,:ComplexF64), (:cgeru_,:ComplexF32))
     @eval begin
         function geru!(α::$elty, x::AbstractVector{$elty}, y::AbstractVector{$elty}, A::AbstractMatrix{$elty})
             require_one_based_indexing(A, x, y)
+            chkstride1(A)
             m, n = size(A)
             if m != length(x) || n != length(y)
                 throw(DimensionMismatch(lazy"A has size ($m,$n), x has length $(length(x)), y has length $(length(y))"))
@@ -1598,6 +1600,7 @@ for (fname, elty, lib) in ((:dsyr_,:Float64,libblastrampoline),
         function syr!(uplo::AbstractChar, α::$elty, x::AbstractVector{$elty}, A::AbstractMatrix{$elty})
             chkuplo(uplo)
             require_one_based_indexing(A, x)
+            chkstride1(A)
             n = checksquare(A)
             if length(x) != n
                 throw(DimensionMismatch(lazy"A has size ($n,$n), x has length $(length(x))"))
@@ -1629,6 +1632,7 @@ for (fname, elty, relty) in ((:zher_,:ComplexF64, :Float64),
         function her!(uplo::AbstractChar, α::$relty, x::AbstractVector{$elty}, A::AbstractMatrix{$elty})
             chkuplo(uplo)
             require_one_based_indexing(A, x)
+            chkstride1(A)
             n = checksquare(A)
             if length(x) != n
                 throw(DimensionMismatch(lazy"A has size ($n,$n), x has length $(length(x))"))
