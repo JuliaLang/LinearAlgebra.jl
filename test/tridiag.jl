@@ -616,8 +616,19 @@ end
     end
     Z = SymTridiagonal(zeros(4), zeros(3))
     @test svdvals(Z) == zeros(4)
+
     @test svdvals(SymTridiagonal(Float64[], Float64[])) == Float64[]
     @test svdvals!(SymTridiagonal(Float64[], Float64[])) == Float64[]
+
+    # Int inference: empty and non-empty must both infer to Vector{Float64}
+    @test @inferred(svdvals(SymTridiagonal(Int[], Int[]))) == Float64[]
+    @test @inferred(svdvals(SymTridiagonal([1, 2, 1], [0, 1]))) isa Vector{Float64}
+
+    # Complex falls through to dense path (our method is <:Real only) but is correct
+    let A = SymTridiagonal(ComplexF64[1, 2, 3], ComplexF64[1, 1])
+        @test svdvals(A) ≈ svdvals(Matrix(A))
+        @test eltype(svdvals(A)) == Float64
+    end
 end
 
 @testset "sum, mapreduce" begin

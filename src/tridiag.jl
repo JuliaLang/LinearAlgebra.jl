@@ -350,14 +350,14 @@ julia> eigvecs(A, [1.])
 """
 eigvecs(A::SymTridiagonal{<:BlasFloat,<:StridedVector}, eigvals::StridedVector{<:Real}) = LAPACK.stein!(A.dv, A.ev, eigvals)
 
-function svdvals!(A::SymTridiagonal)
-    isempty(A) && return real(eltype(A))[]
+function svdvals!(A::SymTridiagonal{<:Real})
+    isempty(A) && return eigtype(eltype(A))[]
     vals = eigvals!(A)
     return sort!(map!(abs, vals, vals); rev=true)
 end
 
-function svdvals(A::SymTridiagonal)
-    isempty(A) && return real(eltype(A))[]
+function svdvals(A::SymTridiagonal{<:Real})
+    isempty(A) && return eigtype(eltype(A))[]
     vals = eigvals(A)
     return sort!(map!(abs, vals, vals); rev=true)
 end
