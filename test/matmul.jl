@@ -503,6 +503,28 @@ end
     @test U * V ≈ Matrix(U) * Matrix(V)
 end
 
+@testset "Symmetric/Hermitian x matrix with non-contiguous or negatively strided arrays" for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
+    # sizes 2 and 3 take the small-matrix path, larger sizes may dispatch to symm!/hemm!
+    @testset "n = $n" for n in (3, 5)
+        # views equal to M, with stride(·, 1) == 2 or with stride(·, 2) < 0, respectively
+        rowstep(M) = (P = zeros(T, 2size(M, 1), size(M, 2)); P[1:2:end, :] = M; view(P, 1:2:size(P, 1), :))
+        colrev(M) = (P = zeros(T, size(M)); P[:, end:-1:1] = M; view(P, :, size(P, 2):-1:1))
+        layouts = (copy, rowstep, colrev)
+        A, B, C = rand(T, n, n), rand(T, n, n), rand(T, n, n)
+        α, β = 2, 3
+        @testset for W in (Symmetric, Hermitian), fA in layouts, fB in layouts, fC in layouts
+            WA = Matrix(W(A))
+            for (X, Y, ref) in ((W(fA(A)), fB(B), WA * B), (fB(B), W(fA(A)), B * WA))
+                Cv = fC(C)
+                @test mul!(Cv, X, Y, α, β) ≈ α * ref + β * C
+                # nothing is written outside of the view
+                @test count(!iszero, parent(Cv)) == count(!iszero, Cv)
+                @test mul!(fC(C), X, Y) ≈ ref
+            end
+        end
+    end
+end
+
 @testset "dot product of subarrays of vectors (floats, negative stride, issue #37767)" begin
     for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         a = Vector{T}(3:2:7)
