@@ -192,6 +192,21 @@ Random.seed!(100)
                 @test_throws DimensionMismatch BLAS.her!('U',α,Vector{elty}(undef,n+1),copy(A))
             end
         end
+        @testset "ger, geru, her, syr with non-contiguous columns" begin
+            # stride(A, 1) must be 1, and the parent must not be written to
+            x, y = rand(elty, n), rand(elty, n)
+            P = rand(elty, 2n, n)
+            P0 = copy(P)
+            A = view(P, 1:2:2n, :)
+            α = rand(elty)
+            @test_throws ErrorException BLAS.ger!(α, x, y, A)
+            @test_throws ErrorException BLAS.geru!(α, x, y, A)
+            @test_throws ErrorException BLAS.syr!('U', α, x, A)
+            if elty <: Complex
+                @test_throws ErrorException BLAS.her!('U', real(α), x, A)
+            end
+            @test P == P0
+        end
         @testset "copy" begin
             x1 = randn(elty, n)
             x2 = randn(elty, n)
