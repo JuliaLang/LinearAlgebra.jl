@@ -605,6 +605,91 @@ end
     @test svdvals(SymTridiagonal([1,2,1], [1,1])) ≈ [3,1,0]
     # test that dependent methods such as `cond` also work
     @test cond(SymTridiagonal([1,2,3], [0,0])) ≈ 3
+
+    # parity with the dense path, across eltypes and sizes
+    for T in (Float32, Float64), n in (0, 1, 2, 10, 50)
+        A = SymTridiagonal(randn(T, n), randn(T, max(n - 1, 0)))
+        s = svdvals(A)
+        @test s ≈ svdvals(Matrix(A))
+        @test issorted(s, rev = true)
+        @test eltype(s) == T
+    end
+    Z = SymTridiagonal(zeros(4), zeros(3))
+    @test svdvals(Z) == zeros(4)
+
+    @test svdvals(SymTridiagonal(Float64[], Float64[])) == Float64[]
+    @test svdvals!(SymTridiagonal(Float64[], Float64[])) == Float64[]
+
+    # Int inference: empty and non-empty must both infer to Vector{Float64}
+    @test @inferred(svdvals(SymTridiagonal(Int[], Int[]))) == Float64[]
+    @test @inferred(svdvals(SymTridiagonal([1, 2, 1], [0, 1]))) isa Vector{Float64}
+
+    # Complex falls through to dense path (our method is <:Real only) but is correct
+    let A = SymTridiagonal(ComplexF64[1, 2, 3], ComplexF64[1, 1])
+        @test svdvals(A) ≈ svdvals(Matrix(A))
+        @test eltype(svdvals(A)) == Float64
+    end
+end
+
+@testset "svd(::SymTridiag)" begin
+    for T in (Float32, Float64)
+        n = 10
+        A = SymTridiagonal(randn(T, n), randn(T, n - 1))
+        F = svd(A)
+        @test F.U * Diagonal(F.S) * F.Vt ≈ A                # reconstruction — load-bearing
+        @test F.U' * F.U ≈ I                                  # orthogonality
+        @test F.Vt * F.Vt' ≈ I
+        @test issorted(F.S; rev=true)                         # descending
+        @test F.S ≈ svdvals(A)                                # parity with sibling
+        @test eltype(F.S) == T
+        @test eltype(F.U) == T
+
+        F! = svd!(copy(A))
+        @test F!.U * Diagonal(F!.S) * F!.Vt ≈ A
+        @test F!.S ≈ F.S
+    end
+
+    # Int: eigtype promotion and inference
+    Ai = SymTridiagonal([1, 2, 3, 4], [1, 1, 1])
+    @test @inferred(svd(Ai)).S isa Vector{Float64}
+    @test svd(Ai).U * Diagonal(svd(Ai).S) * svd(Ai).Vt ≈ Matrix(Ai)
+
+    # empty: guard must fire before eigen (eigen([]) throws)
+    Ae = SymTridiagonal(Float64[], Float64[])
+    Fe = svd(Ae)
+    @test size(Fe.U) == (0, 0) && isempty(Fe.S) && size(Fe.Vt) == (0, 0)
+    @test @inferred(svd(SymTridiagonal(Int[], Int[]))).S isa Vector{Float64}
+
+    # zero eigenvalue: catches the sign(0) trap
+    Az = SymTridiagonal([1.0, 0.0, -2.0, 3.0], zeros(3))
+    Fz = svd(Az)
+    @test Fz.U * Diagonal(Fz.S) * Fz.Vt ≈ Matrix(Az)
+    @test Fz.U' * Fz.U ≈ I                                  # fails if sign(0)=0
+
+    # full kwarg: no-op for square, must not error
+    @test svd(Ai; full=true).S ≈ svd(Ai).S
+    @test svd(Ai; full=false).S ≈ svd(Ai).S
+
+    # complex falls through cleanly to dense
+    Ac = SymTridiagonal(randn(ComplexF64, 5), randn(ComplexF64, 4))
+    Fc = svd(Ac)
+    @test Fc.U * Diagonal(Fc.S) * Fc.Vt ≈ Matrix(Ac)
+
+    # Float16: promotes to Float32 for the eigendecomposition, matches dense svd
+    A16 = SymTridiagonal(Float16[1, 2, 3, 4], Float16[1, 1, 1])
+    F16 = svd(A16)
+    @test eltype(F16.S) == Float32
+    @test eltype(F16.U) == Float32
+    @test eltype(F16.Vt) == Float32
+    @test F16.U * Diagonal(F16.S) * F16.Vt ≈ Matrix{Float32}(A16)
+    @test F16.U' * F16.U ≈ I
+    @test F16.Vt * F16.Vt' ≈ I
+    @test F16.S ≈ svdvals(A16)
+
+    # downstream consumers accept the SVD struct
+    Ad = SymTridiagonal([1.0, 2.0, 3.0], [1.0, 1.0])
+    Fd = svd(Ad)
+    @test rank(Fd) == 3
 end
 
 @testset "sum, mapreduce" begin
@@ -1253,6 +1338,102 @@ end
         @test S == S2
         LinearAlgebra.fillband!(S, 0, 10, 10)
         @test S == S2
+    end
+end
+
+@testset "cond(::SymTridiagonal, p)" begin
+    # Reference: dense SVD path (the implementation we're replacing).
+    dense_cond(A::SymTridiagonal, p=2) = cond(Matrix(A), p)
+
+    # Build a random *definite* (sign-coherent) SymTridiagonal.
+    # Adding (n+1)·I shifts the spectrum safely past zero; ± controls sign.
+    function rand_definite(n::Int, ::Type{T}=Float64; positive::Bool=true) where T
+        d = randn(T, n)
+        e = randn(T, n - 1)
+        shift = positive ? T(n + 1) : T(-(n + 1))
+        SymTridiagonal(d .+ shift, e)
+    end
+
+    function rand_indefinite(n::Int, ::Type{T}=Float64) where T
+        SymTridiagonal(randn(T, n), randn(T, n - 1))
+    end
+
+    @testset "edge cases" begin
+        @test cond(SymTridiagonal(Float64[], Float64[])) == 0.0
+        @test cond(SymTridiagonal([2.0], Float64[])) == 1.0
+        @test cond(SymTridiagonal([-3.0], Float64[])) == 1.0
+        @test cond(SymTridiagonal(zeros(4), zeros(3))) == Inf
+        @test cond(SymTridiagonal(zeros(4), zeros(3)), 2) == Inf
+        @test cond(SymTridiagonal(ones(8), zeros(7))) == 1.0
+        @test cond(SymTridiagonal([1.0, 2.0, 3.0, 4.0], zeros(3))) ≈ 4.0
+    end
+
+    @testset "positive-definite" begin
+        Random.seed!(42)
+        for n in (5, 20, 100, 500)
+            A = rand_definite(n; positive=true)
+            @test cond(A) ≈ dense_cond(A) rtol=1e-10
+            @test typeof(cond(A)) === typeof(dense_cond(A))
+        end
+    end
+
+    @testset "negative-definite" begin
+        Random.seed!(43)
+        for n in (5, 20, 100, 500)
+            A = rand_definite(n; positive=false)
+            @test cond(A) ≈ dense_cond(A) rtol=1e-10
+        end
+    end
+
+    @testset "indefinite" begin
+        Random.seed!(44)
+        for n in (5, 20, 100, 500)
+            A = rand_indefinite(n)
+            @test cond(A) ≈ dense_cond(A) rtol=1e-10
+        end
+    end
+
+    @testset "1D Laplacian (known spectrum)" begin
+        for n in (8, 32, 128)
+            A = SymTridiagonal(fill(-2.0, n), fill(1.0, n - 1))
+            κ_true = sin(n * π / (2(n + 1)))^2 / sin(π / (2(n + 1)))^2
+            @test cond(A) ≈ κ_true rtol=1e-10
+        end
+    end
+
+    @testset "Float32 type" begin
+        Random.seed!(45)
+        A = rand_definite(50, Float32; positive=true)
+        @test cond(A) isa Float32
+        @test cond(A) ≈ cond(Matrix(A), 2) rtol=1e-5
+    end
+
+    @testset "p-norm variants" begin
+        Random.seed!(46)
+        A = rand_definite(20; positive=true)
+        @test cond(A, 2) == cond(A)
+        @test cond(A, 1)   ≈ cond(Matrix(A), 1)   rtol=1e-10
+        @test cond(A, Inf) ≈ cond(Matrix(A), Inf) rtol=1e-10
+        @test_throws ArgumentError cond(A, 3)
+        @test_throws ArgumentError cond(A, 0)
+        @test_throws ArgumentError cond(A, -1)
+    end
+
+    @testset "API consistency" begin
+        Random.seed!(47)
+        A = rand_definite(50; positive=true)
+        @test cond(A) == cond(A, 2)
+        @test cond(A) isa Real
+    end
+
+    # ---- BigFloat: not supported via BlasReal path ------------------------
+    # SymTridiagonal{BigFloat} is outside the BlasReal specialization, so it
+    # falls back to the generic cond(::AbstractMatrix), which calls svdvals.
+    @testset "BigFloat dispatches to generic" begin
+        A = SymTridiagonal(BigFloat[2.0, 3.0], BigFloat[1.0])
+        # Method dispatch: our specialized method should NOT match
+        m = first(methods(cond, (typeof(A),)))
+        @test occursin("dense.jl", string(m.file))
     end
 end
 

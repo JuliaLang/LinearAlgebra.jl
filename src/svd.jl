@@ -90,6 +90,23 @@ Base.iterate(S::SVD, ::Val{:done}) = nothing
 
 default_svd_alg(A) = DivideAndConquer()
 
+# From `eigen` output `A = Q Λ Q'` (or `Q Λ Qᴴ`), build `SVD(U, σ, Vt)` such that
+# `U * Diagonal(σ) * Vt ≈ A`. Uses the V-signed convention: `U = Q`, `V = Q * D`
+# where `D_ii = -1` iff `λ_i < 0`. Mutates `vals` and `vecs` in place; callers
+# pass fresh output from `eigen`.
+function _svd_from_eigen!(vals::AbstractVector{<:Real}, vecs::AbstractMatrix)
+    p = sortperm(vals; by=abs, rev=true)
+    permute!(vals, p)
+    Base.permutecols!!(vecs, p)
+    V = copy(vecs)
+    @inbounds for i in eachindex(vals)
+        if vals[i] < 0
+            vals[i] = -vals[i]
+            for j in axes(V, 1); V[j,i] = -V[j,i]; end
+        end
+    end
+    return SVD(vecs, vals, V')
+end
 
 """
     svd!(A; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) -> SVD
