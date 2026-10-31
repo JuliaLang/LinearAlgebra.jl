@@ -165,6 +165,47 @@ using Main.LinearAlgebraTestHelpers.SizedArrays
                     && Q[2:end, :] == broadcast(/, fD, a)[2:end, :]
                     && Q[1, 1] == Inf
                     && all(isnan, Q[1, 2:end]))
+                a[1] = NaN
+                @test (Q = broadcast(/, D, a); Q isa Matrix && isequal(Q, broadcast(/, fD, a)))
+                a[1] = Inf
+                @test (Q = broadcast(/, D, a); Q isa Diagonal && Q == broadcast(/, fD, a))
+            end
+            @test (Q = D ./ (2 .* fV); Q isa Diagonal && Q == fD ./ (2 .* fV))
+            if N > 0
+                @test (Q = D ./ (fV .- fV); Q isa Matrix && isequal(Q, fD ./ (fV .- fV)))
+            end
+        end
+
+        @testset "zero absorbing functions nested in other operations" begin
+            for X in (D, B, T, U, L, UH)
+                fX = Array(X)
+                @test (Q = 2 .* M .+ X; Q isa Matrix && Q == 2 .* M .+ fX)
+                @test (Q = M .* 2 .+ X; Q isa Matrix && Q == M .* 2 .+ fX)
+                @test (Q = X .* (Inf .* 2.0); Q isa Matrix && isequal(Q, fX .* (Inf .* 2.0)))
+                @test (Q = X .+ (0.0 .* 2.0); Q isa typeof(X) && Q == fX .+ (0.0 .* 2.0))
+                @test (Q = M .* M .+ X; Q isa Matrix && Q == M .* M .+ fX)
+                @test (Q = X .+ fV .* M; Q isa Matrix && Q == fX .+ fV .* M)
+                @test (Q = 2 .* X .* M; Q isa typeof(X) && Q == 2 .* fX .* M)
+                @test (Q = X .* (2 .* M); Q isa typeof(X) && Q == fX .* (2 .* M))
+                @test (Q = X .* (M .* M); Q isa typeof(X) && Q == fX .* (M .* M))
+                @test (Q = X .* (fV .+ M); Q isa typeof(X) && Q == fX .* (fV .+ M))
+                @test (Q = X .* (1.0 ./ zero(M)); (N == 0 || Q isa Matrix) && isequal(Q, fX .* (1.0 ./ zero(M))))
+                @test (Q = (X .* M) .+ X; Q isa typeof(X) && Q == fX .* M .+ fX)
+            end
+            # non-finite values give the same NaNs as in the dense case
+            for X in (D, B, T, U, L, UH, S), x in (Inf, -Inf, NaN)
+                fX = Array(X)
+                Mx = copy(M)
+                N > 0 && (Mx[end, 1] = Mx[1, end] = x)
+                @test isequal(X .* Mx, fX .* Mx)
+                @test isequal(Mx .* X, Mx .* fX)
+                @test isequal(X .* (2 .* Mx), fX .* (2 .* Mx))
+                @test isequal(2 .* X .* Mx, 2 .* fX .* Mx)
+                @test isequal(X .* (floatmax() .* (M .+ 1)), fX .* (floatmax() .* (M .+ 1)))
+            end
+            for (X, fX) in zip((S, unittriangulars...), (fS, funittriangulars...))
+                @test (Q = 2 .* M .+ X; Q isa Matrix && Q == 2 .* M .+ fX)
+                @test (Q = M .* M .+ X; Q isa Matrix && Q == M .* M .+ fX)
             end
         end
     end
@@ -215,6 +256,15 @@ end
             @test_throws ArgumentError broadcast!(+, copy(◥), ◥, A)
             @test_throws ArgumentError broadcast!(*, copy(◥), ◣, 2)
             @test_throws ArgumentError broadcast!(*, copy(Bu), Bl, 2)
+            # products of dense arrays are not zero, even inside a zero-absorbing function
+            for X in (D, Bu, Bl, T, ◣, ◥, UH)
+                @test_throws ArgumentError copy(X) .= 2 .* A .+ X
+                @test_throws ArgumentError copy(X) .= A .* A .+ X
+                @test_throws ArgumentError copy(X) .= X .* (A ./ 0)
+            end
+        end
+        for X in (D, Bu, Bl, T, ◣, ◥, UH)
+            @test (Q = copy(X) .= 2 .* X .* A; Q isa typeof(X) && Q == 2 .* Array(X) .* A)
         end
     end
 end
