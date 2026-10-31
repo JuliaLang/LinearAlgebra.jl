@@ -856,19 +856,9 @@ inv(A::Symmetric{<:Any,<:StridedMatrix}) = Symmetric(_inv(A), _sym_uplo(A.uplo))
 
 function svd(A::RealHermSymComplexHerm; full::Bool=false)
     vals, vecs = eigen(A)
-    I = sortperm(vals; by=abs, rev=true)
-    permute!(vals, I)
-    Base.permutecols!!(vecs, I)         # left-singular vectors
-    V = copy(vecs)                      # right-singular vectors
-    # shifting -1 from singular values to right-singular vectors
-    @inbounds for i = 1:length(vals)
-        if vals[i] < 0
-            vals[i] = -vals[i]
-            for j = 1:size(V,1); V[j,i] = -V[j,i]; end
-        end
-    end
-    return SVD(vecs, vals, V')
+    return _svd_from_eigen!(vals, vecs)
 end
+
 function svd(A::RealHermSymComplexHerm{Float16}; full::Bool = false)
     T = eltype(A)
     F = svd(eigencopy_oftype(A, eigtype(T)); full)

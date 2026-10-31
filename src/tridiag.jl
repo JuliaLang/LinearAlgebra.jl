@@ -364,17 +364,6 @@ function svdvals(A::SymTridiagonal{<:Real})
     return sort!(map!(abs, vals, vals); rev=true)
 end
 
-function _svd_from_eigen(λ::AbstractVector, Q::AbstractMatrix)
-    p = sortperm(abs.(λ); rev=true)
-    λs = λ[p]
-    Qs = Q[:, p]
-    σ  = abs.(λs)
-    signs = ifelse.(λs .< 0, -one(eltype(λs)), one(eltype(λs)))
-    U  = Qs * Diagonal(signs)
-    Vt = permutedims(Qs)
-    return SVD(U, σ, Vt)
-end
-
 function _empty_svd(::Type{T}) where {T}
     z = Matrix{T}(undef, 0, 0)
     return SVD(z, T[], copy(z))
@@ -386,7 +375,7 @@ function svd(A::SymTridiagonal{<:Real};
              atol::Real = 0, rtol::Real = 0)
     isempty(A) && return _empty_svd(eigtype(eltype(A)))
     F = eigen(A)
-    return _svd_from_eigen(F.values, F.vectors)      # ← two args
+    return _svd_from_eigen!(F.values, F.vectors)      # ← two args
 end
 
 function svd!(A::SymTridiagonal{<:Real};
@@ -395,7 +384,7 @@ function svd!(A::SymTridiagonal{<:Real};
               atol::Real = 0, rtol::Real = 0)
     isempty(A) && return _empty_svd(eigtype(eltype(A)))
     F = eigen!(A)
-    return _svd_from_eigen(F.values, F.vectors)      # ← two args
+    return _svd_from_eigen!(F.values, F.vectors)      # ← two args
 end
 
 # tril and triu
