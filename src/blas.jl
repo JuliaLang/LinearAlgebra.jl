@@ -298,8 +298,6 @@ end
 
 """
 Check that `A` can be passed to BLAS as a column-major matrix, and return its leading dimension.
-
-The stride conditions are only checked where they affect the addressing of the elements of `A`.
 """
 function chklda(A::AbstractMatrix)
     m, n = size(A)
