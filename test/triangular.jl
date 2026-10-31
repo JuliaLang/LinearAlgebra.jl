@@ -968,6 +968,17 @@ end
         @test rmul!(colrev(B), A) ≈ B * Ad
         @test ldiv!(A, colrev(B)) ≈ Ad \ B
         @test rdiv!(colrev(B), A) ≈ B / Ad
+        if T <: Complex
+            # a real operand is copied into the complex destination, so this also
+            # dispatches to the methods that call BLAS
+            br, Br = real(b), real(B)
+            @test A * br ≈ Ad * br
+            @test A \ br ≈ Ad \ br
+            @test A * Br ≈ Ad * Br
+            @test A \ Br ≈ Ad \ Br
+            @test Br * A ≈ Br * Ad
+            @test Br / A ≈ Br / Ad
+        end
     end
 end
 
