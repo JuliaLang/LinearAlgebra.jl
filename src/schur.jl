@@ -293,7 +293,7 @@ ordschur(schur::Schur, select::Union{Vector{Bool},BitVector}) =
 Reorders the Schur factorization `F` of a matrix `A = Z*T*Z'` according to the integer array
 `p` returning the reordered factorization `F` object using the algorithm in [^BD93], see also
 [^DK01]. The `i`-th diagonal entry of `F` is the `p[i]`-th diagonal element of `S`.  In the
-real case, a complex conjugate pair of eigenvalues must be either both included in `p` successively.
+real case, the entries of a complex conjugate pair must appear in `p` adjacently and in increasing order.
 
 [^BD93]   Zhaojun Bai and James W. Demmel, "On swapping diagonal blocks in real Schur form,"
         Linear Algebra and its Applications Volume 186 pp 75-95, 1993
@@ -334,7 +334,7 @@ function ordschur!(S::Schur, p::AbstractVector{<:Integer}) end
         end
     end
 
-    # A 2x2 real Schur block must move as a unit
+    # A 2x2 real Schur block must move as a unit and keep its eigenvalue order.
     if eltype(T) <: Real
         pinv = similar(p, Int)
         for i in 1:n
@@ -343,8 +343,8 @@ function ordschur!(S::Schur, p::AbstractVector{<:Integer}) end
         i = 1
         while i < n
             if sizes[i] == 2
-                abs(pinv[i] - pinv[i+1]) == 1 ||
-                    throw(ArgumentError("ordschur!: indices $i and $(i+1) belong to the same 2x2 real Schur block and must remain adjacent in p."))
+                pinv[i] + 1 == pinv[i+1] ||
+                    throw(ArgumentError("ordschur!: indices $i and $(i+1) belong to the same 2x2 real Schur block. They must remain adjacent in p and in increasing order."))
                 i += 2
             else
                 i += 1
@@ -403,6 +403,11 @@ function ordschur!(S::Schur, p::AbstractVector{<:Integer}) end
             j1 = blocks[curpos]
             s1, s2 = sizes[i1], sizes[j1]
             i2, j2 = i1+s1-1, j1+s2-1
+            λ = i1 == i2 ? (T[i1,i1],) : T[i1,i1] .+ (im, -im) .* sqrt(abs(T[i1,i2]*T[i2,i1]))
+            μ = j1 == j2 ? (T[j1,j1],) : T[j1,j1] .+ (im, -im) .* sqrt(abs(T[j1,j2]*T[j2,j1]))
+            minimum(abs(a - b) for a in λ for b in μ) ≤
+                sqrt(eps(real(float(oneunit(eltype(T)))))) * max(opnorm(T[i1:j2,i1:j2], 1), 1) &&
+                @warn "ordschur!: blocks $(i1:j2) have coinciding eigenvalues, so the requested order holds only up to their spectral gap."
 
             # Swap blocks: Calls LAPACK or pure Julia version based on eltype(S.T)
             _swap_adj_schur_blocks!(T, Z, i1, i2, j1, j2, s1, s2, n, Δ, M_K0, M_K1, M_rhs, M_X, M_Q)
@@ -424,8 +429,6 @@ function ordschur!(S::Schur, p::AbstractVector{<:Integer}) end
         end
     end
 
-    # TODO: Either enforce permutation indices to be increasing for 2x2 blocks,
-    #   or allow reordering of eigenvalues in 2x2 blocks (bad idea).
     permute!(vals, p)
     return S
 end
@@ -441,11 +444,10 @@ end
     X   = M_X[1:s1, 1:s2]
     Q   = M_Q[1:m, 1:m]
 
-    # Solve A*X - X*B = -C
+    # Solve A*X - X*B = -C, which with Δ = I is T11*X - X*T22 = -T12
     kron!(K0, Δ[1:s2,1:s2], T[i1:i2,i1:i2])
     K0 .-= kron!(K1, transpose(T[j1:j2,j1:j2]), Δ[1:s1,1:s1])
     rhs .= .-vec(T[i1:i2,j1:j2])
-    # TODO: Handle singular matrix in ldiv!
     ldiv!(lu!(K0), rhs)
     X .= reshape(rhs, s1, s2)
 

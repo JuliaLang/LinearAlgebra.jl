@@ -321,6 +321,13 @@ end
     @test S2.T[5,5] ≈ SB.values[3]
     @test S2.T[6,6] ≈ SB.values[4]
     @test S2.Z*S2.T*S2.Z' ≈ SB.Z*SB.T*SB.Z'
+
+    # A 2x2 block must keep its eigenvalue order: p = [2, 1] is adjacent but reversed
+    S = schur([0.0 -1; 1 0])
+    @test_throws ArgumentError ordschur!(copy(S), [2, 1])
+    # Coinciding eigenvalues can only be warned about, not separated
+    S = schur([1.0 0 0; 0 1 0; 0 0 2])
+    @test_logs (:warn, r"coinciding eigenvalues") ordschur!(copy(S), [2, 1, 3])
 end
 
 end # module TestSchur
