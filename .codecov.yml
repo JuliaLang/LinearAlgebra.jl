@@ -6,3 +6,6 @@ coverage:
     project:
       default:
         only_pulls: true # Only show the `codecov/project` commit status on pull requests.
+        # Coverage is collected on a few CI jobs only (see .github/workflows/ci.yml), so
+        # code that only runs on the other platforms may show up as a small drop.
+        threshold: 0.2%

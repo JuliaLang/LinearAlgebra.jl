@@ -86,7 +86,8 @@ export
 
 public set_num_threads, get_num_threads
 
-using ..LinearAlgebra: libblastrampoline, BlasReal, BlasComplex, BlasFloat, BlasInt, DimensionMismatch, checksquare, chkstride1
+using ..LinearAlgebra: libblastrampoline, BlasReal, BlasComplex, BlasFloat, BlasInt,
+    DimensionMismatch, checksquare, chkstride1, SingularException
 import Libdl
 
 include("lbt.jl")
@@ -259,13 +260,30 @@ function check()
     # ensure that we have a complete set here (warning on an incomplete BLAS implementation)
     # We don't use `get_config()` here because we are invoked in the onload callback and
     # we don't want to take any locks.
-    config = LBTConfig(unsafe_load(ccall((:lbt_get_config, libblastrampoline), Ptr{lbt_config_t}, ())))
 
-    # Ensure that one of our loaded libraries satisfies our interface requirement
-    interface = USE_BLAS64 ? :ilp64 : :lp64
-    if !any(lib.interface == interface for lib in config.loaded_libs)
-        interfacestr = uppercase(string(interface))
-        println(Core.stderr, "No loaded BLAS libraries were built with $interfacestr support.")
+    # Use the raw lbt_config_t to keep this lightweight (`LBTConfig(...)` adds ~200 KB),
+    # since `--trim` does not know how to prune it
+    config = unsafe_load(ccall((:lbt_get_config, libblastrampoline), Ptr{lbt_config_t}, ()))
+
+    # Ensure that one of our loaded libraries satisfies our interface requirement.
+    wanted = USE_BLAS64 ? LBT_INTERFACE_ILP64 : LBT_INTERFACE_LP64
+    found = false
+    idx = 1
+    lib_ptr = unsafe_load(config.loaded_libs, idx)
+    while lib_ptr != C_NULL
+        if unsafe_load(lib_ptr).interface == wanted
+            found = true
+            break
+        end
+        idx += 1
+        lib_ptr = unsafe_load(config.loaded_libs, idx)
+    end
+    if !found
+        if USE_BLAS64
+            println(Core.stderr, "No loaded BLAS libraries were built with ILP64 support.")
+        else
+            println(Core.stderr, "No loaded BLAS libraries were built with LP64 support.")
+        end
         exit(1)
     end
 end
@@ -1475,6 +1493,11 @@ for (fname, elty) in ((:dtrsv_,:Float64),
                 throw(DimensionMismatch(lazy"size of A is $n != length(x) = $(length(x))"))
             end
             chkstride1(A)
+            if diag == 'N'
+                for i in 1:n
+                    iszero(A[i,i]) && throw(SingularException(i))
+                end
+            end
             px, stx = vec_pointer_stride(x, ArgumentError("input vector with 0 stride is not allowed"))
             GC.@preserve x ccall((@blasfunc($fname), libblastrampoline), Cvoid,
                 (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{BlasInt},
@@ -2329,6 +2352,11 @@ for (mmname, smname, elty) in
             end
             chkstride1(A)
             chkstride1(B)
+            if diag == 'N'
+                for i in 1:k
+                    iszero(A[i,i]) && throw(SingularException(i))
+                end
+            end
             ccall((@blasfunc($smname), libblastrampoline), Cvoid,
                    (Ref{UInt8}, Ref{UInt8}, Ref{UInt8}, Ref{UInt8},
                     Ref{BlasInt}, Ref{BlasInt}, Ref{$elty}, Ptr{$elty},

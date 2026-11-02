@@ -13,6 +13,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 function unary_ops_tests(a, ca, tol; n=size(a, 1))
     @test inv(ca)*a ≈ Matrix(I, n, n)
@@ -61,7 +62,8 @@ end
     breal = randn(n,2)/2
     bimg  = randn(n,2)/2
 
-    for eltya in (Float32, Float64, ComplexF32, ComplexF64, BigFloat, Complex{BigFloat}, Quaternion{Float64}, Int)
+    for eltya in (Float64, ComplexF64, BigFloat, Complex{BigFloat}, Quaternion{Float64}, Int,
+                  (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         a = if eltya == Int
             rand(1:7, n, n)
         elseif eltya <: Real
@@ -166,7 +168,7 @@ end
             @test cpapd.P*cpapd.L*cpapd.U*cpapd.P' ≈ apd
         end
 
-        for eltyb in (Float32, Float64, ComplexF32, ComplexF64, Int)
+        for eltyb in (Float64, ComplexF64, Int, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
             b = if eltya <: Quaternion
                 convert(Matrix{eltya}, Quaternion.(breal, bimg, bimg, bimg))
             elseif eltyb == Int
@@ -387,6 +389,37 @@ Base.setindex!(v::WrappedVector, val, i::Integer) = setindex!(v.data, val, i)
         @test getproperty(lowrankdowndate(G, v), uplo) ≈ getproperty(F, uplo)
         @test getproperty(lowrankdowndate(G, w), uplo) ≈ getproperty(F, uplo)
         @test_throws DimensionMismatch lowrankdowndate(G, Vector{eltype(v)}(undef,length(v)+1))
+    end
+end
+
+@testset "cholesky up- and downdates with a matrix" begin
+    A = complex.(randn(10,5), randn(10, 5))
+    V = complex.(randn(5, 3), randn(5, 3))
+    for uplo in (:U, :L)
+        AcA = Hermitian(A'*A, uplo)
+        BcB = hermitianpart!(AcA + V*V', uplo)
+        F = cholesky(AcA)
+        G = cholesky(BcB)
+        # The stored factor; the other triangle of `factors` is undefined
+        factor(C) = getproperty(C, uplo)
+        @test factor(lowrankupdate(F, V)) ≈ factor(G)
+        @test factor(lowrankdowndate(G, V)) ≈ factor(F)
+        # The same as updating with one column after the other
+        @test factor(lowrankupdate(F, V)) == factor(foldl(lowrankupdate, eachcol(V); init=F))
+        @test factor(lowrankdowndate(G, V)) == factor(foldl(lowrankdowndate, eachcol(V); init=G))
+        # A single column is a vector
+        @test factor(lowrankupdate(F, V[:, 1:1])) == factor(lowrankupdate(F, V[:, 1]))
+        @test factor(lowrankdowndate(G, V[:, 1:1])) == factor(lowrankdowndate(G, V[:, 1]))
+        # In place, with `V` destroyed
+        C, W = copy(F), copy(V)
+        @test lowrankupdate!(C, W) === C
+        @test factor(C) ≈ factor(G)
+        @test lowrankdowndate!(C, W .= V) === C
+        @test factor(C) ≈ factor(F)
+        @test factor(lowrankupdate(F, similar(V, 5, 0))) == factor(F)
+        @test_throws DimensionMismatch lowrankupdate(F, similar(V, 6, 3))
+        @test_throws DimensionMismatch lowrankdowndate(G, similar(V, 6, 3))
+        @test_throws PosDefException lowrankdowndate(F, 10 .* V)
     end
 end
 
@@ -710,6 +743,23 @@ end
             @test (@allocated B.U) <= allowed_cost_of_overhead
         end
     end
+end
+
+@testset "abstract eltypes are promoted according to the stored values (#287)" begin
+    A = Real[4 2; 2 big(3)]
+    C = cholesky(A)
+    @test C isa Cholesky{BigFloat}
+    @test C.U ≈ cholesky(BigFloat[4 2; 2 3]).U
+    @test cholesky(Real[4 2; 2 3f0]) isa Cholesky{Float32}
+    @test cholesky(Number[2 im; -im 2]).U ≈ cholesky(ComplexF64[2 im; -im 2]).U
+end
+
+@testset "generic Cholesky of an indefinite matrix, lower" begin
+    A = Hermitian(big.([3.0 2; 2 0]), :L)
+    C = cholesky(A; check = false)
+    @test !issuccess(C)
+    @test C.info == 2
+    @test_throws PosDefException cholesky(A)
 end
 
 end # module TestCholesky

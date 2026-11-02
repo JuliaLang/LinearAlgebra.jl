@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.StridedArrays
 
 @testset "Adjoint and Transpose inner constructor basics" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
@@ -73,10 +74,14 @@ end
 
 @testset "Adjoint and Transpose add additional layers to already-wrapped objects" begin
     intvec, intmat = [1, 2], [1 2; 3 4]
-    @test (A = Adjoint(Adjoint(intvec))::Adjoint{Int,Adjoint{Int,Vector{Int}}}; A.parent.parent === intvec)
-    @test (A = Adjoint(Adjoint(intmat))::Adjoint{Int,Adjoint{Int,Matrix{Int}}}; A.parent.parent === intmat)
-    @test (A = Transpose(Transpose(intvec))::Transpose{Int,Transpose{Int,Vector{Int}}}; A.parent.parent === intvec)
-    @test (A = Transpose(Transpose(intmat))::Transpose{Int,Transpose{Int,Matrix{Int}}}; A.parent.parent === intmat)
+    @test_throws ArgumentError Adjoint(adjoint(intvec))
+    @test_throws ArgumentError Adjoint(adjoint(intmat))
+    @test_throws ArgumentError Transpose(transpose(intvec))
+    @test_throws ArgumentError Transpose(transpose(intmat))
+    @test (A = Adjoint(Transpose(intvec))::Adjoint{Int,Transpose{Int,Vector{Int}}}; A.parent.parent === intvec)
+    @test (A = Adjoint(Transpose(intmat))::Adjoint{Int,Transpose{Int,Matrix{Int}}}; A.parent.parent === intmat)
+    @test (A = Transpose(Adjoint(intvec))::Transpose{Int,Adjoint{Int,Vector{Int}}}; A.parent.parent === intvec)
+    @test (A = Transpose(Adjoint(intmat))::Transpose{Int,Adjoint{Int,Matrix{Int}}}; A.parent.parent === intmat)
 end
 
 @testset "Adjoint and Transpose basic AbstractArray functionality" begin
@@ -571,12 +576,22 @@ end
     @test repr(transpose([1f0,2f0])) == "transpose(Float32[1.0, 2.0])"
 end
 
+struct SVector4{T} <: AbstractArray{T,1}
+    x::NTuple{4, T}
+end
+Base.getindex(A::SVector4, ind::Int) = A.x[ind]
+Base.size(::SVector4) = (4,)
+
 @testset "strided transposes" begin
     for t in (Adjoint, Transpose)
         @test strides(t(rand(3))) == (3, 1)
+        check_strided_get(t(rand(3)))
         @test strides(t(rand(3,2))) == (3, 1)
+        check_strided_get(t(rand(3,2)))
         @test strides(t(view(rand(3, 2), :))) == (6, 1)
+        check_strided_get(t(view(rand(3, 2), :)))
         @test strides(t(view(rand(3, 2), :, 1:2))) == (3, 1)
+        check_strided_get(t(view(rand(3, 2), :, 1:2)))
 
         A = rand(3)
         @test pointer(t(A)) === pointer(A)
@@ -587,6 +602,10 @@ end
     @test_throws MethodError strides(Adjoint(rand(3, 2) .+ rand(3, 2).*im))
     @test strides(Transpose(rand(3) .+ rand(3).*im)) == (3, 1)
     @test strides(Transpose(rand(3, 2) .+ rand(3, 2).*im)) == (3, 1)
+    static_matrix = reshape(SVector4((1,2,3,4)), 2, 2)
+    # `strides` should fail here since elements need to be transposed.
+    @test Transpose(fill(static_matrix, 2, 2))[1,1] != static_matrix
+    @test_throws MethodError strides(Transpose(fill(static_matrix, 2, 2)))
 
     C = rand(3) .+ rand(3).*im
     @test_throws ErrorException pointer(Adjoint(C))
@@ -861,6 +880,34 @@ end
             @test op(A) == B
         end
     end
+end
+
+@testset "transpose!/adjoint! between vectors and matrices, and copy_adjoint!" begin
+    M = [1+im 2-im 3; 4 5im 6]
+    @test transpose!(zeros(Complex{Int}, 3), M[1:1, :]) == vec(M[1, :])
+    @test transpose!(zeros(Complex{Int}, 1, 3), vec(M[1, :])) == M[1:1, :]
+    # a source with cartesian indexing
+    @test adjoint!(zeros(Complex{Int}, 3), view(M, 1:1, :)) == conj(vec(M[1, :]))
+    B = zeros(Complex{Int}, 4, 4)
+    @test LinearAlgebra.copy_adjoint!(B, 2:4, 1:2, M, 1:2, 1:3) === B
+    @test B[2:4, 1:2] == M[1:2, 1:3]'
+    @test count(!iszero, B) == 6
+    @test_throws ArgumentError LinearAlgebra.copy_transpose!(B, 1:2, 1:2, M, 1:2, 1:3)
+    @test_throws ArgumentError LinearAlgebra.copy_transpose!(B, 1:3, 1:3, M, 1:2, 1:3)
+    # destination of a different shape: elements are copied in linear order
+    @test copyto!(zeros(Complex{Int}, 1, 6), transpose(M)) == reshape(vec(Matrix(transpose(M))), 1, 6)
+    @test copyto!(zeros(Complex{Int}, 1, 6), M') == reshape(vec(Matrix(M')), 1, 6)
+end
+
+@testset "lazily conjugated vectors and non-recursive dot" begin
+    v, w = [1+im, 2], [3, 4-im]
+    s = Adjoint(Transpose(v)) + Adjoint(Transpose(w))
+    @test s isa Adjoint{<:Any, <:Transpose}
+    @test s == Adjoint(Transpose(v + w))
+    # element types for which the product is not a BLAS dot
+    @test transpose([1, 2]) * [1.5, 2.5] == 6.5
+    @test transpose(Int[]) * Float64[] === 0.0
+    @test_throws DimensionMismatch transpose([1, 2]) * [1.0]
 end
 
 end # module TestAdjointTranspose

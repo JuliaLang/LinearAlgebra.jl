@@ -232,13 +232,13 @@ _shouldforwardindex(U::LowerTriangular, row::Integer, col::Integer) = row >= col
 _shouldforwardindex(U::UnitUpperTriangular, row::Integer, col::Integer) = row < col
 _shouldforwardindex(U::UnitLowerTriangular, row::Integer, col::Integer) = row > col
 
-Base.isassigned(A::UpperOrLowerTriangular, i::Int, j::Int) =
+Base.isassigned(A::UpperOrLowerTriangular, i::Signed, j::Signed) =
     _shouldforwardindex(A, i, j) ? isassigned(A.data, i, j) : true
 
-Base.isstored(A::UpperOrLowerTriangular, i::Int, j::Int) =
+Base.isstored(A::UpperOrLowerTriangular, i::Signed, j::Signed) =
     _shouldforwardindex(A, i, j) ? Base.isstored(A.data, i, j) : false
 
-@propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Int, j::Int) where {T}
+@propagate_inbounds function getindex(A::Union{UnitLowerTriangular{T}, UnitUpperTriangular{T}}, i::Signed, j::Signed) where {T}
     if _shouldforwardindex(A, i, j)
         A.data[i,j]
     else
@@ -246,7 +246,7 @@ Base.isstored(A::UpperOrLowerTriangular, i::Int, j::Int) =
         ifelse(i == j, oneunit(T), zero(T))
     end
 end
-@propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, i::Int, j::Int)
+@propagate_inbounds function getindex(A::Union{LowerTriangular, UpperTriangular}, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j]
     else
@@ -293,7 +293,7 @@ end
         lazy"cannot set index ($i, $j) on the diagonal of a $Tn matrix to a non-unit value ($x)"))
 end
 
-@propagate_inbounds function setindex!(A::UpperTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::UpperTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -307,7 +307,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::UnitUpperTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -325,7 +325,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::LowerTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::LowerTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -339,7 +339,7 @@ end
     return A
 end
 
-@propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Integer, j::Integer)
+@propagate_inbounds function setindex!(A::UnitLowerTriangular, x, i::Signed, j::Signed)
     if _shouldforwardindex(A, i, j)
         A.data[i,j] = x
     else
@@ -356,6 +356,9 @@ end
     end
     return A
 end
+
+_zero_triangular_half_str(::Type{<:UpperOrUnitUpperTriangular}) = "lower"
+_zero_triangular_half_str(::Type{<:LowerOrUnitLowerTriangular}) = "upper"
 
 @noinline function throw_setindex_structuralzero_error(T::DataType, @nospecialize(x))
     Ts = _zero_triangular_half_str(T)
@@ -1242,7 +1245,7 @@ for (TA, TB) in ((:AbstractTriangular, :AbstractMatrix),
     end
 end
 
-generic_matmatmul_NN!(C, A, B, alpha, beta) = generic_matmatmul!(C, 'N', 'N', A, B, alpha, beta)
+generic_matmatmul_NN!(C, A, B, alpha, beta) = mul!(C, 'N', 'N', A, B, alpha, beta)
 # Optimization for strided matrices, where we know that _generic_matmatmul! will be taken
 for (TA, TB) in ((:UpperOrLowerTriangularStrided, :StridedMatrix),
                     (:StridedMatrix, :UpperOrLowerTriangularStrided),
@@ -1263,6 +1266,7 @@ _ldiv!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
     generic_mattridiv!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
+ldiv!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _ldiv!(B, A, B)
 function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
     if istriu(A)
         _ldiv!(B, uppertriangular(A), B)
@@ -1270,6 +1274,7 @@ function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
         _ldiv!(B, lowertriangular(A), B)
     end
 end
+rdiv!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _rdiv!(A, A, B)
 function rdiv!(A::AbstractMatrix, B::AbstractTriangular)
     if istriu(B)
         _rdiv!(A, A, uppertriangular(B))
@@ -1303,6 +1308,10 @@ for (cty, aty, bty) in ((:UpperTriangular, :UpperTriangular, :UpperTriangular),
     end
 end
 
+# inverse is generally dense: only strided parents keep their array type
+_inv_identity(A::UpperOrLowerTriangularStrided, ::Type{S}) where {S} = copyto!(similar(A, S, size(A)), I)
+_inv_identity(A::AbstractTriangular, ::Type{S}) where {S} = Matrix{S}(I, size(A))
+
 for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
                             (:UnitLowerTriangular, 'L', 'U'),
                             (:UpperTriangular, 'U', 'N'),
@@ -1315,7 +1324,7 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
         function inv(A::$t{T}) where {T}
             S = typeof(inv(oneunit(T)))
             if S <: BlasFloat || S === T # i.e. A is unitless
-                $t(ldiv!(convert(AbstractArray{S}, A), Matrix{S}(I, size(A))))
+                $t(ldiv!(convert(AbstractArray{S}, A), _inv_identity(A, S)))
             else
                 J = (one(T)*I)(size(A, 1))
                 $t(ldiv!(similar(A, S, size(A)), A, J))
@@ -1358,11 +1367,13 @@ function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function,
     end
 end
 # division
-function generic_trimatdiv!(C::StridedVecOrMat{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVecOrMat) where {T<:BlasFloat}
+generic_trimatdiv!(C::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVector) where {T<:BlasFloat} =
+    BLAS.trsv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : copyto!(C, B))
+function generic_trimatdiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1
-        LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : _copy_or_copyto!(C, B))
+        BLAS.trsm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : _copy_or_copyto!(C, B))
     else # incompatible with LAPACK
-        @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
+        @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
 function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat}
@@ -1382,25 +1393,20 @@ end
 
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
-function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+# permute and scale, as for general matrices, have no effect on triangular ones
+function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data)))
+function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
+    eigvec_normalize!(LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A)))
 end
-function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = eigsortby)
-    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
+    vecs = eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
     return sorteig!(diag(A), vecs, sortby)[2]
 end
-function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; sortby = nothing)
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)')))
+function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix}; permute::Bool=true, scale::Bool=true, sortby = nothing)
+    eigvec_normalize!(LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A')))
 end
 
 ####################
@@ -1848,7 +1854,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
                 for i in axes(B,1)[2:end]
                     C[i,k] = oA \ B[i,k] - _ustrip(conj(A[i,1])) * C1
                 end
-                for j in axes(A,2)
+                for j in axes(A,2)[2:end]
                     Cj = C[j,k]
                     for i in j+1:lastindex(A,1)
                         C[i,k] -= _ustrip(conj(A[i,j])) * Cj
@@ -2114,8 +2120,8 @@ powm(A::LowerTriangular, p::Real) = copy(transpose(powm!(copy(transpose(A)), p::
 # Based on the code available at http://eprints.ma.man.ac.uk/1851/02/logm.zip,
 # Copyright (c) 2011, Awad H. Al-Mohy and Nicholas J. Higham
 # Julia version relicensed with permission from original authors
-log(A::UpperTriangular{T}) where {T<:BlasFloat} = log_quasitriu(A)
-log(A::UnitUpperTriangular{T}) where {T<:BlasFloat} = log_quasitriu(A)
+log(A::UpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(A))
+log(A::UnitUpperTriangular{T}) where {T<:Union{Real,Complex}} = log_quasitriu(float(A))
 log(A::LowerTriangular) = copy(transpose(log(copy(transpose(A)))))
 log(A::UnitLowerTriangular) = copy(transpose(log(copy(transpose(A)))))
 
@@ -2123,15 +2129,9 @@ function log_quasitriu(A0::AbstractMatrix{T}) where T<:BlasFloat
     # allocate real A if log(A) will be real and complex A otherwise
     checksquare(A0)
     if isreal(A0) && (!istriu(A0) || !any(x -> real(x) < zero(real(T)), diag(A0)))
-        A = T <: Complex ? real(A0) : copy(A0)
+        A = _log_quasitriu_copy(real(T), A0)
     else
-        A = T <: Complex ? copy(A0) : complex(A0)
-    end
-    if A0 isa UnitUpperTriangular
-        A = UpperTriangular(parent(A))
-        @inbounds for i in axes(A,1)
-            A[i,i] = 1
-        end
+        A = _log_quasitriu_copy(complex(T), A0)
     end
     Y0 = _log_quasitriu!(A0, A)
     # return complex result for complex input
@@ -2143,6 +2143,11 @@ function log_quasitriu(A0::AbstractMatrix{T}) where T<:BlasFloat
         return Y
     end
 end
+# The copy of A0 that _log_quasitriu! overwrites. For a triangular A0, it is upper triangular with
+# dense storage, also if the parent of A0 is banded, since the logarithm fills the upper triangle,
+# and it has zeros below the diagonal, which _sqrt_quasitriu! reads in the parent.
+_log_quasitriu_copy(::Type{S}, A0::Union{UpperTriangular,UnitUpperTriangular}) where {S} = UpperTriangular(Matrix{S}(A0))
+_log_quasitriu_copy(::Type{S}, A0::AbstractMatrix) where {S} = Matrix{S}(A0)
 # type-stable implementation of log_quasitriu
 # A is a copy of A0 that is overwritten while computing the result. It has the same eltype
 # as the result.
@@ -2409,24 +2414,26 @@ function _pow_superdiag_quasitriu!(A, A0, p)
         end
         Ak = t(A0[k,k])
         Akp1 = t(A0[k+1,k+1])
+        A0kkp1 = t(A0[k,k+1])
 
         Akp = Ak^p
         Akp1p = Akp1^p
 
         if Ak == Akp1
-            A[k,k+1] = p * A0[k,k+1] * Ak^(p-1)
+            A[k,k+1] = p * A0kkp1 * Ak^(p-1)
         elseif 2 * abs(Ak) < abs(Akp1) || 2 * abs(Akp1) < abs(Ak) || iszero(Akp1 + Ak)
-            A[k,k+1] = A0[k,k+1] * (Akp1p - Akp) / (Akp1 - Ak)
+            A[k,k+1] = A0kkp1 * (Akp1p - Akp) / (Akp1 - Ak)
         else
             logAk = log(Ak)
             logAkp1 = log(Akp1)
             z = (Akp1 - Ak)/(Akp1 + Ak)
             if abs(z) > 1
-                A[k,k+1] = A0[k,k+1] * (Akp1p - Akp) / (Akp1 - Ak)
+                A[k,k+1] = A0kkp1 * (Akp1p - Akp) / (Akp1 - Ak)
             else
                 w = atanh(z) + im * pi * (unw(logAkp1-logAk) - unw(log1p(z)-log1p(-z)))
                 dd = 2 * exp(p*(logAk+logAkp1)/2) * sinh(p*w) / (Akp1 - Ak);
-                A[k,k+1] = A0[k,k+1] * dd
+                # for a real A, dd is real, unless an entry is NaN
+                A[k,k+1] = A0kkp1 * (t <: Real ? real(dd) : dd)
             end
         end
         k += 1
@@ -2985,16 +2992,17 @@ end
 # End of auxiliary functions for matrix square root
 
 # Generic eigensystems
-eigvals(A::AbstractTriangular; sortby = eigsortby) = sorteig!(diag(A), sortby)
+# permute and scale, as for general matrices, have no effect on triangular ones
+eigvals(A::AbstractTriangular; permute::Bool=true, scale::Bool=true, sortby = eigsortby) = sorteig!(diag(A), sortby)
 # fallback for unknown types
-function eigvecs(A::AbstractTriangular{<:BlasFloat}; sortby = eigsortby)
+function eigvecs(A::AbstractTriangular{<:BlasFloat}; permute::Bool=true, scale::Bool=true, sortby = eigsortby)
     if istriu(A)
         eigvecs(UpperTriangular(Matrix(A)); sortby)
     else # istril(A)
         eigvecs(LowerTriangular(Matrix(A)); sortby)
     end
 end
-function eigvecs(A::AbstractTriangular{T}; sortby = eigsortby) where T
+function eigvecs(A::AbstractTriangular{T}; permute::Bool=true, scale::Bool=true, sortby = eigsortby) where T
     TT = promote_type(T, Float32)
     if TT <: BlasFloat
         return eigvecs(convert(AbstractMatrix{TT}, A); sortby)
@@ -3008,8 +3016,11 @@ logdet(A::UnitUpperTriangular{T}) where {T} = zero(T)
 logdet(A::UnitLowerTriangular{T}) where {T} = zero(T)
 logabsdet(A::UnitUpperTriangular{T}) where {T} = zero(T), one(T)
 logabsdet(A::UnitLowerTriangular{T}) where {T} = zero(T), one(T)
-det(A::UpperTriangular) = prod(diag(A.data))
-det(A::LowerTriangular) = prod(diag(A.data))
+function det(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
+    S = promote_type(T, typeof((one(T) * zero(T) + zero(T)) / one(T)))
+    return prod(Base.Fix1(convert, S), diagview(A.data); init=one(S))
+end
+det(A::Union{UpperTriangular{BigInt},LowerTriangular{BigInt}}) = prod(diagview(A.data))
 function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     sgn = one(T)
     abs_det = zero(real(T))
@@ -3021,7 +3032,7 @@ function logabsdet(A::Union{UpperTriangular{T},LowerTriangular{T}}) where T
     return abs_det, sgn
 end
 
-eigen(A::AbstractTriangular; sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
+eigen(A::AbstractTriangular; permute::Bool=true, scale::Bool=true, sortby = eigsortby) = Eigen(sorteig!(eigvals(A; sortby=nothing), eigvecs(A; sortby=nothing), sortby)...)
 
 # Generic singular systems
 for func in (:svd, :svd!, :svdvals)

@@ -27,7 +27,10 @@ L factor:
 2×2 Matrix{Float64}:
  -8.60233   0.0
   4.41741  -0.697486
-Q factor: 2×2 LinearAlgebra.LQPackedQ{Float64, Matrix{Float64}, Vector{Float64}}
+Q factor:
+2×2 LinearAlgebra.LQPackedQ{Float64, Matrix{Float64}, Vector{Float64}}:
+ -0.581238  -0.813733
+ -0.813733   0.581238
 
 julia> S.L * S.Q
 2×2 Matrix{Float64}:
@@ -70,6 +73,24 @@ matrix as a workspace. See also [`lq`](@ref).
 """
 lq!(A::StridedMatrix{<:BlasFloat}) = LQ(LAPACK.gelqf!(A)...)
 
+# Generic counterpart of LAPACK's `gelqf!`. Like `gelqf!`, it reflects the conjugated rows,
+# so that the reflector `vₖ` of row `k` ends up stored conjugated in `A[k, k+1:n]`, matching
+# what `LQPackedQ` expects.
+function lq!(A::AbstractMatrix{T}) where {T}
+    require_one_based_indexing(A)
+    m, n = size(A)
+    τ = zeros(T, min(m,n))
+    for k = 1:min(n - 1 + !(T<:Real), m)
+        x = view(A, k, k:n)
+        T <: Real || conj!(x)
+        τk = reflector!(x)
+        τ[k] = τk
+        reflectorApply!(view(A, k+1:m, k:n), x, τk)
+        T <: Real || conj!(x)
+    end
+    LQ(A, τ)
+end
+
 """
     lq(A) -> S::LQ
 
@@ -96,7 +117,10 @@ L factor:
 2×2 Matrix{Float64}:
  -8.60233   0.0
   4.41741  -0.697486
-Q factor: 2×2 LinearAlgebra.LQPackedQ{Float64, Matrix{Float64}, Vector{Float64}}
+Q factor:
+2×2 LinearAlgebra.LQPackedQ{Float64, Matrix{Float64}, Vector{Float64}}:
+ -0.581238  -0.813733
+ -0.813733   0.581238
 
 julia> S.L * S.Q
 2×2 Matrix{Float64}:
@@ -152,7 +176,7 @@ function show(io::IO, mime::MIME{Symbol("text/plain")}, F::LQ)
     summary(io, F); println(io)
     println(io, "L factor:")
     show(io, mime, F.L)
-    print(io, "\nQ factor: ")
+    println(io, "\nQ factor:")
     show(io, mime, F.Q)
 end
 

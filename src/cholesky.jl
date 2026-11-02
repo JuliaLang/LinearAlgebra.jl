@@ -178,7 +178,7 @@ Base.iterate(C::CholeskyPivoted, ::Val{:done}) = nothing
 
 
 # make a copy that allow inplace Cholesky factorization
-choltype(A) = promote_type(typeof(sqrt(oneunit(eltype(A)))), Float32)
+choltype(A) = promote_type(typeof(sqrt(oneunit(_valeltype(A)))), Float32)
 cholcopy(A::AbstractMatrix) = eigencopy_oftype(A, choltype(A))
 
 # _chol!. Internal methods for calling unpivoted Cholesky
@@ -880,74 +880,94 @@ rank(C::CholeskyPivoted) = C.rank
 
 """
     lowrankupdate!(C::Cholesky, v::AbstractVector) -> CC::Cholesky
+    lowrankupdate!(C::Cholesky, V::AbstractMatrix) -> CC::Cholesky
 
 Update a Cholesky factorization `C` with the vector `v`. If `A = C.U'C.U` then
 `CC = cholesky(C.U'C.U + v*v')` but the computation of `CC` only uses `O(n^2)`
 operations. The input factorization `C` is updated in place such that on exit `C == CC`.
 The vector `v` is destroyed during the computation.
+
+For a matrix `V`, `CC = cholesky(C.U'C.U + V*V')`, the same as updating `C` with one
+column of `V` after the other, but in a single pass over `C`. `V` is destroyed.
+
+!!! compat "Julia 1.14"
+    Updating with a matrix requires at least Julia 1.14.
 """
-function lowrankupdate!(C::Cholesky, v::AbstractVector)
-    A = C.factors
-    n = length(v)
-    if size(C, 1) != n
-        throw(DimensionMismatch("updating vector must fit size of factorization"))
-    end
-    if C.uplo == 'U'
-        conj!(v)
-    end
-
-    for i = 1:n
-
-        # Compute Givens rotation
-        c, s, r = givensAlgorithm(A[i,i], v[i])
-
-        # Store new diagonal element
-        A[i,i] = r
-
-        # Update remaining elements in row/column
-        if C.uplo == 'U'
-            for j = i + 1:n
-                Aij = A[i,j]
-                vj  = v[j]
-                A[i,j]  =   c*Aij + s*vj
-                v[j]    = -s'*Aij + c*vj
-            end
-        else
-            for j = i + 1:n
-                Aji = A[j,i]
-                vj  = v[j]
-                A[j,i]  =   c*Aji + s*vj
-                v[j]    = -s'*Aji + c*vj
-            end
-        end
-    end
-    return C
-end
+lowrankupdate!(C::Cholesky, V::AbstractVecOrMat) = _lowrankupdate!(_lowrankupdate_row!, C, V)
 
 """
     lowrankdowndate!(C::Cholesky, v::AbstractVector) -> CC::Cholesky
+    lowrankdowndate!(C::Cholesky, V::AbstractMatrix) -> CC::Cholesky
 
 Downdate a Cholesky factorization `C` with the vector `v`. If `A = C.U'C.U` then
 `CC = cholesky(C.U'C.U - v*v')` but the computation of `CC` only uses `O(n^2)`
 operations. The input factorization `C` is updated in place such that on exit `C == CC`.
 The vector `v` is destroyed during the computation.
+
+For a matrix `V`, `CC = cholesky(C.U'C.U - V*V')`, the same as downdating `C` with one
+column of `V` after the other, but in a single pass over `C`. `V` is destroyed.
+
+!!! compat "Julia 1.14"
+    Downdating with a matrix requires at least Julia 1.14.
 """
-function lowrankdowndate!(C::Cholesky, v::AbstractVector)
+lowrankdowndate!(C::Cholesky, V::AbstractVecOrMat) = _lowrankupdate!(_lowrankdowndate_row!, C, V)
+
+# The rotation of row `i` and column `l` of `V` only depends on the rotations of the
+# previous columns in the same row and of the previous rows with the same column. So all
+# columns are applied to one row of the factor after the other: the factor is traversed
+# once, and the result is the same as applying the columns one after the other.
+function _lowrankupdate!(update_row!, C::Cholesky, V::AbstractVecOrMat)
     A = C.factors
-    n = length(v)
+    n = size(V, 1)
     if size(C, 1) != n
         throw(DimensionMismatch("updating vector must fit size of factorization"))
     end
     if C.uplo == 'U'
-        conj!(v)
+        conj!(V)
+        for i = 1:n
+            update_row!(view(A, i, :), V, i)
+        end
+    else
+        for i = 1:n
+            update_row!(view(A, :, i), V, i)
+        end
     end
+    return C
+end
 
-    for i = 1:n
-
-        Aii = A[i,i]
+# Applies the rotations of all columns of `V` to row `i` of the factor, whose elements
+# `i:n` are given in `r` (a row of `U` or a column of `L`). `_lowrankupdate!` has checked
+# that `r` and the columns of `V` have `n` elements.
+@inline function _lowrankupdate_row!(r, V, i)
+    n = size(V, 1)
+    for l in axes(V, 2)
+        v = view(V, :, l)
 
         # Compute Givens rotation
-        s = conj(v[i]/Aii)
+        c, s, rii = givensAlgorithm(r[i], v[i])
+
+        # Store new diagonal element
+        r[i] = rii
+
+        # Update remaining elements in row/column
+        @inbounds for j = i + 1:n
+            rj = r[j]
+            vj = v[j]
+            r[j] =   c*rj + s*vj
+            v[j] = -s'*rj + c*vj
+        end
+    end
+    return r
+end
+
+@inline function _lowrankdowndate_row!(r, V, i)
+    n = size(V, 1)
+    for l in axes(V, 2)
+        v = view(V, :, l)
+        rii = r[i]
+
+        # Compute Givens rotation
+        s = conj(v[i]/rii)
         s2 = abs2(s)
         if s2 > 1
             throw(PosDefException(i))
@@ -955,45 +975,44 @@ function lowrankdowndate!(C::Cholesky, v::AbstractVector)
         c = sqrt(1 - abs2(s))
 
         # Store new diagonal element
-        A[i,i] = c*Aii
+        r[i] = c*rii
 
         # Update remaining elements in row/column
-        if C.uplo == 'U'
-            for j = i + 1:n
-                vj = v[j]
-                Aij = (A[i,j] - s*vj)/c
-                A[i,j] = Aij
-                v[j] = -s'*Aij + c*vj
-            end
-        else
-            for j = i + 1:n
-                vj = v[j]
-                Aji = (A[j,i] - s*vj)/c
-                A[j,i] = Aji
-                v[j] = -s'*Aji + c*vj
-            end
+        @inbounds for j = i + 1:n
+            vj = v[j]
+            rj = (r[j] - s*vj)/c
+            r[j] = rj
+            v[j] = -s'*rj + c*vj
         end
     end
-    return C
+    return r
 end
 
 """
     lowrankupdate(C::Cholesky, v::AbstractVector) -> CC::Cholesky
+    lowrankupdate(C::Cholesky, V::AbstractMatrix) -> CC::Cholesky
 
 Update a Cholesky factorization `C` with the vector `v`. If `A = C.U'C.U`
 then `CC = cholesky(C.U'C.U + v*v')` but the computation of `CC` only uses
-`O(n^2)` operations.
+`O(n^2)` operations. For a matrix `V`, `CC = cholesky(C.U'C.U + V*V')`.
+
+!!! compat "Julia 1.14"
+    Updating with a matrix requires at least Julia 1.14.
 """
-lowrankupdate(C::Cholesky, v::AbstractVector) = lowrankupdate!(copy(C), copy(v))
+lowrankupdate(C::Cholesky, V::AbstractVecOrMat) = lowrankupdate!(copy(C), copy(V))
 
 """
     lowrankdowndate(C::Cholesky, v::AbstractVector) -> CC::Cholesky
+    lowrankdowndate(C::Cholesky, V::AbstractMatrix) -> CC::Cholesky
 
 Downdate a Cholesky factorization `C` with the vector `v`. If `A = C.U'C.U`
 then `CC = cholesky(C.U'C.U - v*v')` but the computation of `CC` only uses
-`O(n^2)` operations.
+`O(n^2)` operations. For a matrix `V`, `CC = cholesky(C.U'C.U - V*V')`.
+
+!!! compat "Julia 1.14"
+    Downdating with a matrix requires at least Julia 1.14.
 """
-lowrankdowndate(C::Cholesky, v::AbstractVector) = lowrankdowndate!(copy(C), copy(v))
+lowrankdowndate(C::Cholesky, V::AbstractVecOrMat) = lowrankdowndate!(copy(C), copy(V))
 
 function diag(C::Cholesky{T}, k::Int = 0) where {T}
     N = size(C, 1)
