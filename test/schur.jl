@@ -329,7 +329,7 @@ end
     S = schur([1.0 0 0; 0 1 0; 0 0 2])
     @test_logs (:warn, r"coinciding eigenvalues") ordschur!(copy(S), [2, 1, 3])
 end
-      
+
 @testset "Infs and NaNs" begin
     @testset for elty in (Float64, ComplexF64)
         # LAPACK's Schur routine may take very long to fail for NaNs
