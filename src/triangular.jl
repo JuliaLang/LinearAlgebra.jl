@@ -1382,7 +1382,7 @@ end
 function generic_trimatdiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat}
     if stride(C,1) == stride(A,1) == 1 && _fullstride2(C) && _fullstride2(A)
         BLAS.trsm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : _copy_or_copyto!(C, B))
-    else # incompatible with LAPACK
+    else # incompatible with BLAS
         @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
