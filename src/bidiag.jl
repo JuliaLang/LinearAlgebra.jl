@@ -258,6 +258,9 @@ end
 similar(B::Bidiagonal, ::Type{T}) where {T} = Bidiagonal(similar(B.dv, T), similar(B.ev, T), B.uplo)
 similar(B::Bidiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = similar(B.dv, T, dims)
 
+Base.dataids(B::Bidiagonal) = (Base.dataids(B.dv)..., Base.dataids(B.ev)...)
+Base.unaliascopy(B::Bidiagonal) = Bidiagonal(Base.unaliascopy(B.dv), Base.unaliascopy(B.ev), B.uplo)
+
 tr(B::Bidiagonal) = sum(B.dv)
 
 function kron(A::Diagonal, B::Bidiagonal)

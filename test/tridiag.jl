@@ -570,6 +570,33 @@ end
     @test all(==(0.1), f)
 end
 
+@testset "dataids and unaliascopy" begin
+    # structured matrices whose bands are columns of M
+    symtri(M) = SymTridiagonal(view(M, 1:4, 1), view(M, 1:3, 2))
+    tri(M) = Tridiagonal(view(M, 1:3, 1), view(M, 1:4, 2), view(M, 1:3, 3))
+    for mk in (symtri, tri)
+        M = rand(4, 4)
+        A = mk(M)
+        @test Base.mightalias(M, A)
+        @test Base.mightalias(view(M, 1:3, 1), A) # aliasing with a single band
+        @test !Base.mightalias(M, mk(copy(M)))
+        U = Base.unaliascopy(A)
+        @test U isa typeof(A) && U == A && !Base.mightalias(M, U)
+        # copying and broadcasting into the memory backing the source
+        M0 = copy(M)
+        copyto!(M, mk(M))
+        @test M == mk(M0)
+        M = rand(4, 4); M0 = copy(M)
+        M .= 2 .* mk(M) .- M
+        @test M ≈ 2 .* mk(M0) .- M0
+    end
+    # du2 is part of the data of a factorized Tridiagonal
+    F = lu(Tridiagonal(rand(4), rand(5) .+ 3, rand(4))).factors
+    @test Base.mightalias(F.du2, F)
+    U = Base.unaliascopy(F)
+    @test U isa typeof(F) && isdefined(U, :du2) && U.du2 == F.du2 && !Base.mightalias(F, U)
+end
+
 @testset "Issue #26994 (and the empty case)" begin
     T = SymTridiagonal([1.0],Float64[])
     x = ones(1)
