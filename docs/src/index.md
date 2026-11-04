@@ -299,6 +299,7 @@ of the Linear Algebra documentation.
 | `Cholesky`         | [Cholesky factorization](https://en.wikipedia.org/wiki/Cholesky_decomposition)                                 |
 | `CholeskyPivoted`  | [Pivoted](https://en.wikipedia.org/wiki/Pivot_element) Cholesky factorization                                  |
 | `LDLt`             | [LDL(T) factorization](https://en.wikipedia.org/wiki/Cholesky_decomposition#LDL_decomposition)                 |
+| `LDLtPivoted`      | Block [LDL(T) factorization](https://en.wikipedia.org/wiki/Cholesky_decomposition#LDL_decomposition) with `1×1` and `2×2` pivots |
 | `LU`               | [LU factorization](https://en.wikipedia.org/wiki/LU_decomposition)                                             |
 | `QR`               | [QR factorization](https://en.wikipedia.org/wiki/QR_decomposition)                                             |
 | `QRCompactWY`      | Compact WY form of the QR factorization                                                                        |
@@ -434,6 +435,7 @@ LinearAlgebra.NoPivot
 LinearAlgebra.RowNonZero
 LinearAlgebra.RowMaximum
 LinearAlgebra.ColumnNorm
+LinearAlgebra.BunchPivot
 ```
 
 ## Standard functions
@@ -487,6 +489,7 @@ LinearAlgebra.lowrankdowndate
 LinearAlgebra.lowrankupdate!
 LinearAlgebra.lowrankdowndate!
 LinearAlgebra.LDLt
+LinearAlgebra.LDLtPivoted
 LinearAlgebra.ldlt
 LinearAlgebra.ldlt!
 LinearAlgebra.QR
