@@ -1336,4 +1336,10 @@ end
     @test_throws "asymmetric value" LinearAlgebra.fillband!(SymTridiagonal([M, M], [M]), [1 2; 3 4], 0, 0)
 end
 
+@testset "eigen with no eigenvalues in the interval" begin
+    F = eigen(SymTridiagonal([1.0, 2.0], [0.5]), 10.0, 11.0)
+    @test isempty(F.values)
+    @test size(F.vectors) == (2, 0)
+end
+
 end # module TestTridiagonal

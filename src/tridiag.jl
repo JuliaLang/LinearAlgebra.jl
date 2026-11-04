@@ -294,6 +294,7 @@ function syevr_tri_eigen(range::AbstractChar, dv::AbstractVector{T}, ev::Abstrac
     end
     # note that these functions do not actually modify dv, ev, despite the !
     values, iblock, isplit = LAPACK.stebz!(range, 'B', T(vl), T(vu), il, iu, -1.0, dv, ev)
+    isempty(values) && return Eigen(values, Matrix{T}(undef, length(dv), 0))
     vectors = LAPACK.stein!(dv, ev, values, iblock, isplit)
     return Eigen(sorteig!(values, vectors, sortby)...)
 end
