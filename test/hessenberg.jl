@@ -356,6 +356,8 @@ end
         @test svdvals(H) ≈ svdvals(M)
         F = svd(H)
         @test F.S ≈ svdvals(M)
+        # Float16 is computed in Float32, and the result converted back
+        @test eltype(svdvals(H)) == eltype(F.S) == real(T) && eltype(F.U) == eltype(F.Vt) == T
         @test F.U * Diagonal(F.S) * F.Vt ≈ M
         @test size(svd(H; full=true).U) == (4, 4)
         @test cond(H) ≈ cond(M)
