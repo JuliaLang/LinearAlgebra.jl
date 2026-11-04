@@ -1168,6 +1168,20 @@ end
     end
 end
 
+@testset "3-arg dot: zeros in y are not strong zeros (#1836)" begin
+    n = 3
+    @testset for TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+        for i in 1:n, j in 1:n
+            A = ones(n, n); A[i, j] = Inf
+            T = TT(A)
+            # only test entries that are actually stored (and not implicitly unit)
+            isinf(T[i, j]) || continue
+            y = ones(n); y[j] = 0
+            @test isnan(dot(ones(n), T, y))
+        end
+    end
+end
+
 @testset "eigvecs and eigen don't overwrite the parent" begin
     for T in (Float64, ComplexF64), TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
         M = T[1 2 3; 4 5 6; 7 8 10]
