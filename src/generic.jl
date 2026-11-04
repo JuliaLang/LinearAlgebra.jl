@@ -1275,11 +1275,6 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     return qr(convert(AbstractArray{TA}, A), ColumnNorm()) \ B
 end
 
-function (\)(a::AbstractVector, b::AbstractArray)
-    den = sum(abs2, a)
-    goodden = den == 0 ? one(den) : den
-    return _pinvadjoint(a) * b / goodden
-end
 """
     A / B
 
@@ -1310,11 +1305,6 @@ function (/)(A::AbstractVecOrMat, B::AbstractVecOrMat)
 end
 # \(A::StridedMatrix,x::Number) = inv(A)*x Should be added at some point when the old elementwise version has been deprecated long enough
 # /(x::Number,A::StridedMatrix) = x*inv(A)
-function (/)(x::Number, v::AbstractVector)
-    den = sum(abs2, v)
-    goodden = den == 0 ? one(den) : den
-    return (x / goodden) * _pinvadjoint(v)
-end
 
 cond(x::Number) = iszero(x) ? Inf : 1.0
 cond(x::Number, p) = cond(x)
