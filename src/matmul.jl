@@ -747,12 +747,13 @@ Base.@constprop :aggressive function gemv!(y::StridedVector{T}, tA::AbstractChar
     tA_uc = _uppercase(tA) # potentially convert a WrapperChar to a Char
     if alpha isa Union{Bool,T} && beta isa Union{Bool,T} &&
         stride(A, 1) == 1 && _fullstride2(A, abs) &&
-        !iszero(stride(x, 1)) && # We only check input's stride here.
+        !iszero(stride(x, 1)) # We only check input's stride here.
         if tA_uc in ('N', 'T', 'C')
             return BLAS.gemv!(tA, alpha, A, x, beta, y)
-        elseif tA_uc == 'S'
+        # unlike gemv!, symv! and hemv! do not support a negative stride(A, 2)
+        elseif tA_uc == 'S' && _fullstride2(A)
             return BLAS.symv!(tA == 'S' ? 'U' : 'L', alpha, A, x, beta, y)
-        elseif tA_uc == 'H'
+        elseif tA_uc == 'H' && _fullstride2(A)
             return BLAS.hemv!(tA == 'H' ? 'U' : 'L', alpha, A, x, beta, y)
         end
     end
