@@ -452,6 +452,10 @@ Factorization{T}(A::QR) where {T} = QR{T}(A)
 QRCompactWY{T}(A::QRCompactWY) where {T} = QRCompactWY(convert(AbstractMatrix{T}, A.factors), convert(AbstractMatrix{T}, A.T))
 Factorization{T}(A::QRCompactWY{T}) where {T} = A
 Factorization{T}(A::QRCompactWY) where {T} = QRCompactWY{T}(A)
+QR(F::QRCompactWY) = QR(copy(F.factors), _wy_to_tau(F.T))
+QRCompactWY(F::QR; blocksize::Integer=36) = QRCompactWY(copy(F.factors), _tau_to_wy(F.factors, F.τ, blocksize))
+convert(::Type{QR}, F::QRCompactWY) = QR(F)
+convert(::Type{QRCompactWY}, F::QR) = QRCompactWY(F)
 AbstractMatrix(F::Union{QR,QRCompactWY}) = F.Q * F.R
 AbstractArray(F::Union{QR,QRCompactWY}) = AbstractMatrix(F)
 Matrix(F::Union{QR,QRCompactWY}) = Array(AbstractArray(F))
@@ -463,6 +467,40 @@ AbstractMatrix(F::QRPivoted) = (F.Q * F.R)[:,invperm(F.p)]
 AbstractArray(F::QRPivoted) = AbstractMatrix(F)
 Matrix(F::QRPivoted) = Array(AbstractArray(F))
 Array(F::QRPivoted) = Matrix(F)
+
+# The diagonals of the blocks `T_j` of the compact WY representation hold the `τᵢ`.
+function _wy_to_tau(T::AbstractMatrix)
+    nb, k = size(T)
+    τ = similar(T, k)
+    for j in 1:k
+        τ[j] = T[mod1(j, nb), j]
+    end
+    return τ
+end
+
+# Construct the `nb`×`k` matrix `T` of the compact WY representation from the reflectors
+# stored in `factors` and `τ`, with the same blocking as LAPACK's `geqrt`; within each
+# block, `T_j` is built column by column as in `geqrt2`.
+function _tau_to_wy(factors::AbstractMatrix, τ::AbstractVector, blocksize::Integer)
+    require_one_based_indexing(factors, τ)
+    blocksize ≥ 1 || throw(ArgumentError(lazy"blocksize must be positive, got $blocksize"))
+    m = size(factors, 1)
+    k = length(τ)
+    nb = min(blocksize, k)
+    T = fill!(similar(factors, nb, k), zero(eltype(factors)))
+    for i0 in 1:max(nb, 1):k, j in i0:min(i0 + nb - 1, k)
+        i = j - i0 + 1
+        T[i, j] = τ[j]
+        i == 1 && continue
+        # T[1:i-1, j] = -τⱼ Tⱼ V[:, i0:j-1]' vⱼ, where vⱼ has a unit entry in row j
+        ti = view(T, 1:i-1, j)
+        ti .= adjoint.(view(factors, j, i0:j-1))
+        mul!(ti, view(factors, j+1:m, i0:j-1)', view(factors, j+1:m, j), true, true)
+        lmul!(UpperTriangular(view(T, 1:i-1, i0:j-1)), ti)
+        ti .*= -τ[j]
+    end
+    return T
+end
 
 function show(io::IO, mime::MIME{Symbol("text/plain")}, F::Union{QR, QRCompactWY, QRPivoted})
     summary(io, F); println(io)
