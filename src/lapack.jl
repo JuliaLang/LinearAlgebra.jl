@@ -3514,7 +3514,7 @@ for (posv, potrf, potri, potrs, pstrf, elty, rtyp) in
             n = checksquare(A)
             chkuplo(uplo)
             piv  = similar(A, BlasInt, n)
-            rank = Vector{BlasInt}(undef, 1)
+            rank = zeros(BlasInt, 1)
             work = Vector{$rtyp}(undef, 2n)
             info = Ref{BlasInt}()
             ccall((@blasfunc($pstrf), libblastrampoline), Cvoid,
