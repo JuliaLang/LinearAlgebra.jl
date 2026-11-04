@@ -170,7 +170,7 @@ eigvec_normalize!(X::AbstractMatrix) = (foreach(eigvec_normalize!, eachcol(X)); 
     eigen!(A; permute, scale, sortby)
     eigen!(A, B; sortby)
     eigen!(A::Union{SymTridiagonal, Hermitian, Symmetric}, vl, vu)
-    eigen!(A::Union{SymTridiagonal, Hermitian, Symmetric}, irange) 
+    eigen!(A::Union{SymTridiagonal, Hermitian, Symmetric}, irange)
 
 Same as [`eigen`](@ref), but saves space by overwriting the input `A` (and `B`), instead of
 creating a copy.
