@@ -590,6 +590,10 @@ end
         M .= 2 .* mk(M) .- M
         @test M ≈ 2 .* mk(M0) .- M0
     end
+    # empty arrays may share their memory address, so empty bands must not alias
+    @test !Base.mightalias(SymTridiagonal([1.0], Float64[]), SymTridiagonal([2.0], Float64[]))
+    @test !Base.mightalias(Tridiagonal(Float64[], [1.0], Float64[]), Tridiagonal(Float64[], [2.0], Float64[]))
+    @test !Base.mightalias(lu(Tridiagonal([1.0], [2.0, 3.0], [4.0])).factors, Tridiagonal(Float64[], [2.0], Float64[]))
     # du2 is part of the data of a factorized Tridiagonal
     F = lu(Tridiagonal(rand(4), rand(5) .+ 3, rand(4))).factors
     @test Base.mightalias(F.du2, F)

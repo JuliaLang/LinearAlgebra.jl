@@ -1395,6 +1395,8 @@ end
     @test !Base.mightalias(M, Bidiagonal(M[1:4, 1], M[1:3, 2], :L))
     U = Base.unaliascopy(B)
     @test U isa typeof(B) && U == B && U.uplo == 'L' && !Base.mightalias(M, U)
+    # empty arrays may share their memory address, so empty bands must not alias
+    @test !Base.mightalias(Bidiagonal([1.0], Float64[], :U), Bidiagonal([2.0], Float64[], :L))
     # copying and broadcasting into the memory backing the source
     M0 = copy(M)
     copyto!(M, B)
