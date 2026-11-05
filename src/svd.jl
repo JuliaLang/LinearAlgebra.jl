@@ -131,6 +131,23 @@ function _svd!(A::StridedMatrix{T}, full::Bool, alg::QRIteration) where {T<:Blas
     u, s, vt = LAPACK.gesvd!(c, c, A)
 end
 
+# From `eigen` output `A = Q Λ Q'` (or `Q Λ Qᴴ`), build `SVD(U, σ, Vt)` such that
+# `U * Diagonal(σ) * Vt ≈ A`. Uses the V-signed convention: `U = Q`, `V = Q * D`
+# where `D_ii = -1` iff `λ_i < 0`. Mutates `vals` and `vecs` in place.
+function _svd_from_eigen!(vals::AbstractVector{<:Real}, vecs::AbstractMatrix)
+    p = sortperm(vals; by=abs, rev=true)
+    permute!(vals, p)
+    Base.permutecols!!(vecs, p)
+    V = copy(vecs)
+    @inbounds for i in eachindex(vals)
+        if vals[i] < 0
+            vals[i] = -vals[i]
+            for j in axes(V, 1); V[j,i] = -V[j,i]; end
+        end
+    end
+    return SVD(vecs, vals, V')
+end
+
 # count positive singular values S ≥ given tolerances, S assumed sorted
 function _count_svdvals(S, atol::Number, rtol::Real)
     isempty(S) && return 0

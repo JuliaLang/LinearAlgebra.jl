@@ -408,6 +408,23 @@ function svdvals(A::SymTridiagonal{T}) where {T<:Real}
     return sort!(map!(abs, vals, vals); rev=true)
 end
 
+function svd(A::SymTridiagonal{T};
+             full::Bool = false,
+             alg::Algorithm = default_svd_alg(A),
+             atol::Real = 0, rtol::Real = 0) where {T<:Real}
+    F = svd!(copymutable_oftype(A, eigtype(T)); full, alg, atol, rtol)
+    return T <: Float16 ? SVD{T}(F) : F
+end
+
+function svd!(A::SymTridiagonal{<:Real};
+              full::Bool = false,
+              alg::Algorithm = default_svd_alg(A),
+              atol::Real = 0, rtol::Real = 0)
+    F = eigen!(A)
+    F = _tohalf(T, eigen!(A))
+    return _svd_from_eigen!(F.values, F.vectors)
+end
+
 # tril and triu
 
 Base.@constprop :aggressive function istriu(M::SymTridiagonal, k::Integer=0)
