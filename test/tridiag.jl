@@ -1373,4 +1373,28 @@ end
     @test size(F.vectors) == (2, 0)
 end
 
+@testset "svdvals(::SymTridiagonal)" begin
+    for T in (Float32, Float64)
+        n = 10
+        A = SymTridiagonal(randn(T, n), randn(T, n - 1))
+        s = svdvals(A)
+        @test s ≈ svdvals(Matrix(A))
+        @test issorted(s; rev=true)
+        @test eltype(s) == T
+
+        s! = svdvals!(copy(A))
+        @test s! == s
+    end
+
+    # Int: eigtype promotion and inference through the non-mutating entry point
+    Ai = SymTridiagonal([1, 2, 3, 4], [1, 1, 1])
+    @test @inferred(svdvals(Ai)) isa Vector{Float64}
+    @test svdvals(Ai) ≈ svdvals(Matrix(Ai))
+
+    # empty: guard must fire before eigen (eigen([]) throws in LAPACK)
+    Ae = SymTridiagonal(Float64[], Float64[])
+    @test isempty(svdvals(Ae))
+    @test @inferred(svdvals(SymTridiagonal(Int[], Int[]))) isa Vector{Float64}
+end
+
 end # module TestTridiagonal
