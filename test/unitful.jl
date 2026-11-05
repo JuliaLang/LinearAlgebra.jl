@@ -341,4 +341,12 @@ end
     end
 end
 
+@testset "normalize of a dimensionful vector, issue #736" begin
+    # `norm` works fine on dimensionful vectors, returning a dimensionful result
+    v = Furlong.([3.0, 4.0])
+    @test norm(v, Inf) == Furlong(4.0)
+    # `normalize` should likewise handle them, even though the result is dimensionless
+    @test normalize(v, Inf)::Vector{<:Furlong{0}} == Furlong{0}.([0.75, 1.0])
+end
+
 end # module TestUnitfulLinAlg
