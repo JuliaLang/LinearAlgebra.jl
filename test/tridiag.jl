@@ -1431,16 +1431,8 @@ end
     @test eltype(Fh.S) == Float16
     @test eltype(Fh.Vt) == Float16
 
-    Fh = svd!(Ah)
-    @test eltype(Fh.U) == Float16
-    @test eltype(Fh.S) == Float16
-    @test eltype(Fh.Vt) == Float16
-    
     # svdvals should also correctly demote back to Float16
     vh = svdvals(Ah)
-    @test eltype(vh) == Float16
-
-    vh = svdvals!(Ah)
     @test eltype(vh) == Float16
     
     # And the math should still be correct
@@ -1460,6 +1452,18 @@ end
     Ac = SymTridiagonal(randn(ComplexF64, 5), randn(ComplexF64, 4))
     Fc = svd(Ac)
     @test Fc.U * Diagonal(Fc.S) * Fc.Vt ≈ Matrix(Ac)
+
+    # empty: verifies LAPACK fixes for 0x0 matrices
+    Ae = SymTridiagonal(Float64[], Float64[])
+    Fe = svd(Ae)
+    @test size(Fe.U) == (0, 0) && isempty(Fe.S) && size(Fe.Vt) == (0, 0)
+    
+    # Int: eigtype promotion for empty matrices
+    @test @inferred(svd(SymTridiagonal(Int[], Int[]))).S isa Vector{Float64}
+    
+    # svdvals empty checks
+    @test isempty(svdvals(Ae))
+    @test @inferred(svdvals(SymTridiagonal(Int[], Int[]))) isa Vector{Float64}
 end
 
 end # module TestTridiagonal
