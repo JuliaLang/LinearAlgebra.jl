@@ -1203,4 +1203,34 @@ end
     end
 end
 
+@testset "Empty input for stev! and stegr!" begin
+    for T in (Float32, Float64)
+        dv = T[]
+        ev = T[]
+
+        # Test stev! with empty inputs
+        for job in ('N', 'V')
+            w, Z = LAPACK.stev!(job, copy(dv), copy(ev))
+            @test isempty(w)
+            @test size(Z) == (0, 0)
+            @test eltype(w) == T
+            @test eltype(Z) == T
+        end
+
+        # Test stegr! with empty inputs
+        for jobz in ('N', 'V')
+            # Range 'A' means all eigenvalues
+            w, Z = LAPACK.stegr!(jobz, 'A', copy(dv), copy(ev), zero(T), zero(T), 0, 0)
+            @test isempty(w)
+            
+            # If jobz == 'N', the original code allocates Z as (1, 0). 
+            # If jobz == 'V', Z is (0, 0).
+            expected_Z_dims = jobz == 'N' ? (1, 0) : (0, 0)
+            @test size(Z) == expected_Z_dims
+            @test eltype(w) == T
+            @test eltype(Z) == T
+        end
+    end
+end
+
 end # module TestLAPACK
