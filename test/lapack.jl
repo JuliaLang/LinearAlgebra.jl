@@ -1222,8 +1222,8 @@ end
             # Range 'A' means all eigenvalues
             w, Z = LAPACK.stegr!(jobz, 'A', copy(dv), copy(ev), zero(T), zero(T), 0, 0)
             @test isempty(w)
-            
-            # If jobz == 'N', the original code allocates Z as (1, 0). 
+
+            # If jobz == 'N', the original code allocates Z as (1, 0).
             # If jobz == 'V', Z is (0, 0).
             expected_Z_dims = jobz == 'N' ? (1, 0) : (0, 0)
             @test size(Z) == expected_Z_dims
