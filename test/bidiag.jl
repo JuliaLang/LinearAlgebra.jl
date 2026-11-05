@@ -1387,4 +1387,23 @@ end
     @test_throws ArgumentError svd(B; alg = LinearAlgebra.RobustRepresentations())
 end
 
+@testset "dataids and unaliascopy" begin
+    M = rand(4, 4)
+    B = Bidiagonal(view(M, 1:4, 1), view(M, 1:3, 2), :L)
+    @test Base.mightalias(M, B)
+    @test Base.mightalias(view(M, 1:3, 2), B) # aliasing with the off-diagonal alone
+    @test !Base.mightalias(M, Bidiagonal(M[1:4, 1], M[1:3, 2], :L))
+    U = Base.unaliascopy(B)
+    @test U isa typeof(B) && U == B && U.uplo == 'L' && !Base.mightalias(M, U)
+    # empty arrays may share their memory address, so empty bands must not alias
+    @test !Base.mightalias(Bidiagonal([1.0], Float64[], :U), Bidiagonal([2.0], Float64[], :L))
+    # copying and broadcasting into the memory backing the source
+    M0 = copy(M)
+    copyto!(M, B)
+    @test M == Bidiagonal(M0[1:4, 1], M0[1:3, 2], :L)
+    M = rand(4, 4); M0 = copy(M)
+    M .= Bidiagonal(view(M, 1:4, 1), view(M, 1:3, 2), :U) .+ 1
+    @test M ≈ Bidiagonal(M0[1:4, 1], M0[1:3, 2], :U) .+ 1
+end
+
 end # module TestBidiagonal
