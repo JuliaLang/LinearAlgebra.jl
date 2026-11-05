@@ -1723,4 +1723,20 @@ end
     @test !issuccess(cholesky(D, RowMaximum(); check = false))
 end
 
+@testset "dataids and unaliascopy" begin
+    M = rand(4, 4)
+    D = Diagonal(view(M, :, 2))
+    @test Base.mightalias(M, D)
+    @test !Base.mightalias(M, Diagonal(M[:, 2]))
+    U = Base.unaliascopy(D)
+    @test U isa typeof(D) && U == D && !Base.mightalias(M, U)
+    # copying and broadcasting into the memory backing the source
+    M0 = copy(M)
+    copyto!(M, Diagonal(view(M, :, 2)))
+    @test M == Diagonal(M0[:, 2])
+    M = rand(4, 4); M0 = copy(M)
+    M .= Diagonal(view(M, :, 1)) .+ M
+    @test M ≈ Diagonal(M0[:, 1]) .+ M0
+end
+
 end # module TestDiagonal
