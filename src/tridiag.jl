@@ -426,7 +426,9 @@ function svd!(A::SymTridiagonal{T};
               alg::Algorithm = default_svd_alg(A),
               atol::Real = 0, rtol::Real = 0) where {T<:Real}
     F = eigen!(A)
-    return _svd_from_eigen!(F.values, F.vectors)
+    G = _svd_from_eigen!(F.values, F.vectors)
+    G.S[_count_svdvals(G.S, atol, rtol)+1:end] .= 0
+    return G
 end
 
 # tril and triu
