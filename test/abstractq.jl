@@ -66,8 +66,10 @@ n = 5
             @test mul!(X, transQ(Q), transY(Y)) ≈ transQ(Q) * transY(Y) ≈ transQ(Q.Q) * transY(Y)
             @test mul!(X, transY(Y), transQ(Q)) ≈ transY(Y) * transQ(Q) ≈ transY(Y) * transQ(Q.Q)
         end
-        @test convert(Matrix, Q) ≈ Matrix(Q) ≈ Q[:,:] ≈ copyto!(zeros(T, size(Q)), Q) ≈ Q.Q*I
-        @test convert(Matrix, Q') ≈ Matrix(Q') ≈ (Q')[:,:] ≈ copyto!(zeros(T, size(Q)), Q') ≈ Q.Q'*I
+        @test Matrix(Q) ≈ Q[:,:] ≈ copyto!(zeros(T, size(Q)), Q) ≈ Q.Q*I
+        @test Matrix(Q') ≈ (Q')[:,:] ≈ copyto!(zeros(T, size(Q)), Q') ≈ Q.Q'*I
+        @test_deprecated convert(Matrix, Q)
+        @test_deprecated convert(Matrix, Q')
         @test AbstractMatrix(Q) ≈ AbstractArray(Q) ≈ AbstractMatrix{T}(Q) ≈ AbstractArray{T}(Q)
         @test Q[1,:] == Q.Q[1,:] == view(Q, 1, :)
         @test Q[:,1] == Q.Q[:,1] == view(Q, :, 1)

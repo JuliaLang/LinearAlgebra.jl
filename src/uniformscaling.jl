@@ -144,6 +144,8 @@ issymmetric(::UniformScaling) = true
 ishermitian(J::UniformScaling) = isreal(J.λ)
 isposdef(J::UniformScaling) = isposdef(J.λ)
 
+factorize(J::UniformScaling) = J
+
 (+)(J::UniformScaling, x::Number) = J.λ + x
 (+)(x::Number, J::UniformScaling) = x + J.λ
 (-)(J::UniformScaling, x::Number) = J.λ - x

@@ -11,6 +11,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.Furlongs
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 LinearAlgebra.sylvester(a::Furlong,b::Furlong,c::Furlong) = -c / (a + b)
 
@@ -36,7 +37,8 @@ getval(x::Furlong) = x.val
         end
         return nothing
     end
-    @testset for relty in (Int, Float64, BigFloat), elty in (relty, Complex{relty})
+    @testset for relty in (Float64, (@static COMPREHENSIVE ? (Int, BigFloat) : ())...),
+                 elty in (relty, Complex{relty})
         if relty <: AbstractFloat
             dv = convert(Vector{elty}, randn(n))
             ev = convert(Vector{elty}, randn(n - 1))
@@ -72,7 +74,8 @@ getval(x::Furlong) = x.val
 end
 
 # diagonal
-@testset for relty in (Float32, Float64, BigFloat), elty in (relty, Complex{relty})
+@testset for relty in (Float64, (@static COMPREHENSIVE ? (Float32, BigFloat) : ())...),
+              elty in (relty, Complex{relty})
     n = 12
     dd = convert(Vector{elty}, randn(n))
     D = Diagonal(dd)

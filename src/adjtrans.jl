@@ -342,14 +342,19 @@ size(A::AdjOrTransAbsMat) = reverse(size(A.parent))
 axes(v::AdjOrTransAbsVec) = (axes(v.parent,2), axes(v.parent)...)
 axes(A::AdjOrTransAbsMat) = reverse(axes(A.parent))
 IndexStyle(::Type{<:AdjOrTransAbsVec}) = IndexLinear()
-@propagate_inbounds Base.isassigned(v::AdjOrTransAbsVec, i::Int) = isassigned(v.parent, i-1+first(axes(v.parent)[1]))
-@propagate_inbounds Base.isassigned(v::AdjOrTransAbsMat, i::Int, j::Int) = isassigned(v.parent, j, i)
-@propagate_inbounds getindex(v::AdjOrTransAbsVec{T}, i::Int) where {T} = wrapperop(v)(v.parent[i-1+first(axes(v.parent)[1])])::T
-@propagate_inbounds getindex(A::AdjOrTransAbsMat{T}, i::Int, j::Int) where {T} = wrapperop(A)(A.parent[j, i])::T
-@propagate_inbounds setindex!(v::AdjOrTransAbsVec, x, i::Int) = (setindex!(v.parent, _wrapperop(v)(x), i-1+first(axes(v.parent)[1])); v)
-@propagate_inbounds setindex!(A::AdjOrTransAbsMat, x, i::Int, j::Int) = (setindex!(A.parent, _wrapperop(A)(x), j, i); A)
+# map the linear index of an adjoint/transposed vector to its parent's index,
+# preserving the index type in the common case of 1-based parents
+_vecparentindex(v::AdjOrTransAbsVec, i) = _vecparentindex(axes(v.parent, 1), i)
+_vecparentindex(::Base.OneTo, i) = i
+_vecparentindex(ax, i) = i - oneunit(i) + first(ax)
+@propagate_inbounds Base.isassigned(v::AdjOrTransAbsVec, i::Signed) = isassigned(v.parent, _vecparentindex(v, i))
+@propagate_inbounds Base.isassigned(v::AdjOrTransAbsMat, i::Signed, j::Signed) = isassigned(v.parent, j, i)
+@propagate_inbounds getindex(v::AdjOrTransAbsVec{T}, i::Signed) where {T} = wrapperop(v)(v.parent[_vecparentindex(v, i)])::T
+@propagate_inbounds getindex(A::AdjOrTransAbsMat{T}, i::Signed, j::Signed) where {T} = wrapperop(A)(A.parent[j, i])::T
+@propagate_inbounds setindex!(v::AdjOrTransAbsVec, x, i::Signed) = (setindex!(v.parent, _wrapperop(v)(x), _vecparentindex(v, i)); v)
+@propagate_inbounds setindex!(A::AdjOrTransAbsMat, x, i::Signed, j::Signed) = (setindex!(A.parent, _wrapperop(A)(x), j, i); A)
 # AbstractArray interface, additional definitions to retain wrapper over vectors where appropriate
-@propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, is::AbstractArray{Int}) = wrapperop(v)(v.parent[is])
+@propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, is::AbstractArray{<:Signed}) = wrapperop(v)(v.parent[is])
 @propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, ::Colon) = wrapperop(v)(v.parent[:])
 
 # band indexing

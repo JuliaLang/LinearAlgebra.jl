@@ -70,7 +70,7 @@ function _eigen(A::RealHermSymComplexHerm{Float16}; alg::Algorithm, sortby::Unio
     S = eigtype(A)
     E = eigen!(eigencopy_oftype(A, S); alg, sortby)
     values = convert(AbstractVector{Float16}, E.values)
-    vectors = convert(AbstractMatrix{isreal(E.vectors) ? Float16 : Complex{Float16}}, E.vectors)
+    vectors = convert(AbstractMatrix{eltype(E.vectors) <: Real ? Float16 : Complex{Float16}}, E.vectors)
     return Eigen(values, vectors)
 end
 

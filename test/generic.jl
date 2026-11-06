@@ -18,6 +18,7 @@ using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.Furlongs
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 Random.seed!(123)
 
@@ -595,6 +596,11 @@ end
     @test @inferred(P((1.0, 2.0))) === Float64
     @test @inferred(P((1, 2.0))) === Float64
     @test @inferred(P((1, (2.0f0, 3)))) === Float32
+    @test @inferred(P(((1, 2), (3.0, (4.0f0,))))) === Float64
+    @test @inferred(P((1, ((2.0f0, (3,)), 4im)))) === ComplexF32
+    @test @inferred(P(ntuple(i -> isodd(i) ? i : (Float32(i),), 40))) === Float32
+    @test @inferred(P(())) === Bool
+    @test @inferred(P(((),))) === Bool
     @test @inferred(P(AbstractVector{Float64}[[1.0]])) === Float64
     @test P(Complex{Real}[1 + 2im]) === Complex{Real}
     # UniformScaling comparisons
@@ -944,6 +950,16 @@ end
         v = zeros(ComplexF64, m); a = zeros(ComplexF64, m, n); w = zeros(Float64, n)
         @test dot(v, a, w) === zero(ComplexF64)
     end
+    # zeros in y are not strong zeros (#1836)
+    @test isnan(dot([1.0], [Inf;;], [0.0]))
+    @static if COMPREHENSIVE
+        @test isnan(dot([1.0], [NaN;;], [0.0]))
+        for i in 1:3, j in 1:3
+            A = ones(3, 3); A[i, j] = Inf
+            y = ones(3); y[j] = 0
+            @test isnan(dot(ones(3), A, y))
+        end
+    end
 end
 
 @testset "condskeel #34512" begin
@@ -1162,6 +1178,54 @@ end
     @test_throws DimensionMismatch fn([I; ones(1, 2)])
     @test_throws DimensionMismatch fn([I ones(BigInt, 2, 1)])
     @test_throws DimensionMismatch fn([I; ones(BigInt, 1, 2)])
+end
+
+@testset "_valeltype" begin
+    # the element types are only known at run time
+    for (A, T) in Any[([1, 2], Int), (Real[1, 2.0], Float64), (Real[], Real),
+                      (Symmetric(Real[1 2; 2.0 3]), Int)]
+        @test LinearAlgebra._valeltype(A) == T
+    end
+end
+
+@testset "wrapper character case conversion" begin
+    @test LinearAlgebra._uppercase('n') == 'N'
+    @test LinearAlgebra._lowercase('N') == 'n'
+    @test_throws ArgumentError LinearAlgebra._uppercase('x')
+    @test_throws ArgumentError LinearAlgebra._lowercase('x')
+end
+
+@testset "checkbounds of a Broadcasted with a BandIndex" begin
+    A = [1 2; 3 4]
+    bc = Broadcast.instantiate(Broadcast.broadcasted(+, A, A))
+    @test checkbounds(bc, LinearAlgebra.BandIndex(1, 1)) === nothing
+    @test_throws BoundsError checkbounds(bc, LinearAlgebra.BandIndex(1, 2))
+end
+
+@testset "versioninfo without relevant environment variables" begin
+    vars = ("JULIA_NUM_THREADS", "MKL_DYNAMIC", "MKL_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS", "GOTO_NUM_THREADS", "OMP_NUM_THREADS")
+    withenv((v => nothing for v in vars)...) do
+        @test occursin(r"Relevant environment variables:\n\s+\[none\]", sprint(LinearAlgebra.versioninfo))
+    end
+end
+
+@testset "peakflops in parallel" begin
+    @test LinearAlgebra.peakflops(64, ntrials=1, parallel=true) > 0
+end
+
+@testset "generic helpers corner cases" begin
+    # MulAddMul with α == 1 and β != 0, constructed at run time
+    m = LinearAlgebra.MulAddMul(Base.inferencebarrier(1), Base.inferencebarrier(2))
+    @test m isa LinearAlgebra.MulAddMul{true,false}
+    @test m.alpha == 1 && m.beta == 2
+    @test_throws ArgumentError @macroexpand LinearAlgebra.@stable_muladdmul foo(1)
+    # generic fallbacks, for an array type without specialized methods
+    @test !issymmetric(Test.GenericArray(ones(ComplexF64, 2, 3)))
+    @test !ishermitian(Test.GenericArray(ones(2, 3)))
+    x, y = BigFloat[1, 2], BigFloat[1, 2, 3]
+    @test_throws BoundsError axpy!(2, x, 1:2, y, 3:4)
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApply!(ones(2, 3), [1.0, 2], 1.0)
 end
 
 end # module TestGeneric

@@ -19,7 +19,7 @@ transpose(Q::AbstractQ{<:Real}) = AdjointQ(Q)
 transpose(Q::AbstractQ) = error("transpose not implemented for $(typeof(Q)). Consider using adjoint instead of transpose.")
 adjoint(adjQ::AdjointQ) = adjQ.Q
 
-(^)(Q::AbstractQ, p::Integer) = p < 0 ? power_by_squaring(inv(Q), -p) : power_by_squaring(Q, p)
+(^)(Q::AbstractQ, p::Integer) = p < 0 ? power_by_squaring(inv(Q)*I, -p) : power_by_squaring(Q*I, p)
 @inline Base.literal_pow(::typeof(^), Q::AbstractQ, ::Val{1}) = Q
 @inline Base.literal_pow(::typeof(^), Q::AbstractQ, ::Val{-1}) = inv(Q)
 
@@ -49,7 +49,8 @@ AbstractMatrix(Q::AbstractQ) = Q*I
 AbstractArray(Q::AbstractQ) = AbstractMatrix(Q)
 AbstractMatrix{T}(Q::AbstractQ) where {T} = Matrix{T}(Q)
 AbstractArray{T}(Q::AbstractQ) where {T} = AbstractMatrix{T}(Q)
-convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray} = T(Q)
+# an `AbstractQ` is not an array; use `Matrix(Q)`, `Array(Q)` or `AbstractMatrix(Q)` instead
+@deprecate(convert(::Type{T}, Q::AbstractQ) where {T<:AbstractArray}, T(Q), false)
 # legacy
 @deprecate(convert(::Type{AbstractMatrix{T}}, Q::AbstractQ) where {T},
     convert(LinearAlgebra.AbstractQ{T}, Q), false)
@@ -98,20 +99,20 @@ end
 @inline getindex(Q::AbstractQ, ::Colon, ::Colon) = copy(Q)
 
 @inline _getindex(Q::AbstractQ, inds...) = @inbounds copymutable(Q)[inds...]
-@inline function _getindex(Q::AbstractQ, ::Colon, J::AbstractVector{<:Integer})
+@inline function _getindex(Q::AbstractQ, ::Colon, J::AbstractVector{<:Signed})
     Y = zeros(eltype(Q), size(Q, 2), length(J))
     @inbounds for (i,j) in enumerate(J)
         Y[j,i] = oneunit(eltype(Q))
     end
     lmul!(Q, Y)
 end
-@inline _getindex(Q::AbstractQ, I::AbstractVector{Int}, J::AbstractVector{Int}) = @inbounds Q[:,J][I,:]
-@inline function _getindex(Q::AbstractQ, ::Colon, j::Int)
+@inline _getindex(Q::AbstractQ, I::AbstractVector{<:Signed}, J::AbstractVector{<:Signed}) = @inbounds Q[:,J][I,:]
+@inline function _getindex(Q::AbstractQ, ::Colon, j::Signed)
     y = zeros(eltype(Q), size(Q, 2))
     y[j] = oneunit(eltype(Q))
     lmul!(Q, y)
 end
-@inline _getindex(Q::AbstractQ, i::Int, j::Int) = @inbounds Q[:,j][i]
+@inline _getindex(Q::AbstractQ, i::Signed, j::Signed) = @inbounds Q[:,j][i]
 
 # needed because AbstractQ does not subtype AbstractMatrix
 qr(Q::AbstractQ{T}, arg...; kwargs...) where {T} = qr!(Matrix{_qreltype(T)}(Q), arg...; kwargs...)
@@ -169,7 +170,7 @@ end
 QDisplayCache(Q::AbstractQ{T}) where {T} = QDisplayCache{T,typeof(Q)}(Q, Dict{Int,Vector{T}}())
 
 size(C::QDisplayCache) = size(C.Q)
-function getindex(C::QDisplayCache, i::Int, j::Int)
+function getindex(C::QDisplayCache, i::Signed, j::Signed)
     @boundscheck checkbounds(C, i, j)
     column = get!(() -> C.Q[:, j], C.columns, j)
     return column[i]
@@ -550,8 +551,8 @@ size(Q::HessenbergQ) = size(Q, 1), size(Q, 2)
 const BlasHessenbergQ{T,sym} = HessenbergQ{T,<:StridedMatrix{T},<:StridedVector{T},sym} where {T<:BlasFloat,sym}
 
 ## reconstruct the original matrix
-Matrix{T}(Q::BlasHessenbergQ{<:Any,false}) where {T} = convert(Matrix{T}, LAPACK.orghr!(1, size(Q.factors, 1), copy(Q.factors), Q.τ))
-Matrix{T}(Q::BlasHessenbergQ{<:Any,true}) where {T} = convert(Matrix{T}, LAPACK.orgtr!(Q.uplo, copy(Q.factors), Q.τ))
+Matrix{T}(Q::BlasHessenbergQ{<:BlasFloat,false}) where {T} = convert(Matrix{T}, LAPACK.orghr!(1, size(Q.factors, 1), copy(Q.factors), Q.τ))
+Matrix{T}(Q::BlasHessenbergQ{<:BlasFloat,true}) where {T} = convert(Matrix{T}, LAPACK.orgtr!(Q.uplo, copy(Q.factors), Q.τ))
 
 lmul!(Q::BlasHessenbergQ{T,false}, X::StridedVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.ormhr!('L', 'N', 1, size(Q.factors, 1), Q.factors, Q.τ, X)
@@ -572,18 +573,19 @@ rmul!(X::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:BlasHessenbergQ{T,true}}) wh
     (Q = adjQ.Q; LAPACK.ormtr!('R', Q.uplo, ifelse(T<:Real, 'T', 'C'), Q.factors, Q.τ, X))
 
 # `Q = H_1 ⋯ H_{n-1}` with the reflectors shifted one row down, so the packed kernels apply
-# once `factors` and the operand are restricted to rows 2:n. For `uplo == 'U'` the reflectors
-# run in the opposite order and sit above the diagonal, which reversing both index orders
-# turns back into the packed layout. The two branches call the kernel separately to keep
-# the view types concrete.
-function _lqmul!(Q::HessenbergQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+# once `factors` and the operand are restricted to rows 2:n. For a symmetric factorization
+# with `uplo == 'U'` the reflectors run in the opposite order and sit above the diagonal,
+# which reversing both index orders turns back into the packed layout; `uplo` is
+# meaningless for the general one, as for `ormhr!` versus `ormtr!`. The two branches call
+# the kernel separately to keep the view types concrete.
+function _lqmul!(Q::HessenbergQ{<:Any,<:Any,<:Any,sym}, B::AbstractVecOrMat, ::Val{adj}) where {sym,adj}
     require_one_based_indexing(B)
     n = size(Q.factors, 1)
     mB, nB = size(B, 1), size(B, 2)
     if n != mB
         throw(DimensionMismatch(lazy"matrix Q has dimensions ($n,$n) but B has dimensions ($mB, $nB)"))
     end
-    if Q.uplo == 'U'
+    if sym && Q.uplo == 'U'
         _lqmul!(QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), view(B, n-1:-1:1, :), Val(adj))
     else
         _lqmul!(QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), view(B, 2:n, :), Val(adj))
@@ -591,14 +593,14 @@ function _lqmul!(Q::HessenbergQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
     B
 end
 
-function _rqmul!(A::AbstractVecOrMat, Q::HessenbergQ, ::Val{adj}) where {adj}
+function _rqmul!(A::AbstractVecOrMat, Q::HessenbergQ{<:Any,<:Any,<:Any,sym}, ::Val{adj}) where {sym,adj}
     require_one_based_indexing(A)
     n = size(Q.factors, 1)
     mA, nA = size(A, 1), size(A, 2)
     if nA != n
         throw(DimensionMismatch(lazy"matrix A has dimensions ($mA,$nA) but matrix Q has dimensions ($n, $n)"))
     end
-    if Q.uplo == 'U'
+    if sym && Q.uplo == 'U'
         _rqmul!(view(A, :, n-1:-1:1), QRPackedQ(view(Q.factors, n-1:-1:1, n:-1:2), view(Q.τ, n-1:-1:1)), Val(adj))
     else
         _rqmul!(view(A, :, 2:n), QRPackedQ(view(Q.factors, 2:n, 1:n-1), Q.τ), Val(adj))

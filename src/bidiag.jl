@@ -124,33 +124,33 @@ uplo(B::Bidiagonal) = sym_uplo(B.uplo)
 
 _offdiagind(uplo) = uplo == 'U' ? 1 : -1
 
-@inline function Base.isassigned(A::Bidiagonal, i::Int, j::Int)
+@inline function Base.isassigned(A::Bidiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false
     if i == j
         return @inbounds isassigned(A.dv, i)
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         return @inbounds isassigned(A.ev, A.uplo == 'U' ? i : j)
     else
         return true
     end
 end
 
-@inline function Base.isstored(A::Bidiagonal, i::Int, j::Int)
+@inline function Base.isstored(A::Bidiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds Base.isstored(A.dv, i)
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         return @inbounds Base.isstored(A.ev, A.uplo == 'U' ? i : j)
     else
         return false
     end
 end
 
-@inline function getindex(A::Bidiagonal{T}, i::Int, j::Int) where T
+@inline function getindex(A::Bidiagonal{T}, i::Signed, j::Signed) where T
     @boundscheck checkbounds(A, i, j)
     if i == j
         return @inbounds A.dv[i]
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         return @inbounds A.ev[A.uplo == 'U' ? i : j]
     else
         return diagzero(A, i, j)
@@ -169,11 +169,11 @@ end
     end
 end
 
-@inline function setindex!(A::Bidiagonal, x, i::Integer, j::Integer)
+@inline function setindex!(A::Bidiagonal, x, i::Signed, j::Signed)
     @boundscheck checkbounds(A, i, j)
     if i == j
         @inbounds A.dv[i] = x
-    elseif i == j - _offdiagind(A.uplo)
+    elseif i == j - oftype(j, _offdiagind(A.uplo))
         @inbounds A.ev[A.uplo == 'U' ? i : j] = x
     elseif !iszero(x)
         throw(ArgumentError(LazyString(lazy"cannot set entry ($i, $j) off the ",
@@ -258,6 +258,9 @@ end
 similar(B::Bidiagonal, ::Type{T}) where {T} = Bidiagonal(similar(B.dv, T), similar(B.ev, T), B.uplo)
 similar(B::Bidiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = similar(B.dv, T, dims)
 
+Base.dataids(B::Bidiagonal) = (_band_dataids(B.dv)..., _band_dataids(B.ev)...)
+Base.unaliascopy(B::Bidiagonal) = Bidiagonal(Base.unaliascopy(B.dv), Base.unaliascopy(B.ev), B.uplo)
+
 tr(B::Bidiagonal) = sum(B.dv)
 
 function kron(A::Diagonal, B::Bidiagonal)
@@ -272,13 +275,25 @@ end
 
 #Singular values
 svdvals!(M::Bidiagonal{<:BlasReal}) = LAPACK.bdsdc!(M.uplo, 'N', M.dv, M.ev)[1]
-function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false)
-    d, e, U, Vt, Q, iQ = LAPACK.bdsdc!(M.uplo, 'I', M.dv, M.ev)
-    SVD(U, d, Vt)
+# M is square, so the full and the thin SVD coincide and `full` has no effect
+function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Real=0, rtol::Real=0)
+    d, U, Vt = _svd!(M, alg)
+    d[_count_svdvals(d, atol, rtol)+1:end] .= 0
+    return SVD(U, d, Vt)
 end
-function svd(M::Bidiagonal; kw...)
-    svd!(copy(M), kw...)
+_svd!(M::Bidiagonal{<:BlasReal}, alg::Algorithm) =
+    throw(ArgumentError("Unsupported value for `alg` keyword."))
+function _svd!(M::Bidiagonal{<:BlasReal}, ::DivideAndConquer)
+    d, _, U, Vt, _, _ = LAPACK.bdsdc!(M.uplo, 'I', M.dv, M.ev)
+    return d, U, Vt
 end
+function _svd!(M::Bidiagonal{T}, ::QRIteration) where {T<:BlasReal}
+    n = size(M, 1)
+    d, Vt, U, _ = LAPACK.bdsqr!(M.uplo, M.dv, M.ev, Matrix{T}(I, n, n), Matrix{T}(I, n, n), Matrix{T}(undef, n, 0))
+    return d, U, Vt
+end
+# other element types use the generic method, which computes the SVD of a dense copy
+svd(M::Bidiagonal{<:BlasReal}; kw...) = svd!(copy(M); kw...)
 
 ###################
 #     opnorm      #
@@ -469,8 +484,8 @@ function rmul!(B::Bidiagonal, x::Number)
         row, col = 1 + isupper, 1 + !isupper
         # ensure that zeros are preserved on scaling
         y = B[row,col] * x
-        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off ",
-            lazy"the tridiagonal band to a nonzero value ($y)")))
+        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off the ",
+            isupper ? "upper" : "lower", " bidiagonal band to a nonzero value ($y)")))
     end
     rmul!(B.dv, x)
     rmul!(B.ev, x)
@@ -482,8 +497,8 @@ function lmul!(x::Number, B::Bidiagonal)
         row, col = 1 + isupper, 1 + !isupper
         # ensure that zeros are preserved on scaling
         y = x * B[row,col]
-        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off ",
-            lazy"the tridiagonal band to a nonzero value ($y)")))
+        iszero(y) || throw(ArgumentError(LazyString(lazy"cannot set index ($row, $col) off the ",
+            isupper ? "upper" : "lower", " bidiagonal band to a nonzero value ($y)")))
     end
     lmul!(x, B.dv)
     lmul!(x, B.ev)
@@ -1448,8 +1463,9 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
 end
 
 # Eigensystems
-eigvals(M::Bidiagonal; sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
-function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
+# permute and scale, as for general matrices, have no effect on bidiagonal ones
+eigvals(M::Bidiagonal; permute::Bool=true, scale::Bool=true, sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
+function eigvecs(M::Bidiagonal{T}; permute::Bool=true, scale::Bool=true, sortby=eigsortby) where T
     n = length(M.dv)
     Q = Matrix{T}(undef, n,n)
     blks = [0; findall(iszero, M.ev); n]
@@ -1475,7 +1491,7 @@ function eigvecs(M::Bidiagonal{T}; sortby=eigsortby) where T
     end
     return isnothing(sortby) ? Q : sorteig!(copy(M.dv), Q, sortby)[2]
 end
-eigen(M::Bidiagonal; sortby=eigsortby) = Eigen(sorteig!(eigvals(M; sortby=nothing), eigvecs(M; sortby=nothing), sortby)...)
+eigen(M::Bidiagonal; permute::Bool=true, scale::Bool=true, sortby=eigsortby) = Eigen(sorteig!(eigvals(M; sortby=nothing), eigvecs(M; sortby=nothing), sortby)...)
 
 Base._sum(A::Bidiagonal, ::Colon) = sum(A.dv) + sum(A.ev)
 function Base._sum(A::Bidiagonal, dims::Integer)

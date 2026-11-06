@@ -145,7 +145,7 @@ size(D::Diagonal) = (n = length(D.diag); (n,n))
 
 axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
 
-@inline function Base.isassigned(D::Diagonal, i::Int, j::Int)
+@inline function Base.isassigned(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, D, i, j) || return false
     if i == j
         @inbounds r = isassigned(D.diag, i)
@@ -155,7 +155,7 @@ axes(D::Diagonal) = (ax = axes(D.diag, 1); (ax, ax))
     r
 end
 
-@inline function Base.isstored(D::Diagonal, i::Int, j::Int)
+@inline function Base.isstored(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = Base.isstored(D.diag, i)
@@ -177,7 +177,7 @@ function Base.maximum(D::Diagonal{T}) where T <: Number
     return maxdiag
 end
 
-@inline function getindex(D::Diagonal, i::Int, j::Int)
+@inline function getindex(D::Diagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds r = D.diag[i]
@@ -219,7 +219,7 @@ zeroslike(::Type{M}, sz::Tuple{Integer, Vararg{Integer}}) where {M<:AbstractMatr
     r
 end
 
-@inline function setindex!(D::Diagonal, v, i::Int, j::Int)
+@inline function setindex!(D::Diagonal, v, i::Signed, j::Signed)
     @boundscheck checkbounds(D, i, j)
     if i == j
         @inbounds D.diag[i] = v
@@ -252,6 +252,9 @@ end
 parent(D::Diagonal) = D.diag
 
 copy(D::Diagonal) = Diagonal(copy(D.diag))
+
+Base.dataids(D::Diagonal) = Base.dataids(D.diag)
+Base.unaliascopy(D::Diagonal) = Diagonal(Base.unaliascopy(D.diag))
 
 Base._reverse(A::Diagonal, dims) = reverse!(Matrix(A); dims)
 Base._reverse(A::Diagonal, ::Colon) = Diagonal(reverse(A.diag))
@@ -308,7 +311,7 @@ function lmul!(x::Number, D::Diagonal)
         # ensure that zeros are preserved on scaling
         y = D[2,1] * x
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (2, 1) off ",
-            lazy"the tridiagonal band to a nonzero value ($y)")))
+            lazy"the diagonal band to a nonzero value ($y)")))
     end
     lmul!(x, D.diag)
     return D
@@ -318,7 +321,7 @@ function rmul!(D::Diagonal, x::Number)
         # ensure that zeros are preserved on scaling
         y = x * D[2,1]
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (2, 1) off ",
-            lazy"the tridiagonal band to a nonzero value ($y)")))
+            lazy"the diagonal band to a nonzero value ($y)")))
     end
     rmul!(D.diag, x)
     return D
@@ -335,6 +338,10 @@ Base.literal_pow(::typeof(^), D::Diagonal, ::Val{-1}) = inv(D) # for disambiguat
 postop_proc(::MulOrDiv, C, _, ::Diagonal) = C
 postop_proc(::MulOrDiv, C, ::Diagonal, _) = C
 postop_proc(::MulOrDiv, C, ::Diagonal, ::Diagonal) = C
+postop_proc(::typeof(\), C, ::LowerOrUnitLowerTriangular, ::Diagonal) = LowerTriangular(C)
+postop_proc(::typeof(\), C, ::UpperOrUnitUpperTriangular, ::Diagonal) = UpperTriangular(C)
+postop_proc(::typeof(/), C, ::Diagonal, ::LowerOrUnitLowerTriangular) = LowerTriangular(C)
+postop_proc(::typeof(/), C, ::Diagonal, ::UpperOrUnitUpperTriangular) = UpperTriangular(C)
 
 function mul(Da::Diagonal, Db::Diagonal)
     matmul_size_check(size(Da), size(Db))
@@ -346,7 +353,12 @@ function (*)(D::Diagonal, V::AbstractVector)
     return D.diag .* V
 end
 
+_wrapperop_reverses_products(::Adjoint, ::Diagonal) = true
+_wrapperop_reverses_products(::Transpose{<:Union{Real,Complex}}, ::Diagonal{<:Union{Real,Complex}}) = true
+_wrapperop_reverses_products(A, D) = false
+
 function mul(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(D) * adj(A)))
 end
@@ -354,6 +366,7 @@ function mul(A::AdjOrTransAbsMat{<:Number, <:StridedMatrix}, D::Diagonal{<:Numbe
     @invoke mul(A::AbstractMatrix, D::AbstractMatrix)
 end
 function mul(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke mul(D::AbstractMatrix, A::AbstractMatrix)
     adj = _wrapperop(A)
     copy(adj(adj(A) * adj(D)))
 end
@@ -374,6 +387,7 @@ end
 # A' = A' * D => A = D' * A
 # This uses the fact that D' is a Diagonal
 function rmul!(A::AdjOrTransAbsMat, D::Diagonal)
+    _wrapperop_reverses_products(A, D) || return @invoke rmul!(A::AbstractMatrix, D::Diagonal)
     f = _wrapperop(A)
     lmul!(f(D), f(A))
     A
@@ -421,6 +435,7 @@ end
 # A' = D * A' => A = A * D'
 # This uses the fact that D' is a Diagonal
 function lmul!(D::Diagonal, A::AdjOrTransAbsMat)
+    _wrapperop_reverses_products(A, D) || return @invoke lmul!(D::Diagonal, A::AbstractVecOrMat)
     f = _wrapperop(A)
     rmul!(f(A), f(D))
     A
@@ -1138,6 +1153,20 @@ function svd(D::Diagonal{T}) where {T<:Number}
         Vt[i,j] = one(Td)
     end
     return SVD(U, S, Vt)
+end
+
+function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(oneunit(T)))))*iszero(atol)) where {T<:Number}
+    n = size(D, 1)
+    Td = _ortho_eltype(T)
+    n == 0 && return zeros(Td, 0, 0)
+    d = D.diag
+    tol = max(atol, rtol*maximum(abs, d))
+    inds = findall(x -> !(abs(x) > tol), d)
+    N = zeros(Td, n, length(inds))
+    for (j, i) in enumerate(inds)
+        N[i, j] = oneunit(Td)
+    end
+    return N
 end
 
 *(x::AdjointAbsVec,   D::Diagonal, y::AbstractVector) = _mapreduce_prod(*, x, D, y)

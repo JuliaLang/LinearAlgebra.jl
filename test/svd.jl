@@ -76,7 +76,7 @@ aimg  = randn(n,n)/2
         @testset "singular value decomposition" begin
             @test usv.S === svdvals(usv)
             @test usv.U * (Diagonal(usv.S) * usv.Vt) ≈ a
-            @test convert(Array, usv) ≈ a
+            @test Array(usv) ≈ a
             @test usv.Vt' ≈ usv.V
             @test_throws FieldError usv.Z
             b = rand(eltya,n)
@@ -95,7 +95,7 @@ aimg  = randn(n,n)/2
                 usv = svd(transform(a))
                 @test usv.S === svdvals(usv)
                 @test usv.U * (Diagonal(usv.S) * usv.Vt) ≈ transform(a)
-                @test convert(Array, usv) ≈ transform(a)
+                @test Array(usv) ≈ transform(a)
                 @test usv.Vt' ≈ usv.V
                 @test_throws FieldError usv.Z
                 b = rand(eltya,n)
@@ -149,7 +149,7 @@ aimg  = randn(n,n)/2
             usv = svd(T(asym))
             @test usv.S === svdvals(usv)
             @test usv.U * (Diagonal(usv.S) * usv.Vt) ≈ T(asym)
-            @test convert(Array, usv) ≈ T(asym)
+            @test Array(usv) ≈ T(asym)
             @test usv.Vt' ≈ usv.V
             @test_throws FieldError usv.Z
             b = rand(eltya,n)
@@ -325,6 +325,69 @@ end
 
     @test rank(svd([1.0 2.0; 2.0 4.0])) == 1
     @test rank(svd([1.0 2.0 3.0; 4.0 5.0 6.0 ; 7.0 8.0 9.0])) == 2
+end
+
+@testset "nullspcae svd" begin
+    # Test that we can get the nullspace
+    A1 = [1.0 1.0; 2.0 0.0; -1.0 1.0] * [1.0 1.0 1.0; 1.0 -1.0 1.0]
+    N1 = nullspace(svd(A1, alg=LinearAlgebra.QRIteration()))
+    @test norm(A1*N1) < 8 * maximum(A1) * eps(eltype(A1))
+    N2 = nullspace(svd(A1, alg=LinearAlgebra.DivideAndConquer()))
+    @test norm(A1*N2) < 8 * maximum(A1) * eps(eltype(A1))
+
+    A2 = [1.0 1.0; -1.0 2.0; 3.0 3.0; 2.0 4.0] * [1.0 1.0 1.0 1.0; 1.0 -1.0 1.0 -1.0]
+    n1 = nullspace(svd(A2, alg=LinearAlgebra.QRIteration()))
+    @test norm(A2 * n1) < 8 * maximum(A2) * eps(eltype(A2))
+    n2 = nullspace(svd(A2, alg=LinearAlgebra.DivideAndConquer()))
+    @test norm(A2 * n2) < 8 * maximum(A2) * eps(eltype(A2))
+
+    # wide matrices: the thin SVD lacks part of the nullspace, which is completed
+    for W in ([1.0 0 0; 0 1 0], randn(3, 7), randn(5, 2) * randn(2, 8), randn(7, 3)',
+              randn(ComplexF64, 3, 7), randn(ComplexF32, 4, 2) * randn(ComplexF32, 2, 6))
+        Nd = nullspace(W)
+        for full in (false, true), alg in (LinearAlgebra.QRIteration(), LinearAlgebra.DivideAndConquer())
+            N = nullspace(svd(W; full, alg))
+            @test N isa Matrix{eltype(W)}
+            @test size(N) == size(Nd)
+            @test N * N' ≈ Nd * Nd'
+            @test N' * N ≈ I
+        end
+    end
+    # tall matrices: thin and full SVDs both have the complete V
+    for T in (A2, randn(7, 3))
+        @test size(nullspace(svd(T))) == size(nullspace(svd(T; full = true))) == size(nullspace(T))
+    end
+end
+
+@testset "ldiv! with all singular values below the tolerance" begin
+    F = svd([1.0 0; 0 1e-3; 0 0])
+    B = [1.0 2; 3 4; 5 6]
+    # the first n rows of B hold the solution, which is zero
+    @test ldiv!(F, copy(B); atol = 2)[1:2, :] == zeros(2, 2)
+    @test ldiv!(F, copy(B))[1:2, :] ≈ [1.0 2; 3000 4000]
+end
+
+@testset "Infs and NaNs" begin
+    # LAPACK's SVD routines may not return for them, so they are rejected beforehand
+    @testset for elty in (Float64, ComplexF64), x in (NaN, Inf)
+        A = elty[1 2 0; x 2 2; 0 1 3]
+        Id = Matrix{elty}(I, 3, 3)
+        @test_throws ArgumentError svd(A)
+        @test_throws ArgumentError svd(A; alg=LinearAlgebra.QRIteration())
+        @test_throws ArgumentError svdvals(A)
+        @test_throws ArgumentError svd(A, Id)
+        @test_throws ArgumentError svd(Id, A)
+        @test_throws ArgumentError svdvals(A, Id)
+        # svd(A, B) calls ggsvd! only for LAPACK older than 3.6
+        @test_throws ArgumentError LAPACK.ggsvd!('N', 'N', 'N', copy(A), copy(Id))
+        @test_throws ArgumentError LAPACK.ggsvd!('N', 'N', 'N', copy(Id), copy(A))
+        if elty <: Real
+            for B in (Bidiagonal(elty[1, x, 3], elty[1, 2], :U), Bidiagonal(elty[1, 2, 3], elty[x, 2], :L))
+                @test_throws ArgumentError svd(B)
+                @test_throws ArgumentError svdvals(B)
+            end
+        end
+    end
 end
 
 end # module TestSVD
