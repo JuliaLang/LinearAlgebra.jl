@@ -403,9 +403,32 @@ julia> eigvecs(A, [1.])
 """
 eigvecs(A::SymTridiagonal{<:BlasFloat,<:StridedVector}, eigvals::StridedVector{<:Real}) = LAPACK.stein!(A.dv, A.ev, eigvals)
 
-function svdvals!(A::SymTridiagonal)
-    vals = eigvals!(A)
+function svdvals!(A::SymTridiagonal{T}) where {T<:Real}
+    vals = _tohalf(T, eigvals!(A))
     return sort!(map!(abs, vals, vals); rev=true)
+end
+
+function svdvals(A::SymTridiagonal{T}) where {T<:Real}
+    vals = _tohalf(T, eigvals(A))
+    return sort!(map!(abs, vals, vals); rev=true)
+end
+
+function svd(A::SymTridiagonal{T};
+             full::Bool = false,
+             alg::Algorithm = default_svd_alg(A),
+             atol::Real = 0, rtol::Real = 0) where {T<:Real}
+    F = svd!(convert(SymTridiagonal{eigtype(T)}, A); full, alg, atol, rtol)
+    return T <: Float16 ? SVD{T}(F) : F
+end
+
+function svd!(A::SymTridiagonal{T};
+              full::Bool = false,
+              alg::Algorithm = default_svd_alg(A),
+              atol::Real = 0, rtol::Real = 0) where {T<:Real}
+    F = eigen!(A)
+    G = _svd_from_eigen!(F.values, F.vectors)
+    G.S[_count_svdvals(G.S, atol, rtol)+1:end] .= 0
+    return G
 end
 
 # tril and triu
