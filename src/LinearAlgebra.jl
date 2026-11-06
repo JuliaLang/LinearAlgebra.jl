@@ -133,6 +133,7 @@ export
     normalize!,
     normalize,
     nullspace,
+    nullspace!,
     opnorm,
     ordschur!,
     ordschur,

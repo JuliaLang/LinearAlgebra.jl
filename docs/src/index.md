@@ -547,6 +547,7 @@ LinearAlgebra.logabsdet
 Base.inv(::AbstractMatrix)
 LinearAlgebra.pinv
 LinearAlgebra.nullspace
+LinearAlgebra.nullspace!
 Base.kron
 Base.kron!
 LinearAlgebra.exp(::AbstractMatrix)
