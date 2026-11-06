@@ -943,6 +943,51 @@ end
     end
 end
 
+@testset "output aliased with a wrapped or viewed input (#1073, #925)" begin
+    A = rand(4, 4); B = rand(4, 4); x = rand(4)
+    # matrix-vector: BLAS, generic, and aliasing through views
+    @test_throws ArgumentError mul!(x, A, x)
+    @test_throws ArgumentError mul!(x, A, x, 2, 3)
+    @test_throws ArgumentError mul!(x, Symmetric(A), view(x, :))
+    @test_throws ArgumentError mul!(view(A, :, 1), A, x)
+    xb = big.(x)
+    @test_throws ArgumentError mul!(xb, big.(A), xb)
+    # row-vector output
+    @test_throws ArgumentError mul!(x', x', A)
+    # matrix-matrix: wrapped factors (symm/hemm, trmm, generic) and structured factors
+    for W in (adjoint, Symmetric, Hermitian, UpperTriangular, UpperHessenberg)
+        @test_throws ArgumentError mul!(A, W(A), B)
+        @test_throws ArgumentError mul!(A, B, W(A))
+    end
+    @test_throws ArgumentError mul!(A, A, Tridiagonal(B))
+    @test_throws ArgumentError mul!(A, Diagonal(B), A)
+    Ab = big.(A)
+    @test_throws ArgumentError mul!(Ab, Ab, big.(B))
+    # non-overlapping views of the same parent do not alias
+    V = rand(4, 3); V0 = copy(V)
+    @test mul!(view(V, :, 2), A, view(V, :, 1)) ≈ A * V0[:, 1]
+    @test mul!(view(V, 1:2, 3:3), view(V, 1:2, 1:2), view(V, 3:4, 1:1)) ≈ V[1:2, 1:2] * V[3:4, 1:1]
+    @static if COMPREHENSIVE
+        wrappers = (identity, adjoint, transpose, M -> view(M, :, :), Symmetric, Hermitian,
+            UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular, UpperHessenberg)
+        others = (M -> M, Diagonal, M -> Bidiagonal(M, :U), Tridiagonal, M -> SymTridiagonal(Symmetric(M)))
+        @testset for T in (Float64, ComplexF64, BigFloat), n in (2, 5)
+            for W in wrappers, O in others
+                C = rand(T, n, n); X = O(rand(T, n, n))
+                @test_throws ArgumentError mul!(C, W(C), X)
+                @test_throws ArgumentError mul!(C, X, W(C))
+                @test_throws ArgumentError mul!(C, W(C), X, 2, 3)
+                @test_throws ArgumentError mul!(C, X, W(C), 2, 3)
+                @test_throws ArgumentError mul!(C, W(C), W(C))
+                v = rand(T, n)
+                @test_throws ArgumentError mul!(v, X, v)
+                @test_throws ArgumentError mul!(v, X, v, 2, 3)
+                @test_throws ArgumentError mul!(view(C, :, 1), W(C), v)
+            end
+        end
+    end
+end
+
 @testset "#35163" begin
     # typemax(Int32) * Int32(1) + Int32(1) * Int32(1) should wrap around
     # not promote to Int64, convert to Int32 and throw inexacterror
@@ -1043,8 +1088,8 @@ end
         @test_throws DimensionMismatch mul!(full43, tri44, tri33)
         @test_throws DimensionMismatch mul!(full44, tri44, tri33)
         @test_throws DimensionMismatch mul!(full44, tri44, full43)
-        @test_throws DimensionMismatch mul!(full43, tri33, full43)
-        @test_throws DimensionMismatch mul!(full43, full43, tri44)
+        @test_throws DimensionMismatch mul!(copy(full43), tri33, full43)
+        @test_throws DimensionMismatch mul!(copy(full43), full43, tri44)
     end
 end
 

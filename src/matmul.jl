@@ -67,9 +67,21 @@ function (*)(a::AbstractVector, B::AbstractMatrix)
     reshape(a, length(a), 1) * B
 end
 
+# The output of `mul!` must not share memory with the factors, as the kernels
+# overwrite the output while still reading the factors.
+@inline function check_mul_aliasing(C, A, B)
+    (Base.mightalias(C, A) || Base.mightalias(C, B)) && throw_mul_aliasing()
+    return nothing
+end
+@noinline throw_mul_aliasing() =
+    throw(ArgumentError("output array must not be aliased with an input array"))
+
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
-@inline mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
-                alpha::Number, beta::Number) = _mul!(y, A, x, alpha, beta)
+@inline function mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
+                alpha::Number, beta::Number)
+    check_mul_aliasing(y, A, x)
+    _mul!(y, A, x, alpha, beta)
+end
 
 _mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
                 alpha::Number, beta::Number) =
@@ -255,7 +267,7 @@ end
 
 Calculates the matrix-matrix or matrix-vector product ``A B`` and stores the result in `Y`,
 overwriting the existing value of `Y`. Note that `Y` must not be aliased with either `A` or
-`B`.
+`B`; an `ArgumentError` is thrown if `Base.mightalias` detects that they share memory.
 
 # Examples
 ```jldoctest
@@ -285,7 +297,8 @@ mul!(C, A, B) = mul!(C, A, B, true, false)
 
 Combined inplace matrix-matrix or matrix-vector multiply-add ``A B α + C β``.
 The result is stored in `C` by overwriting it.  Note that `C` must not be
-aliased with either `A` or `B`.
+aliased with either `A` or `B`; an `ArgumentError` is thrown if `Base.mightalias`
+detects that they share memory.
 
 !!! compat "Julia 1.3"
     Five-argument `mul!` requires at least Julia 1.3.
@@ -310,7 +323,10 @@ julia> C == A * B * α + C_original * β
 true
 ```
 """
-@inline mul!(C::AbstractMatrix, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number) = _mul!(C, A, B, α, β)
+@inline function mul!(C::AbstractMatrix, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number)
+    check_mul_aliasing(C, A, B)
+    _mul!(C, A, B, α, β)
+end
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
 module BlasFlag
 @enum BlasFunction SYRK HERK GEMM SYMM HEMM NONE
