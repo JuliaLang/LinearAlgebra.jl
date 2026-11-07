@@ -206,14 +206,14 @@ function fzeropreserving(bc)
     iszerodefined(typeof(v2)) ? iszero(v2) : isequal(v2, 0)
 end
 
+# Any function of symmetric matrices and scalars is symmetric, so we may look into nested broadcasts
 function issymmetrypreserving(bc::Broadcasted{StructuredMatrixStyle{T}}) where {T<:Union{Symmetric, SymTridiagonal}}
-    return all(x -> x isa Union{Number,Diagonal,Symmetric,SymTridiagonal}, bc.args)
+    return all(x -> x isa Union{Number,Diagonal,Symmetric,SymTridiagonal,UniformScalingMatrix}, Broadcast.cat_nested(bc))
 end
 
-function ishermitianpreserving(bc::Broadcasted{StructuredMatrixStyle{Hermitian}})
-    bc.f isa HermitianPreservingFunction || return false
-    return all(x -> x isa Union{Real,Diagonal{<:Real},SymTridiagonal{<:Real},Symmetric{<:Real},Hermitian}, bc.args)
-end
+ishermitianpreserving(bc::Broadcasted{StructuredMatrixStyle{Hermitian}}) = _ishermitianpreserving(bc)
+_ishermitianpreserving(bc::Broadcasted) = bc.f isa HermitianPreservingFunction && all(_ishermitianpreserving, bc.args)
+_ishermitianpreserving(x) = x isa Union{Real,Diagonal{<:Real},SymTridiagonal{<:Real},Symmetric{<:Real},Hermitian,UniformScalingMatrix{<:Real}}
 
 const HermitianPreservingFunction = Union{
     typeof(+),typeof(-),typeof(*),typeof(/),
@@ -231,6 +231,8 @@ fzero(r::Ref) = Some(r[])
 fzero(t::Tuple{Any}) = Some(only(t))
 fzero(S::StructuredMatrix) = Some(zero(eltype(S)))
 fzero(::StructuredMatrix{<:AbstractMatrix{T}}) where {T<:Number} = Some(haszero(T) ? zero(T)*I : nothing)
+# a `UniformScaling` broadcasted with a structured matrix is represented by a `UniformScalingMatrix`
+fzero(A::UniformScalingMatrix) = Some(zero(A.λ))
 fzero(x) = nothing
 
 # There exist known functions where zeros of structured matrices are preserved under
@@ -252,6 +254,7 @@ fzero(::ZeroAbsorbingFuncs, x) = fzero(x)
 # as with the scalar case.
 fzero(::LeftAbsorbingFuncs, a::AbstractArray{T}) where {T<:Number} = any(iszero, a) ? nothing : Some(one(T))
 fzero(::LeftAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
+fzero(::LeftAbsorbingFuncs, A::UniformScalingMatrix) = fzero(A)
 fzero(::LeftAbsorbingFuncs, x) = fzero(x)
 
 function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:LeftAbsorbingFuncs, <:Tuple{StructuredMatrix, Vararg{Any}}})
@@ -343,6 +346,7 @@ end
 _preprocess_broadcasted(::Type, x) = x
 
 _preprocess_broadcasted(::Type{Diagonal}, d::Diagonal) = d.diag
+_preprocess_broadcasted(::Type{Diagonal}, A::UniformScalingMatrix) = A.λ
 # fallback for types that might opt into Diagonal-like structured broadcasting, e.g. wrappers
 _preprocess_broadcasted(::Type{Diagonal}, d::AbstractMatrix) = diagview(d)
 
@@ -462,34 +466,50 @@ function copyto!(dest::UpperHessenberg, bc::Broadcasted{<:StructuredMatrixStyle}
     return dest
 end
 
+# The diagonal of a Symmetric/Hermitian matrix must consist of symmetric/hermitian
+# values, which is checked by `setindex!`
+@inline function _setindex_symherm!(dest::Union{Symmetric,Hermitian}, v, i, j)
+    if i == j
+        @inbounds dest[i, j] = v
+    else
+        @inbounds dest.data[i, j] = v
+    end
+    return dest
+end
+
 function copyto!(dest::Union{Symmetric,Hermitian}, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
-    if find_uplo(bc) == dest.uplo
-        bc_unwrapped = preprocess_broadcasted(Symmetric, bc)
-        if dest.uplo == 'U'
-            for j in axs[2]
-                for i in 1:j
-                    @inbounds dest.data[i, j] = bc_unwrapped[CartesianIndex(i, j)]
-                end
-            end
-        else
-            for j in axs[2]
-                for i in j:axs[1][end]
-                    @inbounds dest.data[i,j] = bc_unwrapped[CartesianIndex(i, j)]
-                end
-            end
-        end
-    else #uplo is always :U in this case
+    # the wrapped matrices may only be unwrapped if they store the same triangle as `dest`
+    bc_unwrapped = find_uplo(bc) == dest.uplo ? preprocess_broadcasted(Symmetric, bc) : bc
+    if dest.uplo == 'U'
         for j in axs[2]
             for i in 1:j
-                @inbounds dest.data[i, j] = bc[CartesianIndex(i, j)]
+                _setindex_symherm!(dest, @inbounds(bc_unwrapped[CartesianIndex(i, j)]), i, j)
+            end
+        end
+    else
+        for j in axs[2]
+            for i in j:axs[1][end]
+                _setindex_symherm!(dest, @inbounds(bc_unwrapped[CartesianIndex(i, j)]), i, j)
             end
         end
     end
     return dest
 end
+
+# Broadcasting into a structured matrix with `UniformScaling` arguments: once the
+# `UniformScaling`s have been replaced by (`Diagonal`-like) `UniformScalingMatrix`es,
+# treat the broadcast as a structured one, so that only the bands of the destination
+# are written (provided that the broadcast preserves its structure, see `isvalidstructbc`).
+function Broadcast.materialize!(::UniformScalingStyle, dest::StructuredMatrix, bc::Broadcasted)
+    bc′ = Broadcast.instantiate(Broadcasted(bc.style, bc.f, bc.args, axes(dest)))
+    return copyto!(dest, _structured_uniformscaling_broadcast(bc′))
+end
+_structured_uniformscaling_broadcast(bc::Broadcasted{DefaultArrayStyle{2}}) =
+    convert(Broadcasted{StructuredMatrixStyle{Diagonal}}, bc)
+_structured_uniformscaling_broadcast(bc::Broadcasted) = bc
 
 # We can also implement `map` and its promotion in terms of broadcast with a stricter dimension check
 function map(f, A::StructuredMatrix, Bs::StructuredMatrix...)
