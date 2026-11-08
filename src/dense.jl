@@ -923,7 +923,9 @@ _exp_eltype(A::AbstractMatrix) = _valeltype(A) <: Number ? eigtype(A) : eltype(A
 function exp!(A::AbstractMatrix)
     require_one_based_indexing(A)
     n = checksquare(A)
-    if eltype(A) <: Union{Real,Complex} && isdiag(A)
+    # the exponential of a diagonal matrix is that of its diagonal elements, which can be
+    # numbers or square blocks. Element types without an exp take the general path.
+    if isdiag(A) && hasmethod(exp, Tuple{eltype(A)})
         for i in diagind(A, IndexStyle(A))
             A[i] = exp(A[i])
         end
