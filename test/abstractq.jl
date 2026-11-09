@@ -173,7 +173,10 @@ end
         T -> (F = qr(rand(T, n, n)); (F.Q, F.factors)),              # QRCompactWYQ
         T -> (F = qr(rand(T, n, n), ColumnNorm()); (F.Q, F.factors)), # QRPackedQ
         T -> (F = hessenberg(rand(T, n, n)); (F.Q, F.factors)),
-        T -> (A = rand(T, n, n); F = hessenberg(Hermitian(A + A')); (F.Q, F.factors)),
+        # only the uplo triangle of the factors of a Hermitian Hessenberg factorization is
+        # written; zero the other one, which Q doesn't read, so that the factors are defined
+        T -> (A = rand(T, n, n); F = hessenberg(Hermitian(A + A'));
+              F.uplo == 'U' ? triu!(F.factors) : tril!(F.factors); (F.Q, F.factors)),
         T -> (F = lq(rand(T, n, n)); (F.Q, F.factors)),
     )
     overwriting = (
@@ -193,9 +196,7 @@ end
             Q, S = mk(T); Q = adj ? Q' : Q
             S0 = copy(S)
             @test_throws ArgumentError op(Q, S)
-            # the check comes before anything is written; isequal, since the unused triangle
-            # of a symmetric Hessenberg factorization is uninitialized
-            @test isequal(S, S0)
+            @test S == S0 # the check comes before anything is written
         end
         # sharing memory with the other factor is fine, as it is copied into the output first
         Q, S = mk(T); Q = adj ? Q' : Q
