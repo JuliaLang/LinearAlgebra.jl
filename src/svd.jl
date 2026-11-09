@@ -653,3 +653,6 @@ function nullspace(F::SVD; atol::Number=zero(real(eltype(F))), rtol::Real = (min
     indstart = r + 1 # nullspace starts after the numerical rank + 1
     return copy((@view F.Vt[indstart:end,:])')
 end
+
+# the arrays the factorization is stored in, for the aliasing checks (see `_mightalias`)
+_aliasparts(F::SVD) = (_aliasparts(getfield(F, :U))..., _aliasparts(getfield(F, :S))..., _aliasparts(getfield(F, :Vt))...)

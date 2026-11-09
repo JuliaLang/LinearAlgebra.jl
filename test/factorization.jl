@@ -6,6 +6,11 @@ isdefined(Main, :pruned_old_LA) || @eval Main include("prune_old_LA.jl")
 
 using Test, LinearAlgebra
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+
 @testset "equality for factorizations - $f" for f in Any[
     bunchkaufman,
     cholesky,
@@ -131,6 +136,44 @@ end
     for F in (lu(A), cholesky(A), qr(A), svd(A), eigen(A), schur(A), hessenberg(A), lq(A))
         @test_deprecated convert(Matrix, F)
         @test_deprecated convert(AbstractMatrix, F)
+    end
+end
+
+@testset "ldiv!/rdiv! into an array that shares memory with the factorization" begin
+    n = 4
+    @testset for T in (Float64, BigFloat, (@static COMPREHENSIVE ? (ComplexF64,) : ())...)
+        spd() = (X = rand(T, n, n); X * X' + n * I)
+        # factorized in place, so that the factorization is stored in M
+        factorizations = Any[lu!, M -> cholesky!(Hermitian(M)), M -> cholesky!(Hermitian(M), RowMaximum()),
+            qr!, M -> qr!(M, ColumnNorm()), lq!, M -> bunchkaufman!(Hermitian(M))]
+        T <: LinearAlgebra.BlasFloat && push!(factorizations, hessenberg!)
+        for fact in factorizations
+            M = spd(); F = fact(M); M0 = copy(M)
+            @test_throws ArgumentError ldiv!(F, M)
+            @test_throws ArgumentError ldiv!(F, view(M, :, 1))
+            @test_throws ArgumentError ldiv!(F', M)
+            @test_throws ArgumentError ldiv!(M, F, rand(T, n, n))
+            if F isa Union{LU,Cholesky,CholeskyPivoted,LinearAlgebra.Hessenberg}
+                @test_throws ArgumentError rdiv!(M, F)
+            end
+            @test isequal(M, M0) # the check comes before anything is written
+        end
+        # factorizations of banded matrices, stored in their bands
+        for F in (ldlt!(SymTridiagonal(rand(T, n) .+ 10, rand(T, n-1))),
+                  lu!(Tridiagonal(rand(T, n-1), rand(T, n) .+ 10, rand(T, n-1))))
+            d = F isa LDLt ? F.data.dv : F.factors.d
+            d0 = copy(d)
+            @test_throws ArgumentError ldiv!(F, d)
+            @test_throws ArgumentError ldiv!(d, F, rand(T, n))
+            @test d == d0
+        end
+        # these work on copies, so the right-hand side may share memory with the factorization
+        if T <: LinearAlgebra.BlasFloat # no generic svd
+            M = spd(); F = svd!(M); F0 = deepcopy(F); U0 = copy(F.U)
+            @test ldiv!(F, F.U) ≈ F0 \ U0
+        end
+        M = spd(); F = bunchkaufman!(Hermitian(M)); F0 = deepcopy(F); M0 = copy(M)
+        @test rdiv!(M, F) ≈ M0 / F0
     end
 end
 
