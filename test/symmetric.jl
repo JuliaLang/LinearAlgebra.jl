@@ -1408,4 +1408,66 @@ Base.zero(A::ZeroTestWrap) = ZeroTestWrap(zero(A.parent))
     @test zero(Hermitian(rand(ComplexF64, 4, 4))) isa Hermitian
 end
 
+@testset "logabsdet of a Hermitian matrix has a real sign" begin
+    for T in (Float64, ComplexF64, Complex{BigFloat}), uplo in (:U, :L)
+        # indefinite, with a 2-by-2 pivot in the Bunch-Kaufman factorization
+        A = T <: Complex ? T[0 1+2im 3; 1-2im 0 1im; 3 -1im 0] : T[0 1 3; 1 0 1; 3 1 0]
+        for H in (Hermitian(A, uplo), Hermitian(T[2 0; 0 -3], uplo))
+            l, s = @inferred logabsdet(H)
+            @test s isa real(T)
+            @test s ≈ sign(det(H))
+            @test exp(l) * s ≈ det(H)
+            @test l ≈ logabsdet(Matrix(H))[1]
+        end
+    end
+end
+
+# an element type that is neither a number nor a matrix, with its own symmetric_type
+struct SymEltype end
+Base.transpose(x::SymEltype) = x
+Base.adjoint(x::SymEltype) = x
+LinearAlgebra.symmetric_type(::Type{SymEltype}) = SymEltype
+LinearAlgebra.hermitian_type(::Type{SymEltype}) = SymEltype
+
+@testset "symmetric_type/hermitian_type for a custom eltype" begin
+    @test LinearAlgebra.symmetric_type(Matrix{SymEltype}) == Symmetric{SymEltype, Matrix{SymEltype}}
+    @test LinearAlgebra.hermitian_type(Matrix{SymEltype}) == Hermitian{SymEltype, Matrix{SymEltype}}
+    M = fill(SymEltype(), 2, 2)
+    @test LinearAlgebra.symmetric(M, :U) isa Symmetric{SymEltype, Matrix{SymEltype}}
+    @test LinearAlgebra.hermitian(M, :U) isa Hermitian{SymEltype, Matrix{SymEltype}}
+end
+
+@testset "Symmetric/Hermitian corner cases" begin
+    A = [1.0 2; 3 4]
+    for W in (Symmetric, Hermitian)
+        # destination of a different shape: elements are copied in linear order
+        @test copyto!(zeros(1, 4), W(A)) == reshape(vec(Matrix(W(A))), 1, 4)
+        S = W([1.0 2; 2 3], :U)
+        @test_throws ArgumentError kron!(W(zeros(4, 4), :L), S, S)
+        @test_throws ArgumentError kron!(W(zeros(4, 4), :U), W(A, :L), W(A, :L))
+    end
+    # a nonreal entry in the stored lower triangle
+    C = ComplexF64[1 0; im 1]
+    @test !isreal(Symmetric(C, :L))
+    @test !isreal(Hermitian(C, :L))
+    @test isreal(Symmetric(C, :U)) && isreal(Hermitian(C, :U))
+end
+
+@testset "det and logdet with NaN" begin
+    # Bunch-Kaufman reports a NaN pivot like a zero pivot, which must not give a zero determinant
+    for A in (Symmetric([1.0 2; 2 NaN]), Hermitian(ComplexF64[1 2im; -2im NaN]), Symmetric(ComplexF64[1 2; 2 NaN]))
+        @test isnan(det(A))
+        @test isnan(logdet(A))
+        @test isnan(first(logabsdet(A)))
+    end
+    # the generic implementation
+    @test isnan(det(bunchkaufman(Symmetric(big.([1.0 2; 2 NaN])); check=false)))
+    # singular matrices still have a zero determinant
+    for A in (Symmetric([1.0 2 3; 2 4 6; 3 6 10]), Hermitian(ComplexF64[1 1im; -1im 1]))
+        @test det(A) == 0
+        @test logdet(A) == -Inf
+        @test logabsdet(A) == (-Inf, 0)
+    end
+end
+
 end # module TestSymmetric

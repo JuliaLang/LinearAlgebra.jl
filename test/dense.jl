@@ -138,6 +138,15 @@ bimg  = randn(n,2)/2
                 @test @inferred(nullspace(b[1, 1:0]')) == Matrix(I, 0, 0)
                 @test size(@inferred nullspace(transpose(a[:, 1]))) == (n, n - 1)
                 @test size(@inferred nullspace(transpose(b[1, :]))) == (2, 1)
+                # tall and wide matrices, and their adjoints
+                for M in (a[:, 1:n1], a[1:n1, :])
+                    for X in (M, M')
+                        N = nullspace(X)
+                        @test size(N) == (size(X, 2), size(X, 2) - rank(X))
+                        @test norm(X * N, Inf) ≤ 300ε * norm(X, Inf)
+                        @test N' * N ≈ I
+                    end
+                end
             end
         end
     end # for eltyb
@@ -624,6 +633,19 @@ end
 
     A8 = 100 * [-1+1im 0 0 1e-8; 0 1 0 0; 0 0 1 0; 0 0 0 1]
     @test exp(log(A8)) ≈ A8
+
+    @testset "large exponents (issue #1082)" begin
+        A = [1 1e-10; 0 1]
+        @test A^typemin(Int8) == A^Int(typemin(Int8))
+        B = A^(1e20)
+        @test B ≈ [1 1e10; 0 1]
+        B = A^(-1e20)
+        @test B ≈ inv(A)^1e20
+        @test (A^prevfloat(Inf64))[1,2] ≈ A[1,2] * prevfloat(Inf64)
+        @test (A^prevfloat(Inf32))[1,2] ≈ A[1,2] * prevfloat(Inf32)
+        @test (A^prevfloat(Inf16))[1,2] ≈ A[1,2] * prevfloat(Inf16)
+    end
+
 end
 
 @testset "Matrix exponential for element types not supported by LAPACK" begin
@@ -1608,6 +1630,55 @@ end
     H = Hermitian([1.0 2.0im; -2.0im 1.0])
     @test (@inferred abs(H)) ≈ Hermitian([2.0 1.0im; -1.0im 2.0])
     @test abs(H) isa Hermitian
+end
+
+@testset "isone of a large matrix" begin
+    # matrices of at least ISONE_CUTOFF bytes are checked column by column
+    n = isqrt(LinearAlgebra.ISONE_CUTOFF ÷ sizeof(Float64))
+    A = Matrix{Float64}(I, n, n)
+    @test sizeof(A) >= LinearAlgebra.ISONE_CUTOFF
+    @test isone(A)
+    A[n, 1] = 1
+    @test !isone(A)
+    A[n, 1] = 0
+    A[2, 2] = 2
+    @test !isone(A)
+end
+
+@testset "haszero" begin
+    for (T, h) in Any[(Float64, true), (Union{Missing,Int}, true), (Real, false), (String, false)]
+        @test LinearAlgebra.haszero(T) == h
+    end
+end
+
+@testset "cis of a matrix with a non-hardware element type" begin
+    A = [1.0 2; 3 4]
+    for M in (Float16.(A), Matrix{Real}(A))
+        @test cis(M) ≈ exp(im*A)
+    end
+end
+
+@testset "factorize a triangular matrix that is not strided" begin
+    B = [1 0 0; 2 3 0; 4 5 6]
+    L = view(B, [1, 2, 3], :)
+    @test LinearAlgebra.getstructure(L) == (false, false, true, true, false, false)
+    @test factorize(L) isa LowerTriangular
+    @test factorize(L) == LowerTriangular(B)
+    U = view(Matrix(B'), [1, 2, 3], :)
+    @test factorize(U) isa UpperTriangular
+    @test factorize(U) == UpperTriangular(B')
+end
+
+@testset "cond rethrows errors other than singularity" begin
+    @test_throws OverflowError cond(Rational{Int8}[100 99; 99 98], 1)
+end
+
+@testset "nullspace of a tall matrix does not compute the full U" begin
+    A = randn(400, 20)
+    nullspace(A)
+    # the full SVD would allocate the 400×400 matrix U
+    @test (@allocated nullspace(A)) < sizeof(Float64) * 400 * 400
+    @test size(nullspace(A)) == (20, 0)
 end
 
 end # module TestDense
