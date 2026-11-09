@@ -1022,6 +1022,32 @@ end
     end
 end
 
+@testset "ldiv!/rdiv! with operands that share memory" begin
+    @testset for T in (Float64, BigFloat, (@static COMPREHENSIVE ? (ComplexF64,) : ())...)
+        M = rand(T, 4, 4) + 4I
+        M[:, 2] .+= 10 # keep the banded matrices built from columns 1:3 well-conditioned
+        factors = (UpperTriangular(M), UnitLowerTriangular(M), UpperTriangular(M)',
+            Diagonal(view(M, :, 2)), Bidiagonal(view(M, 1:4, 2), view(M, 1:3, 3), :U),
+            Tridiagonal(view(M, 1:3, 1), view(M, 1:4, 2), view(M, 1:3, 3)), UpperHessenberg(M))
+        for A in factors
+            M0 = copy(M)
+            @test_throws ArgumentError ldiv!(A, M)
+            @test_throws ArgumentError ldiv!(A, view(M, :, 2))
+            @test_throws ArgumentError ldiv!(M, A, rand(T, 4, 4))
+            A isa Tridiagonal || @test_throws ArgumentError rdiv!(M, A) # no rdiv! for Tridiagonal
+            @test M == M0 # nothing is written before the check
+        end
+        # the right-hand side may be the output, as in the 2-arg methods
+        A = UpperTriangular(rand(T, 4, 4) + 4I); B = rand(T, 4, 2); B0 = copy(B)
+        @test ldiv!(B, A, B) ≈ Matrix(A) \ B0
+        D = Diagonal(rand(T, 4) .+ 1); B = rand(T, 4, 2); B0 = copy(B)
+        @test ldiv!(B, D, B) ≈ Matrix(D) \ B0
+        # the SymTridiagonal solvers work on an LDLt copy, so sharing memory is fine there
+        S = SymTridiagonal(view(M, 1:4, 2), view(M, 1:3, 3)); S0 = Matrix(S); M0 = copy(M)
+        @test ldiv!(S, M) ≈ S0 \ M0
+    end
+end
+
 @testset "#35163" begin
     # typemax(Int32) * Int32(1) + Int32(1) * Int32(1) should wrap around
     # not promote to Int64, convert to Int32 and throw inexacterror

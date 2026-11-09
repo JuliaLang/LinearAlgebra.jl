@@ -396,7 +396,8 @@ end
 ldiv!(Y::AbstractArray, s::Number, X::AbstractArray) = Y .= s .\ X
 
 # Generic fallback. This assumes that B and Y have the same sizes.
-ldiv!(Y::AbstractArray, A::AbstractMatrix, B::AbstractArray) = ldiv!(A, copyto!(Y, B))
+ldiv!(Y::AbstractArray, A::AbstractMatrix, B::AbstractArray) =
+    (check_inplace_aliasing(Y, A); ldiv!(A, copyto!(Y, B)))
 
 
 """

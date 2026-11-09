@@ -631,7 +631,7 @@ matop_dest(::typeof(/), A::HermOrSym, D::Diagonal) = similar(A, promote_op(/, el
 
 /(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matop_dest(/, A, D), A, D)
 
-rdiv!(A::AbstractVecOrMat, D::Diagonal) = @inline _rdiv!(A, A, D)
+rdiv!(A::AbstractVecOrMat, D::Diagonal) = (check_inplace_aliasing(A, D); @inline _rdiv!(A, A, D))
 # avoid copy when possible via internal 3-arg backend
 function _rdiv!(B::AbstractVecOrMat, A::AbstractVecOrMat, D::Diagonal)
     require_one_based_indexing(A)
@@ -658,6 +658,7 @@ matop_dest(::typeof(\), D::Diagonal, B::HermOrSym) = similar(B, promote_op(\, el
 ldiv!(D::Diagonal, B::AbstractVecOrMat) = @inline ldiv!(B, D, B)
 function ldiv!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
     require_one_based_indexing(A, B)
+    check_inplace_aliasing(B, D) # B may be A, as in the 2-arg ldiv!(D, B)
     dd = D.diag
     d = length(dd)
     m, n = size(A, 1), size(A, 2)

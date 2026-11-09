@@ -1128,6 +1128,7 @@ in `B`, returning the result. In the process, the diagonals of `A` are overwritt
 """
 function ldiv!(A::Tridiagonal, B::AbstractVecOrMat)
     LinearAlgebra.require_one_based_indexing(B)
+    check_inplace_aliasing(B, A)
     n = size(A, 1)
     if n != size(B,1)
         throw(DimensionMismatch(lazy"matrix has dimensions ($n,$n) but right hand side has $(size(B,1)) rows"))
