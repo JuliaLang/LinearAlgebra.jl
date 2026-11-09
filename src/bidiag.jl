@@ -537,6 +537,7 @@ end
 # B .= A * B
 function lmul!(A::Bidiagonal, B::AbstractVecOrMat)
     matmul_size_check(size(A), size(B))
+    check_inplace_aliasing(B, A)
     (; dv, ev) = A
     if A.uplo == 'U'
         for k in axes(B,2)
@@ -558,6 +559,7 @@ end
 # B .= D * B
 function lmul!(D::Diagonal, B::Bidiagonal)
     matmul_size_check(size(D), size(B))
+    check_inplace_aliasing(B, D)
     (; dv, ev) = B
     isL = B.uplo == 'L'
     iszero(size(D,1)) && return B
@@ -571,6 +573,7 @@ end
 # B .= B * A
 function rmul!(B::AbstractMatrix, A::Bidiagonal)
     matmul_size_check(size(A), size(B))
+    check_inplace_aliasing(B, A)
     (; dv, ev) = A
     if A.uplo == 'U'
         for k in reverse(axes(dv,1)[2:end])
@@ -596,6 +599,7 @@ end
 # B .= B * D
 function rmul!(B::Bidiagonal, D::Diagonal)
     matmul_size_check(size(B), size(D))
+    check_inplace_aliasing(B, D)
     (; dv, ev) = B
     isU = B.uplo == 'U'
     iszero(size(D,1)) && return B

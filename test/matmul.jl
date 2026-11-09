@@ -988,6 +988,40 @@ end
     end
 end
 
+@testset "lmul!/rmul! with factors that share memory" begin
+    @testset for T in (Float64, BigFloat, (@static COMPREHENSIVE ? (ComplexF64,) : ())...)
+        M = rand(T, 4, 4)
+        factors = (UpperTriangular(M), UnitLowerTriangular(M), UpperTriangular(M)',
+            Diagonal(view(M, :, 2)), Bidiagonal(view(M, 1:4, 2), view(M, 1:3, 3), :U))
+        for A in factors
+            M0 = copy(M)
+            @test_throws ArgumentError lmul!(A, M)
+            @test_throws ArgumentError rmul!(M, A)
+            @test_throws ArgumentError lmul!(A, view(M, :, 2))
+            @test_throws ArgumentError lmul!(A, M')
+            @test M == M0 # nothing is written before the check
+        end
+        # structured factors sharing memory with each other
+        d = rand(T, 4)
+        @test_throws ArgumentError lmul!(Diagonal(d), Tridiagonal(rand(T, 3), d, rand(T, 3)))
+        @test_throws ArgumentError rmul!(Tridiagonal(rand(T, 3), d, rand(T, 3)), Diagonal(d))
+        @test_throws ArgumentError lmul!(Diagonal(d), Bidiagonal(d, rand(T, 3), :U))
+        @test_throws ArgumentError rmul!(Bidiagonal(d, rand(T, 3), :U), Diagonal(d))
+        U = UpperTriangular(rand(T, 4, 4)); U0 = copy(parent(U))
+        @test_throws ArgumentError rmul!(U, U)
+        @test_throws ArgumentError rmul!(U, UnitUpperTriangular(parent(U)))
+        Dview = Diagonal(view(parent(U), diagind(parent(U))))
+        @test_throws ArgumentError lmul!(Dview, U)
+        @test_throws ArgumentError rmul!(U, Dview)
+        @test parent(U) == U0
+        # factors that don't share memory are unaffected
+        M = rand(T, 4, 4); M0 = copy(M); A = UpperTriangular(rand(T, 4, 4))
+        @test lmul!(A, M) ≈ Matrix(A) * M0
+        M = rand(T, 4, 4); M0 = copy(M); D = Diagonal(rand(T, 4))
+        @test rmul!(M, D) ≈ M0 * Matrix(D)
+    end
+end
+
 @testset "#35163" begin
     # typemax(Int32) * Int32(1) + Int32(1) * Int32(1) should wrap around
     # not promote to Int64, convert to Int32 and throw inexacterror

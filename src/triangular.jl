@@ -1196,16 +1196,24 @@ _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::UpperOrLowerTriangular) =
     generic_mattrimul!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 # methods for LinearAlgebra.jl's own triangular types, to avoid `istriu` checks
-lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _trimul!(B, A, B)
+function lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
+    @inline _trimul!(B, A, B)
+end
 function lmul!(A::AbstractTriangular, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
     if istriu(A)
         _trimul!(B, uppertriangular(A), B)
     else
         _trimul!(B, lowertriangular(A), B)
     end
 end
-rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _trimul!(A, A, B)
+function rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular)
+    check_inplace_aliasing(A, B)
+    @inline _trimul!(A, A, B)
+end
 function rmul!(A::AbstractMatrix, B::AbstractTriangular)
+    check_inplace_aliasing(A, B)
     if istriu(B)
         _trimul!(A, A, uppertriangular(B))
     else
@@ -1969,10 +1977,11 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
 end
 
 # these are needed because we don't keep track of left- and right-multiplication in tritrimul!
-rmul!(A::UpperTriangular, B::UpperTriangular)     = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::UpperTriangular, B::UnitUpperTriangular) = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::LowerTriangular, B::LowerTriangular)     = LowerTriangular(rmul!(tril!(A.data), B))
-rmul!(A::LowerTriangular, B::UnitLowerTriangular) = LowerTriangular(rmul!(tril!(A.data), B))
+# (check before `triu!`/`tril!` write to A.data)
+rmul!(A::UpperTriangular, B::UpperTriangular)     = (check_inplace_aliasing(A, B); UpperTriangular(rmul!(triu!(A.data), B)))
+rmul!(A::UpperTriangular, B::UnitUpperTriangular) = (check_inplace_aliasing(A, B); UpperTriangular(rmul!(triu!(A.data), B)))
+rmul!(A::LowerTriangular, B::LowerTriangular)     = (check_inplace_aliasing(A, B); LowerTriangular(rmul!(tril!(A.data), B)))
+rmul!(A::LowerTriangular, B::UnitLowerTriangular) = (check_inplace_aliasing(A, B); LowerTriangular(rmul!(tril!(A.data), B)))
 
 # Promotion
 ## Promotion methods in matmul don't apply to triangular multiplication since
