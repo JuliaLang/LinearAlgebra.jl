@@ -254,6 +254,7 @@ parent(D::Diagonal) = D.diag
 copy(D::Diagonal) = Diagonal(copy(D.diag))
 
 Base.dataids(D::Diagonal) = Base.dataids(D.diag)
+_aliasparts(D::Diagonal) = _aliasparts(D.diag)
 Base.unaliascopy(D::Diagonal) = Diagonal(Base.unaliascopy(D.diag))
 
 Base._reverse(A::Diagonal, dims) = reverse!(Matrix(A); dims)

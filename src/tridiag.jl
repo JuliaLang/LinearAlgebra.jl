@@ -169,6 +169,7 @@ similar(S::SymTridiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = 
 _band_dataids(v::AbstractVector) = isempty(v) ? () : Base.dataids(v)
 
 Base.dataids(S::SymTridiagonal) = (_band_dataids(S.dv)..., _band_dataids(S.ev)...)
+_aliasparts(S::SymTridiagonal) = (_aliasparts(S.dv)..., _aliasparts(S.ev)...)
 Base.unaliascopy(S::SymTridiagonal) = SymTridiagonal(Base.unaliascopy(S.dv), Base.unaliascopy(S.ev))
 
 # copyto! for matching axes
@@ -728,6 +729,10 @@ similar(M::Tridiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = sim
 function Base.dataids(M::Tridiagonal)
     ids = (_band_dataids(M.dl)..., _band_dataids(M.d)..., _band_dataids(M.du)...)
     isdefined(M, :du2) ? (ids..., _band_dataids(M.du2)...) : ids
+end
+function _aliasparts(M::Tridiagonal)
+    parts = (_aliasparts(M.dl)..., _aliasparts(M.d)..., _aliasparts(M.du)...)
+    isdefined(M, :du2) ? (parts..., _aliasparts(M.du2)...) : parts
 end
 function Base.unaliascopy(M::Tridiagonal)
     dl, d, du = Base.unaliascopy(M.dl), Base.unaliascopy(M.d), Base.unaliascopy(M.du)
