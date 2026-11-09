@@ -662,7 +662,10 @@ LQPackedQ{T}(Q::LQPackedQ) where {T} = LQPackedQ(convert(AbstractMatrix{T}, Q.fa
 @deprecate(AbstractMatrix{T}(Q::LQPackedQ) where {T},
     convert(AbstractQ{T}, Q),
     false)
-Matrix{T}(A::LQPackedQ) where {T} = convert(Matrix{T}, LAPACK.orglq!(copy(A.factors), A.τ))
+# the first min(m, n) rows of the n×n Q of an m×n LQ factorization, as for QR, where the
+# first min(m, n) columns are returned; works for non-BLAS element types, unlike orglq!
+Matrix{T}(Q::LQPackedQ{S}) where {T,S} =
+    convert(Matrix{T}, rmul!(Matrix{S}(I, min(size(Q.factors)...), size(Q, 2)), Q))
 convert(::Type{AbstractQ{T}}, Q::LQPackedQ) where {T} = LQPackedQ{T}(Q)
 
 # size(Q::LQPackedQ) yields the shape of Q's square form
