@@ -164,6 +164,13 @@ axes(M::SymTridiagonal) = (ax = axes(M.dv, 1); (ax, ax))
 similar(S::SymTridiagonal, ::Type{T}) where {T} = SymTridiagonal(similar(S.dv, T), similar(S.ev, T))
 similar(S::SymTridiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = similar(S.dv, T, dims)
 
+# All empty arrays may share the same memory address, so skip empty bands: a nonempty
+# banded matrix may have empty off-diagonals, which must not appear to alias each other
+_band_dataids(v::AbstractVector) = isempty(v) ? () : Base.dataids(v)
+
+Base.dataids(S::SymTridiagonal) = (_band_dataids(S.dv)..., _band_dataids(S.ev)...)
+Base.unaliascopy(S::SymTridiagonal) = SymTridiagonal(Base.unaliascopy(S.dv), Base.unaliascopy(S.ev))
+
 # copyto! for matching axes
 _copyto_banded!(dest::SymTridiagonal, src::SymTridiagonal) =
     (copyto!(dest.dv, src.dv); copyto!(dest.ev, src.ev); dest)
@@ -294,6 +301,7 @@ function syevr_tri_eigen(range::AbstractChar, dv::AbstractVector{T}, ev::Abstrac
     end
     # note that these functions do not actually modify dv, ev, despite the !
     values, iblock, isplit = LAPACK.stebz!(range, 'B', T(vl), T(vu), il, iu, -1.0, dv, ev)
+    isempty(values) && return Eigen(values, Matrix{T}(undef, length(dv), 0))
     vectors = LAPACK.stein!(dv, ev, values, iblock, isplit)
     return Eigen(sorteig!(values, vectors, sortby)...)
 end
@@ -715,6 +723,16 @@ Array(M::Tridiagonal) = Matrix(M)
 
 similar(M::Tridiagonal, ::Type{T}) where {T} = Tridiagonal(similar(M.dl, T), similar(M.d, T), similar(M.du, T))
 similar(M::Tridiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = similar(M.d, T, dims)
+
+# `du2` is optional: it is only defined when it is passed to the constructor, e.g. by `lu!`
+function Base.dataids(M::Tridiagonal)
+    ids = (_band_dataids(M.dl)..., _band_dataids(M.d)..., _band_dataids(M.du)...)
+    isdefined(M, :du2) ? (ids..., _band_dataids(M.du2)...) : ids
+end
+function Base.unaliascopy(M::Tridiagonal)
+    dl, d, du = Base.unaliascopy(M.dl), Base.unaliascopy(M.d), Base.unaliascopy(M.du)
+    isdefined(M, :du2) ? Tridiagonal(dl, d, du, Base.unaliascopy(M.du2)) : Tridiagonal(dl, d, du)
+end
 
 # Operations on Tridiagonal matrices
 # copyto! for matching axes

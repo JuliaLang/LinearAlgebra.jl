@@ -388,22 +388,18 @@ function dot(x::AbstractVector, H::UpperHessenberg, y::AbstractVector)
     r += dot(x[2], H[2,1], y[1])
     @inbounds for j in 2:m-1
         yj = y[j]
-        if !iszero(yj)
-            temp = adjoint(H[1,j]) * x₁
-            @simd for i in 2:j+1
-                temp += adjoint(H[i,j]) * x[i]
-            end
-            r += dot(temp, yj)
+        temp = adjoint(H[1,j]) * x₁
+        @simd for i in 2:j+1
+            temp += adjoint(H[i,j]) * x[i]
         end
+        r += dot(temp, yj)
     end
     ym = y[m]
-    if !iszero(ym)
-        temp = adjoint(H[1,m]) * x₁
-        @simd for i in 2:m
-            temp += adjoint(H[i,m]) * x[i]
-        end
-        r += dot(temp, ym)
+    temp = adjoint(H[1,m]) * x₁
+    @simd for i in 2:m
+        temp += adjoint(H[i,m]) * x[i]
     end
+    r += dot(temp, ym)
     return r
 end
 
@@ -455,6 +451,10 @@ end
 
 # preserve the wrapper for eigensolves with UpperHessenberg
 eigencopy_oftype(H::UpperHessenberg, S) = UpperHessenberg(eigencopy_oftype(H.data, S))
+
+# LAPACK has no SVD for Hessenberg matrices, so use the dense one
+svd!(H::UpperHessenberg; kwargs...) = svd!(triu!(H.data, -1); kwargs...)
+svdvals!(H::UpperHessenberg) = svdvals!(triu!(H.data, -1))
 
 schur!(H::UpperHessenberg{T}) where {T<:BlasFloat} = Schur(LinearAlgebra.LAPACK.hseqr!(H.data)...)
 
@@ -569,7 +569,7 @@ hessenberg(A::AbstractMatrix) =
 function show(io::IO, mime::MIME"text/plain", F::Hessenberg)
     summary(io, F)
     if !iszero(F.μ)
-        print("\nwith shift μI for μ = ", F.μ)
+        print(io, "\nwith shift μI for μ = ", F.μ)
     end
     println(io, "\nQ factor:")
     show(io, mime, F.Q)

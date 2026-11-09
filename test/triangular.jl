@@ -15,6 +15,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 n = 9
 Random.seed!(123)
@@ -944,6 +945,43 @@ end
     @test rdiv!(B2v, U) ≈ rdiv!(B2vc, U)
 end
 
+@testset "triangular matrices with non-contiguous or negatively strided parents" for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
+    n = 5
+    # views equal to M, with stride(·, 1) == 2 or with stride(·, 2) < 0, respectively
+    rowstep(M) = (P = zeros(T, 2size(M, 1), size(M, 2)); P[1:2:end, :] = M; view(P, 1:2:size(P, 1), :))
+    colrev(M) = (P = zeros(T, size(M)); P[:, end:-1:1] = M; view(P, :, size(P, 2):-1:1))
+    M = rand(T, n, n) + n*I
+    b, B = rand(T, n), rand(T, n, n)
+    @testset for fM in (rowstep, colrev), t in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), op in (identity, transpose, adjoint)
+        A, Ad = op(t(fM(M))), op(t(M))
+        @test A * b ≈ Ad * b
+        @test A \ b ≈ Ad \ b
+        @test A * B ≈ Ad * B
+        @test A \ B ≈ Ad \ B
+        @test B * A ≈ B * Ad
+        @test B / A ≈ B / Ad
+        # the destination may also be incompatible with BLAS
+        @test mul!(colrev(zero(B)), A, B) ≈ Ad * B
+        @test mul!(colrev(zero(B)), B, A) ≈ B * Ad
+        @test ldiv!(colrev(zero(B)), A, B) ≈ Ad \ B
+        @test lmul!(A, colrev(B)) ≈ Ad * B
+        @test rmul!(colrev(B), A) ≈ B * Ad
+        @test ldiv!(A, colrev(B)) ≈ Ad \ B
+        @test rdiv!(colrev(B), A) ≈ B / Ad
+        if T <: Complex
+            # a real operand is copied into the complex destination, so this also
+            # dispatches to the methods that call BLAS
+            br, Br = real(b), real(B)
+            @test A * br ≈ Ad * br
+            @test A \ br ≈ Ad \ br
+            @test A * Br ≈ Ad * Br
+            @test A \ Br ≈ Ad \ Br
+            @test Br * A ≈ Br * Ad
+            @test Br / A ≈ Br / Ad
+        end
+    end
+end
+
 @testset "error messages in matmul with mismatched matrix sizes" begin
     for T in (Int, Float64)
         A = UpperTriangular(ones(T,2,2))
@@ -1205,6 +1243,154 @@ end
             @test flat(T \ B) ≈ F \ flat(B)
             @test flat(Bt / T) ≈ flat(Bt) / F
         end
+    end
+end
+
+@testset "eigmax, eigmin, and permute and scale in eigvals, eigvecs and eigen" begin
+    A = [1.0 2 3; 0 -2 4; 0 0 5]
+    for T in (UpperTriangular(A), LowerTriangular(copy(A')), UnitUpperTriangular(A), UnitLowerTriangular(copy(A')))
+        @test eigmax(T) ≈ eigmax(Matrix(T))
+        @test eigmin(T) ≈ eigmin(Matrix(T))
+        @test eigvals(T; permute=false, scale=false) == eigvals(T)
+        @test eigen(T; permute=false, scale=false).values == eigen(T).values
+        @test eigvecs(T; permute=false, scale=false) == eigvecs(T)
+    end
+end
+
+@static if COMPREHENSIVE
+@testset "3-arg dot: zeros in y are not strong zeros (#1836)" begin
+    n = 3
+    @testset for TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+        for i in 1:n, j in 1:n
+            A = ones(n, n); A[i, j] = Inf
+            T = TT(A)
+            # only test entries that are actually stored (and not implicitly unit)
+            isinf(T[i, j]) || continue
+            y = ones(n); y[j] = 0
+            @test isnan(dot(ones(n), T, y))
+        end
+    end
+end
+end # COMPREHENSIVE
+
+@testset "triangular corner cases" begin
+    A = [1.0 2 3; 4 5 6; 7 8 10]
+    Tri = Tridiagonal(ComplexF64[1+im, 2], ComplexF64[3, 4im, 5], ComplexF64[6, 7-im])
+    @testset for TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+        T = TT(A)
+        B = AbstractMatrix{Float64}(T)
+        @test B == T && B isa TT
+        @test parent(B) !== parent(T)
+        # complex parent that is not strided
+        @test real(TT(Tri)) == TT(real(Tri))
+        @test parent(real(TT(Tri))) isa Tridiagonal
+        @test dot(Float64[], TT(zeros(0, 0)), Float64[]) === 0.0
+        # transpose(vector) / triangular of adjoint
+        v = [1.0, 2, 3]
+        @test transpose(v) / TT(A') ≈ transpose(v) / Matrix(TT(A'))
+    end
+    @testset for TT in (UpperTriangular, LowerTriangular)
+        half = TT === UpperTriangular ? "lower" : "upper"
+        @test_throws "cannot set indices in the $half triangular part" fill!(TT(zeros(2, 2)), 1)
+        T = TT(A)
+        # destination of a different shape: the elements, also the zeros, are copied in
+        # linear order, and the rest is left alone
+        D = copyto!(ones(4, 4), T)
+        @test D == copyto!(ones(4, 4), Matrix(T))
+        @test vec(D)[1:9] == vec(Matrix(T)) && all(isone, vec(D)[10:end])
+        # scaling with a parent that is not strided
+        T = TT(Tri)
+        M = Matrix(T)
+        for S in (T*2, 2*T, T/2, 2\T)
+            @test S isa TT
+        end
+        @test T*2 == 2*T == M*2
+        @test T/2 == 2\T == M/2
+    end
+    @test_throws ArgumentError eigvecs(UpperTriangular(big.(A)))
+end
+
+@static if COMPREHENSIVE
+@testset "l/rdiv! with lazy adjoint/transpose parent" begin
+    M = ComplexF64[1 2+3im 1im; 4-1im 5 2-im; 3+im 2im 7]
+    B = ComplexF64[1 2 3; 4 5 6]
+    # the last two parents are not BLAS compatible, and take the generic path
+    for P in (transpose(M'), adjoint(transpose(M)), transpose(big.(M)), big.(M)')
+        for W in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+            A = W(P)
+            @test B / A ≈ B / Matrix(A)
+            C = zeros(eltype(A), 3, 3)
+            @test_throws DimensionMismatch ldiv!(C, A, ones(2, 2))
+            @test_throws DimensionMismatch ldiv!(C, A, copy(transpose(B)))
+            @test_throws DimensionMismatch LinearAlgebra._rdiv!(C, ones(2, 2), A)
+            @test_throws DimensionMismatch LinearAlgebra._rdiv!(C, B, A)
+        end
+    end
+end
+end # COMPREHENSIVE
+
+@testset "log and fractional power, few square roots" begin
+    # 2x2 block of a real Schur form for which log takes a single square root
+    A = [1.0 -0.5; 0.5 1.0]
+    r, θ = hypot(1, 0.5), atan(0.5)
+    @test log(A) ≈ [log(r) -θ; θ log(r)]
+    # close to the identity, so powm needs no square roots; U = I + N with N^2 = 0
+    for ε in (1e-6, 1e-3)
+        U = UpperTriangular([1.0 ε; 0 1.0])
+        @test U^0.3 ≈ UpperTriangular([1.0 0.3ε; 0 1.0])
+    end
+end
+
+@testset "eigvecs and eigen don't overwrite the parent" begin
+    for T in (Float64, ComplexF64), TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+        M = T[1 2 3; 4 5 6; 7 8 10]
+        A = TT(copy(M))
+        V = eigvecs(A)
+        @test parent(A) == M
+        F = eigen(A)
+        @test parent(A) == M
+        @test V ≈ F.vectors
+        @test A * F.vectors ≈ F.vectors * Diagonal(F.values)
+    end
+end
+
+@testset "log with banded parents and with NaN" begin
+    # the logarithm fills the upper triangle, which a banded parent can't hold
+    B = Bidiagonal([1.0, 100, 3], [5.0, 2], :U)
+    for A in (UpperTriangular(B), UnitUpperTriangular(B), Tridiagonal([0.0, 0], [1.0, 100, 3], [5.0, 2]))
+        @test log(A) ≈ log(Matrix(A))
+    end
+    # NaNs propagate into the result instead of throwing
+    for T in (Float64, ComplexF64)
+        L = log(UpperTriangular(T[1 2 3; 0 NaN 4; 0 0 5]))
+        @test isnan(L[2,2]) && isnan(L[1,2]) && isnan(L[2,3])
+        @test L[1,1] == 0 && L[3,3] ≈ log(5)
+        L = log(UpperTriangular(T[1 NaN 3; 0 2 4; 0 0 5]))
+        @test isnan(L[1,2]) && isnan(L[1,3])
+        @test diag(L) ≈ log.([1, 2, 5])
+    end
+end
+
+@testset "log reads no uninitialized memory" begin
+    # log_quasitriu overwrites a copy of its argument, and the square roots in it read the parent
+    # of that copy below the diagonal, which was left uninitialized; this gave NaNs or wrong
+    # results at random
+    A = UpperTriangular(Matrix(Bidiagonal(fill(1.5, 200), fill(0.1, 199), :U)))
+    for _ in 1:3
+        L = log(A)
+        @test all(isfinite, L)
+        @test exp(Matrix(L)) ≈ A
+    end
+    for A0 in (A, UnitUpperTriangular(A), UpperTriangular(Bidiagonal([1.0, 2], [3.0], :U)))
+        @test iszero(tril(parent(LinearAlgebra._log_quasitriu_copy(Float64, A0)), -1))
+    end
+    # nor what is stored below the diagonal of the parent, which the wrapper hides
+    for d in (1.5, -1.5)
+        M = Matrix(Bidiagonal(fill(d, 200), fill(0.1, 199), :U))
+        Mnan = copy(M)
+        Mnan[CartesianIndices(M)[[i > j for i in 1:200, j in 1:200]]] .= NaN
+        @test isequal(log(UpperTriangular(Mnan)), log(UpperTriangular(M)))
+        @test isequal(log(UnitUpperTriangular(Mnan)), log(UnitUpperTriangular(M)))
     end
 end
 

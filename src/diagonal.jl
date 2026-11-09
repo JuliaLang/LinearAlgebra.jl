@@ -253,6 +253,9 @@ parent(D::Diagonal) = D.diag
 
 copy(D::Diagonal) = Diagonal(copy(D.diag))
 
+Base.dataids(D::Diagonal) = Base.dataids(D.diag)
+Base.unaliascopy(D::Diagonal) = Diagonal(Base.unaliascopy(D.diag))
+
 Base._reverse(A::Diagonal, dims) = reverse!(Matrix(A); dims)
 Base._reverse(A::Diagonal, ::Colon) = Diagonal(reverse(A.diag))
 Base._reverse!(A::Diagonal, ::Colon) = (reverse!(A.diag); A)
@@ -308,7 +311,7 @@ function lmul!(x::Number, D::Diagonal)
         # ensure that zeros are preserved on scaling
         y = D[2,1] * x
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (2, 1) off ",
-            lazy"the tridiagonal band to a nonzero value ($y)")))
+            lazy"the diagonal band to a nonzero value ($y)")))
     end
     lmul!(x, D.diag)
     return D
@@ -318,7 +321,7 @@ function rmul!(D::Diagonal, x::Number)
         # ensure that zeros are preserved on scaling
         y = x * D[2,1]
         iszero(y) || throw(ArgumentError(LazyString("cannot set index (2, 1) off ",
-            lazy"the tridiagonal band to a nonzero value ($y)")))
+            lazy"the diagonal band to a nonzero value ($y)")))
     end
     rmul!(D.diag, x)
     return D
@@ -1150,6 +1153,20 @@ function svd(D::Diagonal{T}) where {T<:Number}
         Vt[i,j] = one(Td)
     end
     return SVD(U, S, Vt)
+end
+
+function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(oneunit(T)))))*iszero(atol)) where {T<:Number}
+    n = size(D, 1)
+    Td = _ortho_eltype(T)
+    n == 0 && return zeros(Td, 0, 0)
+    d = D.diag
+    tol = max(atol, rtol*maximum(abs, d))
+    inds = findall(x -> !(abs(x) > tol), d)
+    N = zeros(Td, n, length(inds))
+    for (j, i) in enumerate(inds)
+        N[i, j] = oneunit(Td)
+    end
+    return N
 end
 
 *(x::AdjointAbsVec,   D::Diagonal, y::AbstractVector) = _mapreduce_prod(*, x, D, y)

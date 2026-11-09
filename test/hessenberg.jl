@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 # for tuple tests below
 ≅(x,y) = all(p -> p[1] ≈ p[2], zip(x,y))
@@ -347,6 +348,25 @@ end
     end
 end
 
+@testset "singular value decomposition" begin
+    @testset for T in (Float16, Float64, ComplexF64)
+        # the entries of A below the subdiagonal are not part of H
+        A = T[1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 17]
+        H = UpperHessenberg(A)
+        M = Matrix(H)
+        @test svdvals(H) ≈ svdvals(M)
+        F = svd(H)
+        @test F.S ≈ svdvals(M)
+        # Float16 is computed in Float32, and the result converted back
+        @test eltype(svdvals(H)) == eltype(F.S) == real(T) && eltype(F.U) == eltype(F.Vt) == T
+        @test F.U * Diagonal(F.S) * F.Vt ≈ M
+        @test size(svd(H; full=true).U) == (4, 4)
+        @test cond(H) ≈ cond(M)
+        @test opnorm(H, 2) ≈ opnorm(M, 2)
+        @test H.data == A
+    end
+end
+
 @testset "generic multiplication with HessenbergQ and its adjoint" begin
     hessenbergQs(A) = (hessenberg(A).Q, hessenberg(Hermitian(A'A, :U)).Q, hessenberg(Hermitian(A'A, :L)).Q)
 
@@ -430,6 +450,31 @@ end
             @test_throws DimensionMismatch rmul!(big.(randn(2, 5)), Q')
         end
     end
+end
+
+@static if COMPREHENSIVE
+@testset "3-arg dot: zeros in y are not strong zeros (#1836)" begin
+    n = 4
+    for i in 1:n, j in max(1, i-1):n
+        A = ones(n, n); A[i, j] = Inf
+        H = UpperHessenberg(A)
+        y = ones(n); y[j] = 0
+        @test isnan(dot(ones(n), H, y))
+    end
+end
+end # COMPREHENSIVE
+
+@testset "Hessenberg corner cases" begin
+    @test dot(Float64[], UpperHessenberg(zeros(0, 0)), Float64[]) === 0.0
+    A = [4.0 1 2; 1 3 0; 2 1 5]
+    F = hessenberg(A) + 2I
+    @test F.μ == 2
+    @test Matrix(F) ≈ A + 2I
+    @test occursin("\nwith shift μI for μ = 2\nQ factor:", sprint(show, "text/plain", F))
+    @test !occursin("with shift", sprint(show, "text/plain", hessenberg(A)))
+    # scaling that would change the eltype of F.H
+    @test_throws MethodError hessenberg(A) * (1 + 2im)
+    @test_throws MethodError (1 + 2im) * hessenberg(A)
 end
 
 end # module TestHessenberg

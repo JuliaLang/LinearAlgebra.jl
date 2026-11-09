@@ -1483,6 +1483,9 @@ end
     @test lmul!(0.2, copy(D)) ≈ lmul!(0.2, Array(D))
     @test_throws ArgumentError rmul!(D, NaN)
     @test_throws ArgumentError lmul!(NaN, D)
+    msg = "cannot set index (2, 1) off the diagonal band to a nonzero value (NaN)"
+    @test_throws msg rmul!(D, NaN)
+    @test_throws msg lmul!(NaN, D)
     D = Diagonal(rand(1))
     @test all(isnan, rmul!(copy(D), NaN))
     @test all(isnan, lmul!(NaN, copy(D)))
@@ -1649,6 +1652,91 @@ end
         @test rmul!(op(copy(M)), D) == Matrix(op(M)) * D
         @test lmul!(D, op(copy(M))) == D * Matrix(op(M))
     end
+end
+
+@testset "Diagonal corner cases" begin
+    # 1x1 matrices have no off-diagonal zeros
+    @test minimum(Diagonal([3])) == 3
+    @test maximum(Diagonal([-3])) == -3
+    @test minimum(Diagonal([3, 4])) == 0 && maximum(Diagonal([-3, -4])) == 0
+    @test_throws ArgumentError opnorm(Diagonal([1.0, 2, 3]), 3)
+end
+
+@testset "Diagonal and tridiagonal division size checks" begin
+    D = Diagonal([1.0, 2, 3])
+    S = Tridiagonal([1.0, 2], [3.0, 4, 5], [6.0, 7])
+    @test_throws DimensionMismatch ldiv!(similar(S), Diagonal([1.0, 2]), S)
+    @test_throws DimensionMismatch ldiv!(Tridiagonal(zeros(1), zeros(2), zeros(1)), D, S)
+    @test_throws DimensionMismatch LinearAlgebra._rdiv!(similar(S), S, Diagonal([1.0, 2]))
+    @test_throws DimensionMismatch LinearAlgebra._rdiv!(Tridiagonal(zeros(1), zeros(2), zeros(1)), S, D)
+end
+
+@testset "kron! of Diagonal with matrix entries into a dense matrix" begin
+    # the entries have no zero, so the off-diagonal blocks are computed explicitly
+    A = Diagonal([[1 2; 3 4], [5 6; 7 8]])
+    B = Diagonal([[1 0; 0 2], [0 1; 1 0]])
+    C = Matrix{Matrix{Int}}(undef, 4, 4)
+    @test kron!(C, A, B) === C
+    @test C == kron(A, B)
+    @test C[1, 1] == [1 4; 3 8] && C[1, 2] == zeros(Int, 2, 2)
+end
+
+@testset "nullspace" begin
+    for T in (Float16, Float32, Float64, ComplexF64, Int, BigFloat)
+        for d in ([1, 0, 2, 0, 0, 3], [0, 0, 0], [1, 2, 3], [0], [5], [1e-20, 1, 0, -2])
+            D = Diagonal(convert(Vector{T}, T <: Integer ? round.(Int, d) : d))
+            N = @inferred nullspace(D)
+            # the generic path through the SVD, which nullspace(D) used before
+            Ns = nullspace(svd(D))
+            @test N isa Matrix{eltype(Ns)}
+            @test size(N) == size(Ns)
+            @test N * N' ≈ Ns * Ns'
+            @test norm(D * N) ≤ 10 * eps(real(float(one(T)))) * max(1, opnorm(D))
+            @test N' * N ≈ I
+            # tolerances
+            for kw in ((atol = 1.5,), (rtol = 0.5,), (atol = 0.5, rtol = 0.1))
+                Nk = nullspace(D; kw...)
+                Nks = nullspace(svd(D); kw...)
+                @test size(Nk) == size(Nks)
+                @test Nk * Nk' ≈ Nks * Nks'
+            end
+        end
+    end
+    for T in (Float16, Float64, ComplexF32, Int)
+        @test @inferred(nullspace(Diagonal(T[]))) isa Matrix{eltype(svd(Diagonal(T[1])).Vt)}
+        @test size(nullspace(Diagonal(T[]))) == (0, 0)
+    end
+    @test nullspace(Diagonal([1.0, 0.0, 2.0, 0.0])) == [0 0; 1 0; 0 0; 0 1]
+    # only the result is allocated, not the n×n matrices of the SVD
+    D = Diagonal([isodd(i) ? 0.0 : 1.0 + i for i in 1:200])
+    nullspace(D)
+    @test (@allocated nullspace(D)) < 2 * sizeof(Float64) * 200 * 100
+end
+
+@testset "Diagonal eigen and cholesky errors" begin
+    @test_throws ArgumentError eigen(Diagonal([[1.0 NaN; 0 1], [1.0 0; 0 1]]))
+    @test_throws ArgumentError eigen(Diagonal([1.0, Inf]), Diagonal([1.0, 2]))
+    @test_throws ArgumentError eigen(Diagonal([1.0, 2]), Diagonal([1.0, 0]))
+    @test_throws ArgumentError eigen([1.0 2; 3 4], Diagonal([1.0, 0]))
+    D = Diagonal([1.0+im, 2])
+    @test_throws PosDefException cholesky(D, RowMaximum())
+    @test !issuccess(cholesky(D, RowMaximum(); check = false))
+end
+
+@testset "dataids and unaliascopy" begin
+    M = rand(4, 4)
+    D = Diagonal(view(M, :, 2))
+    @test Base.mightalias(M, D)
+    @test !Base.mightalias(M, Diagonal(M[:, 2]))
+    U = Base.unaliascopy(D)
+    @test U isa typeof(D) && U == D && !Base.mightalias(M, U)
+    # copying and broadcasting into the memory backing the source
+    M0 = copy(M)
+    copyto!(M, Diagonal(view(M, :, 2)))
+    @test M == Diagonal(M0[:, 2])
+    M = rand(4, 4); M0 = copy(M)
+    M .= Diagonal(view(M, :, 1)) .+ M
+    @test M ≈ Diagonal(M0[:, 1]) .+ M0
 end
 
 end # module TestDiagonal
