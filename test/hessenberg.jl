@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 # for tuple tests below
 ≅(x,y) = all(p -> p[1] ≈ p[2], zip(x,y))
@@ -431,5 +432,17 @@ end
         end
     end
 end
+
+@static if COMPREHENSIVE
+@testset "3-arg dot: zeros in y are not strong zeros (#1836)" begin
+    n = 4
+    for i in 1:n, j in max(1, i-1):n
+        A = ones(n, n); A[i, j] = Inf
+        H = UpperHessenberg(A)
+        y = ones(n); y[j] = 0
+        @test isnan(dot(ones(n), H, y))
+    end
+end
+end # COMPREHENSIVE
 
 end # module TestHessenberg

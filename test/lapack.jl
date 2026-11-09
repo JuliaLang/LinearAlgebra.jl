@@ -1034,4 +1034,11 @@ Base.unsafe_convert(::Type{Ptr{T}}, A::NonResizableArray{T}) where {T} = pointer
     @test LAPACK.trevc!('R', 'S', BlasInt[1, 0, 1], copy(T), similar(T), view(similar(T), :, :))[2] ≈ VR
 end
 
+@testset "pstrf! of an empty matrix has rank 0" begin
+    for elty in (Float32, Float64, ComplexF32, ComplexF64), uplo in ('U', 'L')
+        @test all(_ -> LAPACK.pstrf!(uplo, zeros(elty, 0, 0), -1.0)[3] == 0, 1:100)
+        @test cholesky(zeros(elty, 0, 0), RowMaximum()).rank == 0
+    end
+end
+
 end # module TestLAPACK
