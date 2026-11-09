@@ -89,6 +89,13 @@ function chktrans(trans::AbstractChar)
     trans
 end
 
+"Check that the array `C` to be overwritten does not share memory with the reflectors `A` or their scalar factors `tau`"
+function chknoalias(C, A, tau)
+    if Base.mightalias(C, A) || Base.mightalias(C, tau)
+        throw(ArgumentError("C must not share memory with the reflectors or their scalar factors"))
+    end
+end
+
 "Check that left/right hand side multiply is correctly specified"
 function chkside(side::AbstractChar)
     if !(side == 'L' || side == 'R')
@@ -929,6 +936,7 @@ for (tzrzf, ormrz, elty) in
             chktrans(trans)
             chkside(side)
             chkstride1(A, tau, C)
+            chknoalias(C, A, tau)
             m, n = size(C)
             k = length(tau)
             l = size(A, 2) - size(A, 1)
@@ -3075,6 +3083,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             chktrans(trans)
             chkside(side)
             chkstride1(A, C, tau)
+            chknoalias(C, A, tau)
             m,n = ndims(C) == 2 ? size(C) : (size(C, 1), 1)
             nA = size(A, 2)
             k   = length(tau)
@@ -3122,6 +3131,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             chktrans(trans)
             chkside(side)
             chkstride1(A, C, tau)
+            chknoalias(C, A, tau)
             m,n = ndims(C) == 2 ? size(C) : (size(C, 1), 1)
             mA  = size(A, 1)
             k   = length(tau)
@@ -3172,6 +3182,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             chktrans(trans)
             chkside(side)
             chkstride1(A, C, tau)
+            chknoalias(C, A, tau)
             m,n = ndims(C) == 2 ? size(C) : (size(C, 1), 1)
             mA  = size(A, 1)
             k   = length(tau)
@@ -3222,6 +3233,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             chktrans(trans)
             chkside(side)
             chkstride1(A, C, tau)
+            chknoalias(C, A, tau)
             m,n = ndims(C) == 2 ? size(C) : (size(C, 1), 1)
             nA  = size(A, 2)
             k   = length(tau)
@@ -3261,6 +3273,7 @@ for (orglq, orgqr, orgql, orgrq, ormlq, ormqr, ormql, ormrq, gemqrt, elty) in
             chktrans(trans)
             chkside(side)
             chkstride1(V, T, C)
+            chknoalias(C, V, T)
             m,n = ndims(C) == 2 ? size(C) : (size(C, 1), 1)
             nb, k = size(T)
             if k == 0
@@ -6300,6 +6313,7 @@ for (ormhr, elty) in
 
             require_one_based_indexing(A, tau, C)
             chkstride1(A, tau, C)
+            chknoalias(C, A, tau)
             chkside(side)
             chktrans(trans)
             n = checksquare(A)
@@ -6558,6 +6572,7 @@ for (ormtr, elty) in
 
             require_one_based_indexing(A, tau, C)
             chkstride1(A, tau, C)
+            chknoalias(C, A, tau)
             n = checksquare(A)
             chkside(side)
             chkuplo(uplo)
