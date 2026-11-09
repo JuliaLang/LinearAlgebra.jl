@@ -345,4 +345,14 @@ end
     end
 end
 
+@testset "3-arg dot: zeros in y are not strong zeros (#1836)" begin
+    n = 4
+    for i in 1:n, j in max(1, i-1):n
+        A = ones(n, n); A[i, j] = Inf
+        H = UpperHessenberg(A)
+        y = ones(n); y[j] = 0
+        @test isnan(dot(ones(n), H, y))
+    end
+end
+
 end # module TestHessenberg

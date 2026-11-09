@@ -1043,13 +1043,11 @@ function dot(x::AbstractVector, A::AbstractMatrix, y::AbstractVector)
     x₁ = first(x)
     for j in eachindex(y)
         yj = @inbounds y[j]
-        if !iszero(yj)
-            temp = zero(adjoint(@inbounds A[i₁,j]) * x₁)
-            @inbounds @simd for i in eachindex(x)
-                temp += adjoint(A[i,j]) * x[i]
-            end
-            s += dot(temp, yj)
+        temp = zero(adjoint(@inbounds A[i₁,j]) * x₁)
+        @inbounds @simd for i in eachindex(x)
+            temp += adjoint(A[i,j]) * x[i]
         end
+        s += dot(temp, yj)
     end
     return s
 end

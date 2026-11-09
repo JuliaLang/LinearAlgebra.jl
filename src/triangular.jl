@@ -899,13 +899,11 @@ function dot(x::AbstractVector, A::UpperTriangular, y::AbstractVector)
     r = dot(x₁, A[1,1], y[1])
     @inbounds for j in axes(A, 2)[2:end]
         yj = y[j]
-        if !iszero(yj)
-            temp = adjoint(A[1,j]) * x₁
-            @simd for i in 2:j
-                temp += adjoint(A[i,j]) * x[i]
-            end
-            r += dot(temp, yj)
+        temp = adjoint(A[1,j]) * x₁
+        @simd for i in 2:j
+            temp += adjoint(A[i,j]) * x[i]
         end
+        r += dot(temp, yj)
     end
     return r
 end
@@ -920,14 +918,12 @@ function dot(x::AbstractVector, A::UnitUpperTriangular, y::AbstractVector)
     r = dot(x₁, y[1])
     @inbounds for j in axes(A, 2)[2:end]
         yj = y[j]
-        if !iszero(yj)
-            temp = adjoint(A[1,j]) * x₁
-            @simd for i in 2:j-1
-                temp += adjoint(A[i,j]) * x[i]
-            end
-            r += dot(temp, yj)
-            r += dot(x[j], yj)
+        temp = adjoint(A[1,j]) * x₁
+        @simd for i in 2:j-1
+            temp += adjoint(A[i,j]) * x[i]
         end
+        r += dot(temp, yj)
+        r += dot(x[j], yj)
     end
     return r
 end
@@ -941,13 +937,11 @@ function dot(x::AbstractVector, A::LowerTriangular, y::AbstractVector)
     r = zero(typeof(dot(first(x), first(A), first(y))))
     @inbounds for j in axes(A, 2)
         yj = y[j]
-        if !iszero(yj)
-            temp = adjoint(A[j,j]) * x[j]
-            @simd for i in j+1:lastindex(A,1)
-                temp += adjoint(A[i,j]) * x[i]
-            end
-            r += dot(temp, yj)
+        temp = adjoint(A[j,j]) * x[j]
+        @simd for i in j+1:lastindex(A,1)
+            temp += adjoint(A[i,j]) * x[i]
         end
+        r += dot(temp, yj)
     end
     return r
 end
@@ -961,13 +955,11 @@ function dot(x::AbstractVector, A::UnitLowerTriangular, y::AbstractVector)
     r = zero(typeof(dot(first(x), first(y))))
     @inbounds for j in axes(A, 2)
         yj = y[j]
-        if !iszero(yj)
-            temp = x[j]
-            @simd for i in j+1:lastindex(A,1)
-                temp += adjoint(A[i,j]) * x[i]
-            end
-            r += dot(temp, yj)
+        temp = x[j]
+        @simd for i in j+1:lastindex(A,1)
+            temp += adjoint(A[i,j]) * x[i]
         end
+        r += dot(temp, yj)
     end
     return r
 end
@@ -1258,6 +1250,7 @@ _ldiv!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
     generic_mattridiv!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
+ldiv!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _ldiv!(B, A, B)
 function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
     if istriu(A)
         _ldiv!(B, uppertriangular(A), B)
@@ -1265,6 +1258,7 @@ function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
         _ldiv!(B, lowertriangular(A), B)
     end
 end
+rdiv!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _rdiv!(A, A, B)
 function rdiv!(A::AbstractMatrix, B::AbstractTriangular)
     if istriu(B)
         _rdiv!(A, A, uppertriangular(B))
@@ -1337,16 +1331,20 @@ end
 
 # multiplication
 generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector{T}) where {T<:BlasFloat} =
-    BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copy!(c, b))
+    if stride(A,1) == 1 && _fullstride2(A)
+        BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copy!(c, b))
+    else # incompatible with BLAS
+        @invoke generic_trimatmul!(c::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, b::AbstractVecOrMat)
+    end
 function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix{T}) where {T<:BlasFloat}
-    if stride(C,1) == stride(A,1) == 1
+    if stride(C,1) == stride(A,1) == 1 && _fullstride2(C) && _fullstride2(A)
         BLAS.trmm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copy!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatmul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
 function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat}
-    if stride(C,1) == stride(B,1) == 1
+    if stride(C,1) == stride(B,1) == 1 && _fullstride2(C) && _fullstride2(B)
         BLAS.trmm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
         @invoke generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
@@ -1354,14 +1352,14 @@ function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function,
 end
 # division
 function generic_trimatdiv!(C::StridedVecOrMat{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVecOrMat{T}) where {T<:BlasFloat}
-    if stride(C,1) == stride(A,1) == 1
+    if stride(C,1) == stride(A,1) == 1 && _fullstride2(C) && _fullstride2(A)
         LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : _copy_or_copyto!(C, B))
     else # incompatible with LAPACK
         @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
     end
 end
 function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat}
-    if stride(C,1) == stride(B,1) == 1
+    if stride(C,1) == stride(B,1) == 1 && _fullstride2(C) && _fullstride2(B)
         BLAS.trsm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
         @invoke generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
@@ -1378,22 +1376,16 @@ end
 # Eigensystems
 ## Notice that trecv works for quasi-triangular matrices and therefore the lower sub diagonal must be zeroed before calling the subroutine
 function eigvecs(A::UpperTriangular{<:BlasFloat,<:StridedMatrix})
-    LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data))
+    LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A))
 end
 function eigvecs(A::UnitUpperTriangular{<:BlasFloat,<:StridedMatrix})
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    LAPACK.trevc!('R', 'A', BlasInt[], triu!(A.data))
+    LAPACK.trevc!('R', 'A', BlasInt[], Matrix(A))
 end
 function eigvecs(A::LowerTriangular{<:BlasFloat,<:StridedMatrix})
-    LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)'))
+    LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A'))
 end
 function eigvecs(A::UnitLowerTriangular{<:BlasFloat,<:StridedMatrix})
-    for i in axes(A, 1)
-        A.data[i,i] = 1
-    end
-    LAPACK.trevc!('L', 'A', BlasInt[], copy(tril!(A.data)'))
+    LAPACK.trevc!('L', 'A', BlasInt[], Matrix(A'))
 end
 
 ####################
@@ -2162,15 +2154,9 @@ function log_quasitriu(A0::AbstractMatrix{T}) where T<:BlasFloat
     # allocate real A if log(A) will be real and complex A otherwise
     checksquare(A0)
     if isreal(A0) && (!istriu(A0) || !any(x -> real(x) < zero(real(T)), diag(A0)))
-        A = T <: Complex ? real(A0) : copy(A0)
+        A = _log_quasitriu_copy(real(T), A0)
     else
-        A = T <: Complex ? copy(A0) : complex(A0)
-    end
-    if A0 isa UnitUpperTriangular
-        A = UpperTriangular(parent(A))
-        @inbounds for i in axes(A,1)
-            A[i,i] = 1
-        end
+        A = _log_quasitriu_copy(complex(T), A0)
     end
     Y0 = _log_quasitriu!(A0, A)
     # return complex result for complex input
@@ -2182,6 +2168,11 @@ function log_quasitriu(A0::AbstractMatrix{T}) where T<:BlasFloat
         return Y
     end
 end
+# The copy of A0 that _log_quasitriu! overwrites. For a triangular A0, it is upper triangular with
+# dense storage, also if the parent of A0 is banded, since the logarithm fills the upper triangle,
+# and it has zeros below the diagonal, which _sqrt_quasitriu! reads in the parent.
+_log_quasitriu_copy(::Type{S}, A0::Union{UpperTriangular,UnitUpperTriangular}) where {S} = UpperTriangular(Matrix{S}(A0))
+_log_quasitriu_copy(::Type{S}, A0::AbstractMatrix) where {S} = Matrix{S}(A0)
 # type-stable implementation of log_quasitriu
 # A is a copy of A0 that is overwritten while computing the result. It has the same eltype
 # as the result.
@@ -2448,24 +2439,26 @@ function _pow_superdiag_quasitriu!(A, A0, p)
         end
         Ak = t(A0[k,k])
         Akp1 = t(A0[k+1,k+1])
+        A0kkp1 = t(A0[k,k+1])
 
         Akp = Ak^p
         Akp1p = Akp1^p
 
         if Ak == Akp1
-            A[k,k+1] = p * A0[k,k+1] * Ak^(p-1)
+            A[k,k+1] = p * A0kkp1 * Ak^(p-1)
         elseif 2 * abs(Ak) < abs(Akp1) || 2 * abs(Akp1) < abs(Ak) || iszero(Akp1 + Ak)
-            A[k,k+1] = A0[k,k+1] * (Akp1p - Akp) / (Akp1 - Ak)
+            A[k,k+1] = A0kkp1 * (Akp1p - Akp) / (Akp1 - Ak)
         else
             logAk = log(Ak)
             logAkp1 = log(Akp1)
             z = (Akp1 - Ak)/(Akp1 + Ak)
             if abs(z) > 1
-                A[k,k+1] = A0[k,k+1] * (Akp1p - Akp) / (Akp1 - Ak)
+                A[k,k+1] = A0kkp1 * (Akp1p - Akp) / (Akp1 - Ak)
             else
                 w = atanh(z) + im * pi * (unw(logAkp1-logAk) - unw(log1p(z)-log1p(-z)))
                 dd = 2 * exp(p*(logAk+logAkp1)/2) * sinh(p*w) / (Akp1 - Ak);
-                A[k,k+1] = A0[k,k+1] * dd
+                # for a real A, dd is real, unless an entry is NaN
+                A[k,k+1] = A0kkp1 * (t <: Real ? real(dd) : dd)
             end
         end
         k += 1
