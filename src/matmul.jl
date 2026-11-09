@@ -285,6 +285,7 @@ end
 Calculates the matrix-matrix or matrix-vector product ``A B`` and stores the result in `Y`,
 overwriting the existing value of `Y`. Note that `Y` must not be aliased with either `A` or
 `B`; an `ArgumentError` is thrown if `Base.mightalias` detects that they share memory.
+As an exception, if `A` or `B` is an `AbstractQ`, the other factor may be aliased with `Y`.
 
 # Examples
 ```jldoctest
