@@ -1048,6 +1048,46 @@ end
     end
 end
 
+@testset "aliasing checks compare the views inside wrappers" begin
+    @testset for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (BigFloat,) : ())...)
+        function mkV()
+            V = rand(T, 4, 6)
+            V[:, 2] .+= 20 # keep the matrices built from columns 1:4 well-conditioned
+            for i in 1:4; V[i, i] += 10; end
+            return V
+        end
+        x = rand(T, 4)
+        # structured matrices built from views of the columns 1:4 of V
+        D(V) = Diagonal(view(V, :, 2))
+        Bi(V) = Bidiagonal(view(V, 1:4, 2), view(V, 1:3, 3), :U)
+        Tri(V) = Tridiagonal(view(V, 1:3, 1), view(V, 1:4, 2), view(V, 1:3, 3))
+        S(V) = Symmetric(view(V, :, 1:4))
+        U(V) = UpperTriangular(view(V, :, 1:4))
+        for mk in (D, Bi, V -> Bi(V)', Tri, S, U, V -> U(V)')
+            # columns 5 and 6 of V don't overlap with A (a new V each time, as ldiv! with a
+            # Tridiagonal overwrites it)
+            V = mkV(); A = mk(V); Am = Matrix(A)
+            @test mul!(view(V, :, 5), A, x) ≈ Am * x
+            if !(A isa Union{Tridiagonal,Symmetric}) # no in-place lmul! for these
+                y = V[:, 6]
+                @test lmul!(A, view(V, :, 6)) ≈ Am * y
+            end
+            if !(A isa Symmetric) # no in-place ldiv! for Symmetric
+                y = V[:, 6]
+                @test ldiv!(A, view(V, :, 6)) ≈ Am \ y
+            end
+        end
+        # overlapping views are still caught
+        V = mkV()
+        @test_throws ArgumentError mul!(view(V, :, 2), D(V), x)
+        @test_throws ArgumentError mul!(view(V, :, 4), S(V), x)
+        @test_throws ArgumentError lmul!(D(V), view(V, :, 2))
+        @test_throws ArgumentError lmul!(Bi(V)', view(V, :, 3))
+        @test_throws ArgumentError ldiv!(Tri(V), view(V, :, 1))
+        @test_throws ArgumentError ldiv!(U(V), view(V, :, 4))
+    end
+end
+
 @testset "#35163" begin
     # typemax(Int32) * Int32(1) + Int32(1) * Int32(1) should wrap around
     # not promote to Int64, convert to Int32 and throw inexacterror

@@ -70,6 +70,7 @@ AbstractMatrix{T}(H::UpperHessenberg) where {T} = UpperHessenberg{T}(H)
 AbstractMatrix{T}(H::UpperHessenberg{T}) where {T} = copy(H)
 
 Base.dataids(A::UpperHessenberg) = Base.dataids(parent(A))
+_aliasparts(A::UpperHessenberg) = _aliasparts(parent(A))
 Base.unaliascopy(A::UpperHessenberg) = UpperHessenberg(Base.unaliascopy(parent(A)))
 
 copy(H::UpperHessenberg) = UpperHessenberg(copy(H.data))

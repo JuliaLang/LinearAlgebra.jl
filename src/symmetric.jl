@@ -331,6 +331,7 @@ Base._reverse(A::Hermitian, ::Colon) = Hermitian(reverse(A.data), A.uplo == 'U' 
 end
 
 Base.dataids(A::HermOrSym) = Base.dataids(parent(A))
+_aliasparts(A::HermOrSym) = _aliasparts(parent(A))
 Base.unaliascopy(A::Hermitian) = Hermitian(Base.unaliascopy(parent(A)), _sym_uplo(A.uplo))
 Base.unaliascopy(A::Symmetric) = Symmetric(Base.unaliascopy(parent(A)), _sym_uplo(A.uplo))
 
