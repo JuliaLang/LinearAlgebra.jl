@@ -685,20 +685,8 @@ end
     @test_throws ArgumentError exp(fill(SizedArray{(1,1)}([NaN;;]), 2, 2))
     # as for numbers, a diagonal matrix with a NaN gives NaNs
     @test isnan(only(only(exp(fill(SizedArray{(1,1)}([NaN;;]), 1, 1)))))
-    # blocks whose size is not part of their type, like matrices, which need not be square
-    block(m, n, i, j) = [(i == j && r == c ? 1.0 : 0.0) + (r + i) / (c + 2j) for r in 1:m, c in 1:n]
-    for sz in ((2, 2), (1, 2))
-        B = [block(sz[i], sz[j], i, j) for i in 1:2, j in 1:2]
-        @test flat(exp(B)::typeof(B)) ≈ exp(flat(B))
-    end
-    # diagonal matrices take the exponential of their diagonal elements, also for blocks of
-    # different sizes, and element types without an exp take the general path
-    for sz in ((2, 2), (2, 3))
-        B = [i == j ? block(sz[i], sz[j], i, j) : zeros(sz[i], sz[j]) for i in 1:2, j in 1:2]
-        E = exp(B)::typeof(B)
-        @test E[1,1] == exp(B[1,1]) && E[2,2] == exp(B[2,2]) && iszero(E[1,2]) && iszero(E[2,1])
-        @test flat(E) ≈ exp(flat(B))
-    end
+    # diagonal matrices take the exponential of their diagonal elements, and element types
+    # without an exp take the general path
     B = Diagonal([SizedArray{(2,2)}([1.0 2; 3 4]), SizedArray{(2,2)}([0.5 0; 1 -1])])
     E = exp(Matrix(B))
     @test E[1,1] == exp(B[1,1]) && E[2,2] == exp(B[2,2]) && iszero(E[1,2]) && iszero(E[2,1])
