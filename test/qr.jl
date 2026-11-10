@@ -608,6 +608,51 @@ end
     @test size(nullspace(F; atol=1.01), 2) == 2
 end
 
+@testset "nullspace(::QRPivoted): orthonormalization" begin
+    # nullities larger than the block size of the orthonormalization
+    for elty in (Float64, ComplexF64), (m, k, nc) in ((100, 10, 90), (90, 60, 100), (200, 50, 150))
+        A = convert(Matrix{elty}, randn(m, k) * randn(k, nc))
+        N = nullspace(qr(A, ColumnNorm()))
+        ε = eps(real(elty))
+        @test size(N) == (nc, nc - k)
+        @test N' * N ≈ I atol = 100 * ε
+        @test norm(A * N, Inf) ≤ 100 * nc * ε * opnorm(A, Inf)
+        Ns = nullspace(A)
+        @test N * N' ≈ Ns * Ns'
+    end
+    # worst case of column pivoting: R₁₁ = I - triu(ones, 1) has (R₁₁⁻¹)ᵢⱼ = 2^(j-i-1), so
+    # ‖R₁₁ \\ R₁₂‖ grows like 2^r; beyond about 1/ε, Gram-Schmidt loses orthogonality
+    @testset "large ‖R₁₁ \\ R₁₂‖ ($T)" for T in (Float32, Float64)
+        function adversarial(r, k)
+            R = zeros(T, r + k, r + k)
+            R[1:r, 1:r] = I - triu(ones(T, r, r), 1)
+            R[1:r, r+1:end] .= one(T)
+            return QRPivoted(R, zeros(T, r + k), collect(1:r+k)) # τ = 0: Q = I, no pivoting
+        end
+        ε = eps(T)
+        # below the threshold ‖R₁₁ \\ R₁₂‖ ≤ 1/(100ε): Gram-Schmidt keeps the residual small,
+        # where a Householder QR of [-R₁₁ \\ R₁₂; I] would lose about ε‖R₁₁ \\ R₁₂‖
+        r = floor(Int, -log2(ε)) - 8
+        F = adversarial(r, 5)
+        A = Matrix(F)
+        N = nullspace(F)
+        @test N' * N ≈ I atol = 100 * ε
+        @test norm(A * N) ≤ 100 * r * ε * norm(A)
+        # above the threshold: Householder, which keeps the basis orthonormal
+        for r in (T === Float32 ? (30, 40) : (60, 70))
+            N = nullspace(adversarial(r, 5))
+            @test size(N) == (r + 5, 5)
+            @test N' * N ≈ I atol = 100 * ε
+        end
+    end
+    # the basis is orthonormalized in place: besides the result, only small workspace, so
+    # less than two n×(n-r) buffers (the Householder version allocated almost three)
+    A = randn(300, 100) * randn(100, 200)
+    F = qr(A, ColumnNorm())
+    nullspace(F)
+    @test (@allocated nullspace(F)) < 2 * sizeof(Float64) * 200 * 100
+end
+
 @testset "cond of QR factorizations" begin
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         ε = eps(real(elty))
