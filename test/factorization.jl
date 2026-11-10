@@ -153,10 +153,10 @@ end
             @test_throws ArgumentError ldiv!(F, view(M, :, 1))
             @test_throws ArgumentError ldiv!(F', M)
             @test_throws ArgumentError ldiv!(M, F, rand(T, n, n))
-            if F isa Union{LU,Cholesky,CholeskyPivoted,LinearAlgebra.Hessenberg}
+            if F isa Union{LU,Cholesky,CholeskyPivoted,Hessenberg}
                 @test_throws ArgumentError rdiv!(M, F)
             end
-            @test isequal(M, M0) # the check comes before anything is written
+            @test M == M0 # the check comes before anything is written
         end
         # factorizations of banded matrices, stored in their bands
         for F in (ldlt!(SymTridiagonal(rand(T, n) .+ 10, rand(T, n-1))),
