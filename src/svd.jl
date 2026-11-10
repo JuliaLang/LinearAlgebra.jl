@@ -294,6 +294,7 @@ The default relative tolerance is `n*ϵ`, where `n` is the size of the smallest 
     The `atol` and `rtol` arguments require Julia 1.13 or later.
 """
 function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Number=zero(eltype(F.S)), rtol::Real = (eps(real(float(one(T))))*min(size(F)...))*iszero(atol)) where T
+    check_inplace_aliasing(B, F)
     m, n = size(F)
     k = _count_svdvals(F.S, atol, rtol)
     if k == 0

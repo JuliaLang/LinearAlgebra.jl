@@ -436,6 +436,7 @@ end
 # A*transpose(X) = transpose(B), respectively. LAPACK has no right solves, so the transposed
 # right-hand side is copied.
 function rdiv!(B::AbstractMatrix, F::BunchKaufman)
+    check_inplace_aliasing(B, F)
     op = ishermitian(F) ? adjoint : transpose
     return copyto!(B, op(ldiv!(F, copy(op(B)))))
 end

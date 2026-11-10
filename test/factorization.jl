@@ -167,13 +167,15 @@ end
             @test_throws ArgumentError ldiv!(d, F, rand(T, n))
             @test d == d0
         end
-        # these work on copies, so the right-hand side may share memory with the factorization
+        # these solve on a copy, but overwriting the factorization would make it unusable
         if T <: LinearAlgebra.BlasFloat # no generic svd
-            M = spd(); F = svd!(M); F0 = deepcopy(F); U0 = copy(F.U)
-            @test ldiv!(F, F.U) ≈ F0 \ U0
+            F = svd!(spd()); U0 = copy(F.U)
+            @test_throws ArgumentError ldiv!(F, F.U)
+            @test F.U == U0
         end
-        M = spd(); F = bunchkaufman!(Hermitian(M)); F0 = deepcopy(F); M0 = copy(M)
-        @test rdiv!(M, F) ≈ M0 / F0
+        M = spd(); F = bunchkaufman!(Hermitian(M)); M0 = copy(M)
+        @test_throws ArgumentError rdiv!(M, F)
+        @test M == M0
     end
 end
 
