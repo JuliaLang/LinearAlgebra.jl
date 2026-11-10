@@ -531,12 +531,14 @@ size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :facto
 
 
 function ldiv!(A::QRCompactWY, b::AbstractVector)
+    check_inplace_aliasing(b, A)
     require_one_based_indexing(b)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), b), 1:size(A, 2)))
     return b
 end
 function ldiv!(A::QRCompactWY, B::AbstractMatrix)
+    check_inplace_aliasing(B, A)
     require_one_based_indexing(B)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), B), 1:size(A, 2), 1:size(B, 2)))
@@ -636,6 +638,7 @@ end
 
 # Julia implementation similar to xgelsy
 function ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractMatrix{T}, rcond::Real) where {T<:BlasFloat}
+    check_inplace_aliasing(B, A)
     require_one_based_indexing(B)
     _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
@@ -765,6 +768,7 @@ end
 
 
 function ldiv!(A::QR, B::AbstractMatrix)
+    check_inplace_aliasing(B, A)
     require_one_based_indexing(B)
     _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
@@ -800,6 +804,7 @@ end
 _apply_permutation!(::Factorization, B::AbstractVecOrMat) = B
 
 function ldiv!(Fadj::AdjointFactorization{<:Any,<:Union{QR,QRCompactWY,QRPivoted}}, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, Fadj)
     require_one_based_indexing(B)
     m, n = size(Fadj)
 
@@ -859,3 +864,8 @@ end
 ## Lower priority: Add LQ, QL and RQ factorizations
 
 # FIXME! Should add balancing option through xgebal
+
+# the arrays the factorization is stored in, for the aliasing checks (see `_mightalias`)
+_aliasparts(F::QR) = (_aliasparts(getfield(F, :factors))..., _aliasparts(getfield(F, :τ))...)
+_aliasparts(F::QRCompactWY) = (_aliasparts(getfield(F, :factors))..., _aliasparts(getfield(F, :T))...)
+_aliasparts(F::QRPivoted) = (_aliasparts(getfield(F, :factors))..., _aliasparts(getfield(F, :τ))..., _aliasparts(getfield(F, :jpvt))...)

@@ -408,6 +408,7 @@ function inv(B::BunchKaufman{<:BlasComplex,<:StridedMatrix})
 end
 
 function ldiv!(B::BunchKaufman{T,<:StridedMatrix}, R::StridedVecOrMat{T}) where {T<:BlasReal}
+    check_inplace_aliasing(R, B)
     if B.rook
         LAPACK.sytrs_rook!(B.uplo, B.LD, B.ipiv, R)
     else
@@ -415,6 +416,7 @@ function ldiv!(B::BunchKaufman{T,<:StridedMatrix}, R::StridedVecOrMat{T}) where 
     end
 end
 function ldiv!(B::BunchKaufman{T,<:StridedMatrix}, R::StridedVecOrMat{T}) where {T<:BlasComplex}
+    check_inplace_aliasing(R, B)
     if B.rook
         if issymmetric(B)
             LAPACK.sytrs_rook!(B.uplo, B.LD, B.ipiv, R)
@@ -434,6 +436,7 @@ end
 # A*transpose(X) = transpose(B), respectively. LAPACK has no right solves, so the transposed
 # right-hand side is copied.
 function rdiv!(B::AbstractMatrix, F::BunchKaufman)
+    check_inplace_aliasing(B, F)
     op = ishermitian(F) ? adjoint : transpose
     return copyto!(B, op(ldiv!(F, copy(op(B)))))
 end
@@ -1241,7 +1244,10 @@ bunchkaufman!(A::AbstractMatrix{<:Number}, rook::Bool = false; check::Bool = tru
     bunchkaufman_native!(A, rook; check)
 
 ldiv!(B::BunchKaufman{TS}, R::AbstractVecOrMat{TS}) where {TS <: Number} =
-    generic_bksolve!(B, R)
+    (check_inplace_aliasing(R, B); generic_bksolve!(B, R))
 
 inv(B::BunchKaufman) =
     issymmetric(B) ? copytri!(B \ I, B.uplo) : copytri!(B \ I, B.uplo, true)
+
+# the arrays the factorization is stored in, for the aliasing checks (see `_mightalias`)
+_aliasparts(F::BunchKaufman) = (_aliasparts(getfield(F, :LD))..., _aliasparts(getfield(F, :ipiv))...)

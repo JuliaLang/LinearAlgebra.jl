@@ -207,6 +207,7 @@ end
 
 
 function ldiv!(A::LQ, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
     require_one_based_indexing(B)
     m, n = size(A)
     m ≤ n || throw(DimensionMismatch("LQ solver does not support overdetermined systems (more rows than columns)"))
@@ -216,6 +217,7 @@ function ldiv!(A::LQ, B::AbstractVecOrMat)
 end
 
 function ldiv!(Fadj::AdjointFactorization{<:Any,<:LQ}, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, Fadj)
     require_one_based_indexing(B)
     m, n = size(Fadj)
     m >= n || throw(DimensionMismatch("solver does not support underdetermined systems (more columns than rows)"))
@@ -225,3 +227,6 @@ function ldiv!(Fadj::AdjointFactorization{<:Any,<:LQ}, B::AbstractVecOrMat)
     ldiv!(UpperTriangular(adjoint(F.L)), view(B, 1:size(F,1), axes(B,2)))
     return B
 end
+
+# the arrays the factorization is stored in, for the aliasing checks (see `_mightalias`)
+_aliasparts(F::LQ) = (_aliasparts(getfield(F, :factors))..., _aliasparts(getfield(F, :τ))...)
