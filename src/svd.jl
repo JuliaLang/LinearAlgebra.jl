@@ -299,7 +299,7 @@ function ldiv!(F::SVD{T}, B::AbstractVecOrMat; atol::Number=zero(eltype(F.S)), r
     if k == 0
         B[1:n, :] .= 0
     else
-        temp = view(F.U, :, 1:k)' * _cut_B(B, 1:m)
+        temp = view(F.U, :, 1:k)' * selectdim(B, 1, 1:m)
         ldiv!(Diagonal(view(F.S, 1:k)), temp)
         mul!(view(B, 1:n, :), view(F.Vt, 1:k, :)', temp)
     end
