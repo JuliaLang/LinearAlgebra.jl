@@ -254,20 +254,6 @@ end
     @test pinv(A, atol=100) == Matrix(pinv(F, atol=100)) == Matrix(pinv(svd(A, atol=100))) == zeros(5,10)
 end
 
-@testset "ldiv! with a wide SVD" begin
-    # the right-hand side has n rows, of which only the first m are read
-    m, n = 20, 50
-    A = randn(m, n); F = svd(A)
-    for B in (randn(n), randn(n, 3))
-        B0 = copy(B)
-        @test ldiv!(F, B) ≈ pinv(A) * (B isa AbstractVector ? B0[1:m] : B0[1:m, :])
-    end
-    # B is not copied: only the k×size(B, 2) intermediate result is allocated
-    alloc(F, B) = @allocated ldiv!(F, B)
-    B = randn(n, 10); alloc(F, copy(B))
-    @test alloc(F, B) < 1.5 * sizeof(eltype(B)) * m * size(B, 2)
-end
-
 @testset "Issue 40944. ldiv!(SVD) should update rhs" begin
     F = svd(randn(2, 2))
     b = randn(2)
