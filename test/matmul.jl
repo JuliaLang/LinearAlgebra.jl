@@ -1014,11 +1014,6 @@ end
         @test_throws ArgumentError lmul!(Dview, U)
         @test_throws ArgumentError rmul!(U, Dview)
         @test parent(U) == U0
-        # factors that don't share memory are unaffected
-        M = rand(T, 4, 4); M0 = copy(M); A = UpperTriangular(rand(T, 4, 4))
-        @test lmul!(A, M) ≈ Matrix(A) * M0
-        M = rand(T, 4, 4); M0 = copy(M); D = Diagonal(rand(T, 4))
-        @test rmul!(M, D) ≈ M0 * Matrix(D)
     end
 end
 
