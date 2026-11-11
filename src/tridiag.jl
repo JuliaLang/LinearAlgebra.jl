@@ -417,7 +417,7 @@ function svd(A::SymTridiagonal{T};
              full::Bool = false,
              alg::Algorithm = default_svd_alg(A),
              atol::Real = 0, rtol::Real = 0) where {T<:Real}
-    F = svd!(convert(SymTridiagonal{eigtype(T)}, A); full, alg, atol, rtol)
+    F = svd!(copymutable_oftype(A, eigtype(T)); full, alg, atol, rtol)
     return T <: Float16 ? SVD{T}(F) : F
 end
 
