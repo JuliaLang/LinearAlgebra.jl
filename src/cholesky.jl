@@ -896,8 +896,8 @@ column of `V` after the other, but in a single pass over `C`. `V` is destroyed.
 lowrankupdate!(C::Cholesky, V::AbstractVecOrMat) = _lowrankupdate!(_lowrankupdate_row!, C, V)
 
 """
-    lowrankdowndate!(C::Cholesky, v::AbstractVector) -> CC::Cholesky
-    lowrankdowndate!(C::Cholesky, V::AbstractMatrix) -> CC::Cholesky
+    lowrankdowndate!(C::Cholesky, v::AbstractVector; check = true) -> CC::Cholesky
+    lowrankdowndate!(C::Cholesky, V::AbstractMatrix; check = true) -> CC::Cholesky
 
 Downdate a Cholesky factorization `C` with the vector `v`. If `A = C.U'C.U` then
 `CC = cholesky(C.U'C.U - v*v')` but the computation of `CC` only uses `O(n^2)`
@@ -907,16 +907,22 @@ The vector `v` is destroyed during the computation.
 For a matrix `V`, `CC = cholesky(C.U'C.U - V*V')`, the same as downdating `C` with one
 column of `V` after the other, but in a single pass over `C`. `V` is destroyed.
 
+When `C.U'C.U - v*v'` is not positive definite, a [`PosDefException`](@ref) is thrown if
+`check = true` (the default). If `check = false`, the downdate stops instead and the
+returned factorization has [`issuccess`](@ref) false; it shares its factor with `C`, which
+is then no longer a valid factorization.
+
 !!! compat "Julia 1.14"
-    Downdating with a matrix requires at least Julia 1.14.
+    Downdating with a matrix and the `check` keyword argument require at least Julia 1.14.
 """
-lowrankdowndate!(C::Cholesky, V::AbstractVecOrMat) = _lowrankupdate!(_lowrankdowndate_row!, C, V)
+lowrankdowndate!(C::Cholesky, V::AbstractVecOrMat; check::Bool = true) =
+    _lowrankupdate!(_lowrankdowndate_row!, C, V; check)
 
 # The rotation of row `i` and column `l` of `V` only depends on the rotations of the
 # previous columns in the same row and of the previous rows with the same column. So all
 # columns are applied to one row of the factor after the other: the factor is traversed
 # once, and the result is the same as applying the columns one after the other.
-function _lowrankupdate!(update_row!, C::Cholesky, V::AbstractVecOrMat)
+function _lowrankupdate!(update_row!, C::Cholesky, V::AbstractVecOrMat; check::Bool = true)
     A = C.factors
     n = size(V, 1)
     if size(C, 1) != n
@@ -925,19 +931,26 @@ function _lowrankupdate!(update_row!, C::Cholesky, V::AbstractVecOrMat)
     if C.uplo == 'U'
         conj!(V)
         for i = 1:n
-            update_row!(view(A, i, :), V, i)
+            update_row!(view(A, i, :), V, i) || return _lowrankdowndate_failed(C, i, check)
         end
     else
         for i = 1:n
-            update_row!(view(A, :, i), V, i)
+            update_row!(view(A, :, i), V, i) || return _lowrankdowndate_failed(C, i, check)
         end
     end
     return C
 end
 
+# A downdate that would lose positive definiteness at row `i`.
+function _lowrankdowndate_failed(C::Cholesky, i, check::Bool)
+    check && throw(PosDefException(i))
+    return Cholesky(C.factors, C.uplo, i)
+end
+
 # Applies the rotations of all columns of `V` to row `i` of the factor, whose elements
 # `i:n` are given in `r` (a row of `U` or a column of `L`). `_lowrankupdate!` has checked
-# that `r` and the columns of `V` have `n` elements.
+# that `r` and the columns of `V` have `n` elements. Returns whether the row could be
+# updated, which is always the case for an update.
 @inline function _lowrankupdate_row!(r, V, i)
     n = size(V, 1)
     for l in axes(V, 2)
@@ -957,9 +970,11 @@ end
             v[j] = -s'*rj + c*vj
         end
     end
-    return r
+    return true
 end
 
+# Returns false, leaving the rest of the row as it is, when the downdate would lose
+# positive definiteness.
 @inline function _lowrankdowndate_row!(r, V, i)
     n = size(V, 1)
     for l in axes(V, 2)
@@ -970,7 +985,7 @@ end
         s = conj(v[i]/rii)
         s2 = abs2(s)
         if s2 > 1
-            throw(PosDefException(i))
+            return false
         end
         c = sqrt(1 - abs2(s))
 
@@ -985,7 +1000,7 @@ end
             v[j] = -s'*rj + c*vj
         end
     end
-    return r
+    return true
 end
 
 """
@@ -1002,17 +1017,21 @@ then `CC = cholesky(C.U'C.U + v*v')` but the computation of `CC` only uses
 lowrankupdate(C::Cholesky, V::AbstractVecOrMat) = lowrankupdate!(copy(C), copy(V))
 
 """
-    lowrankdowndate(C::Cholesky, v::AbstractVector) -> CC::Cholesky
-    lowrankdowndate(C::Cholesky, V::AbstractMatrix) -> CC::Cholesky
+    lowrankdowndate(C::Cholesky, v::AbstractVector; check = true) -> CC::Cholesky
+    lowrankdowndate(C::Cholesky, V::AbstractMatrix; check = true) -> CC::Cholesky
 
 Downdate a Cholesky factorization `C` with the vector `v`. If `A = C.U'C.U`
 then `CC = cholesky(C.U'C.U - v*v')` but the computation of `CC` only uses
 `O(n^2)` operations. For a matrix `V`, `CC = cholesky(C.U'C.U - V*V')`.
 
+When the result is not positive definite, a [`PosDefException`](@ref) is thrown if
+`check = true` (the default), and `CC` has [`issuccess`](@ref) false if `check = false`.
+
 !!! compat "Julia 1.14"
-    Downdating with a matrix requires at least Julia 1.14.
+    Downdating with a matrix and the `check` keyword argument require at least Julia 1.14.
 """
-lowrankdowndate(C::Cholesky, V::AbstractVecOrMat) = lowrankdowndate!(copy(C), copy(V))
+lowrankdowndate(C::Cholesky, V::AbstractVecOrMat; check::Bool = true) =
+    lowrankdowndate!(copy(C), copy(V); check)
 
 function diag(C::Cholesky{T}, k::Int = 0) where {T}
     N = size(C, 1)
