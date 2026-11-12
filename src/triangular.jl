@@ -1342,21 +1342,21 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
 end
 
 # multiplication
-function generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector) where {T<:BlasFloat}
+function generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::F, A::StridedMatrix{T}, b::AbstractVector) where {T<:BlasFloat, F<:Function}
     if stride(A,1) == 1 && _fullstride2(A)
         BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copy!(c, b))
     else # incompatible with BLAS
         @invoke generic_trimatmul!(c::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, b::AbstractVecOrMat)
     end
 end
-function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat}
+function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::F, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat, F<:Function}
     if stride(C,1) == stride(A,1) == 1 && _fullstride2(C) && _fullstride2(A)
         BLAS.trmm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copy!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatmul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
-function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat}
+function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::F, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat, F<:Function}
     if stride(C,1) == stride(B,1) == 1 && _fullstride2(C) && _fullstride2(B)
         BLAS.trmm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
@@ -1364,21 +1364,21 @@ function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function,
     end
 end
 # division
-function generic_trimatdiv!(C::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVector) where {T<:BlasFloat}
+function generic_trimatdiv!(C::StridedVector{T}, uploc, isunitc, tfun::F, A::StridedMatrix{T}, B::AbstractVector) where {T<:BlasFloat, F<:Function}
     if stride(A,1) == 1 && _fullstride2(A)
         BLAS.trsv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : copyto!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
     end
 end
-function generic_trimatdiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat}
+function generic_trimatdiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::F, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat, F<:Function}
     if stride(C,1) == stride(A,1) == 1 && _fullstride2(C) && _fullstride2(A)
         BLAS.trsm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : _copy_or_copyto!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
-function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat}
+function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::F, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat, F<:Function}
     if stride(C,1) == stride(B,1) == 1 && _fullstride2(C) && _fullstride2(B)
         BLAS.trsm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
@@ -1470,7 +1470,7 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
 end
 
 ## Generic triangular multiplication
-function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
+function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractVecOrMat) where {F<:Function}
     require_one_based_indexing(C, A, B)
     matmul_size_check(size(C), size(A), size(B))
     oA = oneunit(eltype(A))
@@ -1553,7 +1553,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
     return C
 end
 
-function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
+function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractMatrix) where {F<:Function}
     require_one_based_indexing(C, A, B)
     matmul_size_check(size(C), size(A), size(B))
     oB = oneunit(eltype(B))
@@ -1647,7 +1647,7 @@ end
 # does not significantly impact performance as of Dec 2015
 # in the transpose and conjugate transpose naive substitution variants,
 # accumulating in z rather than b[j,k] significantly improves performance as of Dec 2015
-function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
+function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractVecOrMat) where {F<:Function}
     require_one_based_indexing(C, A, B)
     mA, nA = size(A)
     m = size(B, 1)
@@ -1868,7 +1868,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
     return C
 end
 
-function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
+function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractMatrix) where {F<:Function}
     require_one_based_indexing(C, A, B)
     n = size(A,2)
     if size(B, 1) != n
