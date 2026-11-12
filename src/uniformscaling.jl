@@ -370,11 +370,11 @@ isequal(A::AbstractMatrix, J::UniformScaling) = false
 isequal(J::UniformScaling, A::AbstractMatrix) = false
 
 function isapprox(J1::UniformScaling{T}, J2::UniformScaling{S};
-            atol::Real=0, rtol::Real=Base.rtoldefault(T,S,atol), nans::Bool=false) where {T<:Number,S<:Number}
+            atol::Number=zero(real(T)), rtol::Real=Base.rtoldefault(T,S,atol), nans::Bool=false) where {T<:Number,S<:Number}
     isapprox(J1.λ, J2.λ, rtol=rtol, atol=atol, nans=nans)
 end
 function isapprox(J::UniformScaling, A::AbstractMatrix;
-                  atol::Real = 0,
+                  atol::Number = zero(real(promote_leaf_eltypes(A))), # zero in the units of the elements
                   rtol::Real = Base.rtoldefault(promote_leaf_eltypes(A), eltype(J), atol),
                   nans::Bool = false, norm::Function = norm)
     n = checksquare(A)

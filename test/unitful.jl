@@ -146,6 +146,19 @@ end
     else
         @test_broken x ≈ Furlong.([1.0, 2.0 + 1e-10])
     end
+    # `UniformScaling`: the default `atol` is a zero in the units of the scaling
+    J = Furlong(2.0)*I
+    @test J ≈ J
+    @test J ≈ Furlong(2.0 + 1e-10)*I
+    @test J ≉ Furlong(2.5)*I
+    @test isapprox(J, Furlong(2.05)*I; atol=Furlong(0.1))
+    @test !isapprox(J, Furlong(2.05)*I; atol=Furlong(0.01), rtol=0)
+    A = Matrix(Diagonal(Furlong.([2.0, 2.0])))
+    @test J ≈ A
+    @test A ≈ J
+    @test J ≉ Furlong.([2.0 0.0; 0.0 2.5])
+    @test isapprox(J, Furlong.([2.0 0.0; 0.0 2.05]); atol=Furlong(0.1))
+    @test !isapprox(Furlong.([2.0 0.0; 0.0 2.05]), J; atol=Furlong(0.01), rtol=0)
 end
 
 @testset "SVD with dimensionful singular values" begin
@@ -175,6 +188,18 @@ end
     @test map(getval, Matrix(pinv(F; atol=Furlong(2.0)))) ≈ pinv(A0; atol=2.0)
     @test map(getval, Matrix(pinv(F; rtol=0.5))) ≈ pinv(A0; rtol=0.5)
     @test map(getval, Matrix(inv(SVD(F0.U[1:3, :], Furlong.([3.0, 2.0, 1.0]), F0.Vt)))) ≈ inv(F0.U[1:3, :] * Diagonal([3.0, 2.0, 1.0]) * F0.Vt)
+    # nullspace: `atol` has the units of the singular values, `rtol` is relative
+    N = nullspace(F)
+    @test N isa Matrix{Float64}
+    @test size(N) == (3, 1)
+    @test abs.(N) ≈ abs.(nullspace(A0))
+    @test size(nullspace(F; atol=Furlong(2.0))) == (3, 2)
+    @test size(nullspace(F; rtol=0.5)) == (3, 2)
+    # nullspace of a dimensionful `Diagonal`
+    D = Diagonal(Furlong.([3.0, 0.0, -2.0]))
+    @test nullspace(D) == nullspace(Diagonal([3.0, 0.0, -2.0]))
+    @test size(nullspace(D; atol=Furlong(2.5))) == (3, 2)
+    @test size(nullspace(D; rtol=0.9)) == (3, 2)
     # solving with a dimensionless factorization and a dimensionful right-hand side
     b0 = [1.0, 2.0, 3.0, 4.0]
     b = Furlong.(b0)
@@ -185,6 +210,22 @@ end
     # solving with dimensionful singular values needs the solution in different units than
     # the right-hand side, which the in-place `ldiv!` cannot provide
     @test_broken F \ b isa Vector{<:Furlong{0}}
+end
+
+@testset "svd of a dimensionful number" begin
+    x = Furlong(-2.0)
+    F = svd(x)
+    @test F.S == [Furlong(2.0)]
+    @test F.U == fill(Furlong{0}(-1.0), 1, 1)
+    @test F.Vt == fill(Furlong{0}(1.0), 1, 1)
+    @test map(getval, Matrix(F)) == fill(-2.0, 1, 1)
+    # `atol` has the units of the singular value
+    @test svd(x; atol=Furlong(1.0)).U == F.U
+    @test svd(x; atol=Furlong(3.0)).U == fill(Furlong{0}(1.0), 1, 1)
+    # `svd(::Diagonal)` and the truncation tolerances of `svd` for dimensionless matrices are unaffected
+    @test svdvals(svd(Diagonal(Furlong.([3.0, -2.0])))) == Furlong.([3.0, 2.0])
+    @test svd([3.0 0.0; 0.0 1.0]; atol=2.0).S == [3.0, 0.0]
+    @test svd([3.0 0.0; 0.0 1.0]; rtol=0.5).S == [3.0, 0.0]
 end
 
 @testset "solves with a dimensionful right-hand side" begin
