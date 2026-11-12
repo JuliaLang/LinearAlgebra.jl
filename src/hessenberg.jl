@@ -218,6 +218,7 @@ rdiv!(B::AbstractVecOrMat, H::AdjOrTransUpperHessenberg) =
 # solve (H+μI)X = B, storing result in B
 function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     checksquare(F)
+    check_inplace_aliasing(B, F)
     m = size(F,1)
     m != size(B,1) && throw(DimensionMismatch(lazy"wrong right-hand-side # rows != $m"))
     require_one_based_indexing(B)
@@ -268,6 +269,7 @@ end
 # order of the H indices (or the order of the loops).
 function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
     checksquare(F)
+    check_inplace_aliasing(B, F)
     m = size(F,1)
     m != size(B,2) && throw(DimensionMismatch(lazy"wrong right-hand-side # cols != $m"))
     require_one_based_indexing(B)

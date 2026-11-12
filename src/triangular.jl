@@ -1254,7 +1254,8 @@ for (TA, TB) in ((:UpperOrLowerTriangularStrided, :StridedMatrix),
     @eval generic_matmatmul_NN!(C, A::$TA, B::$TB, alpha, beta) = _generic_matmatmul!(C, A, B, alpha, beta)
 end
 
-ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) = _ldiv!(C, A, B)
+ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) =
+    (check_inplace_aliasing(C, A); _ldiv!(C, A, B))
 # generic fallback for AbstractTriangular, directs to 2-arg [l/r]div!
 _ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) =
     ldiv!(A, _copy_or_copyto!(C, B))
@@ -1266,16 +1267,24 @@ _ldiv!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
     generic_mattridiv!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
-ldiv!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _ldiv!(B, A, B)
+function ldiv!(A::UpperOrLowerTriangular, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
+    @inline _ldiv!(B, A, B)
+end
 function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
     if istriu(A)
         _ldiv!(B, uppertriangular(A), B)
     else
         _ldiv!(B, lowertriangular(A), B)
     end
 end
-rdiv!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _rdiv!(A, A, B)
+function rdiv!(A::AbstractMatrix, B::UpperOrLowerTriangular)
+    check_inplace_aliasing(A, B)
+    @inline _rdiv!(A, A, B)
+end
 function rdiv!(A::AbstractMatrix, B::AbstractTriangular)
+    check_inplace_aliasing(A, B)
     if istriu(B)
         _rdiv!(A, A, uppertriangular(B))
     else
