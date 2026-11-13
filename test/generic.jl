@@ -1186,7 +1186,18 @@ end
 end
 
 @testset "peakflops in parallel" begin
-    @test LinearAlgebra.peakflops(64, ntrials=1, parallel=true) > 0
+    # `parallel=true` runs on every worker of the cluster. This file may itself run on a
+    # Distributed worker (as in Julia's test suite), whose siblings are busy with other
+    # tests, so use a fresh process with a worker of its own.
+    code = """
+        include($(repr(joinpath(@__DIR__, "prune_old_LA.jl"))))
+        using LinearAlgebra
+        exit(LinearAlgebra.peakflops(64, ntrials=1, parallel=true) > 0 ? 0 : 1)
+        """
+    cmd = addenv(`$(Base.julia_cmd()) --startup-file=no -p 1 -e $code`,
+                 "JULIA_PROJECT" => Base.active_project(),
+                 "JULIA_LOAD_PATH" => join(LOAD_PATH, Sys.iswindows() ? ';' : ':'))
+    @test success(pipeline(cmd; stdout, stderr))
 end
 
 @testset "generic helpers corner cases" begin
