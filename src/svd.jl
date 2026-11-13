@@ -92,12 +92,12 @@ default_svd_alg(A) = DivideAndConquer()
 
 
 """
-    svd!(A; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) -> SVD
+    svd!(A; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=0, rtol::Real=0) -> SVD
 
 `svd!` is the same as [`svd`](@ref), but saves space by
 overwriting the input `A`, instead of creating a copy. See documentation of [`svd`](@ref) for details.
 """
-function svd!(A::StridedMatrix{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T<:BlasFloat}
+function svd!(A::StridedMatrix{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(real(T)), rtol::Real=0) where {T<:BlasFloat}
     m, n = size(A)
     if m == 0 || n == 0
         u, s, vt = (Matrix{T}(I, m, full ? m : n), real(zeros(T,0)), Matrix{T}(I, n, n))
@@ -107,7 +107,7 @@ function svd!(A::StridedMatrix{T}; full::Bool = false, alg::Algorithm = default_
     s[_count_svdvals(s, atol, rtol)+1:end] .= 0
     return SVD(u, s, vt)
 end
-function svd!(A::StridedVector{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T<:BlasFloat}
+function svd!(A::StridedVector{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(real(T)), rtol::Real=0) where {T<:BlasFloat}
     m = length(A)
     normA = norm(A)
     if iszero(normA)
@@ -156,7 +156,7 @@ function _count_svdvals(S, atol::Number, rtol::Real)
 end
 
 """
-    svd(A; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) -> SVD
+    svd(A; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=0, rtol::Real=0) -> SVD
 
 Compute the singular value decomposition (SVD) of `A` and return an `SVD` object.
 
@@ -207,25 +207,25 @@ julia> Uonly == U
 true
 ```
 """
-function svd(A::AbstractVecOrMat; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0)
+function svd(A::AbstractVecOrMat; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(real(eigtype(A))), rtol::Real=0)
     svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
 end
-function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0) where {T <: Union{Float16,Complex{Float16}}}
+function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(Float16), rtol::Real=0) where {T <: Union{Float16,Complex{Float16}}}
     A = svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
     return SVD{T}(A)
 end
-function svd(x::Number; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Real=0, rtol::Real=0)
-    SVD(iszero(x) || abs(x) < atol ? fill(one(x), 1, 1) : fill(x/abs(x), 1, 1), [abs(x)], fill(one(x), 1, 1))
+function svd(x::Number; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Number=zero(real(x)), rtol::Real=0)
+    # the dimensionless "sign" of `x`, of the type of `x/abs(x)` also when `x` is deemed zero
+    u = iszero(x) || abs(x) < atol ? oneunit(x)/abs(oneunit(x)) : x/abs(x)
+    SVD(fill(u, 1, 1), [abs(x)], fill(oneunit(u), 1, 1))
 end
-function svd(x::Integer; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Real=0, rtol::Real=0)
-    svd(float(x); full, alg, atol, rtol)
-end
-function svd(A::Adjoint; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0)
-    s = svd(A.parent; full, alg, atol, rtol)
+svd(x::Integer; kwargs...) = svd(float(x); kwargs...)
+function svd(A::Adjoint; kwargs...)
+    s = svd(A.parent; kwargs...)
     return SVD(s.Vt', s.S, s.U')
 end
-function svd(A::Transpose; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Real=0, rtol::Real=0)
-    s = svd(A.parent; full, alg, atol, rtol)
+function svd(A::Transpose; kwargs...)
+    s = svd(A.parent; kwargs...)
     return SVD(transpose(s.Vt), s.S, transpose(s.U))
 end
 
@@ -277,7 +277,7 @@ svdvals(x::Number) = abs(x)
 svdvals(S::SVD{<:Any,T}) where {T} = (S.S)::Vector{T}
 
 """
-    rank(S::SVD{<:Any, T}; atol::Real=0, rtol::Real=min(n,m)*ϵ) where {T}
+    rank(S::SVD{<:Any, T}; atol::Number=0, rtol::Real=min(n,m)*ϵ) where {T}
 
 Compute the numerical rank of the SVD object `S` by counting how many singular values are greater
 than `max(atol, rtol*σ₁)` where `σ₁` is the largest calculated singular value.
@@ -296,7 +296,7 @@ end
 
 ### SVD least squares ###
 """
-    ldiv!(F::SVD, B; atol::Real=0, rtol::Real=atol>0 ? 0 : n*ϵ)
+    ldiv!(F::SVD, B; atol::Number=0, rtol::Real=atol>0 ? 0 : n*ϵ)
 
 Given the SVD `F` of an ``m \\times n`` matrix, multiply the first ``m`` rows of `B` in-place
 by the Moore-Penrose pseudoinverse, storing the result in the first ``n`` rows of `B`, returning `B`.
@@ -657,7 +657,7 @@ AbstractArray(F::SVD) = AbstractMatrix(F)
 Matrix(F::SVD) = Array(AbstractArray(F))
 Array(F::SVD) = Matrix(F)
 
-function nullspace(F::SVD; atol::Number=zero(real(eltype(F))), rtol::Real = (min(size(F.U, 1), size(F.V, 1))*eps(real(float(oneunit(eltype(F))))))*iszero(atol))
+function nullspace(F::SVD; atol::Number=zero(eltype(F.S)), rtol::Real = (min(size(F.U, 1), size(F.V, 1))*eps(real(float(oneunit(eltype(F))))))*iszero(atol))
     r = rank(F; atol, rtol)
     k, n = size(F.Vt)
     if k < n
