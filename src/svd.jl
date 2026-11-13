@@ -193,7 +193,7 @@ true
 function svd(A::AbstractVecOrMat; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(real(eigtype(A))), rtol::Real=0)
     svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
 end
-function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(real(T)), rtol::Real=0) where {T <: Union{Float16,Complex{Float16}}}
+function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(Float16), rtol::Real=0) where {T <: Union{Float16,Complex{Float16}}}
     A = svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
     return SVD{T}(A)
 end
