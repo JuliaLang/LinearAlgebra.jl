@@ -2155,6 +2155,11 @@ function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContigu
     end
 end
 
+# `issubnormal` is only defined for a handful of floating-point-like types, so for a
+# `norm` of some other type (e.g. a dimensionful quantity) we can't check for subnormals
+# and just give up the overflow guard below, rather than erroring in `normalize`/`normalize!`
+_issubnormal(nrm) = applicable(issubnormal, nrm) && issubnormal(nrm)
+
 """
     normalize!(a::AbstractArray, p::Real=2)
 
@@ -2164,7 +2169,7 @@ See also [`normalize`](@ref) and [`norm`](@ref).
 """
 function normalize!(a::AbstractArray, p::Real=2) #logic equal to normalize, should be kept in sync
     nrm = norm(a, p)
-    if !issubnormal(nrm) # nrm is accurate and inverting won't overflow
+    if !_issubnormal(nrm) # nrm is accurate and inverting won't overflow
         rmul!(a, inv(nrm))
     else # scale elements to be non-subnormal and re-normalize
         normalize!(rmul!(a, inv(floatmin(nrm))), p)
@@ -2227,7 +2232,7 @@ NaN
 """
 function normalize(a::AbstractArray, p::Real = 2) #logic equal to normalize!, should be kept in sync
     nrm = norm(a, p)
-    if !issubnormal(nrm)
+    if !_issubnormal(nrm)
         return a * inv(nrm)
     else
         return normalize(a * inv(floatmin(nrm)), p)
