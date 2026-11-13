@@ -205,12 +205,12 @@ end
 function svd(x::Integer; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Number=zero(real(float(x))), rtol::Real=0)
     svd(float(x); full, alg, atol, rtol)
 end
-function svd(A::Adjoint; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(real(eigtype(A))), rtol::Real=0)
-    s = svd(A.parent; full, alg, atol, rtol)
+function svd(A::Adjoint; kwargs...)
+    s = svd(A.parent; kwargs...)
     return SVD(s.Vt', s.S, s.U')
 end
-function svd(A::Transpose; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(real(eigtype(A))), rtol::Real=0)
-    s = svd(A.parent; full, alg, atol, rtol)
+function svd(A::Transpose; kwargs...)
+    s = svd(A.parent; kwargs...)
     return SVD(transpose(s.Vt), s.S, transpose(s.U))
 end
 
