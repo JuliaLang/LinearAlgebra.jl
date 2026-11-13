@@ -274,7 +274,7 @@ and `ϵ` is the [`eps`](@ref) of the element type of `S`.
 !!! compat "Julia 1.12"
     The `rank(::SVD)` method requires at least Julia 1.12.
 """
-function rank(S::SVD; atol::Number=zero(eltype(S.S)), rtol::Real = (min(size(S)...)*eps(real(float(one(eltype(S)))))))
+function rank(S::SVD; atol::Number=zero(eltype(S.S)), rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
     tol = max(atol, rtol*S.S[1])
     count(>(tol), S.S)
 end
@@ -642,7 +642,7 @@ AbstractArray(F::SVD) = AbstractMatrix(F)
 Matrix(F::SVD) = Array(AbstractArray(F))
 Array(F::SVD) = Matrix(F)
 
-function nullspace(F::SVD; atol::Number=zero(eltype(F.S)), rtol::Real = (min(size(F.U, 1), size(F.V, 1))*eps(real(float(one(eltype(F))))))*iszero(atol))
+function nullspace(F::SVD; atol::Number=zero(eltype(F.S)), rtol::Real = (min(size(F.U, 1), size(F.V, 1))*eps(real(float(oneunit(eltype(F))))))*iszero(atol))
     r = rank(F; atol, rtol)
     k, n = size(F.Vt)
     if k < n
