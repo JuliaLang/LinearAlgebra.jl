@@ -202,9 +202,7 @@ function svd(x::Number; full::Bool = false, alg::Algorithm = default_svd_alg(x),
     u = iszero(x) || abs(x) < atol ? oneunit(x)/abs(oneunit(x)) : x/abs(x)
     SVD(fill(u, 1, 1), [abs(x)], fill(oneunit(u), 1, 1))
 end
-function svd(x::Integer; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Number=zero(real(float(x))), rtol::Real=0)
-    svd(float(x); full, alg, atol, rtol)
-end
+svd(x::Integer; kwargs...) = svd(float(x); kwargs...)
 function svd(A::Adjoint; kwargs...)
     s = svd(A.parent; kwargs...)
     return SVD(s.Vt', s.S, s.U')
