@@ -477,6 +477,10 @@ end
                 @test dot(mtype(ComplexF64[;;], :U), mtype(Float64[;;], :U)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
                 @test dot(mtype(ComplexF64[;;], :L), mtype(Float64[;;], :L)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
             end
+            # issue 1453
+            A = Symmetric(Int8[-1 1; 2 127])
+            B = Symmetric(Int8[127 -1; 126 0])
+            @test dot(A, B) == dot(Matrix(A), Matrix(B))
         end
 
         @testset "kronecker product of symmetric and Hermitian matrices" begin
