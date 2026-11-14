@@ -577,10 +577,11 @@ for (T, trans, real) in [(:Symmetric, :transpose, :identity), (:(Hermitian{<:Uni
             end
             iszero(n) && return $real(zero(dot(zero(eltype(A)), zero(eltype(B)))))
             dotprod = $real(zero(dot(first(A), first(B))))
+            Tout = typeof(dotprod)
             @inbounds if A.uplo == 'U' && B.uplo == 'U'
                 for j in 1:n
                     for i in 1:(j - 1)
-                        dotprod += 2 * $real(dot(A.data[i, j], B.data[i, j]))
+                        dotprod += Tout(2) * $real(dot(A.data[i, j], B.data[i, j]))
                     end
                     dotprod += $real(dot(A[j, j], B[j, j]))
                 end
@@ -588,13 +589,13 @@ for (T, trans, real) in [(:Symmetric, :transpose, :identity), (:(Hermitian{<:Uni
                 for j in 1:n
                     dotprod += $real(dot(A[j, j], B[j, j]))
                     for i in (j + 1):n
-                        dotprod += 2 * $real(dot(A.data[i, j], B.data[i, j]))
+                        dotprod += Tout(2) * $real(dot(A.data[i, j], B.data[i, j]))
                     end
                 end
             elseif A.uplo == 'U' && B.uplo == 'L'
                 for j in 1:n
                     for i in 1:(j - 1)
-                        dotprod += 2 * $real(dot(A.data[i, j], $trans(B.data[j, i])))
+                        dotprod += Tout(2) * $real(dot(A.data[i, j], $trans(B.data[j, i])))
                     end
                     dotprod += $real(dot(A[j, j], B[j, j]))
                 end
@@ -602,7 +603,7 @@ for (T, trans, real) in [(:Symmetric, :transpose, :identity), (:(Hermitian{<:Uni
                 for j in 1:n
                     dotprod += $real(dot(A[j, j], B[j, j]))
                     for i in (j + 1):n
-                        dotprod += 2 * $real(dot(A.data[i, j], $trans(B.data[j, i])))
+                        dotprod += Tout(2) * $real(dot(A.data[i, j], $trans(B.data[j, i])))
                     end
                 end
             end
