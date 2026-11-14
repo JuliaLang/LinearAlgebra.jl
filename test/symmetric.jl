@@ -1474,4 +1474,12 @@ end
     end
 end
 
+@testset "factorization of integer matrices #1871" begin
+    S = Symmetric([1 2; 2 3])
+    b = [1, 2]
+    @test isa(S \ b, Vector{Float64})
+    @test isa(det(S), Float64)
+    @test isa(logabsdet(S), Tuple{Float64,Float64})
+end
+
 end # module TestSymmetric
