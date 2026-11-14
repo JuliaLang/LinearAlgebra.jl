@@ -21,21 +21,26 @@ function test_triangular(elty1_types)
             (UnitLowerTriangular, :L))
 
             # Construct test matrix
-            A1 = t1(elty1 == Int ? rand(1:7, n, n) : convert(Matrix{elty1}, (elty1 <: Complex ? complex.(randn(n, n), randn(n, n)) : randn(n, n)) |> t -> cholesky(t't).U |> t -> uplo1 === :U ? t : copy(t')))
+            A1 = t1(elty1 == Bool ?
+                (B = rand(Bool, n, n); B[diagind(B)] .= true; B) :
+                elty1 == Int ?
+                    rand(1:7, n, n) :
+                    (randn(elty1, n, n) |> t -> cholesky(t't).U |> t -> uplo1 === :U ? t : copy(t'))
+                )
             M1 = Matrix(A1)
             @test t1(A1) === A1
-            @test t1{eltype(A1)}(A1) === A1
+            @test t1{elty1}(A1) === A1
             # test the ctor works for AbstractMatrix
-            symm = Symmetric(rand(Int8, n, n))
-            t1s = t1{eltype(A1)}(symm)
-            @test typeof(t1s) == t1{eltype(A1),Symmetric{eltype(A1),Matrix{eltype(A1)}}}
-            t1t = t1{eltype(A1)}(t1(rand(Int8, n, n)))
-            @test typeof(t1t) == t1{eltype(A1),Matrix{eltype(A1)}}
+            symm = Symmetric(rand(elty1 == Bool ? Bool : Int8, n, n))
+            t1s = t1{elty1}(symm)
+            @test typeof(t1s) == t1{elty1,Symmetric{elty1,Matrix{elty1}}}
+            t1t = t1{elty1}(t1(rand(elty1 == Bool ? Bool : Int8, n, n)))
+            @test typeof(t1t) == t1{elty1,Matrix{elty1}}
 
             # Convert
-            @test convert(AbstractMatrix{eltype(A1)}, A1) == A1
+            @test convert(AbstractMatrix{elty1}, A1) == A1
             @test convert(Matrix, A1) == A1
-            @test t1{eltype(A1)}(convert(AbstractMatrix{eltype(A1)}, A1)) == A1
+            @test t1{elty1}(convert(AbstractMatrix{elty1}, A1)) == A1
 
             # full!
             @test full!(copy(A1)) == A1
@@ -186,7 +191,7 @@ function test_triangular(elty1_types)
             @test diag(A1) == diagview(M1)
 
             # tr
-            @test tr(A1)::eltype(A1) == tr(M1)
+            @test tr(A1)::(elty1 == Bool ? Int : eltype(A1)) == tr(M1)
 
             # real
             @test real(A1) == real(M1)

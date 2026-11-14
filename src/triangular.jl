@@ -559,7 +559,7 @@ diag(A::Union{UnitLowerTriangular, UnitUpperTriangular}) = fill(oneunit(eltype(A
 -(A::UpperTriangular) = UpperTriangular(-A.data)
 function -(A::UnitLowerTriangular)
     Adata = A.data
-    Anew = similar(Adata) # must be mutable, even if Adata is not
+    Anew = similar(Adata, promote_op(-, eltype(Adata))) # must be mutable, even if Adata is not
     @. Anew = -Adata
     for i in axes(A, 1)
         Anew[i, i] = -A[i, i]
@@ -568,7 +568,7 @@ function -(A::UnitLowerTriangular)
 end
 function -(A::UnitUpperTriangular)
     Adata = A.data
-    Anew = similar(Adata) # must be mutable, even if Adata is not
+    Anew = similar(Adata, promote_op(-, eltype(Adata))) # must be mutable, even if Adata is not
     @. Anew = -Adata
     for i in axes(A, 1)
         Anew[i, i] = -A[i, i]
