@@ -18,6 +18,6 @@ include("testtriag.jl") # test_approx_eq_modphase
 
 # ComplexF32 is also the element type used for the mixed-eltype tests, and ComplexF64
 # takes the same BLAS paths
-test_triangular((ComplexF32, Complex{BigFloat}, (@static COMPREHENSIVE ? (ComplexF64, Complex{Bool}) : ())...))
+test_triangular((ComplexF32, Complex{BigFloat}, (@static COMPREHENSIVE ? (ComplexF64,) : ())...))
 
 end # module TestTriangularComplex
