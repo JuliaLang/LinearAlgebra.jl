@@ -821,6 +821,13 @@ end
         @test_throws DimensionMismatch muladd([1], v3', ones(7, 3))
         @test muladd(u2, v3', fill(0)) == u2 * v3'
     end
+    @testset "Bool (#1872)" begin
+        B = Bool[1 1; 1 1]
+        b = Bool[1, 1]
+        @test muladd(B, B, B)::Matrix{Int} == B * B + B
+        @test muladd(B, b, b)::Vector{Int} == B * b + b
+        @test muladd(B', B, true)::Matrix{Int} == B' * B .+ true
+    end
     @testset "dot" begin # all use muladd(::Any, ::Any, ::Any)
         @test muladd(u2', u2, 0) isa Number
         @test muladd(v3', v3, im) == dot(v3, v3) + im

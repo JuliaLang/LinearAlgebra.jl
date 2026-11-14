@@ -10,6 +10,23 @@ check_uplo(::typeof(==), ::LowerOrUnitLowerTriangular, ::LowerOrUnitLowerTriangu
 check_uplo(::typeof(!=), ::UpperOrUnitUpperTriangular, ::LowerOrUnitLowerTriangular) = true
 check_uplo(::typeof(!=), ::LowerOrUnitLowerTriangular, ::UpperOrUnitUpperTriangular) = true
 
+# Random triangular test matrix: random bits with a nonzero diagonal (to keep it nonsingular)
+# for `Bool`, small integers for `Int`, and a well-conditioned Cholesky factor
+# for floating-point element types.
+function rand_triangular(t, uplo, elty, n)
+    A = if elty == Bool
+        B = rand(Bool, n, n)
+        B[diagind(B)] .= true
+        B
+    elseif elty == Int
+        rand(1:7, n, n)
+    else
+        U = Matrix(cholesky(randn(elty, n, n) |> t -> t't).U) # plain storage, not an UpperTriangular parent
+        uplo === :U ? U : copy(U')
+    end
+    return t(A)
+end
+
 # The following test block tries to call all methods in base/linalg/triangular.jl in order for a combination of input element types. Keep the ordering when adding code.
 function test_triangular(elty1_types)
     n = 9
@@ -21,12 +38,7 @@ function test_triangular(elty1_types)
             (UnitLowerTriangular, :L))
 
             # Construct test matrix
-            A1 = t1(elty1 == Bool ?
-                (B = rand(Bool, n, n); B[diagind(B)] .= true; B) :
-                elty1 == Int ?
-                    rand(1:7, n, n) :
-                    (randn(elty1, n, n) |> t -> cholesky(t't).U |> t -> uplo1 === :U ? t : copy(t'))
-                )
+            A1 = rand_triangular(t1, uplo1, elty1, n)
             M1 = Matrix(A1)
             @test t1(A1) === A1
             @test t1{elty1}(A1) === A1
@@ -237,11 +249,9 @@ function test_triangular(elty1_types)
             # scale
             if (A1 isa UpperTriangular || A1 isa LowerTriangular)
                 unitt = istriu(A1) ? UnitUpperTriangular : UnitLowerTriangular
-                if eltype(A1) == Int
-                    cr = 2
-                else
-                    cr = 0.5
-                end
+                # in-place scaling must keep the results representable in eltype(A1)
+                cr = eltype(A1) == Bool ? true : eltype(A1) == Int ? 2 : 0.5
+                β = eltype(A1) == Bool ? true : 2
                 ci = cr * im
                 if eltype(A1) <: Real
                     A1tmp = copy(A1)
@@ -257,9 +267,9 @@ function test_triangular(elty1_types)
                     @test A1tmp == cr * A2tmp
 
                     A1tmp .= A1
-                    @test mul!(A1tmp, A2tmp, cr, 0, 2) == 2A1
+                    @test mul!(A1tmp, A2tmp, cr, 0, β) == β*A1
                     A1tmp .= A1
-                    @test mul!(A1tmp, cr, A2tmp, 0, 2) == 2A1
+                    @test mul!(A1tmp, cr, A2tmp, 0, β) == β*A1
                 else
                     A1tmp = copy(A1)
                     rmul!(A1tmp, ci)
@@ -352,7 +362,7 @@ function test_triangular(elty1_types)
                     (LowerTriangular, :L),
                     (UnitLowerTriangular, :L))
 
-                    A2 = t2(elty2 == Int ? rand(1:7, n, n) : convert(Matrix{elty2}, (elty2 <: Complex ? complex.(randn(n, n), randn(n, n)) : randn(n, n)) |> t -> cholesky(t't).U |> t -> uplo2 === :U ? t : copy(t')))
+                    A2 = rand_triangular(t2, uplo2, elty2, n)
                     M2 = Matrix(A2)
                     # Convert
                     if eltype(A1) <: Real && !(eltype(A2) <: Integer)
@@ -420,17 +430,17 @@ function test_triangular(elty1_types)
                     @test_throws DimensionMismatch transpose(A2) * offsizeA
                     @test_throws DimensionMismatch A2' * offsizeA
                     @test_throws DimensionMismatch A2 * offsizeA
-                    if (check_uplo(==, A1, A2) && eltype(A1) == eltype(A2) != Int && !(A1 isa UnitUpperOrUnitLowerTriangular))
+                    if (check_uplo(==, A1, A2) && eltype(A1) == eltype(A2) ∉ (Int, Bool) && !(A1 isa UnitUpperOrUnitLowerTriangular))
                         @test rdiv!(copy(A1), A2)::t1 ≈ A1 / A2 ≈ M1 / M2
                         @test ldiv!(A2, copy(A1))::t1 ≈ A2 \ A1 ≈ M2 \ M1
                     end
-                    if (check_uplo(!=, A1, A2) && eltype(A1) == eltype(A2) != Int && !(A2 isa UnitUpperOrUnitLowerTriangular))
+                    if (check_uplo(!=, A1, A2) && eltype(A1) == eltype(A2) ∉ (Int, Bool) && !(A2 isa UnitUpperOrUnitLowerTriangular))
                         @test lmul!(adjoint(A1), copy(A2)) ≈ A1' * A2 ≈ M1' * M2
                         @test lmul!(transpose(A1), copy(A2)) ≈ transpose(A1) * A2 ≈ transpose(M1) * M2
                         @test ldiv!(adjoint(A1), copy(A2)) ≈ A1' \ A2 ≈ M1' \ M2
                         @test ldiv!(transpose(A1), copy(A2)) ≈ transpose(A1) \ A2 ≈ transpose(M1) \ M2
                     end
-                    if (check_uplo(!=, A1, A2) && eltype(A1) == eltype(A2) != Int && !(A1 isa UnitUpperOrUnitLowerTriangular))
+                    if (check_uplo(!=, A1, A2) && eltype(A1) == eltype(A2) ∉ (Int, Bool) && !(A1 isa UnitUpperOrUnitLowerTriangular))
                         @test rmul!(copy(A1), adjoint(A2)) ≈ A1 * A2' ≈ M1 * M2'
                         @test rmul!(copy(A1), transpose(A2)) ≈ A1 * transpose(A2) ≈ M1 * transpose(M2)
                         @test rdiv!(copy(A1), adjoint(A2)) ≈ A1 / A2' ≈ M1 / M2'
@@ -446,10 +456,11 @@ function test_triangular(elty1_types)
                     continue
                 end
 
-                B = convert(Matrix{eltyB}, (eltype(A1) <: Complex ? real(A1) : A1) * fill(1.0, n, n))
+                B = eltyB == Bool ? rand(Bool, n, n) :
+                    convert(Matrix{eltyB}, (eltype(A1) <: Complex ? real(A1) : A1) * fill(1.0, n, n))
 
                 Tri = Tridiagonal(rand(eltype(B), n - 1), rand(eltype(B), n), rand(eltype(B), n - 1))
-                C = Matrix{promote_type(eltype(A1), eltype(B))}(undef, n, n)
+                C = Matrix{Base.promote_op(LinearAlgebra.matprod, eltype(A1), eltype(B))}(undef, n, n)
                 mul!(C, Tri, A1)
                 @test C ≈ Tri * M1
                 Tri = Tridiagonal(rand(eltype(B), n - 1), rand(eltype(B), n), rand(eltype(B), n - 1))
@@ -483,7 +494,7 @@ function test_triangular(elty1_types)
                 @test transpose(B) * transpose(A1) ≈ transpose(B) * transpose(M1)
                 @test B'A1' ≈ B'M1'
 
-                if eltype(B) == eltype(A1)
+                if eltype(B) == eltype(A1) != Bool # sums of Bools don't fit into Bool storage
                     Bsim = similar(B)
                     @test mul!(Bsim, A1, B) ≈ M1 * B
                     @test mul!(Bsim, A1, adjoint(B)) ≈ M1 * B'
