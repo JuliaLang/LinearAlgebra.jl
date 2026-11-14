@@ -17,6 +17,7 @@ using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 include("testutils.jl") # test_approx_eq_modphase
 
@@ -1464,6 +1465,21 @@ end
     # svdvals empty checks
     @test isempty(svdvals(Ae))
     @test @inferred(svdvals(SymTridiagonal(Int[], Int[]))) isa Vector{Float64}
+end
+
+@static if COMPREHENSIVE
+@testset "isposdef and cholesky of empty banded matrices (#1874)" begin
+    @testset for elty in (Float64, ComplexF64)
+        for A in (SymTridiagonal(elty[], elty[]), Tridiagonal(elty[], elty[], elty[]),
+                  Bidiagonal(elty[], elty[], :U), Bidiagonal(elty[], elty[], :L))
+            @test isposdef(A)
+            F = cholesky(A)
+            @test issuccess(F)
+            @test size(F) == (0, 0)
+            @test isempty(Matrix(F))
+        end
+    end
+end
 end
 
 end # module TestTridiagonal

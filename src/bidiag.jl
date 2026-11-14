@@ -1451,12 +1451,14 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
             dv[i] = Akk
             ev[i] *= dv[i]
         end
-        Akk = dv[n]
-        Akk, info = _chol!(Akk, $T)
-        if info != 0
-            return $T(A), convert(BlasInt, n)
+        if n > 0
+            Akk = dv[n]
+            Akk, info = _chol!(Akk, $T)
+            if info != 0
+                return $T(A), convert(BlasInt, n)
+            end
+            dv[n] = Akk
         end
-        dv[n] = Akk
         B = Bidiagonal(dv, ev, $uplo)
         return $T(B), convert(BlasInt, 0)
     end
