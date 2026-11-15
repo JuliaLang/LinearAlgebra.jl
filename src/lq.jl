@@ -189,8 +189,8 @@ function lmul!(A::LQ, B::AbstractVecOrMat)
     return B
 end
 function *(A::LQ{TA}, B::AbstractVecOrMat{TB}) where {TA,TB}
-    TAB = promote_type(TA, TB)
-    _cut_B(lmul!(convert(Factorization{TAB}, A), copy_similar(B, TAB)), 1:size(A,1))
+    S, TAB = _qmul_eltypes(TA, TB)
+    _cut_B(lmul!(convert(Factorization{S}, A), copy_similar(B, TAB)), 1:size(A,1))
 end
 
 # With a real lhs and complex rhs with the same precision, we can reinterpret

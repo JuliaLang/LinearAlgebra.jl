@@ -793,10 +793,10 @@ norm(::Missing, p::Real=2) = missing
 function opnorm1(A::AbstractMatrix{T}) where T
     require_one_based_indexing(A)
     Tnorm = typeof(float(real(zero(T))))
-    Tsum = promote_type(Float64, Tnorm)
-    nrm::Tsum = 0
+    Tsum = typeof(oneunit(Tnorm) * 1.0) # accumulate in at least Float64 precision, keeping units
+    nrm = zero(Tsum)
     for j in axes(A,2)
-        nrmj::Tsum = 0
+        nrmj = zero(Tsum)
         for i in axes(A,1)
             nrmj += norm(@inbounds A[i,j])
         end
@@ -817,10 +817,10 @@ end
 function opnormInf(A::AbstractMatrix{T}) where T
     require_one_based_indexing(A)
     Tnorm = typeof(float(real(zero(T))))
-    Tsum = promote_type(Float64, Tnorm)
-    nrm::Tsum = 0
+    Tsum = typeof(oneunit(Tnorm) * 1.0) # accumulate in at least Float64 precision, keeping units
+    nrm = zero(Tsum)
     for i in axes(A,1)
-        nrmi::Tsum = 0
+        nrmi = zero(Tsum)
         for j in axes(A,2)
             nrmi += norm(@inbounds A[i,j])
         end
