@@ -1482,4 +1482,21 @@ end
     @test isa(logabsdet(S), Tuple{Float64,Float64})
 end
 
+@testset "exact factorization of rational matrices #1871 follow-up" begin
+    # exact element types should match the dense `Matrix{T}` path (stay exact), not become floats
+    S = Symmetric(Rational{Int}[2 1; 1 2])
+    b = Rational{Int}[1, 1]
+    @test S \ b == Matrix(S) \ b
+    @test S \ b isa Vector{<:Rational}
+    @test det(S) == det(Matrix(S))
+    @test det(S) isa Rational
+    @test inv(S) == inv(Matrix(S))
+    @test eltype(inv(S)) <: Rational
+    SB = Symmetric(Rational{BigInt}[2 1; 1 2])
+    @test SB \ Rational{BigInt}[1, 1] isa Vector{Rational{BigInt}}
+    H = Hermitian(Complex{Rational{Int}}[2 im; -im 3])
+    @test H \ Complex{Rational{Int}}[1, 1] == Matrix(H) \ Complex{Rational{Int}}[1, 1]
+    @test eltype(H \ Complex{Rational{Int}}[1, 1]) <: Complex{<:Rational}
+end
+
 end # module TestSymmetric

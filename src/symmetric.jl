@@ -812,6 +812,12 @@ end
 
 factorize(A::HermOrSym) = _factorize(A)
 function _factorize(A::HermOrSym{T}; check::Bool=true) where T
+    # Exact element types (`Rational` and their complex counterparts) match the dense `Matrix{T}`
+    # path, which stays exact, so only convert to floating point when the dense path would too.
+    # (Follow-up to #1871/#1882, which regressed exact rational `\\`, `det` and `inv` to floats.)
+    if T <: Union{Rational, Complex{<:Rational}}
+        return isdiag(A) ? Diagonal(A) : lu(A; check=check)
+    end
     A2 = convert(AbstractMatrix{float(T)}, A)
     TT = typeof(sqrt(oneunit(T)))
     if isdiag(A2)
