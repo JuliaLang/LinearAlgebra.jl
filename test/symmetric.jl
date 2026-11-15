@@ -11,6 +11,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
@@ -1480,6 +1481,35 @@ end
     @test isa(S \ b, Vector{Float64})
     @test isa(det(S), Float64)
     @test isa(logabsdet(S), Tuple{Float64,Float64})
+end
+
+@testset "factorize for generic element types" begin
+    M = [4 1 2; 1 -3 0; 2 0 5]
+    b = [1, 2, 3]
+    B = [1 2; 3 4; 5 6]
+    # the generic Bunch-Kaufman factorization is used for the supported non-BLAS types
+    for T in (BigFloat, (@static COMPREHENSIVE ? (Float16, Complex{BigFloat}) : ())...),
+            W in (Symmetric, Hermitian)
+        A = W(T.(M))
+        @test factorize(A) isa LinearAlgebra.BunchKaufman{T}
+        @test A \ b ≈ Matrix(A) \ b
+        @test A \ B ≈ Matrix(A) \ B
+        # the determinant is computed from the pivots, not as `exp(logabsdet(A))`
+        @test det(A) == -53
+        @test logabsdet(A)[1] ≈ log(T(53))
+    end
+    # other types fall back to LU, like dual numbers, which are not floating-point numbers
+    D = Symmetric(Dual.(float.(M), float.(M)))
+    @test factorize(D) isa LU
+    @test det(D) == Dual(-53.0, -159.0)
+    @static if COMPREHENSIVE
+        # quaternions only for Hermitian matrices, as their multiplication does not commute
+        Q = randn(Quaternion{Float64}, 3, 3)
+        @test factorize(Hermitian(Q + Q')) isa LinearAlgebra.BunchKaufman{Quaternion{Float64}}
+        S = Symmetric(Q + transpose(Q))
+        @test factorize(S) isa LU{Quaternion{Float64}}
+        @test S * (S \ b) ≈ b
+    end
 end
 
 end # module TestSymmetric
