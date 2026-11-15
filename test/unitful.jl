@@ -146,6 +146,14 @@ end
     else
         @test_broken x ≈ Furlong.([1.0, 2.0 + 1e-10])
     end
+    # `UniformScaling`: the default `atol` is a zero in the units of the scaling
+    J = Furlong(2.0)*I
+    @test J ≈ Furlong(2.0 + 1e-10)*I
+    @test isapprox(J, Furlong(2.05)*I; atol=Furlong(0.1))
+    @test !isapprox(J, Furlong(2.05)*I; atol=Furlong(0.01), rtol=0)
+    @test J ≈ Matrix(Diagonal(Furlong.([2.0, 2.0])))
+    @test isapprox(J, Furlong.([2.0 0.0; 0.0 2.05]); atol=Furlong(0.1))
+    @test !isapprox(Furlong.([2.0 0.0; 0.0 2.05]), J; atol=Furlong(0.01), rtol=0)
 end
 
 @testset "SVD with dimensionful singular values" begin
@@ -175,6 +183,10 @@ end
     @test map(getval, Matrix(pinv(F; atol=Furlong(2.0)))) ≈ pinv(A0; atol=2.0)
     @test map(getval, Matrix(pinv(F; rtol=0.5))) ≈ pinv(A0; rtol=0.5)
     @test map(getval, Matrix(inv(SVD(F0.U[1:3, :], Furlong.([3.0, 2.0, 1.0]), F0.Vt)))) ≈ inv(F0.U[1:3, :] * Diagonal([3.0, 2.0, 1.0]) * F0.Vt)
+    # nullspace: the default `atol` is a zero in the units of the singular values
+    @test abs.(nullspace(F)) ≈ abs.(nullspace(A0))
+    # nullspace of a dimensionful `Diagonal`: the default `rtol` must be dimensionless
+    @test nullspace(Diagonal(Furlong.([3.0, 0.0, -2.0]))) == nullspace(Diagonal([3.0, 0.0, -2.0]))
     # solving with a dimensionless factorization and a dimensionful right-hand side
     b0 = [1.0, 2.0, 3.0, 4.0]
     b = Furlong.(b0)
@@ -185,6 +197,16 @@ end
     # solving with dimensionful singular values needs the solution in different units than
     # the right-hand side, which the in-place `ldiv!` cannot provide
     @test_broken F \ b isa Vector{<:Furlong{0}}
+end
+
+@testset "svd of a dimensionful number" begin
+    x = Furlong(-2.0)
+    F = svd(x)   # `U` and `Vt` are dimensionless, of a common type
+    @test F.S == [Furlong(2.0)]
+    @test F.U == fill(Furlong{0}(-1.0), 1, 1)
+    @test F.Vt == fill(Furlong{0}(1.0), 1, 1)
+    # `atol` has the units of the singular value
+    @test svd(x; atol=Furlong(3.0)).U == fill(Furlong{0}(1.0), 1, 1)
 end
 
 @testset "solves with a dimensionful right-hand side" begin

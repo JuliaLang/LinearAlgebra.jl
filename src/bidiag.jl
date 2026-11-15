@@ -276,7 +276,7 @@ end
 #Singular values
 svdvals!(M::Bidiagonal{<:BlasReal}) = LAPACK.bdsdc!(M.uplo, 'N', M.dv, M.ev)[1]
 # M is square, so the full and the thin SVD coincide and `full` has no effect
-function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Real=0, rtol::Real=0)
+function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Number=zero(real(eltype(M))), rtol::Real=0)
     d, U, Vt = _svd!(M, alg)
     d[_count_svdvals(d, atol, rtol)+1:end] .= 0
     return SVD(U, d, Vt)

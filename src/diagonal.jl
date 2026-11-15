@@ -1155,7 +1155,7 @@ function svd(D::Diagonal{T}) where {T<:Number}
     return SVD(U, S, Vt)
 end
 
-function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(oneunit(T)))))*iszero(atol)) where {T<:Number}
+function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(one(T)))))*iszero(atol)) where {T<:Number}
     n = size(D, 1)
     Td = _ortho_eltype(T)
     n == 0 && return zeros(Td, 0, 0)
