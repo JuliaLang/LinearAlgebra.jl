@@ -818,9 +818,13 @@ _bk_supported(::Type{<:Hermitian}, ::Type{T}) where {T} = T <: Number && real(T)
 _bk_supported(::Type{<:Symmetric}, ::Type{T}) where {T} =
     T <: Union{Real,Complex} && real(T) <: ClosedReal
 
+# The element type in which a symmetric or Hermitian matrix is factorized. Rational numbers are
+# kept, as the factorization is exact for them, and other types are converted to floating point.
+_factorize_eltype(::Type{T}) where {T} = T <: Union{Rational,Complex{<:Rational}} ? T : float(T)
+
 factorize(A::HermOrSym) = _factorize(A)
 function _factorize(A::HermOrSym{T}; check::Bool=true) where T
-    A2 = convert(AbstractMatrix{float(T)}, A)
+    A2 = convert(AbstractMatrix{_factorize_eltype(T)}, A)
     if isdiag(A2)
         return Diagonal(A2)
     elseif _bk_supported(typeof(A2), eltype(A2))
@@ -846,7 +850,7 @@ det(A::Symmetric) = det(_factorize(A; check=false))
 # generic implementation, which needs about half the operations of LU.
 function \(A::HermOrSym, B::AbstractMatrix)
     T = eltype(A)
-    if T <: Number && !(float(T) <: BlasFloat)
+    if T <: Number && !(_factorize_eltype(T) <: BlasFloat)
         return \(factorize(A), B)
     end
     return \(isdiag(A) ? Diagonal(A) : lu(A), B)

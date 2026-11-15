@@ -1512,4 +1512,31 @@ end
     end
 end
 
+@testset "exact factorization of rational matrices" begin
+    # rational matrices are factorized exactly, like dense matrices, with Bunch-Kaufman
+    S = Symmetric(Rational{Int}[2 1; 1 2])
+    b = Rational{Int}[1, 1]
+    @test factorize(S) isa LinearAlgebra.BunchKaufman{Rational{Int}}
+    @test S \ b == Matrix(S) \ b
+    @test S \ b isa Vector{<:Rational}
+    @test S \ [b b] == Matrix(S) \ [b b]
+    @test S \ [b b] isa Matrix{<:Rational}
+    @test det(S) == det(Matrix(S))
+    @test det(S) isa Rational
+    @test inv(S) == inv(Matrix(S))
+    @test eltype(inv(S)) <: Rational
+    SB = Symmetric(Rational{BigInt}[2 1; 1 2])
+    @test SB \ Rational{BigInt}[1, 1] isa Vector{Rational{BigInt}}
+    H = Hermitian(Complex{Rational{Int}}[2 im; -im 3])
+    bc = Complex{Rational{Int}}[1, 1]
+    @test H \ bc == Matrix(H) \ bc
+    @test eltype(H \ bc) <: Complex{<:Rational}
+    @test det(H) == 5
+    @test det(H) isa Rational
+    # 2-by-2 pivots
+    Z = Symmetric(Rational{BigInt}[0 1 2; 1 0 3; 2 3 0])
+    @test Z \ Rational{BigInt}[1, 2, 3] == Matrix(Z) \ Rational{BigInt}[1, 2, 3]
+    @test det(Z) == 12
+end
+
 end # module TestSymmetric
