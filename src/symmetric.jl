@@ -812,17 +812,18 @@ end
 
 factorize(A::HermOrSym) = _factorize(A)
 function _factorize(A::HermOrSym{T}; check::Bool=true) where T
+    A2 = convert(AbstractMatrix{float(T)}, A)
     TT = typeof(sqrt(oneunit(T)))
-    if isdiag(A)
-        return Diagonal(A)
+    if isdiag(A2)
+        return Diagonal(A2)
     elseif TT <: BlasFloat
-        return bunchkaufman(A; check=check)
+        return bunchkaufman(A2; check=check)
     else # fallback
-        return lu(A; check=check)
+        return lu(A2; check=check)
     end
 end
 
-logabsdet(A::RealHermSymComplexHerm) = ((l, s) = logabsdet(_factorize(A; check=false)); return real(l), real(s))
+logabsdet(A::RealHermSymComplexHerm) = real.(logabsdet(_factorize(A; check=false)))
 logabsdet(A::Symmetric{<:Real}) = logabsdet(_factorize(A; check=false))
 logabsdet(A::Symmetric) = logabsdet(_factorize(A; check=false))
 logdet(A::RealHermSymComplexHerm) = real(logdet(_factorize(A; check=false)))
