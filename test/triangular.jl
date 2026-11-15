@@ -1290,4 +1290,16 @@ end
     end
 end
 
+@testset "integer powers of Bool unit triangular matrices (#1869)" begin
+    for (T, B) in ((UnitUpperTriangular, Bool[1 1 1; 0 1 1; 0 0 1]),
+                   (UnitLowerTriangular, Bool[1 0 0; 1 1 0; 1 1 1]))
+        A = T(B)
+        M = Matrix(A)
+        for p in 0:4
+            @test A^p == M^p
+        end
+        @test A^2 isa T{Int}
+    end
+end
+
 end # module TestTriangular
