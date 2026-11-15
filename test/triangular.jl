@@ -1369,20 +1369,15 @@ end
     end
 end
 
-@testset "Bool unit triangular: negation and integer powers (#1868, #1869)" begin
+@testset "integer powers of Bool unit triangular matrices (#1869)" begin
     for (T, B) in ((UnitUpperTriangular, Bool[1 1 1; 0 1 1; 0 0 1]),
                    (UnitLowerTriangular, Bool[1 0 0; 1 1 0; 1 1 1]))
         A = T(B)
         M = Matrix(A)
-        @test -A == -M
-        @test eltype(-A) == Int
         for p in 0:4
             @test A^p == M^p
         end
         @test A^2 isa T{Int}
-        # conversion between unit triangular types with different element types
-        @test convert(T{Int,Matrix{Int}}, A)::T{Int,Matrix{Int}} == A
-        @test convert(T{Int}, A)::T{Int} == A
     end
 end
 

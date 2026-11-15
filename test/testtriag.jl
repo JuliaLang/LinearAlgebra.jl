@@ -53,6 +53,10 @@ function test_triangular(elty1_types)
             @test convert(AbstractMatrix{elty1}, A1) == A1
             @test convert(Matrix, A1) == A1
             @test t1{elty1}(convert(AbstractMatrix{elty1}, A1)) == A1
+            # to the same wrapper type with a different element type
+            eltyw = promote_type(elty1, Float64)
+            @test convert(t1{eltyw,Matrix{eltyw}}, A1)::t1{eltyw,Matrix{eltyw}} == A1
+            @test convert(t1{eltyw}, A1)::t1{eltyw} == A1
 
             # full!
             @test full!(copy(A1)) == A1
