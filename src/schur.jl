@@ -157,13 +157,16 @@ function schur(A::RealHermSymComplexHerm)
     F = eigen(A; sortby=nothing)
     return Schur(typeof(F.vectors)(Diagonal(F.values)), F.vectors, F.values)
 end
+# The Schur form and the (dimensionless) Schur vectors share their type, which is abstract for
+# dimensionful element types.
+_schurtype(T) = (t = eigtype(T); promote_type(t, _ortho_eltype(t)))
 function schur(A::Union{UnitUpperTriangular{T},UpperTriangular{T}}) where {T}
-    t = eigtype(T)
+    t = _schurtype(T)
     Z = copy_similar(A, t)
     return Schur(Z, Matrix{t}(I, size(A)), convert(Vector{t}, diag(A)))
 end
 function schur(A::Union{UnitLowerTriangular{T},LowerTriangular{T}}) where {T}
-    t = eigtype(T)
+    t = _schurtype(T)
     # double flip the matrix A
     Z = copy_similar(A, t)
     reverse!(reshape(Z, :))
@@ -171,12 +174,12 @@ function schur(A::Union{UnitLowerTriangular{T},LowerTriangular{T}}) where {T}
     n = size(A, 1)
     J = zeros(t, n, n)
     for i in axes(J, 2)
-       J[n+1-i, i] = oneunit(t)
+       J[n+1-i, i] = one(t)
     end
     return Schur(Z, J, reverse!(convert(Vector{t}, diag(A))))
 end
 function schur(A::Bidiagonal{T}) where {T}
-    t = eigtype(T)
+    t = _schurtype(T)
     if A.uplo == 'U'
         return Schur(Matrix{t}(A), Matrix{t}(I, size(A)), Vector{t}(A.dv))
     else # A.uplo == 'L'
@@ -184,7 +187,7 @@ function schur(A::Bidiagonal{T}) where {T}
         n = size(A, 1)
         J = zeros(t, n, n)
         for i in axes(J, 2)
-            J[n+1-i, i] = oneunit(t)
+            J[n+1-i, i] = one(t)
         end
         dv = reverse!(Vector{t}(A.dv))
         ev = reverse!(Vector{t}(A.ev))

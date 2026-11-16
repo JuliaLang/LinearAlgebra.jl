@@ -394,4 +394,23 @@ end
     end
 end
 
+@testset "eigtype and dimensionless results" begin
+    # eigtype keeps the units and is concrete
+    for (T, S) in (Furlong{1,Float64} => Furlong{1,Float64}, Furlong{1,Float32} => Furlong{1,Float32},
+                   Furlong{1,Float16} => Furlong{1,Float32}, Furlong{2,Int} => Furlong{2,Float64})
+        @test LinearAlgebra.eigtype(T) === S
+    end
+    # the condition number and the null space are dimensionless, also for empty matrices
+    @test cond(Furlong.(zeros(0, 0)))::Float64 == 0
+    @test nullspace(Furlong.(zeros(0, 3)))::Matrix{Float64} == I
+    # the Schur vectors are dimensionless, so they share an abstract type with the Schur form
+    M = Furlong.([4.0 1 2; 0 3 1; 0 0 5])
+    for A in (UpperTriangular(M), LowerTriangular(copy(M')), Bidiagonal(M, :U), Bidiagonal(copy(M'), :L))
+        F = schur(A)
+        @test !any(z -> z isa Furlong, F.Z)
+        @test F.Z' * F.Z == I
+        @test sort(map(getval, F.values)) == sort(map(getval, diag(A)))
+    end
+end
+
 end # module TestUnitfulLinAlg
