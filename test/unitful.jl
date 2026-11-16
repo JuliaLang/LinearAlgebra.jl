@@ -363,4 +363,35 @@ end
     end
 end
 
+@testset "eltype of products with a dimensionless factor" begin
+    U = [4.0 1 0; 1 3 1; 0 1 2]
+    Bu = Furlong.(U .+ 1)
+    bu = Furlong.([1.0, 2, 3])
+    m2 = Furlong(2.0)
+    F = Furlong{1,Float64}
+    @testset "AbstractQ" begin
+        Q = qr(U).Q
+        MQ = Matrix(Q)
+        for (A, B, MA, MB) in ((Q, bu, MQ, bu), (Q, Bu, MQ, Bu), (Bu, Q, Bu, MQ), (bu', Q, bu', MQ),
+                               (Q', Bu, MQ', Bu), (Bu, Q', Bu, MQ'),
+                               (Q, m2 * I, MQ, m2), (m2 * I, Q, m2, MQ), (Q, m2, MQ, m2), (m2, Q, m2, MQ))
+            @test eltype(A * B) === F
+            @test map(getval, A * B) ≈ map(getval, MA * MB)
+        end
+    end
+    @testset "LQ" begin
+        L = lq(U)
+        @test map(getval, (L * bu)::Vector{F}) ≈ U * map(getval, bu)
+        @test map(getval, (L * Bu)::Matrix{F}) ≈ U * map(getval, Bu)
+    end
+    @testset "UniformScaling" begin
+        @test map(getval, ((m2 * I) / U)::Matrix{F}) ≈ 2 * inv(U)
+        @test map(getval, (U \ (m2 * I))::Matrix{F}) ≈ 2 * inv(U)
+    end
+    @testset "opnorm" begin
+        @test opnorm(Bu, 1)::F == Furlong(opnorm(U .+ 1, 1))
+        @test opnorm(Bu, Inf)::F == Furlong(opnorm(U .+ 1, Inf))
+    end
+end
+
 end # module TestUnitfulLinAlg
