@@ -233,6 +233,12 @@ _bktype(::Type{<:Integer}) = Rational{BigInt}
 _bktype(::Type{<:Complex{<:Integer}}) = Complex{Rational{BigInt}}
 _bktype(::Type{T}) where {T} = typeof(oneunit(T) / oneunit(T))
 
+# The element type in which `factorize` factorizes a symmetric or Hermitian matrix. Unlike in
+# `bunchkaufman`, integers are converted to floating point, as for dense matrices, while
+# floating-point and rational numbers are kept, as the factorization is exact for the latter.
+_factorize_eltype(::Type{T}) where {T<:ClosedScalar} = T
+_factorize_eltype(::Type{T}) where {T} = float(T)
+
 BunchKaufman{T}(B::BunchKaufman) where {T} =
     BunchKaufman(convert(Matrix{T}, B.LD), B.ipiv, B.uplo, B.symmetric, B.rook, B.info)
 Factorization{T}(B::BunchKaufman) where {T} = BunchKaufman{T}(B)
