@@ -1057,17 +1057,17 @@ _ortho_eltype(T::Type{<:Number}) = typeof(one(T)/one(T))
 
 #Eigensystem
 eigvals(D::Diagonal{T}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:Number} =
-    _tohalf(T, sorteig!(copymutable_oftype(D.diag, eigtype(D)), sortby))
+    _tohalf(T, sorteig!(eigtype(D).(D.diag), sortby))
 eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
     sorteig!(reduce(vcat, eigvals(x; sortby=nothing) for x in D.diag), sortby) #For block matrices, etc.
 function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
     facts = [eigen(x; sortby=nothing) for x in D.diag]
     λ = reduce(vcat, f.values for f in facts)
     diag_vecs = [f.vectors for f in facts]
-    matT = promote_type(map(typeof, diag_vecs)...)
+    Tv = promote_type(map(eltype, diag_vecs)...)
     ncols_diag = [size(x, 2) for x in D.diag]
     nrows = size(D, 1)
-    vecs = Matrix{Vector{eltype(matT)}}(undef, nrows, sum(ncols_diag))
+    vecs = Matrix{Vector{Tv}}(undef, nrows, sum(ncols_diag))
     for j in axes(D, 2), i in axes(D, 1)
         jj = sum(view(ncols_diag,1:j-1))
         if i == j
@@ -1076,7 +1076,7 @@ function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
             end
         else
             for k in 1:ncols_diag[j]
-                vecs[i,jj+k] = zeros(eltype(matT), ncols_diag[i])
+                vecs[i,jj+k] = zeros(Tv, ncols_diag[i])
             end
         end
     end

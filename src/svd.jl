@@ -270,7 +270,7 @@ julia> svdvals(A)
 ```
 """
 svdvals(A::AbstractMatrix{T}) where {T} = _tohalf(T, svdvals!(eigencopy_oftype(A, eigtype(A))))
-svdvals(A::AbstractVector{T}) where {T} = _tohalf(T, [convert(eigtype(A), norm(A))])
+svdvals(A::AbstractVector{T}) where {T} = _tohalf(T, [convert(real(eigtype(A)), norm(A))])
 svdvals(x::Number) = abs(x)
 svdvals(S::SVD{<:Any,T}) where {T} = (S.S)::Vector{T}
 
