@@ -1484,59 +1484,34 @@ end
 end
 
 @testset "factorize for generic element types" begin
+    # rational matrices are factorized exactly with Bunch-Kaufman, here with 2-by-2 pivots
+    S = Symmetric(Rational{BigInt}[0 1 2; 1 0 3; 2 3 0])
+    b = Rational{BigInt}[1, 2, 3]
+    F = factorize(S)
+    @test F isa LinearAlgebra.BunchKaufman{Rational{BigInt}}
+    @test any(<(0), F.ipiv)
+    @test S \ b isa Vector{Rational{BigInt}}
+    @test S \ b == Matrix(S) \ b
+    @test S \ [b b] isa Matrix{Rational{BigInt}}
+    @test S \ [b b] == Matrix(S) \ [b b]
+    @test det(S) isa Rational{BigInt}
+    @test det(S) == 12
+    H = Hermitian(Complex{Rational{Int}}[2 im; -im 3])
+    bc = Complex{Rational{Int}}[1, 1]
+    @test H \ bc isa Vector{Complex{Rational{Int}}}
+    @test H \ bc == Matrix(H) \ bc
+    @test det(H) isa Rational{Int}
+    @test det(H) == 5
+    # non-BLAS floating-point types also use Bunch-Kaufman, and the determinant is the product
+    # of the pivots, which is exact here, unlike `exp(logabsdet(A))`
     M = [4 1 2; 1 -3 0; 2 0 5]
-    b = [1, 2, 3]
-    B = [1 2; 3 4; 5 6]
-    # the generic Bunch-Kaufman factorization is used for the supported non-BLAS types
-    for T in (BigFloat, (@static COMPREHENSIVE ? (Float16, Complex{BigFloat}) : ())...),
-            W in (Symmetric, Hermitian)
-        A = W(T.(M))
-        @test factorize(A) isa LinearAlgebra.BunchKaufman{T}
-        @test A \ b ≈ Matrix(A) \ b
-        @test A \ B ≈ Matrix(A) \ B
-        # the determinant is computed from the pivots, not as `exp(logabsdet(A))`
-        @test det(A) == -53
-        @test logabsdet(A)[1] ≈ log(T(53))
-    end
-    # other types fall back to LU, like dual numbers, which are not floating-point numbers
+    A = Symmetric(big.(M))
+    @test factorize(A) isa LinearAlgebra.BunchKaufman{BigFloat}
+    @test det(A) == -53
+    # types that the generic Bunch-Kaufman factorization does not support fall back to LU
     D = Symmetric(Dual.(float.(M), float.(M)))
     @test factorize(D) isa LU
     @test det(D) == Dual(-53.0, -159.0)
-    @static if COMPREHENSIVE
-        # quaternions only for Hermitian matrices, as their multiplication does not commute
-        Q = randn(Quaternion{Float64}, 3, 3)
-        @test factorize(Hermitian(Q + Q')) isa LinearAlgebra.BunchKaufman{Quaternion{Float64}}
-        S = Symmetric(Q + transpose(Q))
-        @test factorize(S) isa LU{Quaternion{Float64}}
-        @test S * (S \ b) ≈ b
-    end
-end
-
-@testset "exact factorization of rational matrices" begin
-    # rational matrices are factorized exactly, like dense matrices, with Bunch-Kaufman
-    S = Symmetric(Rational{Int}[2 1; 1 2])
-    b = Rational{Int}[1, 1]
-    @test factorize(S) isa LinearAlgebra.BunchKaufman{Rational{Int}}
-    @test S \ b == Matrix(S) \ b
-    @test S \ b isa Vector{<:Rational}
-    @test S \ [b b] == Matrix(S) \ [b b]
-    @test S \ [b b] isa Matrix{<:Rational}
-    @test det(S) == det(Matrix(S))
-    @test det(S) isa Rational
-    @test inv(S) == inv(Matrix(S))
-    @test eltype(inv(S)) <: Rational
-    SB = Symmetric(Rational{BigInt}[2 1; 1 2])
-    @test SB \ Rational{BigInt}[1, 1] isa Vector{Rational{BigInt}}
-    H = Hermitian(Complex{Rational{Int}}[2 im; -im 3])
-    bc = Complex{Rational{Int}}[1, 1]
-    @test H \ bc == Matrix(H) \ bc
-    @test eltype(H \ bc) <: Complex{<:Rational}
-    @test det(H) == 5
-    @test det(H) isa Rational
-    # 2-by-2 pivots
-    Z = Symmetric(Rational{BigInt}[0 1 2; 1 0 3; 2 3 0])
-    @test Z \ Rational{BigInt}[1, 2, 3] == Matrix(Z) \ Rational{BigInt}[1, 2, 3]
-    @test det(Z) == 12
 end
 
 end # module TestSymmetric

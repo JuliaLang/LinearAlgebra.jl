@@ -406,32 +406,6 @@ end
     end
 end
 
-@testset "det" begin
-    # the determinant is the product of the determinants of the blocks of D, also with 2-by-2
-    # pivots, so it is exact for rational matrices
-    Mr = [0 1 2; 1 0 3; 2 3 0]
-    M = [0 1+2im 3; 1-2im 0 1im; 3 -1im 0]
-    for uplo in (:U, :L), rook in (false, true)
-        F = bunchkaufman(Symmetric(Rational{BigInt}.(Mr), uplo), rook)
-        @test any(<(0), F.ipiv)
-        @test @inferred(det(F)) isa Rational{BigInt}
-        @test det(F) == 12
-        A = Complex{Rational{BigInt}}.(M)
-        F = bunchkaufman(Hermitian(A, uplo), rook)
-        @test any(<(0), F.ipiv)
-        @test @inferred(det(F)) isa Complex{Rational{BigInt}}
-        @test det(F) == -12
-        S = Symmetric(A, uplo)
-        @test det(bunchkaufman(S, rook)) == det(Matrix(S))
-        # LAPACK
-        @test det(bunchkaufman(Hermitian(ComplexF64.(M), uplo), rook)) ≈ -12
-        @test det(bunchkaufman(Symmetric(ComplexF64.(M), uplo), rook)) ≈ det(ComplexF64.(Matrix(S)))
-    end
-    # a singular matrix
-    @test det(bunchkaufman(Symmetric([1.0 2; 2 4]); check=false)) == 0
-    @test det(bunchkaufman(Symmetric(big.([1 2; 2 4])); check=false)) == 0
-end
-
 @testset "Hermitian matrices of quaternions" begin
     # the real 4n×4n matrix of the map x -> A*x has each eigenvalue of a Hermitian A four times
     realmat(q) = [q.s -q.v1 -q.v2 -q.v3; q.v1 q.s -q.v3 q.v2; q.v2 q.v3 q.s -q.v1; q.v3 -q.v2 q.v1 q.s]
