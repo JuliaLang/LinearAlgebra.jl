@@ -306,19 +306,20 @@ end
     B = [1 2; 3 4; 5 6; 7 8]
     for A in (Symmetric(float(M)), Hermitian(C + C'), Symmetric(big.(M))), rook in (false, true)
         F = bunchkaufman(A, rook)
+        MA = Matrix(A)
         @test any(<(0), F.ipiv) # covers 2×2 pivot blocks
         T = eltype(F)
         for R in (b, B)
             X = @inferred F \ Furlong.(R)
             @test X isa Array{Furlong{1,T}}
-            @test map(getval, X) ≈ Matrix(A) \ R
+            @test map(getval, X) ≈ MA \ R
             Y = Furlong.(T.(R))
             @test ldiv!(F, Y) === Y
-            @test map(getval, Y) ≈ Matrix(A) \ R
+            @test map(getval, Y) ≈ MA \ R
         end
         X = Furlong.(B') / F
         @test X isa Matrix{Furlong{1,T}}
-        @test map(getval, X) ≈ B' / Matrix(A)
+        @test map(getval, X) ≈ B' / MA
     end
     # in-place solve with a rational factorization and a floating-point right-hand side
     F = bunchkaufman(Symmetric(Rational{BigInt}.(M)))
