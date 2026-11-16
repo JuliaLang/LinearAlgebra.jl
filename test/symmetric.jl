@@ -1484,8 +1484,10 @@ end
 end
 
 @testset "factorize for generic element types" begin
-    # rational matrices are factorized exactly with Bunch-Kaufman, here with 2-by-2 pivots
-    S = Symmetric(Rational{BigInt}[0 1 2; 1 0 3; 2 3 0])
+    # The parents are not symmetric or Hermitian, so that the tests check that only the upper
+    # triangle is used, and for Hermitian matrices only the real part of the diagonal.
+    # Rational matrices are factorized exactly with Bunch-Kaufman, here with 2-by-2 pivots.
+    S = Symmetric(Rational{BigInt}[0 1 2; 7 0 3; -5 11 0])
     b = Rational{BigInt}[1, 2, 3]
     F = factorize(S)
     @test F isa LinearAlgebra.BunchKaufman{Rational{BigInt}}
@@ -1496,7 +1498,7 @@ end
     @test S \ [b b] == Matrix(S) \ [b b]
     @test det(S) isa Rational{BigInt}
     @test det(S) == 12
-    H = Hermitian(Complex{Rational{Int}}[2 im; -im 3])
+    H = Hermitian(Complex{Rational{Int}}[2+7im im; 5 3-im])
     bc = Complex{Rational{Int}}[1, 1]
     @test H \ bc isa Vector{Complex{Rational{Int}}}
     @test H \ bc == Matrix(H) \ bc
@@ -1504,13 +1506,15 @@ end
     @test det(H) == 5
     # non-BLAS floating-point types also use Bunch-Kaufman, and the determinant is the product
     # of the pivots, which is exact here, unlike `exp(logabsdet(A))`
-    M = [4 1 2; 1 -3 0; 2 0 5]
+    M = [4 1 2; 9 -3 0; -7 6 5]
     A = Symmetric(big.(M))
     @test factorize(A) isa LinearAlgebra.BunchKaufman{BigFloat}
     @test det(A) == -53
     # Hermitian quaternion matrices also use Bunch-Kaufman
-    Q = randn(Quaternion{Float64}, 3, 3)
-    @test factorize(Hermitian(Q + Q')) isa LinearAlgebra.BunchKaufman{Quaternion{Float64}}
+    Q = Hermitian(randn(Quaternion{Float64}, 3, 3))
+    FQ = factorize(Q)
+    @test FQ isa LinearAlgebra.BunchKaufman{Quaternion{Float64}}
+    @test Matrix(FQ) ≈ Q
     # types that the generic Bunch-Kaufman factorization does not support fall back to LU
     D = Symmetric(Dual.(float.(M), float.(M)))
     @test factorize(D) isa LU
