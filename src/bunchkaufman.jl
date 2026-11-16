@@ -889,7 +889,7 @@ generic_bksolve!(F, B) -> X<:AbstractVecOrMat
 `generic_bksolve!` solves a system of linear equations `A*X = B` where
 the Bunch-Kaufman factorization of `A` is provided by `F`.
 """
-function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS <: Number}
+function generic_bksolve!(F::BunchKaufman{<:Number}, B::AbstractMatrix)
     A, ipiv, symm, rook = F.LD, F.ipiv, issymmetric(F), F.rook
     require_one_based_indexing(A, ipiv, B)
     N = size(A, 1)
@@ -976,7 +976,7 @@ function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS 
     return B
 end
 # a vector is solved as a matrix with a single column
-function generic_bksolve!(F::BunchKaufman{T}, b::AbstractVector{T}) where {T <: Number}
+function generic_bksolve!(F::BunchKaufman{<:Number}, b::AbstractVector)
     generic_bksolve!(F, view(b, :, :))
     return b
 end
@@ -1240,7 +1240,7 @@ end
 bunchkaufman!(A::AbstractMatrix{<:Number}, rook::Bool = false; check::Bool = true) =
     bunchkaufman_native!(A, rook; check)
 
-ldiv!(B::BunchKaufman{TS}, R::AbstractVecOrMat{TS}) where {TS <: Number} =
+ldiv!(B::BunchKaufman{<:Number}, R::AbstractVecOrMat) =
     generic_bksolve!(B, R)
 
 inv(B::BunchKaufman) =

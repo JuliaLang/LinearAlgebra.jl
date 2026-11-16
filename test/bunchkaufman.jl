@@ -14,6 +14,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.Furlongs
 
 n = 10
 
@@ -292,6 +293,38 @@ end
         @test_throws DimensionMismatch F \ T.([1, 2, 3])
         @test_throws DimensionMismatch ldiv!(F, zeros(T, 5, 2))
     end
+end
+
+@testset "solve with a right-hand side of another element type" begin
+    # the generic solver does not need the element types of the factorization and of the
+    # right-hand side to agree, e.g., for a dimensionful right-hand side
+    getval(x) = x
+    getval(x::Furlong) = x.val
+    M = [0 1 2 0; 1 0 3 1; 2 3 1 0; 0 1 0 2]
+    C = complex.(M, [0 1 0 2; 1 0 1 0; 0 1 0 1; 2 0 1 0])
+    b = [1, 2, 3, 4]
+    B = [1 2; 3 4; 5 6; 7 8]
+    for A in (Symmetric(float(M)), Hermitian(C + C'), Symmetric(big.(M))), rook in (false, true)
+        F = bunchkaufman(A, rook)
+        @test any(<(0), F.ipiv) # covers 2×2 pivot blocks
+        T = eltype(F)
+        for R in (b, B)
+            X = @inferred F \ Furlong.(R)
+            @test X isa Array{Furlong{1,T}}
+            @test map(getval, X) ≈ Matrix(A) \ R
+            Y = Furlong.(T.(R))
+            @test ldiv!(F, Y) === Y
+            @test map(getval, Y) ≈ Matrix(A) \ R
+        end
+        X = Furlong.(B') / F
+        @test X isa Matrix{Furlong{1,T}}
+        @test map(getval, X) ≈ B' / Matrix(A)
+    end
+    # in-place solve with a rational factorization and a floating-point right-hand side
+    F = bunchkaufman(Symmetric(Rational{BigInt}.(M)))
+    x = big.(float.(b))
+    @test ldiv!(F, x) === x
+    @test M * x ≈ b
 end
 
 @testset "matrices with an abstract element type" begin
