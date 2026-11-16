@@ -313,6 +313,33 @@ end
     @test F.U ≈ F32.U
     @test F.Vt ≈ F32.Vt
     @test F.S ≈ F32.S
+    # general (non-Hermitian) complex matrices, full decompositions and vectors
+    A = ComplexF16[1 2im 0; 3 4 1-im]
+    for full in (false, true)
+        F = svd(A; full)
+        @test F isa SVD{ComplexF16, Float16, Matrix{ComplexF16}, Vector{Float16}}
+        @test size(F.U) == (2, 2)
+        @test size(F.Vt) == (full ? 3 : 2, 3)
+        @test F.S ≈ svdvals(ComplexF32.(A))
+        @test svdvals(A) isa Vector{Float16}
+        F = svd(Float16.(real(A)); full)
+        @test F isa SVD{Float16, Float16, Matrix{Float16}}
+    end
+    for v in (Float16[3, 4], ComplexF16[3, 4im])
+        F = svd(v)
+        @test F.U isa Matrix{eltype(v)}
+        @test F.S isa Vector{Float16}
+        @test F.S == [5]
+        @test svdvals(v) isa Vector{Float16}
+        @test svdvals(v) == [5]
+    end
+end
+
+@testset "svdvals of vectors with an abstract element type" begin
+    @test svdvals(AbstractFloat[3f0, 4f0]) == [5]
+    @test svdvals(AbstractFloat[3f0, 4f0]) isa Vector{Float32}
+    @test svdvals(Number[3, 4im]) == [5]
+    @test svdvals(Number[3, 4im]) isa Vector{Float64}
 end
 
 @testset "rank svd" begin

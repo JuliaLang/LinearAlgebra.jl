@@ -578,6 +578,53 @@ end
     @test lam == [1, 2, 3]
 end
 
+@testset "element types of svd and eigen (#1875)" begin
+    # singular values of signed integers don't wrap around at typemin
+    for T in (Int8, Int16, Int64)
+        D = Diagonal(T[typemin(T), 0, 3])
+        @test svdvals(D) == [-float(typemin(T)), 3, 0]
+        F = svd(D)
+        @test F.S == svdvals(D)
+        @test F.U * Diagonal(F.S) * F.Vt ≈ D
+        @test rank(D) == rank(Matrix(D))
+        @test rank(Diagonal(T[typemin(T)])) == 1
+    end
+    # the element types match those of the dense methods; in particular, half precision is kept
+    # T => (eltype of singular values, eltype of eigenvalues, eltype of singular/eigenvectors)
+    for (T, (TS, Tλ, TV)) in (Int8 => (Float64, Float64, Float64), Int => (Float64, Float64, Float64),
+                             Float16 => (Float16, Float16, Float16), ComplexF16 => (Float16, ComplexF16, ComplexF16),
+                             Float32 => (Float32, Float32, Float32), ComplexF64 => (Float64, ComplexF64, ComplexF64),
+                             BigFloat => (BigFloat, BigFloat, BigFloat))
+        D = Diagonal(T <: Complex ? T[1+im, -2, 3im] : T[1, -2, 3])
+        MD = Matrix(D)
+        @test svdvals(D) isa Vector{TS}
+        F = svd(D)
+        @test F.S isa Vector{TS}
+        @test F.U isa Matrix{TV}
+        @test F.Vt isa Matrix{TV}
+        @test F.U * Diagonal(F.S) * F.Vt ≈ MD
+        @test eigvals(D) isa Vector{Tλ}
+        E = eigen(D)
+        @test E.values isa Vector{Tλ}
+        @test E.vectors isa Matrix{TV}
+        @test MD * E.vectors ≈ E.vectors * Diagonal(E.values)
+        E = eigen(D; sortby=nothing)
+        @test E.values isa Vector{Tλ}
+        @test E.vectors isa Diagonal{TV}
+        if T !== BigFloat # no dense methods
+            @test svdvals(D) ≈ svdvals(MD)
+            @test eltype(svdvals(MD)) == TS
+            @test sort(eigvals(D), by=LinearAlgebra.eigsortby) ≈ sort(eigvals(MD), by=LinearAlgebra.eigsortby)
+            @test eltype(eigvals(MD)) == Tλ
+        end
+    end
+    # block diagonal matrices of half precision blocks
+    D = Diagonal([Float16[1 2; 2 1], Float16[3;;]])
+    E = eigen(D)
+    @test E.values isa Vector{Float16}
+    @test E.vectors isa Matrix{Vector{Float16}}
+end
+
 @testset "eigmin (#27847)" begin
     for _ in 1:100
         d = randn(rand(1:10))
