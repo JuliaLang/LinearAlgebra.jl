@@ -1508,6 +1508,9 @@ end
     A = Symmetric(big.(M))
     @test factorize(A) isa LinearAlgebra.BunchKaufman{BigFloat}
     @test det(A) == -53
+    # Hermitian quaternion matrices also use Bunch-Kaufman
+    Q = randn(Quaternion{Float64}, 3, 3)
+    @test factorize(Hermitian(Q + Q')) isa LinearAlgebra.BunchKaufman{Quaternion{Float64}}
     # types that the generic Bunch-Kaufman factorization does not support fall back to LU
     D = Symmetric(Dual.(float.(M), float.(M)))
     @test factorize(D) isa LU
