@@ -1086,7 +1086,7 @@ function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{
     if any(!isfinite, D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
-    Td = _ortho_eltype(eltype(D))
+    Td = _ortho_eltype(eigtype(D))
     λ = eigvals(D; sortby=nothing)
     if !isnothing(sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
@@ -1146,7 +1146,7 @@ function svd(D::Diagonal{T}) where {T<:Number}
     s = abs.(eigtype(D).(d))
     piv = sortperm(s, rev = true)
     S = s[piv]
-    Td  = _ortho_eltype(T)
+    Td  = _ortho_eltype(eigtype(D))
     U = zeros(Td, size(D))
     Vt = copy(U)
     for i in 1:length(d)

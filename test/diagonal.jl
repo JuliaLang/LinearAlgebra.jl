@@ -594,6 +594,8 @@ end
     for (T, (TS, Tλ, TV)) in (Int8 => (Float64, Float64, Float64), Int => (Float64, Float64, Float64),
                              Float16 => (Float16, Float16, Float16), ComplexF16 => (Float16, ComplexF16, ComplexF16),
                              Float32 => (Float32, Float32, Float32), ComplexF64 => (Float64, ComplexF64, ComplexF64),
+                             Rational{Int} => (Float64, Float64, Float64),
+                             Complex{Rational{Int}} => (Float64, ComplexF64, ComplexF64),
                              BigFloat => (BigFloat, BigFloat, BigFloat))
         D = Diagonal(T <: Complex ? T[1+im, -2, 3im] : T[1, -2, 3])
         MD = Matrix(D)
@@ -617,6 +619,25 @@ end
             @test sort(eigvals(D), by=LinearAlgebra.eigsortby) ≈ sort(eigvals(MD), by=LinearAlgebra.eigsortby)
             @test eltype(eigvals(MD)) == Tλ
         end
+    end
+    # immutable diagonals, also ones that change under sorting
+    for d in (1:4, 4:-1:1, -3:2, 3.5:-1.0:0.5, Int8(-128):Int8(-125), Float16(1):Float16(4), FillArrays.Fill(-2.0, 3))
+        D = Diagonal(d)
+        MD = Matrix(D)
+        λ = eigvals(MD)
+        @test eigvals(D) isa Vector{eltype(λ)}
+        @test eigvals(D) ≈ λ
+        E = eigen(D)
+        @test E.values isa Vector{eltype(λ)}
+        @test MD * E.vectors ≈ E.vectors * Diagonal(E.values)
+        @test eigen(D; sortby=nothing).values isa Vector{eltype(λ)}
+        s = svdvals(MD)
+        @test svdvals(D) isa Vector{eltype(s)}
+        @test svdvals(D) ≈ s
+        F = svd(D)
+        @test F.S ≈ s
+        @test F.U * Diagonal(F.S) * F.Vt ≈ MD
+        @test rank(D) == rank(MD)
     end
     # block diagonal matrices of half precision blocks
     D = Diagonal([Float16[1 2; 2 1], Float16[3;;]])
