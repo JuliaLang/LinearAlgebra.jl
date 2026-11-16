@@ -1056,7 +1056,8 @@ _ortho_eltype(T) = Base.promote_op(/, T, T)
 _ortho_eltype(T::Type{<:Number}) = typeof(one(T)/one(T))
 
 #Eigensystem
-eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) = sorteig!(copy(D.diag), sortby)
+eigvals(D::Diagonal{T}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:Number} =
+    _tohalf(T, sorteig!(copymutable_oftype(D.diag, eigtype(D)), sortby))
 eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
     sorteig!(reduce(vcat, eigvals(x; sortby=nothing) for x in D.diag), sortby) #For block matrices, etc.
 function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
@@ -1075,7 +1076,7 @@ function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
             end
         else
             for k in 1:ncols_diag[j]
-                vecs[i,jj+k] = zeros(eltype(T), ncols_diag[i])
+                vecs[i,jj+k] = zeros(eltype(matT), ncols_diag[i])
             end
         end
     end
@@ -1097,7 +1098,7 @@ function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{
     else
         evecs = Diagonal(ones(Td, length(λ)))
     end
-    Eigen(λ, evecs)
+    _tohalf(eltype(D), Eigen(λ, evecs))
 end
 function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
     if any(any(!isfinite, x) for x in D.diag)
@@ -1137,11 +1138,12 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
 end
 
 #Singular system
-svdvals(D::Diagonal{<:Number}) = sort!(abs.(D.diag), rev = true)
+svdvals(D::Diagonal{T}) where {T<:Number} =
+    _tohalf(T, sort!(abs.(eigtype(D).(D.diag)), rev = true))
 svdvals(D::Diagonal) = [svdvals(v) for v in D.diag]
 function svd(D::Diagonal{T}) where {T<:Number}
     d = D.diag
-    s = abs.(d)
+    s = abs.(eigtype(D).(d))
     piv = sortperm(s, rev = true)
     S = s[piv]
     Td  = _ortho_eltype(T)
@@ -1152,7 +1154,7 @@ function svd(D::Diagonal{T}) where {T<:Number}
         U[j,i] = iszero(d[j]) ? one(Td) : d[j] / S[i]
         Vt[i,j] = one(Td)
     end
-    return SVD(U, S, Vt)
+    return _tohalf(T, SVD(U, S, Vt))
 end
 
 function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(one(T)))))*iszero(atol)) where {T<:Number}
