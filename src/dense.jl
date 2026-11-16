@@ -1986,6 +1986,7 @@ true
 """
 function sylvester(A::AbstractMatrix, B::AbstractMatrix, C::AbstractMatrix)
     T = promote_type(float(eltype(A)), float(eltype(B)), float(eltype(C)))
+    T <: BlasFloat || throw(ArgumentError(lazy"sylvester for eltype $T not supported."))
     return sylvester(copy_similar(A, T), copy_similar(B, T), copy_similar(C, T))
 end
 function sylvester(A::AbstractMatrix{T}, B::AbstractMatrix{T}, C::AbstractMatrix{T}) where {T<:BlasFloat}
@@ -2059,6 +2060,7 @@ true
 """
 function lyap(A::AbstractMatrix, C::AbstractMatrix)
     T = promote_type(float(eltype(A)), float(eltype(C)))
+    T <: BlasFloat || throw(ArgumentError(lazy"lyap for eltype $T not supported."))
     return lyap(copy_similar(A, T), copy_similar(C, T))
 end
 function lyap(A::AbstractMatrix{T}, C::AbstractMatrix{T}) where {T<:BlasFloat}
