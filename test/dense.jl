@@ -171,6 +171,7 @@ bimg  = randn(n,2)/2
             @test -a2' ≈ a'y + y*a
             z = lyap(Tridiagonal(a)', Diagonal(a2))
             @test z ≈ lyap(Array(Tridiagonal(a)'), Array(Diagonal(a2)))
+            @test_throws ArgumentError lyap(big.(a), big.(a2))
             @test -Diagonal(a2) ≈ Tridiagonal(a)'*z + z*Tridiagonal(a)
             x2 = sylvester(a[1:3, 1:3], a[4:n, 4:n], a2[1:3,4:n])
             @test -a2[1:3, 4:n] ≈ a[1:3, 1:3]*x2 + x2*a[4:n, 4:n]
@@ -180,6 +181,8 @@ bimg  = randn(n,2)/2
             z2 = sylvester(Tridiagonal(a[1:3, 1:3]), Diagonal(a[4:n, 4:n]), a2[1:3,4:n])
             @test z2 ≈ sylvester(Array(Tridiagonal(a[1:3, 1:3])), Array(Diagonal(a[4:n, 4:n])), Array(a2[1:3,4:n]))
             @test -a2[1:3, 4:n] ≈ Tridiagonal(a[1:3, 1:3])*z2 + z2*Diagonal(a[4:n, 4:n])
+            ab = big.(a)
+            @test_throws ArgumentError sylvester(ab[1:3, 1:3], ab[4:n, 4:n], a2[1:3,4:n])
         end
 
         @testset "Matrix square root" begin
