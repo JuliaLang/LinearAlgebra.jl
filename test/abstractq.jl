@@ -66,8 +66,10 @@ n = 5
             @test mul!(X, transQ(Q), transY(Y)) ≈ transQ(Q) * transY(Y) ≈ transQ(Q.Q) * transY(Y)
             @test mul!(X, transY(Y), transQ(Q)) ≈ transY(Y) * transQ(Q) ≈ transY(Y) * transQ(Q.Q)
         end
-        @test convert(Matrix, Q) ≈ Matrix(Q) ≈ Q[:,:] ≈ copyto!(zeros(T, size(Q)), Q) ≈ Q.Q*I
-        @test convert(Matrix, Q') ≈ Matrix(Q') ≈ (Q')[:,:] ≈ copyto!(zeros(T, size(Q)), Q') ≈ Q.Q'*I
+        @test Matrix(Q) ≈ Q[:,:] ≈ copyto!(zeros(T, size(Q)), Q) ≈ Q.Q*I
+        @test Matrix(Q') ≈ (Q')[:,:] ≈ copyto!(zeros(T, size(Q)), Q') ≈ Q.Q'*I
+        @test_deprecated convert(Matrix, Q)
+        @test_deprecated convert(Matrix, Q')
         @test AbstractMatrix(Q) ≈ AbstractArray(Q) ≈ AbstractMatrix{T}(Q) ≈ AbstractArray{T}(Q)
         @test Q[1,:] == Q.Q[1,:] == view(Q, 1, :)
         @test Q[:,1] == Q.Q[:,1] == view(Q, :, 1)
@@ -181,6 +183,20 @@ end
         show(IOContext(devnull, ctx...), "text/plain", C)
         @test 0 < length(C.columns) < 20
         @test all(j -> C.columns[j] == P[:, j], keys(C.columns))
+    end
+end
+
+@testset "multiplication with abstract element types" begin
+    # the result keeps the promoted abstract element type, as for the dense Q
+    U = [4.0 1 0; 1 3 1; 0 1 2]
+    Q = qr(U).Q
+    MQ = Matrix(Q)
+    bn = Number[1, 2.0, 3]
+    Br = Real[1 2; 3 4.0; 5 6]
+    for (A, B, MA, MB, T) in ((Q, bn, MQ, bn, Number), (Q, Br, MQ, Br, Real), (Br', Q, Br', MQ, Real),
+                              (Q', bn, MQ', bn, Number), (lq(U), bn, U, bn, Number))
+        @test eltype(A * B) === T
+        @test A * B ≈ MA * MB
     end
 end
 

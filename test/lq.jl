@@ -23,7 +23,7 @@ bcomplex = randn(ComplexF64, m, 2) / 2
 
 # helper functions to unambiguously recover explicit forms of an LQPackedQ
 squareQ(Q::LinearAlgebra.LQPackedQ) = (n = size(Q.factors, 2); lmul!(Q, Matrix{eltype(Q)}(I, n, n)))
-rectangularQ(Q::LinearAlgebra.LQPackedQ) = convert(Array, Q)
+rectangularQ(Q::LinearAlgebra.LQPackedQ) = Array(Q)
 
 @testset for eltya in (Float32, Float64, ComplexF32, ComplexF64), n in (m, size(awide, 2))
     adata = m == n ? asquare : awide
@@ -473,6 +473,33 @@ end
         b = big.(randn(3))
         x = lq(A) \ b
         @test A * x ≈ b
+    end
+end
+
+@testset "Matrix(::LQPackedQ) for BLAS and non-BLAS element types" begin
+    @testset for T in (Float64, ComplexF64), (m, n) in ((3, 5), (4, 4), (5, 3), (0, 3), (3, 0))
+        A = randn(T, m, n)
+        Q = lq(A).Q
+        Qm = Matrix(Q)
+        # the first min(m, n) rows of the square Q
+        @test size(Qm) == (min(m, n), n)
+        @test Qm ≈ (Q*I)[1:min(m, n), :]
+        Qb = lq(big.(A)).Q
+        @test Matrix(Qb) isa Matrix{big(T)}
+        @test Matrix(Qb) ≈ Qm
+        @test Matrix{T}(Qb) ≈ Qm
+    end
+end
+
+@testset "powers of Q from square, tall and wide matrices" begin
+    for T in (Float64, ComplexF64, BigFloat), sz in ((5, 5), (6, 3), (3, 6))
+        Q = lq(randn(T, sz...)).Q
+        Qm = Q*I
+        @test size(Qm) == (sz[2], sz[2])
+        for p in (-3, -2, -1, 0, 1, 2, 3, 4)
+            @test (Q^p)::Matrix{T} ≈ Qm^p
+            @test (Q'^p)::Matrix{T} ≈ Qm'^p
+        end
     end
 end
 

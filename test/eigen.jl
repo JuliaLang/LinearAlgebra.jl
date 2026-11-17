@@ -46,8 +46,8 @@ aimg  = randn(n,n)/2
             @test eigvals(f) === f.values
 
             if all(isreal, eigvals(f))
-                @test eigmin(f) == minimum(eigvals(f))
-                @test eigmax(f) == maximum(eigvals(f))
+                @test eigmin(f) == minimum(real, eigvals(f))
+                @test eigmax(f) == maximum(real, eigvals(f))
             else
                 @test_throws MethodError eigmin(f)
                 @test_throws MethodError eigmax(f)
@@ -70,8 +70,10 @@ aimg  = randn(n,n)/2
             num_fact = eigen(one(eltya))
             @test num_fact.values[1] == one(eltya)
             h = asym
-            @test minimum(eigvals(h)) ≈ eigmin(h)
-            @test maximum(eigvals(h)) ≈ eigmax(h)
+            @test minimum(real, eigvals(h)) ≈ eigmin(h)
+            @test maximum(real, eigvals(h)) ≈ eigmax(h)
+            @test eigmin(h) isa real(eigtype(eltya))
+            @test eigmax(h) isa real(eigtype(eltya))
             @test_throws DomainError eigmin(a - a')
             @test_throws DomainError eigmax(a - a')
         end
@@ -92,8 +94,8 @@ aimg  = randn(n,n)/2
             @test eigvals(f) === f.values
 
             if all(isreal, eigvals(f))
-                @test eigmin(f) == minimum(eigvals(f))
-                @test eigmax(f) == maximum(eigvals(f))
+                @test eigmin(f) == minimum(real, eigvals(f))
+                @test eigmax(f) == maximum(real, eigvals(f))
             else
                 @test_throws MethodError eigmin(f)
                 @test_throws MethodError eigmax(f)
@@ -279,16 +281,14 @@ end
         D = Diagonal(T[1,2,4])
         A = Array(D)
         B = eigen(A)
-        @test B isa Eigen{Float16, Float16, Matrix{Float16}, Vector{Float16}}
-        @test B.values isa Vector{Float16}
-        @test B.vectors isa Matrix{Float16}
+        @test B isa Eigen{T, T, Matrix{T}, Vector{T}}
+        @test B.values == D.diag
     end
     D = Diagonal(ComplexF16[im,2,4])
     A = Array(D)
     B = eigen(A)
-    @test B isa Eigen{Float16, ComplexF16, Matrix{Float16}, Vector{ComplexF16}}
-    @test B.values isa Vector{ComplexF16}
-    @test B.vectors isa Matrix{Float16}
+    @test B isa Eigen{ComplexF16, ComplexF16, Matrix{ComplexF16}, Vector{ComplexF16}}
+    @test B.values == D.diag
 end
 
 @testset "Float16 values match the factorizations" begin
@@ -354,9 +354,7 @@ end
 
 @testset "complex eigen inference (#52289)" begin
     A = ComplexF64[1.0 0.0; 0.0 8.0]
-    TC = Eigen{ComplexF64, ComplexF64, Matrix{ComplexF64}, Vector{ComplexF64}}
-    TR = Eigen{ComplexF64, Float64, Matrix{ComplexF64}, Vector{Float64}}
-    λ, v = @inferred Union{TR,TC} eigen(A)
+    λ, v = @inferred eigen(A)
     @test λ == [1.0, 8.0]
 end
 
@@ -409,6 +407,76 @@ end
     @test LinearAlgebra.eigtype(S) === Float64
     @test eigvals(S) == eigvals(Symmetric([2.0 1; 1 2]))
     @test eigvals(Matrix{Real}(undef, 0, 0)) == Float64[]
+end
+
+@testset "complex matrices yield complex eigenvalues (#974)" begin
+    for T in (ComplexF32, ComplexF64, Complex{Int})
+        S = eigtype(T)
+        D = T[1 0; 0 2]    # diagonal
+        H = T[1 1; 1 2]    # hermitian
+        G = T[1 2; 3 4]    # neither
+        P = T[2 0; 0 1]    # positive definite
+        for A in (D, H, G)
+            F = @inferred eigen(A)
+            @test F.values isa Vector{S}
+            @test A * F.vectors ≈ F.vectors * Diagonal(F.values)
+            @test @inferred(eigvals(A)) isa Vector{S}
+            @test eigvals(A) ≈ F.values
+            F = @inferred eigen(A, P)
+            @test F.values isa Vector{S}
+            @test A * F.vectors ≈ P * F.vectors * Diagonal(F.values)
+            @test @inferred(eigvals(A, P)) isa Vector{S}
+            @test eigvals(A, P) ≈ F.values
+            if T <: BlasComplex
+                @test @inferred(eigvals!(copy(A))) isa Vector{T}
+                @test eigen!(copy(A)).values isa Vector{T}
+                @test @inferred(eigvals!(copy(A), copy(P))) isa Vector{T}
+                @test eigen!(copy(A), copy(P)).values isa Vector{T}
+            end
+        end
+        # the hermitian fast path returns exactly real values
+        @test all(isreal, eigvals(H))
+        @test eigvals(H) == eigvals(Hermitian(H))
+        @test eigvals(Hermitian(H)) isa Vector{real(S)}
+        @test eigen(Hermitian(H)).values isa Vector{real(S)}
+        @test eigmin(H) isa real(S)
+        @test eigmax(H) isa real(S)
+        @test eigmin(H) ≈ eigmin(Hermitian(H))
+        @test eigmax(H) ≈ eigmax(Hermitian(H))
+        @test eigmin(eigen(H)) === minimum(eigvals(Hermitian(H)))
+        @test eigmax(eigen(H, P)) ≈ maximum(eigvals(Hermitian(H), Hermitian(P)))
+        # non-Hermitian complex matrices throw even if their computed eigenvalues happen to
+        # be real (G's are), as whether they are exactly real is subject to rounding
+        @test_throws DomainError eigmax(G)
+        @test_throws DomainError eigmin(G)
+    end
+    @test @inferred(eigvals(1.0 + 0im)) === 1.0 + 0im
+    @test eigvals(2.0) === 2.0
+    @test eigmax(1.0 + 0im) === 1.0
+    @test_throws DomainError eigmax(1.0 + 1im)
+    @test eigen(ComplexF16[1 0; 0 2]).values isa Vector{ComplexF16}
+    @test eigen(ComplexF16[1 1; 1 2]).vectors isa Matrix{ComplexF16}
+    @test eigen(Float16[1 1; 1 2]).values isa Vector{Float16}
+end
+
+@testset "generalized eigenproblem and Schur form with Infs and NaNs" begin
+    # LAPACK's generalized eigenvalue and Schur routines may take very long to fail for them,
+    # return wrong results or corrupt memory, so they are rejected beforehand
+    @testset for elty in (Float64, ComplexF64), x in (NaN, Inf)
+        A = elty[1 2 0; x 2 2; 0 1 3]
+        B = elty[2 1 0; 1 2 1; 0 1 2]
+        for (X, Y) in ((A, B), (B, A))
+            @test_throws ArgumentError eigvals(X, Y)
+            @test_throws ArgumentError eigen(X, Y)
+            @test_throws ArgumentError schur(X, Y)
+            # called only for LAPACK older than 3.6
+            @test_throws ArgumentError LAPACK.ggev!('N', 'V', copy(X), copy(Y))
+            @test_throws ArgumentError LAPACK.gges!('V', 'V', copy(X), copy(Y))
+        end
+    end
+    # xGGEV wrote to the column after the eigenvectors for a NaN eigenvalue (#1808)
+    @test_throws ArgumentError eigen([NaN 2; 1 2], [2.0 1; 1 2])
+    @test_throws ArgumentError eigen([Inf 2; 1 2], [2.0 1; 1 2])
 end
 
 end # module TestEigen

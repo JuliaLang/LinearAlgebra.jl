@@ -18,6 +18,7 @@ using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.Furlongs
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 Random.seed!(123)
 
@@ -389,6 +390,30 @@ end
         @test B[1] ≈ C[1] ≈ A[1] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))
         @test B[2:end] ≈ C[2:end] ≈ A[2:end] - conj(τ)*(A[1] + dot(x[2:end], A[2:end]))*x[2:end]
     end
+    # the two kernels agree with each other and with the definition, also for non-commutative
+    # elements
+    for T in (Float64, ComplexF64, Quaternion{Float64})
+        x = randn(T, 6)
+        τ = randn(T)
+        A = randn(T, 6, 3)
+        v = [one(T); x[2:end]]
+        H = I - v*conj(τ)*v'
+        B = LinearAlgebra.reflectorApplyNumeric!(x, τ, copy(A))
+        C = LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+        @test B ≈ C ≈ H*A
+        @test LinearAlgebra.reflectorApply!(x, τ, copy(A)) == B   # numeric elements: `dot`-based kernel
+    end
+    # elements of `A` that are vectors: apply the reflector to each component
+    x = randn(6)
+    τ = randn()
+    A1, A2 = randn(6, 3), randn(6, 3)
+    A = [SizedArray{(2,)}([A1[i, j], A2[i, j]]) for i in axes(A1, 1), j in axes(A1, 2)]
+    B = LinearAlgebra.reflectorApply!(x, τ, copy(A))
+    @test B == LinearAlgebra.reflectorApplyLoop!(x, τ, copy(A))
+    @test all(b -> b isa SizedArray{(2,),Float64}, B)
+    B1, B2 = LinearAlgebra.reflectorApply!(x, τ, copy(A1)), LinearAlgebra.reflectorApply!(x, τ, copy(A2))
+    @test all(i -> B[i].data ≈ [B1[i], B2[i]], eachindex(B))
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApplyLoop!(x[1:5], τ, copy(A))
 end
 
 @testset "axp(b)y! for element type without commutative multiplication" begin
@@ -571,6 +596,11 @@ end
     @test @inferred(P((1.0, 2.0))) === Float64
     @test @inferred(P((1, 2.0))) === Float64
     @test @inferred(P((1, (2.0f0, 3)))) === Float32
+    @test @inferred(P(((1, 2), (3.0, (4.0f0,))))) === Float64
+    @test @inferred(P((1, ((2.0f0, (3,)), 4im)))) === ComplexF32
+    @test @inferred(P(ntuple(i -> isodd(i) ? i : (Float32(i),), 40))) === Float32
+    @test @inferred(P(())) === Bool
+    @test @inferred(P(((),))) === Bool
     @test @inferred(P(AbstractVector{Float64}[[1.0]])) === Float64
     @test P(Complex{Real}[1 + 2im]) === Complex{Real}
     # UniformScaling comparisons
@@ -608,6 +638,74 @@ Base.adjoint(a::ModInt{n}) where {n} = ModInt{n}(conj(a))
 Base.transpose(a::ModInt{n}) where {n} = a  # see Issue 20978
 LinearAlgebra.Adjoint(a::ModInt{n}) where {n} = adjoint(a)
 LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
+
+@testset "scalar type of the right-hand side in ldiv" begin
+    _scalartype = LinearAlgebra._scalartype
+    @test _scalartype(Float64) === Float64
+    @test _scalartype(Complex{Int}) === Complex{Int}
+    @test _scalartype(Furlong{1,Float64}) === Furlong{1,Float64}
+    @test _scalartype(ModInt{2}) === ModInt{2}          # a scalar type that is not a `Number`
+    @test _scalartype(Vector{Float64}) === Float64      # vector-valued elements
+    @test _scalartype(Vector{Vector{ComplexF32}}) === ComplexF32
+    @test _scalartype(Any) === Any
+    # homogeneous containers of a concrete scalar type are not iterated by `promote_leaf_eltypes`
+    @test LinearAlgebra.promote_leaf_eltypes(ModInt{2}.([1, 0])) === ModInt{2}
+    @test LinearAlgebra.promote_leaf_eltypes((ModInt{2}(1), ModInt{2}(0))) === ModInt{2}
+    # the factorization is promoted to the scalar type of the solution, keeping its units
+    A = [4.0 1.0; 1.0 3.0]
+    x = lu(Float32.(A)) \ Furlong.([1.0, 2.0])
+    @test x isa Vector{Furlong{1,Float64}}
+    @test map(x -> x.val, x) ≈ A \ [1.0, 2.0]
+    @test lu(Float32.(A)) \ [1.0, 2.0] isa Vector{Float64}
+    # vector-valued right-hand side (#904): the elements of `b` are (static) vectors
+    b = [SizedArray{(2,)}([1.0, 2.0]), SizedArray{(2,)}([3.0, 4.0])]
+    @test _scalartype(eltype(b)) === Float64
+    X = A \ [1.0 2.0; 3.0 4.0]   # the same system, component by component
+    for F in (lu(A), lu(Float32.(A)), cholesky(A), qr(A))
+        x = F \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+        @test all(((y, z),) -> y.data ≈ z.data, zip(A * x, b))
+    end
+    @test ldiv!(lu(A), copy(b)) isa Vector{<:SizedArray{(2,),Float64}}
+    # the generic `\` derives the solution type from the scalar type of the right-hand side
+    for M in (A, Float32.(A), [4 1; 1 3], Tridiagonal(A), hessenberg(A))
+        x = M \ b
+        @test x isa Vector{<:SizedArray{(2,),Float64}}
+        @test all(i -> x[i].data ≈ X[i, :], 1:2)
+    end
+    # least squares, through the pivoted QR
+    At = [A; 1.0 1.0]
+    Xt = At \ [1.0 2.0; 3.0 4.0; 1.0 2.0]
+    x = At \ vcat(b, [b[1]])
+    @test x isa Vector{<:SizedArray{(2,),Float64}}
+    @test all(i -> x[i].data ≈ Xt[i, :], 1:2)
+end
+
+@testset "abstractly typed right-hand sides" begin
+    A = [4.0 1.0 0.5; 1.0 3.0 0.2; 0.3 0.5 5.0]
+    b = [1.0, 2.0, 3.0]
+    for rhs in (Any[1.0, 2.0, 3.0], Real[1, 2, 3], Number[1, 2im, 3], AbstractFloat[1.0, 2.0, 3.0])
+        # dense `\` and solves with (LAPACK) factorizations promote `A` to the solution type, which
+        # requires a concrete element type of the right-hand side
+        @test_throws ArgumentError A \ rhs
+        @test_throws "abstract element type $(eltype(rhs))" A \ rhs
+        @test_throws ArgumentError [A; 1.0 1.0 1.0] \ vcat(rhs, rhs[1])   # least squares
+        @test_throws ArgumentError A \ permutedims(rhs)                   # matrix right-hand side
+        @test_throws ArgumentError permutedims(rhs) / A                    # right division
+        @test_throws ArgumentError Tridiagonal(A) \ rhs                    # through `lu`
+        for F in (lu(A), qr(A), qr(A, ColumnNorm()), cholesky(A'A), svd(A), lq(A), bunchkaufman(Symmetric(A)))
+            @test_throws ArgumentError F \ rhs
+        end
+        # the right-hand side is only read in the structured solves, whose result type is inferred
+        rhsc = convert(AbstractVector{mapreduce(typeof, promote_type, rhs)}, rhs)
+        for M in (UpperTriangular(A), LowerTriangular(A), Diagonal(A), Bidiagonal(A, :U), SymTridiagonal(Symmetric(A)), UpperHessenberg(A), 2I)
+            @test M \ rhs ≈ M \ rhsc
+            @test permutedims(rhs) / M ≈ permutedims(rhsc) / M
+        end
+    end
+    @test A \ convert(AbstractVector{Float64}, Any[1.0, 2.0, 3.0]) ≈ A \ b
+end
 
 @testset "Issue 22042" begin
     A = [ModInt{2}(1) ModInt{2}(0); ModInt{2}(1) ModInt{2}(1)]
@@ -852,6 +950,16 @@ end
         v = zeros(ComplexF64, m); a = zeros(ComplexF64, m, n); w = zeros(Float64, n)
         @test dot(v, a, w) === zero(ComplexF64)
     end
+    # zeros in y are not strong zeros (#1836)
+    @test isnan(dot([1.0], [Inf;;], [0.0]))
+    @static if COMPREHENSIVE
+        @test isnan(dot([1.0], [NaN;;], [0.0]))
+        for i in 1:3, j in 1:3
+            A = ones(3, 3); A[i, j] = Inf
+            y = ones(3); y[j] = 0
+            @test isnan(dot(ones(3), A, y))
+        end
+    end
 end
 
 @testset "condskeel #34512" begin
@@ -1070,6 +1178,65 @@ end
     @test_throws DimensionMismatch fn([I; ones(1, 2)])
     @test_throws DimensionMismatch fn([I ones(BigInt, 2, 1)])
     @test_throws DimensionMismatch fn([I; ones(BigInt, 1, 2)])
+end
+
+@testset "_valeltype" begin
+    # the element types are only known at run time
+    for (A, T) in Any[([1, 2], Int), (Real[1, 2.0], Float64), (Real[], Real),
+                      (Symmetric(Real[1 2; 2.0 3]), Int)]
+        @test LinearAlgebra._valeltype(A) == T
+    end
+end
+
+@testset "wrapper character case conversion" begin
+    @test LinearAlgebra._uppercase('n') == 'N'
+    @test LinearAlgebra._lowercase('N') == 'n'
+    @test_throws ArgumentError LinearAlgebra._uppercase('x')
+    @test_throws ArgumentError LinearAlgebra._lowercase('x')
+end
+
+@testset "checkbounds of a Broadcasted with a BandIndex" begin
+    A = [1 2; 3 4]
+    bc = Broadcast.instantiate(Broadcast.broadcasted(+, A, A))
+    @test checkbounds(bc, LinearAlgebra.BandIndex(1, 1)) === nothing
+    @test_throws BoundsError checkbounds(bc, LinearAlgebra.BandIndex(1, 2))
+end
+
+@testset "versioninfo without relevant environment variables" begin
+    vars = ("JULIA_NUM_THREADS", "MKL_DYNAMIC", "MKL_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS", "GOTO_NUM_THREADS", "OMP_NUM_THREADS")
+    withenv((v => nothing for v in vars)...) do
+        @test occursin(r"Relevant environment variables:\n\s+\[none\]", sprint(LinearAlgebra.versioninfo))
+    end
+end
+
+@testset "peakflops in parallel" begin
+    # `parallel=true` runs on every worker of the cluster. This file may itself run on a
+    # Distributed worker (as in Julia's test suite), whose siblings are busy with other
+    # tests, so use a fresh process with a worker of its own.
+    code = """
+        include($(repr(joinpath(@__DIR__, "prune_old_LA.jl"))))
+        using LinearAlgebra
+        exit(LinearAlgebra.peakflops(64, ntrials=1, parallel=true) > 0 ? 0 : 1)
+        """
+    cmd = addenv(`$(Base.julia_cmd()) --startup-file=no -p 1 -e $code`,
+                 "JULIA_PROJECT" => Base.active_project(),
+                 "JULIA_LOAD_PATH" => join(LOAD_PATH, Sys.iswindows() ? ';' : ':'))
+    @test success(pipeline(cmd; stdout, stderr))
+end
+
+@testset "generic helpers corner cases" begin
+    # MulAddMul with α == 1 and β != 0, constructed at run time
+    m = LinearAlgebra.MulAddMul(Base.inferencebarrier(1), Base.inferencebarrier(2))
+    @test m isa LinearAlgebra.MulAddMul{true,false}
+    @test m.alpha == 1 && m.beta == 2
+    @test_throws ArgumentError @macroexpand LinearAlgebra.@stable_muladdmul foo(1)
+    # generic fallbacks, for an array type without specialized methods
+    @test !issymmetric(Test.GenericArray(ones(ComplexF64, 2, 3)))
+    @test !ishermitian(Test.GenericArray(ones(2, 3)))
+    x, y = BigFloat[1, 2], BigFloat[1, 2, 3]
+    @test_throws BoundsError axpy!(2, x, 1:2, y, 3:4)
+    @test_throws DimensionMismatch LinearAlgebra.reflectorApply!(ones(2, 3), [1.0, 2], 1.0)
 end
 
 end # module TestGeneric

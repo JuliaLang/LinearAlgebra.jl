@@ -67,9 +67,21 @@ function (*)(a::AbstractVector, B::AbstractMatrix)
     reshape(a, length(a), 1) * B
 end
 
+# The output of `mul!` must not share memory with the factors, as the kernels
+# overwrite the output while still reading the factors.
+@inline function check_mul_aliasing(C, A, B)
+    (Base.mightalias(C, A) || Base.mightalias(C, B)) && throw_mul_aliasing()
+    return nothing
+end
+@noinline throw_mul_aliasing() =
+    throw(ArgumentError("output array must not be aliased with an input array"))
+
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
-@inline mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
-                alpha::Number, beta::Number) = _mul!(y, A, x, alpha, beta)
+@inline function mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
+                alpha::Number, beta::Number)
+    check_mul_aliasing(y, A, x)
+    _mul!(y, A, x, alpha, beta)
+end
 
 _mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
                 alpha::Number, beta::Number) =
@@ -237,14 +249,14 @@ Base.muladd(x::TransposeAbsVec, A::AbstractMatrix, z::Union{Number, AbstractVecO
     transpose(muladd(transpose(A), transpose(x), transpose(z)))
 
 function Base.muladd(A::StridedMaybeAdjOrTransMat{<:Number}, y::AbstractVector{<:Number}, z::Union{Number, AbstractVector})
-    T = promote_type(eltype(A), eltype(y), eltype(z))
+    T = promote_type(_matprod_type(A, y), eltype(z))
     C = similar(A, T, axes(A,1))
     C .= z
     mul!(C, A, y, true, true)
 end
 
 function Base.muladd(A::StridedMaybeAdjOrTransMat{<:Number}, B::StridedMaybeAdjOrTransMat{<:Number}, z::Union{Number, AbstractVecOrMat})
-    T = promote_type(eltype(A), eltype(B), eltype(z))
+    T = promote_type(_matprod_type(A, B), eltype(z))
     C = similar(A, T, axes(A,1), axes(B,2))
     C .= z
     mul!(C, A, B, true, true)
@@ -255,7 +267,7 @@ end
 
 Calculates the matrix-matrix or matrix-vector product ``A B`` and stores the result in `Y`,
 overwriting the existing value of `Y`. Note that `Y` must not be aliased with either `A` or
-`B`.
+`B`; an `ArgumentError` is thrown if `Base.mightalias` detects that they share memory.
 
 # Examples
 ```jldoctest
@@ -285,7 +297,8 @@ mul!(C, A, B) = mul!(C, A, B, true, false)
 
 Combined inplace matrix-matrix or matrix-vector multiply-add ``A B α + C β``.
 The result is stored in `C` by overwriting it.  Note that `C` must not be
-aliased with either `A` or `B`.
+aliased with either `A` or `B`; an `ArgumentError` is thrown if `Base.mightalias`
+detects that they share memory.
 
 !!! compat "Julia 1.3"
     Five-argument `mul!` requires at least Julia 1.3.
@@ -310,7 +323,10 @@ julia> C == A * B * α + C_original * β
 true
 ```
 """
-@inline mul!(C::AbstractMatrix, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number) = _mul!(C, A, B, α, β)
+@inline function mul!(C::AbstractMatrix, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number)
+    check_mul_aliasing(C, A, B)
+    _mul!(C, A, B, α, β)
+end
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
 module BlasFlag
 @enum BlasFunction SYRK HERK GEMM SYMM HEMM NONE
@@ -590,14 +606,13 @@ Base.@constprop :aggressive function generic_matmatmul_wrapper!(C::StridedMatrix
     matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
     alpha, beta = promote(α, β, zero(T))
     blasfn = _valtypeparam(val)
-    if alpha isa Union{Bool,T} && beta isa Union{Bool,T} && blasfn ∈ (BlasFlag.SYMM, BlasFlag.HEMM)
-        _blasfn = blasfn
-        αβ = (alpha, beta)
+    if alpha isa T && beta isa T && blasfn ∈ (BlasFlag.SYMM, BlasFlag.HEMM) &&
+            stride(A, 1) == stride(B, 1) == stride(C, 1) == 1 &&
+            _fullstride2(A) && _fullstride2(B) && _fullstride2(C)
+        _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, Val(blasfn))
     else
-        _blasfn = BlasFlag.NONE
-        αβ = (α, β)
+        _symm_hemm_generic!(C, tA, tB, A, B, α, β, Val(BlasFlag.NONE))
     end
-    _symm_hemm_generic!(C, tA, tB, A, B, αβ..., Val(_blasfn))
     return C
 end
 Base.@constprop :aggressive function _lrchar_ulchar(tA, tB)
@@ -628,6 +643,24 @@ function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.HEMM})
 end
 Base.@constprop :aggressive function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.NONE})
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
+end
+# Symmetric/Hermitian matrices that can't be passed to BLAS, e.g. Symmetric(A) * B'.
+# We wrap the matrices in a method that is inlined into _mul!, where tA and tB are known.
+# This ensures that the wrapped matrices are concretely inferred, without relying on
+# the larger method above being inlined (JuliaLang/julia#53951)
+Base.@constprop :aggressive @inline function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
+                                    α::Number, β::Number, ::Val{BlasFlag.NONE}) where {T<:BlasFloat}
+    _generic_matmatmul_wrapped!(C, tA, tB, A, B, wrap(A, tA), wrap(B, tB), α, β)
+end
+function _generic_matmatmul_wrapped!(C, tA, tB, A, B, wA, wB, α, β)
+    mA, nA = lapack_size(tA, A)
+    mB, nB = lapack_size(tB, B)
+    matmul_size_check(size(C), (mA, nA), (mB, nB))
+    if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
+        return _rmul_or_fill!(C, β)
+    end
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    return _generic_matmatmul!(C, wA, wB, α, β)
 end
 
 """
@@ -745,14 +778,15 @@ Base.@constprop :aggressive function gemv!(y::StridedVector{T}, tA::AbstractChar
     nA == 0 && return _rmul_or_fill!(y, β)
     alpha, beta = promote(α, β, zero(T))
     tA_uc = _uppercase(tA) # potentially convert a WrapperChar to a Char
-    if alpha isa Union{Bool,T} && beta isa Union{Bool,T} &&
-        stride(A, 1) == 1 && _fullstride2(A, abs) &&
-        !iszero(stride(x, 1)) && # We only check input's stride here.
+    if alpha isa T && beta isa T &&
+            stride(A, 1) == 1 && _fullstride2(A, abs) &&
+            !iszero(stride(x, 1)) # We only check input's stride here.
         if tA_uc in ('N', 'T', 'C')
             return BLAS.gemv!(tA, alpha, A, x, beta, y)
-        elseif tA_uc == 'S'
+        # unlike gemv!, symv! and hemv! do not support a negative stride(A, 2)
+        elseif tA_uc == 'S' && _fullstride2(A)
             return BLAS.symv!(tA == 'S' ? 'U' : 'L', alpha, A, x, beta, y)
-        elseif tA_uc == 'H'
+        elseif tA_uc == 'H' && _fullstride2(A)
             return BLAS.hemv!(tA == 'H' ? 'U' : 'L', alpha, A, x, beta, y)
         end
     end
@@ -773,7 +807,7 @@ Base.@constprop :aggressive function gemv!(y::StridedVector{Complex{T}}, tA::Abs
     nA == 0 && return _rmul_or_fill!(y, β)
     alpha, beta = promote(α, β, zero(T))
     tA_uc = _uppercase(tA) # potentially convert a WrapperChar to a Char
-    if alpha isa Union{Bool,T} && beta isa Union{Bool,T} &&
+    if alpha isa T && beta isa T &&
             stride(A, 1) == 1 && _fullstride2(A, abs) &&
             stride(y, 1) == 1 && tA_uc == 'N' && # reinterpret-based optimization is valid only for contiguous `y`
             !iszero(stride(x, 1))
@@ -794,7 +828,7 @@ Base.@constprop :aggressive function gemv!(y::StridedVector{Complex{T}}, tA::Abs
     nA == 0 && return _rmul_or_fill!(y, β)
     alpha, beta = promote(α, β, zero(T))
     tA_uc = _uppercase(tA) # potentially convert a WrapperChar to a Char
-    @views if alpha isa Union{Bool,T} && beta isa Union{Bool,T} &&
+    @views if alpha isa T && beta isa T &&
             stride(A, 1) == 1 && _fullstride2(A, abs) &&
             !iszero(stride(x, 1)) && tA_uc in ('N', 'T', 'C')
         xfl = reinterpret(reshape, T, x) # Use reshape here.
@@ -832,10 +866,9 @@ Base.@constprop :aggressive function syrk_wrapper!(C::StridedMatrix{T}, tA::Abst
     # alternatively, make non-zero β a show-stopper for BLAS.syrk!
     if iszero(β) || issymmetric(C)
         alpha, beta = promote(α, β, zero(T))
-        if (alpha isa Union{Bool,T} &&
-                beta isa Union{Bool,T} &&
+        if alpha isa T && beta isa T &&
                 stride(A, 1) == stride(C, 1) == 1 &&
-                _fullstride2(A) && _fullstride2(C)) &&
+                _fullstride2(A) && _fullstride2(C) &&
                 max(nA, mA) ≥ 4
             BLAS.syrk!('U', tA, alpha, A, beta, C)
         else
@@ -950,10 +983,9 @@ Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{T}, tA::Ab
     end
 
     alpha, beta = promote(α, β, zero(T))
-    if (alpha isa Union{Bool,T} &&
-            beta isa Union{Bool,T} &&
+    if alpha isa T && beta isa T &&
             stride(A, 1) == stride(B, 1) == stride(C, 1) == 1 &&
-            _fullstride2(A) && _fullstride2(B) && _fullstride2(C))
+            _fullstride2(A) && _fullstride2(B) && _fullstride2(C)
         return BLAS.gemm!(tA, tB, alpha, A, B, beta, C)
     end
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), α, β)
@@ -989,10 +1021,9 @@ Base.@constprop :aggressive function gemm_wrapper!(C::StridedVecOrMat{Complex{T}
     tA_uc = _uppercase(tA) # potentially convert a WrapperChar to a Char
 
     # Make-sure reinterpret-based optimization is BLAS-compatible.
-    if (alpha isa Union{Bool,T} &&
-            beta isa Union{Bool,T} &&
+    if alpha isa T && beta isa T &&
             stride(A, 1) == stride(B, 1) == stride(C, 1) == 1 &&
-            _fullstride2(A) && _fullstride2(B) && _fullstride2(C) && tA_uc == 'N')
+            _fullstride2(A) && _fullstride2(B) && _fullstride2(C) && tA_uc == 'N'
         BLAS.gemm!(tA, tB, alpha, reinterpret(T, A), B, beta, reinterpret(T, C))
         return C
     end

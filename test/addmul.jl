@@ -10,6 +10,12 @@ using LinearAlgebra
 using LinearAlgebra: AbstractTriangular
 using Random
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+
 _rand(::Type{T}) where {T <: AbstractFloat} = T(randn())
 _rand(::Type{T}) where {F, T <: Complex{F}} = T(_rand(F), _rand(F))
 _rand(::Type{T}) where {T <: Integer} =
@@ -48,19 +54,22 @@ needsquare(::Type) = true
 testdata = []
 
 sizecandidates = 1:4
+# The element types are sampled below, so restricting them in standard mode does not
+# reduce the number of tested combinations much, but it reduces the number of distinct
+# type combinations that need to be compiled.
 floattypes = [
-    Float64, Float32, ComplexF64, ComplexF32,  # BlasFloat
-    BigFloat,
+    Float64, ComplexF64,  # BlasFloat
+    (@static COMPREHENSIVE ? (Float32, ComplexF32, BigFloat) : ())...,
 ]
 inttypes = [
     Int,
-    BigInt,
+    (@static COMPREHENSIVE ? (BigInt,) : ())...,
 ]
 # `Bool` can be added to `inttypes` but it's hard to handle
 # `InexactError` bug that is mentioned in:
 # https://github.com/JuliaLang/julia/issues/30094#issuecomment-440175887
 alleltypes = [floattypes; inttypes]
-celtypes = [Float64, ComplexF64, BigFloat, Int]
+celtypes = [Float64, ComplexF64, (@static COMPREHENSIVE ? (BigFloat, Int) : ())...]
 
 mattypes = [
     Matrix,

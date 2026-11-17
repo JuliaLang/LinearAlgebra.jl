@@ -67,6 +67,8 @@ convert(::Type{T}, m::ConvertibleSpecialMatrix) where {T<:Tridiagonal}    = m is
 
 convert(::Type{T}, m::Union{LowerTriangular,UnitLowerTriangular}) where {T<:LowerTriangular} = m isa T ? m : T(m)::T
 convert(::Type{T}, m::Union{UpperTriangular,UnitUpperTriangular}) where {T<:UpperTriangular} = m isa T ? m : T(m)::T
+convert(::Type{T}, m::UnitLowerTriangular) where {T<:UnitLowerTriangular} = m isa T ? m : T(m)::T
+convert(::Type{T}, m::UnitUpperTriangular) where {T<:UnitUpperTriangular} = m isa T ? m : T(m)::T
 
 convert(::Type{T}, m::PossibleTriangularMatrix) where {T<:LowerTriangular} = m isa T ? m :
     istril(m) ? T(m)::T : throw(ArgumentError("matrix cannot be represented as LowerTriangular"))

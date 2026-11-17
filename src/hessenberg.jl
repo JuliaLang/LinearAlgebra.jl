@@ -96,16 +96,16 @@ function Matrix{T}(H::UpperHessenberg) where T
     return triu!(copyto!(Matrix{T}(undef, m, n), H.data), -1)
 end
 
-Base.isassigned(H::UpperHessenberg, i::Int, j::Int) =
-    i <= j+1 ? isassigned(H.data, i, j) : true
+Base.isassigned(H::UpperHessenberg, i::Signed, j::Signed) =
+    i - oneunit(i) <= j ? isassigned(H.data, i, j) : true
 
-Base.@propagate_inbounds getindex(H::UpperHessenberg{T}, i::Int, j::Int) where {T} =
-    i <= j+1 ? convert(T, H.data[i,j]) : zero(T)
+Base.@propagate_inbounds getindex(H::UpperHessenberg{T}, i::Signed, j::Signed) where {T} =
+    i - oneunit(i) <= j ? convert(T, H.data[i,j]) : zero(T)
 
 Base._reverse(A::UpperHessenberg, dims) = reverse!(Matrix(A); dims)
 
-Base.@propagate_inbounds function setindex!(A::UpperHessenberg, x, i::Integer, j::Integer)
-    if i > j+1
+Base.@propagate_inbounds function setindex!(A::UpperHessenberg, x, i::Signed, j::Signed)
+    if i - oneunit(i) > j
         iszero(x) || throw(ArgumentError(LazyString("cannot set index in the lower triangular part ",
             lazy"($i, $j) of an UpperHessenberg matrix to a nonzero value ($x)")))
     else
@@ -388,22 +388,18 @@ function dot(x::AbstractVector, H::UpperHessenberg, y::AbstractVector)
     r += dot(x[2], H[2,1], y[1])
     @inbounds for j in 2:m-1
         yj = y[j]
-        if !iszero(yj)
-            temp = adjoint(H[1,j]) * x₁
-            @simd for i in 2:j+1
-                temp += adjoint(H[i,j]) * x[i]
-            end
-            r += dot(temp, yj)
+        temp = adjoint(H[1,j]) * x₁
+        @simd for i in 2:j+1
+            temp += adjoint(H[i,j]) * x[i]
         end
+        r += dot(temp, yj)
     end
     ym = y[m]
-    if !iszero(ym)
-        temp = adjoint(H[1,m]) * x₁
-        @simd for i in 2:m
-            temp += adjoint(H[i,m]) * x[i]
-        end
-        r += dot(temp, ym)
+    temp = adjoint(H[1,m]) * x₁
+    @simd for i in 2:m
+        temp += adjoint(H[i,m]) * x[i]
     end
+    r += dot(temp, ym)
     return r
 end
 
@@ -455,6 +451,10 @@ end
 
 # preserve the wrapper for eigensolves with UpperHessenberg
 eigencopy_oftype(H::UpperHessenberg, S) = UpperHessenberg(eigencopy_oftype(H.data, S))
+
+# LAPACK has no SVD for Hessenberg matrices, so use the dense one
+svd!(H::UpperHessenberg; kwargs...) = svd!(triu!(H.data, -1); kwargs...)
+svdvals!(H::UpperHessenberg) = svdvals!(triu!(H.data, -1))
 
 schur!(H::UpperHessenberg{T}) where {T<:BlasFloat} = Schur(LinearAlgebra.LAPACK.hseqr!(H.data)...)
 
@@ -569,7 +569,7 @@ hessenberg(A::AbstractMatrix) =
 function show(io::IO, mime::MIME"text/plain", F::Hessenberg)
     summary(io, F)
     if !iszero(F.μ)
-        print("\nwith shift μI for μ = ", F.μ)
+        print(io, "\nwith shift μI for μ = ", F.μ)
     end
     println(io, "\nQ factor:")
     show(io, mime, F.Q)

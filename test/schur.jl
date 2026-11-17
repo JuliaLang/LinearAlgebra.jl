@@ -34,7 +34,7 @@ aimg  = randn(n,n)/2
         @test sort(real(f.values)) ≈ sort(real(d))
         @test sort(imag(f.values)) ≈ sort(imag(d))
         @test istriu(f.Schur) || eltype(a)<:Real
-        @test convert(Array, f) ≈ a
+        @test Array(f) ≈ a
         @test_throws FieldError f.A
 
         sch, vecs, vals = schur(UpperTriangular(triu(a)))
@@ -220,6 +220,22 @@ end
     fact2 = schur(B)
     @test fact1.values ≈ fact2.values
     @test fact1.Z * fact1.T * fact1.Z' ≈ B
+end
+
+@testset "Infs and NaNs" begin
+    @testset for elty in (Float64, ComplexF64)
+        # LAPACK's Schur routine may take very long to fail for NaNs
+        A = elty[1 2 0; NaN 2 2; 0 1 3]
+        @test_throws ArgumentError schur(A)
+        # through the Schur decomposition
+        @test_throws ArgumentError sqrt(A)
+        @test_throws ArgumentError log(A)
+        # but returns NaNs for an Inf
+        A = elty[1 2 0; Inf 2 2; 0 1 3]
+        @test all(isnan, schur(A).values)
+        @test all(isnan, sqrt(A))
+        @test all(isnan, log(A))
+    end
 end
 
 end # module TestSchur

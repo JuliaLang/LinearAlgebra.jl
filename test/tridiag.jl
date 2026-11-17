@@ -17,6 +17,7 @@ using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 include("testutils.jl") # test_approx_eq_modphase
 
@@ -570,6 +571,37 @@ end
     @test all(==(0.1), f)
 end
 
+@testset "dataids and unaliascopy" begin
+    # structured matrices whose bands are columns of M
+    symtri(M) = SymTridiagonal(view(M, 1:4, 1), view(M, 1:3, 2))
+    tri(M) = Tridiagonal(view(M, 1:3, 1), view(M, 1:4, 2), view(M, 1:3, 3))
+    for mk in (symtri, tri)
+        M = rand(4, 4)
+        A = mk(M)
+        @test Base.mightalias(M, A)
+        @test Base.mightalias(view(M, 1:3, 1), A) # aliasing with a single band
+        @test !Base.mightalias(M, mk(copy(M)))
+        U = Base.unaliascopy(A)
+        @test U isa typeof(A) && U == A && !Base.mightalias(M, U)
+        # copying and broadcasting into the memory backing the source
+        M0 = copy(M)
+        copyto!(M, mk(M))
+        @test M == mk(M0)
+        M = rand(4, 4); M0 = copy(M)
+        M .= 2 .* mk(M) .- M
+        @test M ≈ 2 .* mk(M0) .- M0
+    end
+    # empty arrays may share their memory address, so empty bands must not alias
+    @test !Base.mightalias(SymTridiagonal([1.0], Float64[]), SymTridiagonal([2.0], Float64[]))
+    @test !Base.mightalias(Tridiagonal(Float64[], [1.0], Float64[]), Tridiagonal(Float64[], [2.0], Float64[]))
+    @test !Base.mightalias(lu(Tridiagonal([1.0], [2.0, 3.0], [4.0])).factors, Tridiagonal(Float64[], [2.0], Float64[]))
+    # du2 is part of the data of a factorized Tridiagonal
+    F = lu(Tridiagonal(rand(4), rand(5) .+ 3, rand(4))).factors
+    @test Base.mightalias(F.du2, F)
+    U = Base.unaliascopy(F)
+    @test U isa typeof(F) && isdefined(U, :du2) && U.du2 == F.du2 && !Base.mightalias(F, U)
+end
+
 @testset "Issue #26994 (and the empty case)" begin
     T = SymTridiagonal([1.0],Float64[])
     x = ones(1)
@@ -922,6 +954,9 @@ end
         @test lmul!(0.2, copy(T)) ≈ lmul!(0.2, Array(T))
         @test_throws ArgumentError rmul!(T, NaN)
         @test_throws ArgumentError lmul!(NaN, T)
+        msg = "cannot set index (3, 1) off the tridiagonal band to a nonzero value (NaN)"
+        @test_throws msg rmul!(T, NaN)
+        @test_throws msg lmul!(NaN, T)
     end
     for T in (SymTridiagonal(rand(2), rand(1)), Tridiagonal(rand(1), rand(2), rand(1)))
         @test all(isnan, rmul!(copy(T), NaN))
@@ -1273,6 +1308,29 @@ end
     @test F.vectors ≈ Fdense.vectors
 end
 
+@testset "eigen of SymTridiagonal with Infs or NaNs" begin
+    # for NaNs, LAPACK's tridiagonal eigensolvers may not return, or return wrong results
+    for (dv, ev) in (([NaN, 1.0], [1.0]), ([1.0, NaN, 3], [1.0, 2]), ([1.0, 2, 3], [NaN, 2]))
+        S = SymTridiagonal(dv, ev)
+        @test_throws ArgumentError eigvals(S)
+        @test_throws ArgumentError eigvals(S, 1:1)
+        @test_throws ArgumentError eigvals(S, -10, 10)
+        @test_throws ArgumentError eigen(S)
+        # but xSTEIN returns NaNs
+        @test all(isnan, eigvecs(S, [1.0]))
+    end
+    @test_throws ArgumentError LAPACK.stev!('N', [NaN, 1.0], [1.0])
+    @test_throws ArgumentError LAPACK.stegr!('N', 'A', [NaN, 1.0], [1.0], 0.0, 0.0, 0, 0)
+    @test_throws ArgumentError LAPACK.stebz!('A', 'E', 0.0, 0.0, 0, 0, -1.0, [NaN, 1.0], [1.0])
+    # Infs give the limits, or NaNs, or the error points to them
+    S = SymTridiagonal([1.0, Inf, 3], [1.0, 2])
+    @test eigvals(S)[1:2] ≈ [1, 3]
+    @test eigvals(S)[3] == Inf
+    @test eigvals(S, -10, 10) ≈ [1, 3]
+    @test all(isnan, eigvecs(S, [1.0]))
+    @test_throws ArgumentError("matrix contains Infs") eigvals(S, 1:1)
+end
+
 @testset "eigen sorting" begin
     B = SymTridiagonal([3, 4, 1, 2],[1, 0, 2]) #block diagonal matrix to hit 'B' ordering of stebz!
     fB = Float64.(B)
@@ -1295,6 +1353,133 @@ end
         @test fact == eigen!(fB, 2, 4; sortby = eigsortby)
         @test fact == Eigen(sorteig!(fact.values, fact.vectors)...)
     end
+end
+
+@testset "Tridiagonal corner cases" begin
+    # cholesky of a non-Hermitian matrix
+    T = Tridiagonal([1.0, 2], [3.0, 4, 5], [6.0, 7])
+    @test_throws PosDefException cholesky(T)
+    @test !issuccess(cholesky(T; check = false))
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(2))
+    # zero pivot without a row interchange
+    S = Tridiagonal([0.0, 1], [0.0, 1, 1], [1.0, 1])
+    @test_throws SingularException(1) ldiv!(copy(S), ones(3))
+    M = [1 2; 2 3]
+    @test_throws "asymmetric value" LinearAlgebra.fillband!(SymTridiagonal([M, M], [M]), [1 2; 3 4], 0, 0)
+end
+
+@testset "eigen with no eigenvalues in the interval" begin
+    F = eigen(SymTridiagonal([1.0, 2.0], [0.5]), 10.0, 11.0)
+    @test isempty(F.values)
+    @test size(F.vectors) == (2, 0)
+end
+
+@testset "svdvals(::SymTridiagonal)" begin
+    for T in (Float32, Float64)
+        n = 10
+        A = SymTridiagonal(randn(T, n), randn(T, n - 1))
+        s = svdvals(A)
+        @test s ≈ svdvals(Matrix(A))
+        @test issorted(s; rev=true)
+        @test eltype(s) == T
+
+        s! = svdvals!(copy(A))
+        @test s! == s
+    end
+
+    # Int: eigtype promotion and inference through the non-mutating entry point
+    Ai = SymTridiagonal([1, 2, 3, 4], [1, 1, 1])
+    @test @inferred(svdvals(Ai)) isa Vector{Float64}
+    @test svdvals(Ai) ≈ svdvals(Matrix(Ai))
+
+    # empty: guard must fire before eigen (eigen([]) throws in LAPACK)
+    Ae = SymTridiagonal(Float64[], Float64[])
+    @test isempty(svdvals(Ae))
+    @test @inferred(svdvals(SymTridiagonal(Int[], Int[]))) isa Vector{Float64}
+end
+
+@testset "svd(::SymTridiagonal)" begin
+    for T in (Float32, Float64)
+        n = 10
+        A = SymTridiagonal(randn(T, n), randn(T, n - 1))
+        F = svd(A)
+
+        # Check reconstruction and orthogonality
+        @test F.U * Diagonal(F.S) * F.Vt ≈ A
+        @test F.U' * F.U ≈ I
+        @test F.Vt * F.Vt' ≈ I
+
+        # Check properties against the svdvals we added in the previous PR
+        @test issorted(F.S; rev=true)
+        @test F.S ≈ svdvals(A)
+        @test eltype(F.S) == T
+
+        # Check the mutating version
+        F! = svd!(copy(A))
+        @test F!.U * Diagonal(F!.S) * F!.Vt ≈ A
+    end
+
+    # Int: eigtype promotion and inference
+    Ai = SymTridiagonal([1, 2, 3, 4], [1, 1, 1])
+    @test @inferred(svd(Ai)).S isa Vector{Float64}
+    @test svd(Ai).U * Diagonal(svd(Ai).S) * svd(Ai).Vt ≈ Matrix(Ai)
+
+        # Float16: verifies internal promotion to Float32 and demotion back to Float16
+    Ah = SymTridiagonal(Float16[1, 2, 3], Float16[0, 1])
+
+    Fh = svd(Ah)
+    @test eltype(Fh.U) == Float16
+    @test eltype(Fh.S) == Float16
+    @test eltype(Fh.Vt) == Float16
+
+    # svdvals should also correctly demote back to Float16
+    vh = svdvals(Ah)
+    @test eltype(vh) == Float16
+
+    # And the math should still be correct
+    @test Fh.U * Diagonal(Fh.S) * Fh.Vt ≈ Matrix(Ah)
+
+    # zero eigenvalue: catches the sign(0) trap in _svd_from_eigen!
+    Az = SymTridiagonal([1.0, 0.0, -2.0, 3.0], zeros(3))
+    Fz = svd(Az)
+    @test Fz.U * Diagonal(Fz.S) * Fz.Vt ≈ Matrix(Az)
+    @test Fz.U' * Fz.U ≈ I
+
+    # full kwarg: no-op for square, must not error
+    @test svd(Ai; full=true).S ≈ svd(Ai).S
+    @test svd(Ai; full=false).S ≈ svd(Ai).S
+
+    # complex falls through cleanly to dense
+    Ac = SymTridiagonal(randn(ComplexF64, 5), randn(ComplexF64, 4))
+    Fc = svd(Ac)
+    @test Fc.U * Diagonal(Fc.S) * Fc.Vt ≈ Matrix(Ac)
+
+    # empty: verifies LAPACK fixes for 0x0 matrices
+    Ae = SymTridiagonal(Float64[], Float64[])
+    Fe = svd(Ae)
+    @test size(Fe.U) == (0, 0) && isempty(Fe.S) && size(Fe.Vt) == (0, 0)
+
+    # Int: eigtype promotion for empty matrices
+    @test @inferred(svd(SymTridiagonal(Int[], Int[]))).S isa Vector{Float64}
+
+    # svdvals empty checks
+    @test isempty(svdvals(Ae))
+    @test @inferred(svdvals(SymTridiagonal(Int[], Int[]))) isa Vector{Float64}
+end
+
+@static if COMPREHENSIVE
+@testset "isposdef and cholesky of empty banded matrices (#1874)" begin
+    @testset for elty in (Float64, ComplexF64)
+        for A in (SymTridiagonal(elty[], elty[]), Tridiagonal(elty[], elty[], elty[]),
+                  Bidiagonal(elty[], elty[], :U), Bidiagonal(elty[], elty[], :L))
+            @test isposdef(A)
+            F = cholesky(A)
+            @test issuccess(F)
+            @test size(F) == (0, 0)
+            @test isempty(Matrix(F))
+        end
+    end
+end
 end
 
 end # module TestTridiagonal
