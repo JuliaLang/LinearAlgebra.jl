@@ -268,6 +268,34 @@ end
         @test F.Q * F.S * F.Z' ≈ M
         @test F.Q * F.T * F.Z' ≈ B
     end
+    # reordering, which goes through single precision as LAPACK has no half-precision routines
+    select = [false, true, true]
+    for M in (A, ComplexF16.(A) .+ 0.5im)
+        F = schur(M)
+        G = ordschur(F, select)
+        @test G.T isa Matrix{eltype(M)}
+        @test G.Z isa Matrix{eltype(M)}
+        @test G.Z * G.T * G.Z' ≈ M
+        @test sort(G.values[1:2], by=LinearAlgebra.eigsortby) ≈ sort(F.values[2:3], by=LinearAlgebra.eigsortby)
+        H = copy(F)
+        @test ordschur!(H, select) === H
+        @test H.values == G.values
+        @test H.T == G.T
+    end
+    B = Float16[1 0.5 0; 0 2 0.25; 0 0 3]
+    F = schur(A, B)
+    G = ordschur(F, select)
+    @test G.S isa Matrix{Float16}
+    @test G.Q isa Matrix{Float16}
+    @test G.α isa Vector{ComplexF16}
+    @test G.β isa Vector{Float16}
+    @test G.Q * G.S * G.Z' ≈ A
+    @test G.Q * G.T * G.Z' ≈ B
+    λ(F) = F.α ./ F.β
+    @test sort(λ(G)[1:2], by=LinearAlgebra.eigsortby) ≈ sort(λ(F)[2:3], by=LinearAlgebra.eigsortby)
+    H = copy(F)
+    @test ordschur!(H, select) === H
+    @test H.S == G.S
     # matrix functions using the Schur decomposition still compute in single precision
     @test log(A) isa Matrix{Float32}
     @test sqrt(A) isa Matrix{Float32}

@@ -273,11 +273,16 @@ function ordschur!(schur::Schur, select::Union{Vector{Bool},BitVector})
     return schur
 end
 
-_ordschur(T::StridedMatrix{Ty}, Z::StridedMatrix{Ty}, select::Union{Vector{Bool},BitVector}) where {Ty<:BlasFloat} =
+_ordschur(T::StridedMatrix{Ty}, Z::StridedMatrix{Ty}, select::Union{Vector{Bool},BitVector}) where {Ty<:Union{BlasFloat,Float16,ComplexF16}} =
     _ordschur!(copy(T), copy(Z), select)
 
 _ordschur!(T::StridedMatrix{Ty}, Z::StridedMatrix{Ty}, select::Union{Vector{Bool},BitVector}) where {Ty<:BlasFloat} =
     LinearAlgebra.LAPACK.trsen!(convert(Vector{BlasInt}, select), T, Z)[1:3]
+# LAPACK has no half-precision routines: reorder in single precision and convert back
+function _ordschur!(T::StridedMatrix{Ty}, Z::StridedMatrix{Ty}, select::Union{Vector{Bool},BitVector}) where {Ty<:Union{Float16,ComplexF16}}
+    T32, Z32, vals = _ordschur!(eigtype(Ty).(T), eigtype(Ty).(Z), select)
+    return copyto!(T, T32), copyto!(Z, Z32), _tohalf(Ty, vals)
+end
 
 """
     ordschur(F::Schur, select::Union{Vector{Bool},BitVector}) -> F::Schur
@@ -389,12 +394,19 @@ function ordschur!(gschur::GeneralizedSchur, select::Union{Vector{Bool},BitVecto
 end
 
 _ordschur(S::StridedMatrix{Ty}, T::StridedMatrix{Ty}, Q::StridedMatrix{Ty},
-    Z::StridedMatrix{Ty}, select::Union{Vector{Bool},BitVector}) where {Ty<:BlasFloat} =
+    Z::StridedMatrix{Ty}, select::Union{Vector{Bool},BitVector}) where {Ty<:Union{BlasFloat,Float16,ComplexF16}} =
         _ordschur!(copy(S), copy(T), copy(Q), copy(Z), select)
 
 _ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty}, Q::StridedMatrix{Ty},
     Z::StridedMatrix{Ty}, select::Union{Vector{Bool},BitVector}) where {Ty<:BlasFloat} =
         LinearAlgebra.LAPACK.tgsen!(convert(Vector{BlasInt}, select), S, T, Q, Z)
+# LAPACK has no half-precision routines: reorder in single precision and convert back
+function _ordschur!(S::StridedMatrix{Ty}, T::StridedMatrix{Ty}, Q::StridedMatrix{Ty},
+        Z::StridedMatrix{Ty}, select::Union{Vector{Bool},BitVector}) where {Ty<:Union{Float16,ComplexF16}}
+    Ts = eigtype(Ty)
+    S32, T32, α, β, Q32, Z32 = _ordschur!(Ts.(S), Ts.(T), Ts.(Q), Ts.(Z), select)
+    return copyto!(S, S32), copyto!(T, T32), _tohalf(Ty, α), _tohalf(Ty, β), copyto!(Q, Q32), copyto!(Z, Z32)
+end
 
 """
     ordschur(F::GeneralizedSchur, select::Union{Vector{Bool},BitVector}) -> F::GeneralizedSchur
