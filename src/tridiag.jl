@@ -516,10 +516,8 @@ function det_usmani(a::V, b::V, c::V; shift::Number=0) where {T,V<:AbstractVecto
     return θb
 end
 
-function _dettype(::Type{T}) where {T}
-    T <: BigInt && return T
-    return lutype(T)
-end
+_dettype(::Type{BigInt}) = BigInt
+_dettype(::Type{T}) where {T} = lutype(T)
 # det with optional diagonal shift for use with shifted Hessenberg factorizations
 function det(A::SymTridiagonal; shift::Number=false)
     Tout = _dettype(eltype(A))
