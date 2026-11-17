@@ -249,6 +249,10 @@ default. The rules:
   master-only refactors. A backport PR targets `backports-release-1.x`, and its tests
   must not use `COMPREHENSIVE` (it only exists from 1.14 on); spell out the types.
   Test it with that release's Julia.
+- Make each backport commit with `git cherry-pick -x <sha>` of the merged commit on
+  `master`, so that its message references the original commit ("(cherry picked from
+  commit ...)"). Keep that line when resolving conflicts or adjusting the commit by
+  hand.
 - For 1.10, LinearAlgebra still lived in JuliaLang/julia under `stdlib/`, so backports go
   to that repository's `backports-release-1.10`. Reference this repository's PRs there
   as `JuliaLang/LinearAlgebra.jl#NNNN`; a bare `#NNNN` links to julia's.
