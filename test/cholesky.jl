@@ -389,6 +389,9 @@ Base.setindex!(v::WrappedVector, val, i::Integer) = setindex!(v.data, val, i)
         @test getproperty(lowrankdowndate(G, v), uplo) ≈ getproperty(F, uplo)
         @test getproperty(lowrankdowndate(G, w), uplo) ≈ getproperty(F, uplo)
         @test_throws DimensionMismatch lowrankdowndate(G, Vector{eltype(v)}(undef,length(v)+1))
+        @test_throws PosDefException lowrankdowndate(F, 10 .* v)
+        @test !issuccess(lowrankdowndate(F, 10 .* v; check = false))
+        @test getproperty(lowrankdowndate(G, v; check = false), uplo) ≈ getproperty(F, uplo)
     end
 end
 
@@ -420,6 +423,21 @@ end
         @test_throws DimensionMismatch lowrankupdate(F, similar(V, 6, 3))
         @test_throws DimensionMismatch lowrankdowndate(G, similar(V, 6, 3))
         @test_throws PosDefException lowrankdowndate(F, 10 .* V)
+        # Without the check, a downdate that loses positive definiteness is reported by
+        # `issuccess`, with the row where it stopped
+        D = lowrankdowndate(F, 10 .* V; check = false)
+        @test !issuccess(D)
+        @test_throws PosDefException(D.info) lowrankdowndate(F, 10 .* V; check = true)
+        @test_throws DimensionMismatch lowrankdowndate(G, similar(V, 6, 3); check = false)
+        E = lowrankdowndate(G, V; check = false)
+        @test issuccess(E)
+        @test factor(E) == factor(lowrankdowndate(G, V))
+        C, W = copy(G), copy(V)
+        @test lowrankdowndate!(C, W; check = false) === C
+        C = copy(F)
+        D = lowrankdowndate!(C, 10 .* V; check = false)
+        @test !issuccess(D)
+        @test D.factors === C.factors
     end
 end
 
