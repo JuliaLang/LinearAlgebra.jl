@@ -1487,6 +1487,12 @@ end
     T = Tridiagonal(Int8[1,-1,-14],Int8[-14,-6,4,4],Int8[1,-1,-14])
     @test det(S) ≈ det(Matrix(S))
     @test det(T) ≈ det(Matrix(T))
+    BS = BigInt.(S)
+    BT = BigInt.(T)
+    @test isa(det(BS), BigInt)
+    @test isa(det(BT), BigInt)
+    @test det(BS) == det(Matrix(BS))
+    @test det(BT) == det(Matrix(BT))
 end
 
 end # module TestTridiagonal
