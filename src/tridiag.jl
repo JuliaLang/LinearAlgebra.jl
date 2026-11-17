@@ -502,7 +502,7 @@ end
 #    R. Usmani, "Inversion of a tridiagonal Jacobi matrix",
 #    Linear Algebra and its Applications 212-213 (1994), pp.413-414
 #    doi:10.1016/0024-3795(94)90414-6
-function det_usmani(a::V, b::V, c::V, shift::Number=0) where {T,V<:AbstractVector{T}}
+function det_usmani(a::V, b::V, c::V; shift::Number=0) where {T,V<:AbstractVector{T}}
     require_one_based_indexing(a, b, c)
     n = length(b)
     θa = oneunit(T)+zero(shift)
@@ -517,7 +517,12 @@ function det_usmani(a::V, b::V, c::V, shift::Number=0) where {T,V<:AbstractVecto
 end
 
 # det with optional diagonal shift for use with shifted Hessenberg factorizations
-det(A::SymTridiagonal; shift::Number=false) = det_usmani(A.ev, A.dv, A.ev, shift)
+function det(A::SymTridiagonal; shift::Number=false)
+    Tout = lutype(eltype(A))
+    ev2 = convert(AbstractVector{Tout}, A.ev)
+    dv2 = convert(AbstractVector{Tout}, A.dv)
+    return det_usmani(ev2, dv2, ev2; shift)
+end
 logabsdet(A::SymTridiagonal; shift::Number=false) = logabsdet(ldlt(A; shift=shift))
 
 @inline function Base.isassigned(A::SymTridiagonal, i::Signed, j::Signed)
@@ -1021,7 +1026,13 @@ function ==(A::Tridiagonal, B::SymTridiagonal)
 end
 ==(A::SymTridiagonal, B::Tridiagonal) = B == A
 
-det(A::Tridiagonal) = det_usmani(A.dl, A.d, A.du)
+function det(A::Tridiagonal; shift::Number=false)
+    Tout = lutype(eltype(A))
+    dl2 = convert(AbstractVector{Tout}, A.dl)
+    d2 = convert(AbstractVector{Tout}, A.d)
+    du2 = convert(AbstractVector{Tout}, A.du)
+    return det_usmani(dl2, d2, du2; shift)
+end
 
 AbstractMatrix{T}(M::Tridiagonal) where {T} = Tridiagonal{T}(M)
 AbstractMatrix{T}(M::Tridiagonal{T}) where {T} = copy(M)
