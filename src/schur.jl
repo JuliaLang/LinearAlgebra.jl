@@ -152,7 +152,11 @@ julia> t == F.T && z == F.Z && vals == F.values
 true
 ```
 """
-schur(A::AbstractMatrix) = schur!(eigencopy_oftype(A, eigtype(A)))
+schur(A::AbstractMatrix) = _tohalf(eltype(A), schur!(eigencopy_oftype(A, eigtype(A))))
+# for internal use, e.g., in matrix functions, which compute in at least single precision:
+# don't convert the factors of half-precision input back to half precision
+_schur_single(A::AbstractMatrix) = schur(A)
+_schur_single(A::AbstractMatrix{<:Union{Float16,Complex{Float16}}}) = schur(eigencopy_oftype(A, eigtype(A)))
 function schur(A::RealHermSymComplexHerm)
     F = eigen(A; sortby=nothing)
     return Schur(typeof(F.vectors)(Diagonal(F.values)), F.vectors, F.values)
@@ -160,7 +164,7 @@ end
 function schur(A::Union{UnitUpperTriangular{T},UpperTriangular{T}}) where {T}
     t = eigtype(T)
     Z = copy_similar(A, t)
-    return Schur(Z, Matrix{t}(I, size(A)), convert(Vector{t}, diag(A)))
+    return _tohalf(T, Schur(Z, Matrix{t}(I, size(A)), convert(Vector{t}, diag(A))))
 end
 function schur(A::Union{UnitLowerTriangular{T},LowerTriangular{T}}) where {T}
     t = eigtype(T)
@@ -173,12 +177,12 @@ function schur(A::Union{UnitLowerTriangular{T},LowerTriangular{T}}) where {T}
     for i in axes(J, 2)
        J[n+1-i, i] = oneunit(t)
     end
-    return Schur(Z, J, reverse!(convert(Vector{t}, diag(A))))
+    return _tohalf(T, Schur(Z, J, reverse!(convert(Vector{t}, diag(A)))))
 end
 function schur(A::Bidiagonal{T}) where {T}
     t = eigtype(T)
     if A.uplo == 'U'
-        return Schur(Matrix{t}(A), Matrix{t}(I, size(A)), Vector{t}(A.dv))
+        return _tohalf(T, Schur(Matrix{t}(A), Matrix{t}(I, size(A)), Vector{t}(A.dv)))
     else # A.uplo == 'L'
         # construct "reverse" identity
         n = size(A, 1)
@@ -188,7 +192,7 @@ function schur(A::Bidiagonal{T}) where {T}
         end
         dv = reverse!(Vector{t}(A.dv))
         ev = reverse!(Vector{t}(A.ev))
-        return Schur(Matrix{t}(Bidiagonal(dv, ev, 'U')), J, dv)
+        return _tohalf(T, Schur(Matrix{t}(Bidiagonal(dv, ev, 'U')), J, dv))
     end
 end
 
@@ -256,6 +260,7 @@ end
 Schur{Complex}(S::Schur{<:Complex}) = S
 Schur{T}(S::Schur{T}) where {T} = S
 Schur{T}(S::Schur) where {T} = Schur(T.(S.T), T.(S.Z), T <: Real && !(eltype(S.values) <: Real) ? complex(T).(S.values) : T.(S.values))
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::Schur) = Schur{T}(F)
 
 """
     ordschur!(F::Schur, select::Union{Vector{Bool},BitVector}) -> F::Schur
@@ -322,6 +327,9 @@ function GeneralizedSchur(S::AbstractMatrix{Ty}, T::AbstractMatrix{Ty},
                           Q::AbstractMatrix{Ty}, Z::AbstractMatrix{Ty}) where Ty
     GeneralizedSchur{Ty, typeof(S), typeof(alpha), typeof(beta)}(S, T, alpha, beta, Q, Z)
 end
+# the generalized eigenvalues α are complex for real input
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::GeneralizedSchur) =
+    GeneralizedSchur(_tohalf(T, F.S), _tohalf(T, F.T), _tohalf(T, F.α), _tohalf(T, F.β), _tohalf(T, F.Q), _tohalf(T, F.Z))
 # backwards-compatible constructors (remove with Julia 2.0)
 @deprecate(GeneralizedSchur{Ty,M}(S::AbstractMatrix{Ty}, T::AbstractMatrix{Ty},
                                  alpha::AbstractVector, beta::AbstractVector{Ty},
@@ -365,7 +373,7 @@ Iterating the decomposition produces the components `F.S`, `F.T`, `F.Q`, `F.Z`,
 """
 function schur(A::AbstractMatrix, B::AbstractMatrix)
     S = promote_type(eigtype(A), _valeltype(B))
-    return schur!(copy_similar(A, S), copy_similar(B, S))
+    return _tohalf(promote_type(eltype(A), eltype(B)), schur!(copy_similar(A, S), copy_similar(B, S)))
 end
 
 """
