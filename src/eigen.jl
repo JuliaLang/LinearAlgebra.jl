@@ -357,7 +357,6 @@ function eigvals!(A::StridedMatrix{<:BlasComplex}; permute::Bool=true, scale::Bo
 end
 
 # promotion type to use for eigenvalues of a Matrix{T}: at least single precision, keeping units
-# (`one(T)` is dimensionless, and promoting a dimensionful type with `Float32` gives an abstract type)
 eigtype(T) = typeof(zero(T)/sqrt(abs2(one(T))) * one(Float32))
 # for arrays with an abstract eltype, take the promoted type of the stored values into account
 eigtype(A::AbstractArray) = eigtype(_valeltype(A))
