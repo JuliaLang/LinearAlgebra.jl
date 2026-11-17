@@ -81,7 +81,7 @@ SVD{T}(F::SVD) where {T} = SVD(
     convert(AbstractMatrix{T}, F.Vt))
 Factorization{T}(F::SVD) where {T} = SVD{T}(F)
 
-_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::SVD) = SVD(_tohalf(T, F.U), _tohalf(T, F.S), _tohalf(T, F.Vt))
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::SVD) = SVD{T}(F)
 
 # iteration for destructuring into components
 Base.iterate(S::SVD) = (S.U, Val(:S))
