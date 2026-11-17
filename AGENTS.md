@@ -163,8 +163,12 @@ before `prune_old_LA.jl`.
 - **Error messages** are `LazyString`s built from comma-separated parts, with
   interpolation done lazily. `ArgumentError` for bad values, `DimensionMismatch` for
   shapes.
-- **Comments** only for genuinely tricky code, and they say why. History belongs in the
-  PR, not in the code. Internal helpers may have short docstrings.
+- **Comments** only for genuinely tricky code, and they say why. A comment describes
+  the code as it now is and must be comprehensible from the current state of the code
+  alone. It never mentions earlier versions of the code or why something was changed
+  ("now", "no longer", "previously", "was changed to"); that belongs in the commit
+  message and the PR. The same holds for comments in tests. Internal helpers may have
+  short docstrings.
 - When adding a `@static` guard, do not reindent the guarded code; keep the diff small.
 - Style-only changes go in their own PR.
 
