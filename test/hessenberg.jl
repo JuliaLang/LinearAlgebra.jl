@@ -79,6 +79,18 @@ let n = 10
                 @test (transpose(b) / H) * H ≈ (Matrix(transpose(b)) / H) * H ≈ transpose(b)
             end
         end
+        @testset "singular ldiv and rdiv" begin
+            S1 = UpperHessenberg([0.0 0.0 0.0; 1 2 3; 3 4 5])
+            S2 = UpperHessenberg([1.0 2.0 3.0; 0 0 0; 3 4 5])
+            S3 = UpperHessenberg([1.0 2.0 3.0; 3 4 5; 0 0 0])
+            b = ones(3)
+            B = ones(3,3)
+            for (i, H) in enumerate((S1, S2, S3)), op in (identity, adjoint, transpose)
+                @test_throws SingularException H \ b
+                @test_throws SingularException H \ B
+                @test_throws SingularException B / H
+            end
+        end
         @testset "Preserve UpperHessenberg shape (issue #39388)" begin
             H = UpperHessenberg(Areal)
             A = rand(n,n)

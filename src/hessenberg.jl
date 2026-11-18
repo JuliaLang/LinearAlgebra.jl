@@ -231,6 +231,7 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     cs = Vector{Tuple{real(float(eltype(u))),float(eltype(u))}}(undef, length(u)) # store Givens rotations
     @inbounds for k = m:-1:2
         c, s, ρ = givensAlgorithm(u[k], H[k,k-1])
+        iszero(ρ) && throw(SingularException(m-k+1))
         cs[k] = (c, s)
         for i = 1:n
             X[k,i] /= ρ
@@ -245,6 +246,7 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
         end
         u[k-1] = (H[k-1,k-1] + μ) * c - u[k-1]*s'
     end
+    iszero(u[1]) && throw(SingularException(m))
     for i = 1:n
         τ₁ = X[1,i] / u[1]
         @inbounds for j = 2:m
@@ -281,6 +283,7 @@ function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
     cs = Vector{Tuple{real(float(eltype(u))),float(eltype(u))}}(undef, length(u)) # store Givens rotations
     @inbounds for k = 1:m-1
         c, s, ρ = givensAlgorithm(u[k], H[k+1,k])
+        iszero(ρ) && throw(SingularException(k))
         cs[k] = (c, s)
         for i = 1:n
             X[i,k] /= ρ
@@ -295,6 +298,7 @@ function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
         end
         u[k+1] = (H[k+1,k+1] + μ) * c - u[k+1]*s'
     end
+    iszero(u[m]) && throw(SingularException(m))
     for i = 1:n
         τ₁ = X[i,m] / u[m]
         @inbounds for j = m-1:-1:1
