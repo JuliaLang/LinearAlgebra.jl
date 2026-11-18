@@ -85,10 +85,10 @@ let n = 10
             S3 = UpperHessenberg([1.0 2.0 3.0; 3 4 5; 0 0 0])
             b = ones(3)
             B = ones(3,3)
-            for (i, H) in enumerate((S1, S2, S3)), op in (identity, adjoint, transpose)
-                @test_throws SingularException(op == identity ? i : 4-i) op(H) \ b
-                @test_throws SingularException(op == identity ? i : 4-i) op(H) \ B
-                @test_throws SingularException(op == identity ? i : 4-i) B / op(H)
+            for H in (S1, S2, S3), op in (identity, adjoint, transpose)
+                @test_throws SingularException op(H) \ b
+                @test_throws SingularException op(H) \ B
+                @test_throws SingularException B / op(H)
             end
         end
         @testset "Preserve UpperHessenberg shape (issue #39388)" begin

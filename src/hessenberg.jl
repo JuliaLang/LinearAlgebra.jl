@@ -189,7 +189,7 @@ _hessldiv!(::Type, H, X) = ldiv!(lu(H), X)
 
 function _rdiv(B::AbstractMatrix, H::Union{UpperHessenberg,AdjOrTransUpperHessenberg})
     X = copyto!(matop_dest(/, B, H), B)
-    _hessrdiv!(promote_op(/, eltype(X), eltype(X)), B, H)
+    _hessrdiv!(promote_op(/, eltype(X), eltype(X)), X, H)
 end
 _hessrdiv!(::Type{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, X, H) = rdiv!(X, H)
 _hessrdiv!(::Type, H, X) = rdiv!(X, lu(H))
