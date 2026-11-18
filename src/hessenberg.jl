@@ -192,7 +192,7 @@ function _rdiv(B::AbstractMatrix, H::Union{UpperHessenberg,AdjOrTransUpperHessen
     _hessrdiv!(promote_op(/, eltype(X), eltype(X)), X, H)
 end
 _hessrdiv!(::Type{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, X, H) = rdiv!(X, H)
-_hessrdiv!(::Type, H, X) = rdiv!(X, lu(H))
+_hessrdiv!(::Type, X, H) = rdiv!(X, lu(H))
 
 ldiv!(H::AdjOrTransUpperHessenberg, B::AbstractVecOrMat) =
     (rdiv!(wrapperop(H)(B), parent(H)); B)
