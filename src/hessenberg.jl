@@ -176,20 +176,23 @@ AdjUpperHessenberg{T,S<:UpperHessenberg{T}} = Adjoint{T, S}
 TransUpperHessenberg{T,S<:UpperHessenberg{T}} = Transpose{T, S}
 AdjOrTransUpperHessenberg{T,S<:UpperHessenberg{T}} = AdjOrTrans{T, S}
 
-RationalOrComplex = Union{<:Rational, <:Complex{<:Rational}}
-RationalUpperHessenberg = Union{<:UpperHessenberg{<:RationalOrComplex}, AdjOrTransUpperHessenberg{<:RationalOrComplex}}
-
-(\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat) = _ldiv(H, B)
-
-_ldiv(H, B) = ldiv!(H, copyto!(matop_dest(\, H, B), B))
-_ldiv(H::RationalUpperHessenberg, B) = ldiv!(lu(H), copyto!(matop_dest(\, H, B), B))
+function (\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat)
+    X = copyto!(matop_dest(\, H, B), B)
+    _hessldiv!(promote_op(/, eltype(X), eltype(X)), H, X)
+end
+_hessldiv!(::Type{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, H, X) = ldiv!(H, X)
+_hessldiv!(::Type, H, X) = ldiv!(lu(H), X)
 
 (/)(B::AbstractMatrix, H::UpperHessenberg) = _rdiv(B, H)
 (/)(B::AbstractMatrix, H::AdjUpperHessenberg) = _rdiv(B, H)
 (/)(B::AbstractMatrix, H::TransUpperHessenberg) = _rdiv(B, H)
 
-_rdiv(B, H) = rdiv!(copyto!(matop_dest(/, B, H), B), H)
-_rdiv(B, H::RationalUpperHessenberg) = rdiv!(copyto!(matop_dest(/, B, H), B), lu(H))
+function _rdiv(B::AbstractMatrix, H::Union{UpperHessenberg,AdjOrTransUpperHessenberg})
+    X = copyto!(matop_dest(/, B, H), B)
+    _hessrdiv!(promote_op(/, eltype(X), eltype(X)), B, H)
+end
+_hessrdiv!(::Type{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, X, H) = rdiv!(X, H)
+_hessrdiv!(::Type, H, X) = rdiv!(X, lu(H))
 
 ldiv!(H::AdjOrTransUpperHessenberg, B::AbstractVecOrMat) =
     (rdiv!(wrapperop(H)(B), parent(H)); B)
@@ -237,7 +240,7 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     cs = Vector{Tuple{real(float(eltype(u))),float(eltype(u))}}(undef, length(u)) # store Givens rotations
     @inbounds for k = m:-1:2
         c, s, ρ = givensAlgorithm(u[k], H[k,k-1])
-        iszero(ρ) && throw(SingularException(m-k+1))
+        iszero(ρ) && throw(SingularException(k))
         cs[k] = (c, s)
         for i = 1:n
             X[k,i] /= ρ
@@ -252,7 +255,7 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
         end
         u[k-1] = (H[k-1,k-1] + μ) * c - u[k-1]*s'
     end
-    iszero(u[1]) && throw(SingularException(m))
+    iszero(u[1]) && throw(SingularException(1))
     for i = 1:n
         τ₁ = X[1,i] / u[1]
         @inbounds for j = 2:m

@@ -86,9 +86,9 @@ let n = 10
             b = ones(3)
             B = ones(3,3)
             for (i, H) in enumerate((S1, S2, S3)), op in (identity, adjoint, transpose)
-                @test_throws SingularException H \ b
-                @test_throws SingularException H \ B
-                @test_throws SingularException B / H
+                @test_throws SingularException(op == identity ? i : 4-i) H \ b
+                @test_throws SingularException(op == identity ? i : 4-i) H \ B
+                @test_throws SingularException(op == identity ? i : 4-i) B / H
             end
         end
         @testset "Preserve UpperHessenberg shape (issue #39388)" begin
