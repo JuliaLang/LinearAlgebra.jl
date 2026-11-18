@@ -489,4 +489,9 @@ end # COMPREHENSIVE
     @test_throws MethodError (1 + 2im) * hessenberg(A)
 end
 
+@testset "exact arithmetic for rational UpperHessenberg" begin
+    Hr = UpperHessenberg(Rational{Int}[1 2; 1 3])
+    @test Hr \ Rational{Int}[1, 2] == [-1, 1]
+end
+
 end # module TestHessenberg
