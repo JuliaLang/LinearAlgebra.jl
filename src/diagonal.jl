@@ -809,8 +809,10 @@ end
     valA = A.diag; mA, nA = size(A)
     valB = B.diag; mB, nB = size(B)
     nC = checksquare(C)
-    @boundscheck nC == nA*nB ||
-        throw(DimensionMismatch(lazy"expect C to be a $(nA*nB)x$(nA*nB) matrix, got size $(nC)x$(nC)"))
+    @boundscheck begin
+        n = checked_mul(nA, nB)
+        nC == n || throw(DimensionMismatch(lazy"expect C to be a $(n)x$(n) matrix, got size $(nC)x$(nC)"))
+    end
     zerofilled = false
     if !(isempty(A) || isempty(B))
         z = A[1,1] * B[1,1]
@@ -881,8 +883,11 @@ end
     (mA, nA) = size(A)
     (mB, nB) = size(B)
     (mC, nC) = size(C)
-    @boundscheck (mC, nC) == (mA * mB, nA * nB) ||
-        throw(DimensionMismatch(lazy"expect C to be a $(mA * mB)x$(nA * nB) matrix, got size $(mC)x$(nC)"))
+    @boundscheck begin
+        m, n = _kronsize(A, B)
+        (mC, nC) == (m, n) ||
+            throw(DimensionMismatch(lazy"expect C to be a $(m)x$(n) matrix, got size $(mC)x$(nC)"))
+    end
     zerofilled = false
     if !(isempty(A) || isempty(B))
         z = A[1,1] * B[1,1]
@@ -924,8 +929,11 @@ end
     (mA, nA) = size(A)
     (mB, nB) = size(B)
     (mC, nC) = size(C)
-    @boundscheck (mC, nC) == (mA * mB, nA * nB) ||
-        throw(DimensionMismatch(lazy"expect C to be a $(mA * mB)x$(nA * nB) matrix, got size $(mC)x$(nC)"))
+    @boundscheck begin
+        m, n = _kronsize(A, B)
+        (mC, nC) == (m, n) ||
+            throw(DimensionMismatch(lazy"expect C to be a $(m)x$(n) matrix, got size $(mC)x$(nC)"))
+    end
     zerofilled = false
     if !(isempty(A) || isempty(B))
         z = A[1,1] * B[1,1]
