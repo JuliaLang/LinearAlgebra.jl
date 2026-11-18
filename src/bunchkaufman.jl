@@ -237,7 +237,13 @@ BunchKaufman{T}(B::BunchKaufman) where {T} =
     BunchKaufman(convert(Matrix{T}, B.LD), B.ipiv, B.uplo, B.symmetric, B.rook, B.info)
 Factorization{T}(B::BunchKaufman) where {T} = BunchKaufman{T}(B)
 
-AbstractMatrix(B::BunchKaufman) = B.uplo == 'U' ? B.P'B.U*B.D*B.U'B.P : B.P'B.L*B.D*B.L'B.P
+function AbstractMatrix(B::BunchKaufman)
+    if issymmetric(B)
+        return B.uplo == 'U' ? B.P'B.U*B.D*transpose(B.U)*B.P : B.P'B.L*B.D*transpose(B.L)*B.P
+    else
+        return B.uplo == 'U' ? B.P'B.U*B.D*B.U'B.P : B.P'B.L*B.D*B.L'B.P
+    end
+end
 AbstractArray(B::BunchKaufman) = AbstractMatrix(B)
 Matrix(B::BunchKaufman) = convert(Array, AbstractArray(B))
 Array(B::BunchKaufman) = Matrix(B)
