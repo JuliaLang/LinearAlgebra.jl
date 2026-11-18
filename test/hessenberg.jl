@@ -86,9 +86,9 @@ let n = 10
             b = ones(3)
             B = ones(3,3)
             for (i, H) in enumerate((S1, S2, S3)), op in (identity, adjoint, transpose)
-                @test_throws SingularException(op == identity ? i : 4-i) H \ b
-                @test_throws SingularException(op == identity ? i : 4-i) H \ B
-                @test_throws SingularException(op == identity ? i : 4-i) B / H
+                @test_throws SingularException(op == identity ? i : 4-i) op(H) \ b
+                @test_throws SingularException(op == identity ? i : 4-i) op(H) \ B
+                @test_throws SingularException(op == identity ? i : 4-i) B / op(H)
             end
         end
         @testset "Preserve UpperHessenberg shape (issue #39388)" begin
@@ -492,6 +492,7 @@ end
 @testset "exact arithmetic for rational UpperHessenberg" begin
     Hr = UpperHessenberg(Rational{Int}[1 2; 1 3])
     @test Hr \ Rational{Int}[1, 2] == [-1, 1]
+    @test Rational{Int}[1 2] / Hr == [1 0]
 end
 
 end # module TestHessenberg
