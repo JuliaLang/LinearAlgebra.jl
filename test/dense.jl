@@ -507,6 +507,28 @@ end
     @test c == [0.0 1.0; 0.0 0.0]
 end
 
+@testset "kron dimension overflow" begin
+    # Lazy inputs exercise unrepresentable output dimensions without a large allocation.
+    v = 1:(typemax(Int) ÷ 4)
+    col = reshape(v, :, 1)
+    row = reshape(v, 1, :)
+    b = collect(1:5)
+    B = reshape(b, :, 1)
+    @test_throws OverflowError kron(v, b)
+    @test_throws OverflowError kron!(Int[], v, b)
+    for (x, y) in ((v, B), (col, b), (col, B), (row, transpose(B)))
+        @test_throws OverflowError kron(x, y)
+        @test_throws OverflowError kron!(zeros(Int, 0, 0), x, y)
+    end
+    D = Diagonal(v)
+    for (x, y) in ((D, Diagonal(b)), (D, B), (B, D))
+        @test_throws OverflowError kron!(zeros(Int, 0, 0), x, y)
+    end
+    a = falses(0, typemax(Int) ÷ 4)
+    @test_throws OverflowError kron(a, falses(0, 5))
+    @test_throws OverflowError kron!(falses(0, 0), a, falses(0, 5))
+end
+
 @testset "kron adjoint" begin
     a = [1+im, 2, 3]
     b = [4, 5, 6+7im]
