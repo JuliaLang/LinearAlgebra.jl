@@ -401,7 +401,8 @@ end
         @test LinearAlgebra.eigtype(T) === S
     end
     # the condition number and the null space are dimensionless, also for empty matrices
-    @test cond(Furlong.(zeros(0, 0)))::Float64 == 0
+    @test (@inferred cond(Furlong.(zeros(0, 0)))) === Furlong{0}(0.0)
+    @test (@inferred cond(Diagonal(Furlong.([0.0, 0.0])))) === Furlong{0}(Inf)
     @test nullspace(Furlong.(zeros(0, 3)))::Matrix{Float64} == I
     # the Schur vectors are dimensionless, so they share an abstract type with the Schur form
     M = Furlong.([4.0 1 2; 0 3 1; 0 0 5])

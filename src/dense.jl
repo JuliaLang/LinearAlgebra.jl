@@ -2005,7 +2005,8 @@ function cond(A::AbstractMatrix, p::Real=2)
     if p == 2
         if isempty(A)
             checksquare(A)
-            return zero(real(_ortho_eltype(eigtype(eltype(A)))))
+            x = oneunit(eigtype(eltype(A)))
+            return zero(real(x / x))
         end
         v = svdvals(A)
         maxv = maximum(v)
