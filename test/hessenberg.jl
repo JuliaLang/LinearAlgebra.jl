@@ -445,4 +445,13 @@ end
 end
 end # COMPREHENSIVE
 
+@testset "det of small integer matrices (#1895)" begin
+    H = UpperHessenberg(Int8[100 100 100; 50 50 25; 1 2 3])
+    @test det(H) ≈ det(Matrix(H))
+    @test_throws OverflowError det(Rational.(H))
+    BH = BigInt.(H)
+    @test isa(det(BH), BigInt)
+    @test det(BH) == det(Matrix(BH))
+end
+
 end # module TestHessenberg

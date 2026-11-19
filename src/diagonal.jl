@@ -990,7 +990,7 @@ function diag(D::Diagonal, k::Integer=0)
     return v
 end
 tr(D::Diagonal{<:Number}) = sum(D.diag)
-det(D::Diagonal{<:Number}) = prod(D.diag)
+det(D::Diagonal{T}) where {T<:Number} = prod(convert(AbstractVector{_dettype(T)}, D.diag))
 tr(D::Diagonal) = isempty(D.diag) ? zero(promote_leaf_eltypes(D.diag)) : sum(tr, D.diag)
 # for block-diagonal matrices, the empty case returns the determinant of an empty block
 det(D::Diagonal) = isempty(D.diag) ? det(zeros(promote_leaf_eltypes(D.diag), 0, 0)) : prod(det, D.diag)
