@@ -1694,7 +1694,7 @@ end
         @test @inferred(tr(D)) == zero(T)
         @test @inferred(det(D)) == one(T)
         @test typeof(tr(D)) == typeof(tr(Diagonal(T[1]))) == T
-        @test typeof(det(D)) == typeof(det(Diagonal(T[1]))) == T
+        @test typeof(det(D)) == typeof(det(Diagonal(T[1]))) == LinearAlgebra._dettype(T)
     end
     @test tr(Diagonal(Number[])) == 0
     @test det(Diagonal(Number[])) == 1
@@ -1805,6 +1805,15 @@ end
     M = rand(4, 4); M0 = copy(M)
     M .= Diagonal(view(M, :, 1)) .+ M
     @test M ≈ Diagonal(M0[:, 1]) .+ M0
+end
+
+@testset "det of integer matrices (#1895)" begin
+    D = Diagonal([typemax(Int), typemax(Int)])
+    @test det(D) == det(float(D))
+    @test_throws OverflowError det(Rational.(D))
+    BD = BigInt.(D)
+    @test isa(det(BD), BigInt)
+    @test det(BD) == det(Matrix(BD))
 end
 
 end # module TestDiagonal

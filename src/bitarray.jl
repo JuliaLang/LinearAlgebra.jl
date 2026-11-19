@@ -95,7 +95,7 @@ qr(A::BitMatrix) = qr(float(A))
 @inline function kron!(R::BitVector, a::BitVector, b::BitVector)
     m = length(a)
     n = length(b)
-    @boundscheck length(R) == n*m || throw(DimensionMismatch())
+    @boundscheck length(R) == checked_mul(n, m) || throw(DimensionMismatch())
     Rc = R.chunks
     bc = b.chunks
     for j = 1:m
@@ -107,14 +107,14 @@ end
 function kron(a::BitVector, b::BitVector)
     m = length(a)
     n = length(b)
-    R = falses(n * m)
+    R = falses(checked_mul(n, m))
     return @inbounds kron!(R, a, b)
 end
 
 function kron!(R::BitMatrix, a::BitMatrix, b::BitMatrix)
     mA,nA = size(a)
     mB,nB = size(b)
-    @boundscheck size(R) == (mA*mB, nA*nB) || throw(DimensionMismatch())
+    @boundscheck size(R) == _kronsize(a, b) || throw(DimensionMismatch())
 
     for i = 1:mA
         ri = (1:mB) .+ ((i-1)*mB)
@@ -129,9 +129,9 @@ function kron!(R::BitMatrix, a::BitMatrix, b::BitMatrix)
 end
 
 function kron(a::BitMatrix, b::BitMatrix)
-    mA,nA = size(a)
-    mB,nB = size(b)
-    R = falses(mA*mB, nA*nB)
+    dims = _kronsize(a, b)
+    checked_mul(dims...) # The total bit count must also fit in Int.
+    R = falses(dims)
     return @inbounds kron!(R, a, b)
 end
 

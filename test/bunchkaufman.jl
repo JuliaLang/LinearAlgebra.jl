@@ -269,11 +269,13 @@ end
 end
 
 @testset "BunchKaufman array constructors #1461" begin
-    a = randn(5,5)
-    A = a'a
-    for ul in (:U, :L)
-        B = bunchkaufman(Symmetric(A, ul))
-        @test A ≈ Array(B) ≈ Matrix(B) ≈ AbstractArray(B) ≈ AbstractMatrix(B)
+    for T in (Float64, ComplexF64)
+        a = randn(T, 5, 5)
+        for ul in (:U, :L), wrapper in (Symmetric, Hermitian)
+            A = wrapper(a, ul)
+            B = bunchkaufman(A)
+            @test A ≈ Array(B) ≈ Matrix(B) ≈ AbstractArray(B) ≈ AbstractMatrix(B)
+        end
     end
 end
 
