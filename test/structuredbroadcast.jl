@@ -596,4 +596,18 @@ end
     end
 end
 
+
+@testset "broadcast into SymTridiagonal with NaN off-diagonal (#1911)" begin
+    S = SymTridiagonal([1.0, 2.0, 3.0], [NaN, 5.0])
+    R = S .* 2
+    @test R isa SymTridiagonal
+    @test R.dv == [2.0, 4.0, 6.0]
+    @test isequal(R.ev, [NaN, 10.0])
+    @test isequal(Matrix(S .+ 0), Matrix(S))
+    @test isequal(Matrix(identity.(S)), Matrix(S))
+    T = SymTridiagonal([1.0, 2.0], [NaN])
+    T .*= 2
+    @test isequal(T.ev, [NaN])
+end
+
 end
