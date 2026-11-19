@@ -506,6 +506,7 @@ end
     @test logabsdet(Hr; shift=2//3) == logabsdet(Matrix(Hr) + 2//3*I)
     @test det(Hr) == det(Matrix(Hr))
     @test det(Hr; shift=2//3) == det(Matrix(Hr) + 2//3*I)
+    @test logdet(UpperHessenberg([2 1 1; 1 3 1; 7 1 4])) ≈ logdet([2 1 1; 1 3 1; 0 1 4])
 end
 
 end # module TestHessenberg
