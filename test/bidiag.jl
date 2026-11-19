@@ -1404,9 +1404,7 @@ end
     M = rand(4, 4); M0 = copy(M)
     M .= Bidiagonal(view(M, 1:4, 1), view(M, 1:3, 2), :U) .+ 1
     @test M ≈ Bidiagonal(M0[1:4, 1], M0[1:3, 2], :U) .+ 1
-
 end
-
 
 @testset "cholesky of banded matrices with a zero pivot honours check=false (#1899)" begin
     S = SymTridiagonal([1.0, 0.0, 0.0], [0.0, 1.0])
