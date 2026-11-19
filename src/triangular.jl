@@ -165,7 +165,7 @@ imag(A::LowerTriangular) = LowerTriangular(imag(A.data))
 imag(A::UpperTriangular{<:Any,<:StridedMaybeAdjOrTransMat}) = imag.(A)
 imag(A::LowerTriangular{<:Any,<:StridedMaybeAdjOrTransMat}) = imag.(A)
 function imag(A::UnitLowerTriangular)
-    L = LowerTriangular(imag(A.data))
+    L = imag(LowerTriangular(A.data))
     Lim = similar(L) # must be mutable to set diagonals to zero
     Lim .= L
     for i in axes(Lim,1)
@@ -174,7 +174,7 @@ function imag(A::UnitLowerTriangular)
     return Lim
 end
 function imag(A::UnitUpperTriangular)
-    U = UpperTriangular(imag(A.data))
+    U = imag(UpperTriangular(A.data))
     Uim = similar(U) # must be mutable to set diagonals to zero
     Uim .= U
     for i in axes(Uim,1)
