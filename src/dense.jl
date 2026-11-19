@@ -2009,7 +2009,7 @@ function cond(A::AbstractMatrix, p::Real=2)
         end
         v = svdvals(A)
         maxv = maximum(v)
-        return iszero(maxv) ? oftype(real(maxv), Inf) : maxv / minimum(v)
+        return iszero(maxv) ? oftype(real(maxv) / one(real(maxv)), Inf) : maxv / minimum(v)
     elseif p == 1 || p == Inf
         checksquare(A)
         try
