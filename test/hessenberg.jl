@@ -494,9 +494,9 @@ end
     @test Hr \ Rational{Int}[1, 2] == [-1, 1]
     @test Rational{Int}[1 2] / Hr == [1 0]
     @test logabsdet(Hr) == logabsdet(Matrix(Hr))
-    @test logabsdet(Hr; shift=2//3) == logabsdet(Matrix(Hr); shift=2//3)
+    @test logabsdet(Hr; shift=2//3) == logabsdet(Matrix(Hr) + 2//3*I)
     @test det(Hr) == det(Matrix(Hr))
-    @test det(Hr; shift=2//3) == det(Matrix(Hr); shift=2//3)
+    @test det(Hr; shift=2//3) == det(Matrix(Hr) + 2//3*I)
 end
 
 end # module TestHessenberg
