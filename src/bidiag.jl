@@ -1440,7 +1440,7 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
         ev = A.ev
         n = length(dv)
         @inbounds for i in 1:n-1
-            iszero(dv[i]) && throw(ZeroPivotException(i))
+            iszero(dv[i]) && return $T(A), convert(BlasInt, i)
             ev[i] /= dv[i]
             dv[i+1] -= abs2(ev[i])*dv[i]
             Akk = dv[i]
