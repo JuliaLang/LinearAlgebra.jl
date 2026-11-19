@@ -394,4 +394,10 @@ end
     end
 end
 
+@testset "cond of singular dimensionful matrices" begin
+    for p in (1, Inf)
+        @test cond(Diagonal(Furlong.([0.0, 2.0])), p) === Furlong{0}(Inf)
+    end
+end
+
 end # module TestUnitfulLinAlg
