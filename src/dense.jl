@@ -640,7 +640,7 @@ function (^)(A::AbstractMatrix{T}, p::Real) where T
     checksquare(A)
     # Quicker return if A is diagonal
     if isdiag(A)
-        if T <: Real && any(<(0), diagview(A))
+        if T <: Real && !isinteger(p) && any(<(0), diagview(A))
             return applydiagonal(x -> complex(x)^p, A)
         else
             return applydiagonal(x -> x^p, A)
