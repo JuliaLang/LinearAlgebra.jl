@@ -1574,4 +1574,14 @@ end
     @test abs(H) isa Hermitian
 end
 
+@testset "real diagonal matrix with negative entries to an integer-valued real power" begin
+    A = [-1.0 0; 0 2]
+    for p in (2.0, 3.0, -1.0)
+        @test A^p isa Matrix{Float64}
+        @test A^p == A^Int(p)
+    end
+    @test A^0.5 isa Matrix{ComplexF64}
+    @test A^0.5 ≈ Diagonal([im, sqrt(2)])
+end
+
 end # module TestDense
