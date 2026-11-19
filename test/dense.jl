@@ -1719,13 +1719,14 @@ end
     half(T::Type{<:Complex}) = ComplexF16
     Asym = Float16[0.5 0.1 0.05; 0.1 0.4 0.1; 0.05 0.1 0.3]
     Anon = Float16[0.5 0.1 0.05; 0.2 0.4 0.1; 0.05 0.1 0.3]
-    for A in (Asym, Anon, ComplexF16.(Asym .+ 0.1im .* (Anon .- Anon')), ComplexF16.(Anon .+ 0.1im .* Anon))
+    Atri = Float16[0.5 0.1 0.05; 0 0.4 0.1; 0 0 0.3]
+    for A in (Asym, Anon, Atri, ComplexF16.(Asym .+ 0.1im .* (Anon .- Anon')), ComplexF16.(Anon .+ 0.1im .* Anon))
         @test eltype(A) <: Union{Float16,ComplexF16}
         A64 = eltype(A) <: Complex ? ComplexF64.(A) : Float64.(A)
         for f in (exp, cis, log, sqrt, cos, sin, tan, cosh, sinh, tanh, acos, asin, atan, asinh, atanh, sec,
                   x -> acosh(x + 2I), x -> sincos(x)[1], x -> sincos(x)[2], (eltype(A) <: Real ? (cbrt,) : ())...)
             F64 = f(A64)
-            for B in (A, view(A, :, :), copy(A')', transpose(copy(transpose(A))))
+            for B in (A, view(A, :, :), copy(A')', transpose(copy(transpose(A))), ImmutableArray(A))
                 F = f(B)
                 @test eltype(F) === half(eltype(F64))
                 @test F ≈ F64 rtol=2e-3
