@@ -608,6 +608,83 @@ end
     @test size(nullspace(F; atol=1.01), 2) == 2
 end
 
+@testset "nullspace!(::QRPivoted)" begin
+    qrcopy(F) = QRPivoted(copy(F.factors), copy(F.τ), copy(F.p))
+    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64, BigFloat)
+        ε = eps(real(elty))
+        # square/tall (result shares memory with F) and wide (result is allocated); the
+        # nullities include ones larger than the block size of the orthonormalization
+        sizes = ((n, n1-1, n1+2), (3n, n1, 2n), (100, 10, 90), (90, 60, 100), (n1+2, n1+2, n), (n, n1, n1))
+        for (m, k, nc) in (elty === BigFloat ? sizes[[1, 2, 5, 6]] : sizes)
+            A = convert(Matrix{elty}, randn(m, k) * randn(k, nc))
+            F = qr(A, ColumnNorm())
+            N = nullspace(F)
+            N! = nullspace!(qrcopy(F))
+            @test size(N!) == size(N)
+            @test eltype(N!) == elty
+            @test norm(A * N!, Inf) ≤ 100 * nc * ε * opnorm(A, Inf)
+            @test N!' * N! ≈ I atol = 100 * ε
+            @test N! * N!' ≈ N * N'
+            if m ≥ nc
+                G = qrcopy(F)
+                @test parent(nullspace!(G)) === G.factors
+            end
+        end
+        @test nullspace!(qr(zeros(elty, 3, 3), ColumnNorm())) == -Matrix(I, 3, 3)
+        @test nullspace!(qr(zeros(elty, 0, 3), ColumnNorm())) == Matrix(I, 3, 3)
+        @test size(nullspace!(qr(zeros(elty, 3, 0), ColumnNorm()))) == (0, 0)
+        @test size(nullspace!(qr(elty[1 0; 0 1; 1 1], ColumnNorm()))) == (2, 0)
+    end
+    # tolerances are forwarded to rank
+    F = qr([1.0 0.0; 0.0 0.9], ColumnNorm())
+    @test size(nullspace!(qrcopy(F)), 2) == 0
+    @test size(nullspace!(qrcopy(F); rtol=0.95), 2) == 1
+    @test abs.(nullspace!(qrcopy(F); atol=0.95)) ≈ [0.0; 1.0;;]
+    @test size(nullspace!(qrcopy(F); atol=1.01), 2) == 2
+    # worst case of column pivoting: R₁₁ = I - triu(ones, 1) has (R₁₁⁻¹)ᵢⱼ = 2^(j-i-1), so
+    # ‖R₁₁ \ R₁₂‖ grows like 2^r; beyond about 1/ε, Gram-Schmidt loses orthogonality
+    @testset "Householder fallback for large ‖R₁₁ \\ R₁₂‖ ($T)" for T in (Float32, Float64)
+        function adversarial(r, k)
+            R = zeros(T, r + k, r + k)
+            R[1:r, 1:r] = I - triu(ones(T, r, r), 1)
+            R[1:r, r+1:end] .= one(T)
+            return QRPivoted(R, zeros(T, r + k), collect(1:r+k)) # τ = 0: Q = I, no pivoting
+        end
+        ε = eps(T)
+        # below the threshold ‖R₁₁ \\ R₁₂‖ ≤ 1/(100ε): Gram-Schmidt, which also keeps the
+        # residual small; the result shares memory with F
+        r = floor(Int, -log2(ε)) - 8
+        A = Matrix(adversarial(r, 5))
+        F = adversarial(r, 5)
+        N = nullspace!(F)
+        @test parent(N) === F.factors
+        @test N' * N ≈ I atol = 100 * ε
+        @test norm(A * N) ≤ 100 * r * ε * norm(A)
+        # above the threshold: Householder, which keeps the basis orthonormal
+        for r in (T === Float32 ? (30, 40) : (60, 70))
+            F = adversarial(r, 5)
+            N = nullspace!(F)
+            @test parent(N) isa Matrix{T} && parent(N) !== F.factors
+            @test size(N) == (r + 5, 5)
+            @test N' * N ≈ I atol = 100 * ε
+        end
+    end
+    # the result is a view in all cases: shared with F, allocated (m < n), empty and full rank
+    for (m, nc) in ((10, 6), (6, 10), (0, 3), (10, 3))
+        A = m == 10 && nc == 3 ? randn(m, nc) : randn(m, 2) * randn(2, nc)
+        @test (@inferred nullspace!(qr(A, ColumnNorm()))) isa SubArray{Float64,2,Matrix{Float64}}
+    end
+    # memory reuse: no n×(n-r) buffer for m ≥ n, only the result for m < n
+    for (m, nc, r) in ((200, 150, 60), (300, 200, 190), (100, 150, 60))
+        A = randn(m, r) * randn(r, nc)
+        F = qr(A, ColumnNorm())
+        nullspace!(qrcopy(F))
+        G = qrcopy(F)
+        bytes = @allocated nullspace!(G)
+        @test bytes < (m ≥ nc ? 1 : 2) * sizeof(Float64) * nc * (nc - r)
+    end
+end
+
 @testset "cond of QR factorizations" begin
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         ε = eps(real(elty))
