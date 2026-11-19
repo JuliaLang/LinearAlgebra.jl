@@ -357,6 +357,11 @@ function det(F::UpperHessenberg; shift::Number=false)
     return determinant
 end
 
+function logabsdet(F::UpperHessenberg; shift::Number=false)
+    S = typeof(zero(eltype(H)) + μ)
+    _logabsdet(promote_op(/, S, S), F; shift)
+end
+_logabsdet(::Type, F; shift::Number=false) = logabsdet(lu(F + shift*I; check=false))
 # O(m²) log-determinant based on first doing Givens RQ to put H+μI into upper-triangular form and then
 # taking the product of the diagonal entries.   The trick is that we only need O(m) temporary storage,
 # because we don't need to store the whole Givens-rotated matrix, only the most recent column.
@@ -364,12 +369,12 @@ end
 # (We could also use it for det instead of the Cahill algorithm above.  Cahill is slightly faster
 #  for very small matrices where you are likely to use det, and also uses only ± and * so it can
 #  be applied to Hessenberg matrices over other number fields.)
-function logabsdet(F::UpperHessenberg; shift::Number=false)
+function _logabsdet(::Type{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, F::UpperHessenberg; shift::Number=false)
     checksquare(F)
     H = F.data
     m = size(H,1)
     μ = shift
-    P = one(zero(eltype(H)) + μ)
+    P = one(zero(float(eltype(H))) + μ)
     logdeterminant = zero(real(P))
     m == 0 && return (logdeterminant, P)
     g = Vector{typeof(P)}(undef, m) # below, g is the k-th col of Givens-rotated H+μI matrix
