@@ -1101,11 +1101,13 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=n
 end
 
 #Singular system
-svdvals(D::Diagonal{<:Number}) = sort!(abs.(D.diag), rev = true)
+_svdabs(x) = abs(x)
+_svdabs(x::Base.BitSigned) = abs(float(x))
+svdvals(D::Diagonal{<:Number}) = sort!(_svdabs.(D.diag), rev = true)
 svdvals(D::Diagonal) = [svdvals(v) for v in D.diag]
 function svd(D::Diagonal{T}) where {T<:Number}
     d = D.diag
-    s = abs.(d)
+    s = _svdabs.(d)
     piv = sortperm(s, rev = true)
     S = s[piv]
     Td  = _ortho_eltype(T)
