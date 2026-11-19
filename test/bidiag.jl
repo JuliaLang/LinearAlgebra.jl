@@ -1317,4 +1317,18 @@ end
     @test isnan(L[2,2]) && L[3,3] ≈ log(3)
 end
 
+@testset "cholesky of banded matrices with a zero pivot honours check=false (#1899)" begin
+    S = SymTridiagonal([1.0, 0.0, 0.0], [0.0, 1.0])
+    F = cholesky(S; check=false)
+    @test !issuccess(F)
+    @test F.info == 2
+    @test_throws PosDefException cholesky(S)
+    @test !isposdef(SymTridiagonal([0.0, 1.0], [1.0]))
+    @test !isposdef(Tridiagonal([1.0], [0.0, 1.0], [1.0]))
+    # a non-positive-definite but nonzero pivot still reports failure consistently
+    @test !issuccess(cholesky(SymTridiagonal([1.0, -1.0], [0.0]); check=false))
+    # a genuinely positive-definite banded matrix is unaffected
+    @test issuccess(cholesky(SymTridiagonal([2.0, 2.0], [1.0]); check=false))
+end
+
 end # module TestBidiagonal
