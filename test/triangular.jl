@@ -1247,4 +1247,23 @@ end
     @test E == [2 0; 0 3]
 end
 
+@testset "issue #1907: rmul! of two triangular matrices" begin
+    @testset for T in (Int, Float64)
+        a, b, c = T[9 2 3; 9 9 4; 9 9 9], T[7 -1 2; 7 7 5; 7 7 7], T[1 -1 2; 7 1 5; 7 7 1]
+        at, bt, ct = (copy(transpose(x)) for x in (a, b, c))
+        for (A, B) in ((UnitUpperTriangular(a), UnitUpperTriangular(b)),
+                       (UnitUpperTriangular(a), UpperTriangular(c)),
+                       (UnitUpperTriangular(a), transpose(UnitLowerTriangular(bt))),
+                       (UnitLowerTriangular(at), UnitLowerTriangular(bt)),
+                       (UnitLowerTriangular(at), LowerTriangular(ct)),
+                       (UnitLowerTriangular(at), adjoint(UnitUpperTriangular(b))))
+            MA, MB = Matrix(A), Matrix(B)
+            @test rmul!(A, B)::typeof(A) == MA * MB
+        end
+        # the product is not lower triangular
+        L = LowerTriangular(T[0 0 0; -2 2 0; 0 -2 0])
+        @test_throws ArgumentError rmul!(L, UnitUpperTriangular(T[1 2 -1; 0 1 1; 0 0 1]))
+    end
+end
+
 end # module TestTriangular
