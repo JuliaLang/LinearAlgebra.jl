@@ -358,7 +358,7 @@ function det(F::UpperHessenberg; shift::Number=false)
 end
 
 function logabsdet(F::UpperHessenberg; shift::Number=false)
-    S = typeof(zero(eltype(F)) + μ)
+    S = typeof(zero(eltype(F)) + shift)
     _logabsdet(promote_op(/, S, S), F; shift)
 end
 _logabsdet(::Type, F::UpperHessenberg; shift::Number=false) = logabsdet(lu(F + shift*I; check=false))
