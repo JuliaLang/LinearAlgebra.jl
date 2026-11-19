@@ -20,6 +20,7 @@ import Base: AbstractArray, AbstractMatrix, Array, Matrix
 using Base: IndexLinear, promote_eltype, promote_op, print_matrix,
     @propagate_inbounds, reduce, typed_hvcat, typed_vcat, require_one_based_indexing,
     splat, BitInteger
+using Base.Checked: checked_mul
 using Base.Broadcast: Broadcasted, broadcasted
 using Base.PermutedDimsArrays: CommutativeOps
 using OpenBLAS_jll

@@ -445,9 +445,10 @@ Random.seed!(1)
                 for op in (+, -, *)
                     @test Array(op(T, T2)) ≈ op(Tfull, Tfull2)
                 end
-                A = kron(T.dv, T.dv')
-                @test T * A ≈ lmul!(T, copy(A))
-                @test A * T ≈ rmul!(copy(A), T)
+                L = T.dv * T.ev'
+                R = T.ev * T.dv'
+                @test T * L ≈ lmul!(T, copy(L))
+                @test R * T ≈ rmul!(copy(R), T)
             end
             # test pass-through of mul! for SymTridiagonal*Bidiagonal
             TriSym = SymTridiagonal(T.dv, T.ev)
@@ -1404,6 +1405,20 @@ end
     M = rand(4, 4); M0 = copy(M)
     M .= Bidiagonal(view(M, 1:4, 1), view(M, 1:3, 2), :U) .+ 1
     @test M ≈ Bidiagonal(M0[1:4, 1], M0[1:3, 2], :U) .+ 1
+end
+
+@testset "cholesky of banded matrices with a zero pivot honours check=false (#1899)" begin
+    S = SymTridiagonal([1.0, 0.0, 0.0], [0.0, 1.0])
+    F = cholesky(S; check=false)
+    @test !issuccess(F)
+    @test F.info == 2
+    @test_throws PosDefException cholesky(S)
+    @test !isposdef(SymTridiagonal([0.0, 1.0], [1.0]))
+    @test !isposdef(Tridiagonal([1.0], [0.0, 1.0], [1.0]))
+    # a non-positive-definite but nonzero pivot still reports failure consistently
+    @test !issuccess(cholesky(SymTridiagonal([1.0, -1.0], [0.0]); check=false))
+    # a genuinely positive-definite banded matrix is unaffected
+    @test issuccess(cholesky(SymTridiagonal([2.0, 2.0], [1.0]); check=false))
 end
 
 end # module TestBidiagonal

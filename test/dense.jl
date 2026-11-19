@@ -507,6 +507,28 @@ end
     @test c == [0.0 1.0; 0.0 0.0]
 end
 
+@testset "kron dimension overflow" begin
+    # Lazy inputs exercise unrepresentable output dimensions without a large allocation.
+    v = 1:(typemax(Int) ÷ 4)
+    col = reshape(v, :, 1)
+    row = reshape(v, 1, :)
+    b = collect(1:5)
+    B = reshape(b, :, 1)
+    @test_throws OverflowError kron(v, b)
+    @test_throws OverflowError kron!(Int[], v, b)
+    for (x, y) in ((v, B), (col, b), (col, B), (row, transpose(B)))
+        @test_throws OverflowError kron(x, y)
+        @test_throws OverflowError kron!(zeros(Int, 0, 0), x, y)
+    end
+    D = Diagonal(v)
+    for (x, y) in ((D, Diagonal(b)), (D, B), (B, D))
+        @test_throws OverflowError kron!(zeros(Int, 0, 0), x, y)
+    end
+    a = falses(0, typemax(Int) ÷ 4)
+    @test_throws OverflowError kron(a, falses(0, 5))
+    @test_throws OverflowError kron!(falses(0, 0), a, falses(0, 5))
+end
+
 @testset "kron adjoint" begin
     a = [1+im, 2, 3]
     b = [4, 5, 6+7im]
@@ -1670,6 +1692,24 @@ end
     # the full SVD would allocate the 400×400 matrix U
     @test (@allocated nullspace(A)) < sizeof(Float64) * 400 * 400
     @test size(nullspace(A)) == (20, 0)
+end
+
+@testset "real diagonal matrix with negative entries to an integer-valued real power" begin
+    A = [-1.0 0; 0 2]
+    for p in (2.0, 3.0, -1.0)
+        @test A^p isa Matrix{Float64}
+        @test A^p == A^Int(p)
+    end
+    @test A^0.5 isa Matrix{ComplexF64}
+    @test A^0.5 ≈ Diagonal([im, sqrt(2)])
+end
+
+@testset "cond of an all-zero integer Diagonal" begin
+    for p in (1, 2, Inf)
+        @test (@inferred cond(Diagonal([0, 0]), p)) == Inf
+    end
+    @test (@inferred cond(Diagonal(Int8[0]))) == Inf
+    @test (@inferred cond(Diagonal([0, 2]))) == Inf
 end
 
 end # module TestDense

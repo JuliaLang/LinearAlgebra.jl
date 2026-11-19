@@ -458,9 +458,9 @@ function tr(A::StridedMatrix{T}) where T
     reduce(+, (A[i] for i in diagind(A, IndexStyle(A))))
 end
 
-_kronsize(A::AbstractMatrix, B::AbstractMatrix) = map(*, size(A), size(B))
-_kronsize(A::AbstractMatrix, B::AbstractVector) = (size(A, 1)*length(B), size(A, 2))
-_kronsize(A::AbstractVector, B::AbstractMatrix) = (length(A)*size(B, 1), size(B, 2))
+_kronsize(A::AbstractMatrix, B::AbstractMatrix) = map(checked_mul, size(A), size(B))
+_kronsize(A::AbstractMatrix, B::AbstractVector) = (checked_mul(size(A, 1), length(B)), size(A, 2))
+_kronsize(A::AbstractVector, B::AbstractMatrix) = (checked_mul(length(A), size(B, 1)), size(B, 2))
 
 """
     kron!(C, A, B)
@@ -476,7 +476,7 @@ function kron!(C::AbstractVecOrMat, A::AbstractVecOrMat, B::AbstractVecOrMat)
     _kron!(C, A, B)
 end
 function kron!(c::AbstractVector, a::AbstractVector, b::AbstractVector)
-    length(c) == length(a) * length(b) || throw(DimensionMismatch("kron!"))
+    length(c) == checked_mul(length(a), length(b)) || throw(DimensionMismatch("kron!"))
     m = firstindex(c)
     @inbounds for i in eachindex(a)
         ai = a[i]
@@ -575,7 +575,7 @@ function kron(A::AbstractVecOrMat{T}, B::AbstractVecOrMat{S}) where {T,S}
     return kron!(C, A, B)
 end
 function kron(a::AbstractVector{T}, b::AbstractVector{S}) where {T,S}
-    c = Vector{promote_op(*,T,S)}(undef, length(a)*length(b))
+    c = Vector{promote_op(*,T,S)}(undef, checked_mul(length(a), length(b)))
     return kron!(c, a, b)
 end
 kron(a::Number, b::Union{Number, AbstractVecOrMat}) = a * b
@@ -646,7 +646,7 @@ function (^)(A::AbstractMatrix{T}, p::Real) where T
     checksquare(A)
     # Quicker return if A is diagonal
     if isdiag(A)
-        if T <: Real && any(<(0), diagview(A))
+        if T <: Real && !isinteger(p) && any(<(0), diagview(A))
             return applydiagonal(x -> complex(x)^p, A)
         else
             return applydiagonal(x -> x^p, A)
@@ -2010,7 +2010,7 @@ function cond(A::AbstractMatrix, p::Real=2)
         end
         v = svdvals(A)
         maxv = maximum(v)
-        return iszero(maxv) ? oftype(real(maxv), Inf) : maxv / minimum(v)
+        return iszero(maxv) ? oftype(real(maxv) / oneunit(real(maxv)), Inf) : maxv / minimum(v)
     elseif p == 1 || p == Inf
         checksquare(A)
         try

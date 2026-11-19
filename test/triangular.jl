@@ -1381,4 +1381,16 @@ end
     end
 end
 
+@testset "cbrt of integer triangular matrices" begin
+    for (T, A) in ((UpperTriangular, [2 1; 0 3]), (LowerTriangular, [2 0; 1 3]))
+        C = cbrt(T(A))
+        @test C isa T{Float64}
+        @test C ≈ cbrt(float(A))
+        @test C^3 ≈ A
+    end
+    E = cbrt(UpperTriangular([8 0; 0 27]))
+    @test E isa UpperTriangular{Float64}
+    @test E == [2 0; 0 3]
+end
+
 end # module TestTriangular
