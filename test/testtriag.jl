@@ -212,6 +212,7 @@ function test_triangular(elty1_types)
             # real
             @test real(A1) == real(M1)
             @test imag(A1) == imag(M1)
+            @test isreal(imag(A1))
             @test abs.(A1) == abs.(M1)
 
             # zero
