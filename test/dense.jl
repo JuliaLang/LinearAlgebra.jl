@@ -1704,6 +1704,14 @@ end
     @test A^0.5 ≈ Diagonal([im, sqrt(2)])
 end
 
+@testset "cond of an all-zero integer Diagonal" begin
+    for p in (1, 2, Inf)
+        @test (@inferred cond(Diagonal([0, 0]), p)) == Inf
+    end
+    @test (@inferred cond(Diagonal(Int8[0]))) == Inf
+    @test (@inferred cond(Diagonal([0, 2]))) == Inf
+end
+
 @testset "matrix functions of half-precision matrices" begin
     # computed in single precision and converted back, independently of the method used for the
     # computation (e.g., the eigendecomposition for Hermitian input)

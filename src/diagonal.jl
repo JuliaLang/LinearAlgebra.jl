@@ -990,7 +990,7 @@ function diag(D::Diagonal, k::Integer=0)
     return v
 end
 tr(D::Diagonal{<:Number}) = sum(D.diag)
-det(D::Diagonal{<:Number}) = prod(D.diag)
+det(D::Diagonal{T}) where {T<:Number} = prod(convert(AbstractVector{_dettype(T)}, D.diag))
 tr(D::Diagonal) = isempty(D.diag) ? zero(promote_leaf_eltypes(D.diag)) : sum(tr, D.diag)
 # for block-diagonal matrices, the empty case returns the determinant of an empty block
 det(D::Diagonal) = isempty(D.diag) ? det(zeros(promote_leaf_eltypes(D.diag), 0, 0)) : prod(det, D.diag)
@@ -1145,11 +1145,13 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
 end
 
 #Singular system
-svdvals(D::Diagonal{<:Number}) = sort!(abs.(D.diag), rev = true)
+_svdabs(x) = abs(x)
+_svdabs(x::Base.BitSigned) = abs(float(x))
+svdvals(D::Diagonal{<:Number}) = sort!(_svdabs.(D.diag), rev = true)
 svdvals(D::Diagonal) = [svdvals(v) for v in D.diag]
 function svd(D::Diagonal{T}) where {T<:Number}
     d = D.diag
-    s = abs.(d)
+    s = _svdabs.(d)
     piv = sortperm(s, rev = true)
     S = s[piv]
     Td  = _ortho_eltype(T)
