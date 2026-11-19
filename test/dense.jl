@@ -1696,10 +1696,10 @@ end
 
 @testset "cond of an all-zero integer Diagonal" begin
     for p in (1, 2, Inf)
-        @test cond(Diagonal([0, 0]), p) == Inf
+        @test (@inferred cond(Diagonal([0, 0]), p)) == Inf
     end
-    @test cond(Diagonal(Int8[0])) == Inf
-    @test cond(Diagonal([0, 2])) == Inf
+    @test (@inferred cond(Diagonal(Int8[0]))) == Inf
+    @test (@inferred cond(Diagonal([0, 2]))) == Inf
 end
 
 end # module TestDense
