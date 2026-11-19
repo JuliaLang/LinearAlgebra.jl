@@ -489,6 +489,15 @@ end # COMPREHENSIVE
     @test_throws MethodError (1 + 2im) * hessenberg(A)
 end
 
+@testset "det of small integer matrices (#1895)" begin
+    H = UpperHessenberg(Int8[100 100 100; 50 50 25; 1 2 3])
+    @test det(H) ≈ det(Matrix(H))
+    @test_throws OverflowError det(Rational.(H))
+    BH = BigInt.(H)
+    @test isa(det(BH), BigInt)
+    @test det(BH) == det(Matrix(BH))
+end
+
 @testset "exact arithmetic for rational UpperHessenberg" begin
     Hr = UpperHessenberg(Rational{Int}[1 2; 1 3])
     @test Hr \ Rational{Int}[1, 2] == [-1, 1]
