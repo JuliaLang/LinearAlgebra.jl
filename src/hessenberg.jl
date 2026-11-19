@@ -358,10 +358,10 @@ function det(F::UpperHessenberg; shift::Number=false)
 end
 
 function logabsdet(F::UpperHessenberg; shift::Number=false)
-    S = typeof(zero(eltype(H)) + μ)
+    S = typeof(zero(eltype(F)) + μ)
     _logabsdet(promote_op(/, S, S), F; shift)
 end
-_logabsdet(::Type, F; shift::Number=false) = logabsdet(lu(F + shift*I; check=false))
+_logabsdet(::Type, F::UpperHessenberg; shift::Number=false) = logabsdet(lu(F + shift*I; check=false))
 # O(m²) log-determinant based on first doing Givens RQ to put H+μI into upper-triangular form and then
 # taking the product of the diagonal entries.   The trick is that we only need O(m) temporary storage,
 # because we don't need to store the whole Givens-rotated matrix, only the most recent column.
