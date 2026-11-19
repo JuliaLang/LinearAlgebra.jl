@@ -445,9 +445,10 @@ Random.seed!(1)
                 for op in (+, -, *)
                     @test Array(op(T, T2)) ≈ op(Tfull, Tfull2)
                 end
-                A = kron(T.dv, T.dv')
-                @test T * A ≈ lmul!(T, copy(A))
-                @test A * T ≈ rmul!(copy(A), T)
+                L = T.dv * T.ev'
+                R = T.ev * T.dv'
+                @test T * L ≈ lmul!(T, copy(L))
+                @test R * T ≈ rmul!(copy(R), T)
             end
             # test pass-through of mul! for SymTridiagonal*Bidiagonal
             TriSym = SymTridiagonal(T.dv, T.ev)
