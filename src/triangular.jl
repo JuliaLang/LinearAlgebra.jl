@@ -1212,7 +1212,6 @@ function rmul!(A::AbstractMatrix, B::AbstractTriangular)
         rmul!(A, lowertriangular(B))
     end
 end
-# `_trimul!(A, A, B)` would take the destination `A` for the left triangular factor
 rmul!(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
     generic_mattrimul!(A, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
