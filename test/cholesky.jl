@@ -762,4 +762,50 @@ end
     @test_throws PosDefException cholesky(A)
 end
 
+@testset "nullspace(::CholeskyPivoted)" begin
+    @testset for elty in (Float32, Float64, ComplexF32, ComplexF64, BigFloat)
+        ε = eps(real(elty))
+        # BigFloat has no SVD: compare with the result in Float64
+        eltys = elty <: BigFloat ? Float64 : elty
+        εs = eps(real(eltys))
+        for (n, k) in ((10, 4), (10, 9), (12, 12), (40, 20))
+            X = convert(Matrix{elty}, elty <: Complex ? randn(ComplexF64, n, k) : randn(n, k))
+            # keep the full-rank case well-conditioned also in single precision
+            A = k == n ? X * X' + n * I : X * X'
+            As = convert(Matrix{eltys}, A)
+            Ns = nullspace(As)
+            s = svdvals(As)
+            κ = s[1] / s[k]
+            for uplo in (:U, :L), tol in (0.0, -1.0)
+                F = cholesky(Hermitian(A, uplo), RowMaximum(); tol, check = false)
+                N = @inferred nullspace(F)
+                @test N isa Matrix{elty}
+                # the default rtol finds the rank also when the factorization overestimates it
+                @test size(N) == (n, n - k)
+                @test norm(A * N, Inf) ≤ 100 * n * ε * opnorm(A, Inf)
+                @test N' * N ≈ I atol = 100 * ε
+                # same subspace as the SVD-based result: compare orthogonal projectors,
+                # whose perturbation scales with the condition of the nonzero part of A
+                @test norm(N * N' - Ns * Ns', Inf) ≤ 100 * n * εs * κ
+            end
+        end
+        N = nullspace(cholesky(zeros(elty, 3, 3), RowMaximum(); check = false))
+        @test N isa Matrix{elty}
+        @test N * N' == I
+        # the generic pivoted Cholesky does not support empty matrices; check = false since
+        # LAPACK.pstrf! leaves the rank of an empty matrix undefined
+        elty <: BigFloat || @test size(nullspace(cholesky(zeros(elty, 0, 0), RowMaximum(); check = false))) == (0, 0)
+    end
+    # tolerances apply to the pivots abs2(U[i,i]), and the rank is at most F.rank
+    F = cholesky([1.0 0.0; 0.0 0.81], RowMaximum())
+    @test size(nullspace(F), 2) == 0
+    @test size(nullspace(F; rtol = 0.9), 2) == 1
+    @test size(nullspace(F; atol = 0.9), 2) == 1
+    @test abs.(nullspace(F; atol = 0.9)) ≈ [0.0; 1.0;;]
+    @test size(nullspace(F; atol = 1.1), 2) == 2
+    @test size(nullspace(cholesky([1.0 0.0; 0.0 0.81], RowMaximum(); tol = 0.9, check = false)), 2) == 1
+    # a failed factorization of a non-Hermitian matrix
+    @test_throws PosDefException nullspace(cholesky([1.0 2.0; 0.0 1.0], RowMaximum(); check = false))
+end
+
 end # module TestCholesky

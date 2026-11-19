@@ -879,6 +879,54 @@ end
 rank(C::CholeskyPivoted) = C.rank
 
 """
+    nullspace(F::CholeskyPivoted; atol::Real=0, rtol::Real=n*ϵ)
+
+Compute an orthonormal basis for the nullspace of the positive semi-definite matrix `A`
+from its pivoted Cholesky factorization `F = cholesky(A, RowMaximum())`.
+
+Writing `A[F.p, F.p] ≈ U' * U` with `U = [U₁₁ U₁₂]` of size `r×n`, the columns of
+`[-U₁₁ \\ U₁₂; I]` (with rows permuted back by `F.p`) span the nullspace, and they are
+orthonormalized before being returned. The numerical rank `r` is the number of leading
+pivots `abs2(U[i,i])` that are greater than `max(atol, rtol*abs2(U[1,1]))`, but at most
+`F.rank`. The default `rtol = n*ϵ` matches the default tolerance of the factorization
+(`tol < 0`), where `n` is the size of `A` and `ϵ` is the [`eps`](@ref) of its element type.
+This makes a difference when `F` was computed with `tol = 0`, the default of `cholesky`,
+which tends to overestimate the rank.
+
+Like [`nullspace(::QRPivoted)`](@ref), this is typically faster than the SVD-based
+[`nullspace`](@ref) method for matrices but may be less reliable for ill-conditioned matrices.
+
+!!! compat "Julia 1.15"
+    The `nullspace(::CholeskyPivoted)` method requires at least Julia 1.15.
+"""
+function nullspace(F::CholeskyPivoted; atol::Real=0, rtol::Real=size(F, 1) * eps(real(float(eltype(F)))) * iszero(atol))
+    n = size(F, 1)
+    T = eltype(F)
+    n == 0 && return Matrix{T}(I, 0, 0)
+    F.info < 0 && throw(PosDefException(F.info))
+    # only the first F.rank rows of U are computed; read them directly from F.factors
+    Uf = F.uplo == 'U' ? F.factors : F.factors'
+    tol = max(atol, rtol*abs2(Uf[1,1]))
+    r = something(findfirst(i -> !(abs2(Uf[i,i]) > tol), 1:F.rank), F.rank + 1) - 1
+    U₁₁ = F.uplo == 'U' ? UpperTriangular(view(F.factors, 1:r, 1:r)) :
+                          LowerTriangular(view(F.factors, 1:r, 1:r))'
+    # A[p, p] * [-U₁₁ \ U₁₂; I] = U' * [0; U₂₂] ≈ 0
+    Y = zeros(T, n, n - r)
+    Y₁ = view(Y, 1:r, :)
+    Y₁ .= .-view(Uf, 1:r, r+1:n)
+    ldiv!(U₁₁, Y₁)
+    for j in 1:n-r
+        Y[r+j, j] = one(T)
+    end
+    # undo the symmetric pivoting in place; then orthonormalize, which commutes with
+    # row permutations (up to column signs)
+    Base.invpermuterows!(Y, copy(F.p))
+    # for r = 0, Y is a permutation of the identity and already orthonormal
+    r == 0 && return Y
+    return Matrix(qr!(Y).Q)
+end
+
+"""
     lowrankupdate!(C::Cholesky, v::AbstractVector) -> CC::Cholesky
     lowrankupdate!(C::Cholesky, V::AbstractMatrix) -> CC::Cholesky
 
