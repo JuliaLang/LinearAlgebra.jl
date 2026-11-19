@@ -579,8 +579,17 @@ Compute an orthonormal basis for the nullspace of the matrix `A` from its pivote
 factorization `F = qr(A, ColumnNorm())`. The numerical rank `r` is determined as in
 [`rank(::QRPivoted)`](@ref) with the tolerances `atol` and `rtol`. Writing
 `A[:, F.p] = Q * [R₁₁ R₁₂; 0 R₂₂]` with `R₁₁` of size `r×r`, the columns of
-`[-R₁₁ \\ R₁₂; I]` (with rows permuted back by `F.p`) span the nullspace, and they are
+`Y = [-R₁₁ \\ R₁₂; I]` (with rows permuted back by `F.p`) span the nullspace, and they are
 orthonormalized before being returned.
+
+The orthonormalization uses block classical Gram-Schmidt with reorthogonalization (BCGS2)
+in place in `Y`, which keeps the columns orthonormal to working precision as long as the
+condition number of `Y` is below `1/ϵ`. Because of its identity block, all singular values
+of `Y` are at least one and its condition number is at most `√(1 + ‖R₁₁⁻¹R₁₂‖²)`, which is
+modest in practice, but column pivoting only bounds it exponentially in the rank.
+Therefore, if `‖R₁₁⁻¹R₁₂‖` exceeds `1/(100ϵ)`, `Y` is orthonormalized by a Householder
+QR factorization instead. In that regime, the basis is orthonormal, but `A` times it is
+accurate only to about `ϵ‖R₁₁⁻¹R₁₂‖‖A‖`.
 
 Like [`rank(::QRPivoted)`](@ref), this is typically faster than the SVD-based
 [`nullspace`](@ref) method for matrices but may be less reliable for ill-conditioned matrices.
@@ -603,10 +612,58 @@ function nullspace(F::QRPivoted; atol::Real=0, rtol::Real=min(size(F)...) * eps(
     for j in 1:n-r
         Y[r+j, j] = one(T)
     end
+    # BCGS2 loses orthogonality once ϵ * cond(Y) is no longer small, where
+    # cond(Y) ≤ √(1 + ‖R₁₁ \ R₁₂‖²); fall back to Householder before that. Below this
+    # threshold BCGS2 is preferable: its residual ‖A * N‖ is never larger than Householder's
+    householder = 100 * eps(real(T)) * norm(Y₁) > 1
     # undo the column pivoting in place; then orthonormalize, which commutes with
     # row permutations (up to column signs)
     Base.invpermuterows!(Y, copy(F.p))
-    return Matrix(qr!(Y).Q)
+    k = n - r
+    k == 0 && return Y
+    householder && return Matrix(qr!(Y).Q)
+    b = min(k, T <: Complex ? 64 : 32)
+    return _bcgs2!(Y, similar(Y, k, b), similar(Y, b), b)
+end
+
+# In-place orthonormalization of the columns of Y by block classical Gram-Schmidt with
+# reorthogonalization (BCGS2), with blocks of b columns; H (k×b) and h (b) are workspace.
+# The columns stay orthonormal to working precision as long as ϵ * cond(Y) is small.
+function _bcgs2!(Y::AbstractMatrix, H::AbstractMatrix, h::AbstractVector, b::Integer)
+    k = size(Y, 2)
+    for j₀ in 1:b:k
+        J = j₀:min(j₀+b-1, k)
+        W = view(Y, :, J)
+        if j₀ == 1
+            _cgs2!(W, h)
+        else
+            Q = view(Y, :, 1:j₀-1)
+            Hⱼ = view(H, 1:j₀-1, 1:length(J))
+            # each pass projects out the previous blocks and then orthonormalizes the block
+            for _ in 1:2
+                mul!(Hⱼ, Q', W)
+                mul!(W, Q, Hⱼ, -1, 1)
+                _cgs2!(W, h)
+            end
+        end
+    end
+    return Y
+end
+# column-wise CGS2; h is workspace of length ≥ size(W, 2)
+function _cgs2!(W::AbstractMatrix, h::AbstractVector)
+    for j in axes(W, 2)
+        w = view(W, :, j)
+        if j > 1
+            Q = view(W, :, 1:j-1)
+            hⱼ = view(h, 1:j-1)
+            for _ in 1:2
+                mul!(hⱼ, Q', w)
+                mul!(w, Q, hⱼ, -1, 1)
+            end
+        end
+        rmul!(w, inv(norm(w)))
+    end
+    return W
 end
 
 """
