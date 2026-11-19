@@ -1421,4 +1421,29 @@ end
     @test issuccess(cholesky(SymTridiagonal([2.0, 2.0], [1.0]); check=false))
 end
 
+@testset "svd of a lower Bidiagonal (#1927)" begin
+    # A lower Bidiagonal's SVD is routed through its upper (transpose) form; check it matches the dense
+    # result for both algorithms, and that the overflow-regime case returns instead of looping forever
+    # in LAPACK's lower-to-upper rotation (Reference-LAPACK #1409).
+    for alg in (LinearAlgebra.DivideAndConquer(), LinearAlgebra.QRIteration())
+        for (dv, ev) in (([2.0, 3.0, 5.0], [1.0, 2.0]),
+                         ([1.0, 1.0, 1.0, 1.0], [0.5, -0.5, 0.5]),
+                         ([4.0, -2.0], [3.0]))
+            M = Bidiagonal(dv, ev, :L)
+            F = svd(M; alg)
+            @test F.S ≈ svdvals(Matrix(M))
+            @test F.U * Diagonal(F.S) * F.Vt ≈ Matrix(M)
+            @test F.U'F.U ≈ I
+            @test F.Vt * F.Vt' ≈ I
+        end
+    end
+    fm = floatmax(Float64)
+    Ml = Bidiagonal([1.0, fm, 3.0], [2.0, fm], :L)
+    @test all(isfinite, Ml.dv) && all(isfinite, Ml.ev)
+    for alg in (LinearAlgebra.DivideAndConquer(), LinearAlgebra.QRIteration())
+        Fl = svd(Ml; alg)                                   # must return (used to hang)
+        @test Fl.S == svd(Bidiagonal([1.0, fm, 3.0], [2.0, fm], :U); alg).S
+    end
+end
+
 end # module TestBidiagonal

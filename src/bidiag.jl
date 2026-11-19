@@ -277,6 +277,15 @@ end
 svdvals!(M::Bidiagonal{<:BlasReal}) = LAPACK.bdsdc!(M.uplo, 'N', M.dv, M.ev)[1]
 # M is square, so the full and the thin SVD coincide and `full` has no effect
 function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Number=zero(real(eltype(M))), rtol::Real=0)
+    if M.uplo == 'L'
+        # A lower bidiagonal is the transpose of the upper bidiagonal with the same diagonals, so its
+        # SVD is obtained from the upper form by swapping the singular vectors. Routing through the upper
+        # form also avoids LAPACK's internal lower-to-upper rotation, which can loop forever on finite
+        # inputs in the overflow regime (Reference-LAPACK #1409, reached from finite data here). With
+        # svd(Mᵀ) = SVD(U, S, Vᵀ), svd(M) = SVD(V, S, Uᵀ).
+        F = svd!(Bidiagonal(M.dv, M.ev, :U); full, alg, atol, rtol)
+        return SVD(permutedims(F.Vt), F.S, permutedims(F.U))
+    end
     d, U, Vt = _svd!(M, alg)
     d[_count_svdvals(d, atol, rtol)+1:end] .= 0
     return SVD(U, d, Vt)
