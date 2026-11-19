@@ -1145,7 +1145,6 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
 end
 
 #Singular system
-# `abs` of `typemin` wraps around for fixed-width signed integers
 _svdabs(x) = abs(x)
 _svdabs(x::Base.BitSigned) = abs(float(x))
 svdvals(D::Diagonal{<:Number}) = sort!(_svdabs.(D.diag), rev = true)
