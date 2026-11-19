@@ -620,6 +620,8 @@ end
             @test eltype(eigvals(MD)) == Tλ
         end
     end
+    # singular and nonsingular rational diagonals give the same type of condition number
+    @test (@inferred cond(Diagonal([0//1, 0//1]))) === Inf
     # immutable diagonals, also ones that change under sorting
     for d in (1:4, 4:-1:1, -3:2, 3.5:-1.0:0.5, Int8(-128):Int8(-125), Float16(1):Float16(4), FillArrays.Fill(-2.0, 3))
         D = Diagonal(d)
