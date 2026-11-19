@@ -648,6 +648,13 @@ end
     @test E.vectors isa Matrix{Vector{Float16}}
 end
 
+@testset "issue #1875" begin
+    D = Diagonal(Int8[-128, 3, 0])
+    @test svdvals(D) == [128, 3, 0]
+    @test svd(D).S == [128, 3, 0]
+    @test rank(D) == 2
+end
+
 @testset "eigmin (#27847)" begin
     for _ in 1:100
         d = randn(rand(1:10))
