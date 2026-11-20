@@ -243,16 +243,30 @@ const LeftAbsorbingFuncs = Union{
     typeof(/), typeof(div), typeof(mod), typeof(rem)
 }
 
-# For such functions, we add cases not covered above, and fallback otherwise
-fzero(::ZeroAbsorbingFuncs, ::AbstractArray{T}) where {T<:Number} = Some(haszero(T) ? zero(T) : nothing)
-fzero(::ZeroAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
-fzero(::ZeroAbsorbingFuncs, x) = fzero(x)
-# Each function in LeftAbsorbingFuncs returns NaN/Inf/error when zero is on the right.
-# We check for any zeros and return nothing if true. This falls back to a dense matrix
-# as with the scalar case.
-fzero(::LeftAbsorbingFuncs, a::AbstractArray{T}) where {T<:Number} = any(iszero, a) ? nothing : Some(one(T))
-fzero(::LeftAbsorbingFuncs, s::StructuredMatrix) = fzero(s)
-fzero(::LeftAbsorbingFuncs, x) = fzero(x)
+const AbsorbingFuncs = Union{ZeroAbsorbingFuncs, LeftAbsorbingFuncs}
+
+# For such functions, a structural zero absorbs the values of dense arguments, provided
+# that this gives the same result as broadcasting over a dense matrix: `0 * x` is zero only
+# for finite `x`, and `0 / x` only for nonzero `x` that is not NaN. We then substitute a
+# value for which this holds. Otherwise, this falls back to a dense matrix.
+isabsorbed(::ZeroAbsorbingFuncs, x) = isfinite(x)
+isabsorbed(::LeftAbsorbingFuncs, x) = !(iszero(x) || isnan(x))
+absorbedvalue(::ZeroAbsorbingFuncs, ::Type{T}) where {T} = zero(T)
+absorbedvalue(::LeftAbsorbingFuncs, ::Type{T}) where {T} = one(T)
+function fzero_absorbed(f::AbsorbingFuncs, ::Type{T}, a) where {T}
+    T <: Number && haszero(T) && all(x -> isabsorbed(f, x), a) || return nothing
+    return Some(absorbedvalue(f, T))
+end
+fzero(f::AbsorbingFuncs, a::AbstractArray{T}) where {T<:Number} = fzero_absorbed(f, T, a)
+fzero(::AbsorbingFuncs, s::StructuredMatrix) = fzero(s)
+# A nested broadcast whose value is not known is absorbed like a dense array of its values.
+function fzero(f::AbsorbingFuncs, bc::Broadcasted)
+    v = fzero(bc)
+    isnothing(v) || return v
+    T = Broadcast.combine_eltypes(bc.f, bc.args)
+    return fzero_absorbed(f, T, Broadcast.instantiate(bc))
+end
+fzero(::AbsorbingFuncs, x) = fzero(x)
 
 function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:LeftAbsorbingFuncs, <:Tuple{StructuredMatrix, Vararg{Any}}})
     args = map(x -> fzero(bc.f, x), bc.args)
@@ -260,9 +274,19 @@ function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:LeftAbsorbingFuncs, <:T
 end
 
 function fzero(bc::Broadcast.Broadcasted{<:Union{Nothing, Broadcast.BroadcastStyle}, <:Any, <:ZeroAbsorbingFuncs})
-    args = map(x -> fzero(bc.f, x), bc.args)
+    args = map(fzero, bc.args)::Tuple
+    if any(isnothing, args)
+        # A structural zero lets us ignore the values of dense array arguments.
+        any(map(isstructuralzero, bc.args, args)) || return nothing
+        args = map((x, v) -> isnothing(v) ? fzero(bc.f, x) : v, bc.args, args)
+    end
     return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
 end
+function isstructuralzero(::Union{StructuredMatrix, Broadcast.Broadcasted}, v::Some)
+    z = something(v)
+    return iszerodefined(typeof(z)) ? iszero(z) : isequal(z, 0)
+end
+isstructuralzero(x, v) = false
 
 function fzero(bc::Broadcast.Broadcasted)
     # Type-assert to prevent inference from widening the result type to AbstractArray.
