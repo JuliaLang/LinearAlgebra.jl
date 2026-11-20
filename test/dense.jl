@@ -1712,4 +1712,11 @@ end
     @test (@inferred cond(Diagonal([0, 2]))) == Inf
 end
 
+@testset "matrix functions on diagonals outside the real domain" begin
+    A = [0.5 0.0;0.0 2.0]
+    for f ∈ (acos, asin, acosh, atanh)
+        @test f(A) == f(complex(A))
+    end
+end
+
 end # module TestDense
