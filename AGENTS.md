@@ -202,7 +202,15 @@ default. The rules:
   write shows. Use the public interface (`F.R0`), not internal fields.
 - **Use an independent reference.** Compare against `Matrix(A)` or another code path
   that does not run through the code under test; `lu(Matrix(A))` or a LAPACK result for
-  a generic-eltype computation.
+  a generic-eltype computation. Another output of the same code is no reference: the
+  upper and lower forms of one method, or two calls that reach the same LAPACK routine or
+  post-processing, can be wrong in the same way and still compare equal. Prefer a closed
+  form where one exists. For a factorization, also check its defining properties
+  (reconstruction, orthogonality, ordering), but `≈` on a reconstruction only bounds
+  errors relative to the largest entry: check small singular values or eigenvalues
+  against a closed form or a `BigFloat` computation. An expected value should itself be
+  checkable (`F.S[1] == Inf` for an overflowing singular value), so that a wrong answer
+  both sides share is rejected.
 - **Inputs are fixed or seeded.** Julia's CI fails the stdlib bump on a test that fails
   for some draws. Prefer literals and constructions with a guaranteed property.
   `Rational{Int}` overflows easily; use `BigInt`.
