@@ -1457,4 +1457,11 @@ end
     @test A^0.5 ≈ Diagonal([im, sqrt(2)])
 end
 
+@testset "matrix functions on diagonals outside the real domain" begin
+    A = [0.5 0.0;0.0 2.0]
+    for f ∈ (acos, asin, acosh, atanh)
+        @test f(A) == f(complex(A))
+    end
+end
+
 end # module TestDense
