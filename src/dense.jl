@@ -1439,7 +1439,11 @@ julia> acos(cos([0.5 0.1; -0.2 0.3]))
 """
 function acos(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(acos, A)
+        if eltype(A) <: Real && any(x -> abs(x) > 1, diagview(A))
+            return applydiagonal(acos ∘ complex, A)
+        else
+            return applydiagonal(acos, A)
+        end
     elseif ishermitian(A)
         return _safe_parent(acos(Hermitian(A)))
     end
@@ -1471,7 +1475,11 @@ julia> asin(sin([0.5 0.1; -0.2 0.3]))
 """
 function asin(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(asin, A)
+        if eltype(A) <: Real && any(x -> abs(x) > 1, diagview(A))
+            return applydiagonal(asin ∘ complex, A)
+        else
+            return applydiagonal(asin, A)
+        end
     elseif ishermitian(A)
         asinHermA = asin(Hermitian(A))
         P = parent(asinHermA)
@@ -1531,7 +1539,11 @@ logarithmic formulas used to compute this function, see [^AH16_4].
 """
 function acosh(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(acosh, A)
+        if eltype(A) <: Real && any(<(1), diagview(A))
+            return applydiagonal(acosh ∘ complex, A)
+        else
+            return applydiagonal(acosh, A)
+        end
     elseif ishermitian(A)
         return _safe_parent(acosh(Hermitian(A)))
     end
@@ -1577,7 +1589,11 @@ logarithmic formulas used to compute this function, see [^AH16_6].
 """
 function atanh(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(atanh, A)
+        if eltype(A) <: Real && any(x -> abs(x) > 1, diagview(A))
+            return applydiagonal(atanh ∘ complex, A)
+        else
+            return applydiagonal(atanh, A)
+        end
     elseif ishermitian(A)
         return _safe_parent(atanh(Hermitian(A)))
     end
