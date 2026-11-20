@@ -1207,11 +1207,13 @@ end
 rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _trimul!(A, A, B)
 function rmul!(A::AbstractMatrix, B::AbstractTriangular)
     if istriu(B)
-        _trimul!(A, A, uppertriangular(B))
+        rmul!(A, uppertriangular(B))
     else
-        _trimul!(A, A, lowertriangular(B))
+        rmul!(A, lowertriangular(B))
     end
 end
+rmul!(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
+    generic_mattrimul!(A, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 for TC in (:AbstractVector, :AbstractMatrix)
     @eval @inline function _mul!(C::$TC, A::AbstractTriangular, B::AbstractVector, alpha::Number, beta::Number)
@@ -1968,11 +1970,13 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
     return C
 end
 
-# these are needed because we don't keep track of left- and right-multiplication in tritrimul!
-rmul!(A::UpperTriangular, B::UpperTriangular)     = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::UpperTriangular, B::UnitUpperTriangular) = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::LowerTriangular, B::LowerTriangular)     = LowerTriangular(rmul!(tril!(A.data), B))
-rmul!(A::LowerTriangular, B::UnitLowerTriangular) = LowerTriangular(rmul!(tril!(A.data), B))
+# structure-preserving products are computed in the parent, where BLAS may apply
+for (TA, TB) in ((:UpperTriangular, :UpperTriangular), (:UpperTriangular, :UnitUpperTriangular),
+                 (:UnitUpperTriangular, :UnitUpperTriangular),
+                 (:LowerTriangular, :LowerTriangular), (:LowerTriangular, :UnitLowerTriangular),
+                 (:UnitLowerTriangular, :UnitLowerTriangular))
+    @eval rmul!(A::$TA, B::$TB) = $TA(rmul!(full!(A), B))
+end
 
 # Promotion
 ## Promotion methods in matmul don't apply to triangular multiplication since
