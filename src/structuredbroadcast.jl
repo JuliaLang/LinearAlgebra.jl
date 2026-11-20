@@ -100,8 +100,9 @@ Broadcast.BroadcastStyle(T::StructuredMatrixStyle{Matrix}, ::StructuredMatrixSty
 Broadcast.BroadcastStyle(::StructuredMatrixStyle, T::StructuredMatrixStyle{Matrix}) = T
 Broadcast.BroadcastStyle(T::StructuredMatrixStyle{Matrix}, ::StructuredMatrixStyle{Matrix}) = T
 
-# All other combinations fall back to the default style
-Broadcast.BroadcastStyle(::StructuredMatrixStyle, ::StructuredMatrixStyle) = DefaultArrayStyle{2}()
+# All other combinations give a dense result, with the sticky `StructuredMatrixStyle{Matrix}`:
+# a `DefaultArrayStyle{2}` would lose to a third structured argument, whose style would then win
+Broadcast.BroadcastStyle(::StructuredMatrixStyle, ::StructuredMatrixStyle) = StructuredMatrixStyle{Matrix}()
 
 # And a definition akin to similar using the structured type:
 structured_broadcast_alloc(bc, ::Type{Diagonal}, ::Type{ElType}, sz::NTuple{2,Integer}) where {ElType} =
