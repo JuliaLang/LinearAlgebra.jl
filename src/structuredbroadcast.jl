@@ -362,8 +362,17 @@ function copy(bc::Broadcasted{StructuredMatrixStyle{Diagonal}})
     end
 end
 
+# Unalias the broadcast arguments from the destination, as `Broadcast.preprocess` does in the
+# generic `copyto!`: the banded methods below write one band after the other, so an argument that
+# shares band vectors with `dest` (e.g. `T .= T'` for a `Tridiagonal`) would be read after being
+# overwritten. An argument that is `dest` itself is left alone, as elementwise writes are safe.
+_unalias_bc(dest, bc::Broadcasted) =
+    Broadcasted(bc.style, bc.f, map(arg -> _unalias_bc(dest, arg), bc.args), bc.axes)
+_unalias_bc(dest, x) = Broadcast.broadcast_unalias(dest, x)
+
 function copyto!(dest::Diagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
+    bc = _unalias_bc(dest, bc)
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
     for i in eachindex(dest.diag)
@@ -374,6 +383,7 @@ end
 
 function copyto!(dest::Bidiagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
+    bc = _unalias_bc(dest, bc)
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
     for i in eachindex(dest.dv)
@@ -393,6 +403,7 @@ end
 
 function copyto!(dest::SymTridiagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
+    bc = _unalias_bc(dest, bc)
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
     for i in axs[1]
@@ -409,6 +420,7 @@ end
 
 function copyto!(dest::Tridiagonal, bc::Broadcasted{<:StructuredMatrixStyle})
     isvalidstructbc(dest, bc) || return copyto!(dest, convert(Broadcasted{Nothing}, bc))
+    bc = _unalias_bc(dest, bc)
     axs = axes(dest)
     axes(bc) == axs || Broadcast.throwdm(axes(bc), axs)
     for i in eachindex(dest.d)

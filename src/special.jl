@@ -362,7 +362,9 @@ dot(x::AbstractVector, A::RealHermSymComplexSym{<:Real,<:Diagonal}, y::AbstractV
 # O(N) implementations using the banded structure
 function copyto!(dest::BandedMatrix, src::BandedMatrix)
     if axes(dest) == axes(src)
-        _copyto_banded!(dest, src)
+        # the bands are copied one after the other, so a source sharing band vectors with `dest`
+        # (e.g. `copyto!(T, T')` for a `Tridiagonal`) must be unaliased first
+        _copyto_banded!(dest, Base.unalias(dest, src))
     else
         @invoke copyto!(dest::AbstractMatrix, src::AbstractMatrix)
     end
