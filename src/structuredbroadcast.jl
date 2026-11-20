@@ -100,8 +100,7 @@ Broadcast.BroadcastStyle(T::StructuredMatrixStyle{Matrix}, ::StructuredMatrixSty
 Broadcast.BroadcastStyle(::StructuredMatrixStyle, T::StructuredMatrixStyle{Matrix}) = T
 Broadcast.BroadcastStyle(T::StructuredMatrixStyle{Matrix}, ::StructuredMatrixStyle{Matrix}) = T
 
-# All other combinations give a dense result, with the sticky `StructuredMatrixStyle{Matrix}`:
-# a `DefaultArrayStyle{2}` would lose to a third structured argument, whose style would then win
+# All other combinations give a dense result, with the sticky `StructuredMatrixStyle{Matrix}`
 Broadcast.BroadcastStyle(::StructuredMatrixStyle, ::StructuredMatrixStyle) = StructuredMatrixStyle{Matrix}()
 
 # And a definition akin to similar using the structured type:
