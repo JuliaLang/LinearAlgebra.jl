@@ -622,7 +622,7 @@ function schurpow(A::AbstractMatrix, p)
         end
     else
         rA = convert(AbstractMatrix{float(T)}, A)
-        S, Q, d = Schur{Complex}(schur(rA))
+        S, Q, d = Schur{Complex}(_schur_single(rA))
         # Integer part
         R = integerpow(S, floor(p))
         # Real part
@@ -1045,7 +1045,7 @@ function log(A::AbstractMatrix)
     elseif istriu(A)
         return triu!(parent(log(UpperTriangular(A))))
     elseif isreal(A)
-        SchurF = schur(real(A))
+        SchurF = _schur_single(real(A))
         if istriu(SchurF.T)
             logA = SchurF.Z * log(UpperTriangular(SchurF.T)) * SchurF.Z'
         else
@@ -1060,7 +1060,7 @@ function log(A::AbstractMatrix)
         end
         return eltype(A) <: Complex ? complex(logA) : logA
     else
-        SchurF = schur(A)
+        SchurF = _schur_single(A)
         return SchurF.vectors * log(UpperTriangular(SchurF.T)) * SchurF.vectors'
     end
 end
@@ -1132,7 +1132,7 @@ function sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Real,Compl
     elseif istriu(A)
         return triu!(parent(sqrt(UpperTriangular(A); check)))
     elseif isreal(A)
-        SchurF = schur(real(A))
+        SchurF = _schur_single(real(A))
         if istriu(SchurF.T)
             sqrtA = SchurF.Z * sqrt(UpperTriangular(SchurF.T); check) * SchurF.Z'
         else
@@ -1148,7 +1148,7 @@ function sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Real,Compl
         end
         return eltype(A) <: Complex ? complex(sqrtA) : sqrtA
     else
-        SchurF = schur(A)
+        SchurF = _schur_single(A)
         return SchurF.vectors * sqrt(UpperTriangular(SchurF.T); check) * SchurF.vectors'
     end
 end
@@ -1197,7 +1197,7 @@ function cbrt(A::AbstractMatrix{<:Real})
     elseif issymmetric(A)
         return copytri_maybe_inplace(parent(cbrt(Symmetric(A))), 'U')
     else
-        S = schur(A)
+        S = _schur_single(A)
         return S.Z * _cbrt_quasi_triu!(S.T) * S.Z'
     end
 end
@@ -1525,7 +1525,7 @@ function acos(A::AbstractMatrix)
     elseif ishermitian(A)
         return _safe_parent(acos(Hermitian(A)))
     end
-    SchurF = Schur{Complex}(schur(A))
+    SchurF = Schur{Complex}(_schur_single(A))
     U = UpperTriangular(SchurF.T)
     R = triu!(parent(-im * log(U + im * sqrt(I - U^2))))
     return SchurF.Z * R * SchurF.Z'
@@ -1563,7 +1563,7 @@ function asin(A::AbstractMatrix)
         P = parent(asinHermA)
         return isa(asinHermA, Hermitian) ? copytri_maybe_inplace(P, 'U', true) : P
     end
-    SchurF = Schur{Complex}(schur(A))
+    SchurF = Schur{Complex}(_schur_single(A))
     U = UpperTriangular(SchurF.T)
     R = triu!(parent(-im * log(im * U + sqrt(I - U^2))))
     return SchurF.Z * R * SchurF.Z'
@@ -1596,7 +1596,7 @@ function atan(A::AbstractMatrix)
         P = parent(atan(Hermitian(A)))
         return copytri_maybe_inplace(P, 'U', true)
     end
-    SchurF = Schur{Complex}(schur(A))
+    SchurF = Schur{Complex}(_schur_single(A))
     U = im * UpperTriangular(SchurF.T)
     R = triu!(parent(log((I + U) / (I - U)) / 2im))
     retmat = SchurF.Z * R * SchurF.Z'
@@ -1625,7 +1625,7 @@ function acosh(A::AbstractMatrix)
     elseif ishermitian(A)
         return _safe_parent(acosh(Hermitian(A)))
     end
-    SchurF = Schur{Complex}(schur(A))
+    SchurF = Schur{Complex}(_schur_single(A))
     U = UpperTriangular(SchurF.T)
     R = triu!(parent(log(U + sqrt(U - I) * sqrt(U + I))))
     return SchurF.Z * R * SchurF.Z'
@@ -1646,7 +1646,7 @@ function asinh(A::AbstractMatrix)
         P = parent(asinh(Hermitian(A)))
         return copytri_maybe_inplace(P, 'U', true)
     end
-    SchurF = Schur{Complex}(schur(A))
+    SchurF = Schur{Complex}(_schur_single(A))
     U = UpperTriangular(SchurF.T)
     R = triu!(parent(log(U + sqrt(I + U^2))))
     retmat = SchurF.Z * R * SchurF.Z'
@@ -1675,7 +1675,7 @@ function atanh(A::AbstractMatrix)
     elseif ishermitian(A)
         return _safe_parent(atanh(Hermitian(A)))
     end
-    SchurF = Schur{Complex}(schur(A))
+    SchurF = Schur{Complex}(_schur_single(A))
     U = UpperTriangular(SchurF.T)
     R = triu!(parent(log((I + U) / (I - U)) / 2))
     return SchurF.Z * R * SchurF.Z'
