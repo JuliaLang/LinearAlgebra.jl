@@ -1018,6 +1018,17 @@ end
     end
 end
 
+@testset "issue #1948" begin
+    # views of different parents within one buffer are told apart by their memory ranges
+    buf = rand(9); A = rand(3, 3)
+    x0 = buf[1:3]
+    y = view(reshape(view(buf, 4:9), 3, 2), :, 1)
+    @test mul!(y, A, view(buf, 1:3)) ≈ A * x0
+    @test mul!(y, A, view(buf, 3:-1:1)) ≈ A * reverse(x0)
+    @test_throws ArgumentError mul!(y, A, view(buf, 2:4))
+    @test_throws ArgumentError mul!(y, A, view(buf, 6:-1:4))
+end
+
 @testset "lmul!/rmul! with factors that share memory" begin
     @testset for T in (Float64, BigFloat, (@static COMPREHENSIVE ? (ComplexF64,) : ())...)
         M = rand(T, 4, 4)
