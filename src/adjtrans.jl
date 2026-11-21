@@ -465,14 +465,20 @@ Broadcast.broadcast_preserving_zero_d(f, tvs::Union{Number,Adjoint{<:Any,<:Trans
 
 ### reductions
 # faster to sum the Array than to work through the wrapper (but only in commutative reduction ops as in Base/permuteddimsarray.jl)
+# an empty wrapper reduces like the empty parent would (mapreduce_empty on the original `f`),
+# instead of forwarding `f∘transpose`/`f∘adjoint`, for which no empty-reduction method exists
 Base._mapreduce_dim(f, op::CommutativeOps, init::Base._InitialValue, A::Transpose, dims::Colon) =
+    isempty(A) ? Base.mapreduce_empty_iter(f, op, A, Base.IteratorEltype(A)) :
     Base._mapreduce_dim(f∘transpose, op, init, parent(A), dims)
 Base._mapreduce_dim(f, op::CommutativeOps, init::Base._InitialValue, A::Adjoint, dims::Colon) =
+    isempty(A) ? Base.mapreduce_empty_iter(f, op, A, Base.IteratorEltype(A)) :
     Base._mapreduce_dim(f∘adjoint, op, init, parent(A), dims)
 # in prod, use fast path only in the commutative case to avoid surprises
 Base._mapreduce_dim(f::typeof(identity), op::Union{typeof(*),typeof(Base.mul_prod)}, init::Base._InitialValue, A::Transpose{<:Union{Real,Complex}}, dims::Colon) =
+    isempty(A) ? Base.mapreduce_empty_iter(f, op, A, Base.IteratorEltype(A)) :
     Base._mapreduce_dim(f∘transpose, op, init, parent(A), dims)
 Base._mapreduce_dim(f::typeof(identity), op::Union{typeof(*),typeof(Base.mul_prod)}, init::Base._InitialValue, A::Adjoint{<:Union{Real,Complex}}, dims::Colon) =
+    isempty(A) ? Base.mapreduce_empty_iter(f, op, A, Base.IteratorEltype(A)) :
     Base._mapreduce_dim(f∘adjoint, op, init, parent(A), dims)
 # count allows for optimization only if the parent array has Bool eltype
 Base._count(::typeof(identity), A::Transpose{Bool}, ::Colon, init) = Base._count(identity, parent(A), :, init)
