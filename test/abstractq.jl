@@ -186,4 +186,18 @@ end
     end
 end
 
+@testset "multiplication with abstract element types" begin
+    # the result keeps the promoted abstract element type, as for the dense Q
+    U = [4.0 1 0; 1 3 1; 0 1 2]
+    Q = qr(U).Q
+    MQ = Matrix(Q)
+    bn = Number[1, 2.0, 3]
+    Br = Real[1 2; 3 4.0; 5 6]
+    for (A, B, MA, MB, T) in ((Q, bn, MQ, bn, Number), (Q, Br, MQ, Br, Real), (Br', Q, Br', MQ, Real),
+                              (Q', bn, MQ', bn, Number), (lq(U), bn, U, bn, Number))
+        @test eltype(A * B) === T
+        @test A * B ≈ MA * MB
+    end
+end
+
 end # module
