@@ -549,31 +549,35 @@ function _swap_cols!(B::AbstractMatrix, i::Integer, j::Integer)
 end
 
 function rdiv!(A::AbstractVecOrMat, B::LU)
+    check_inplace_aliasing(A, B)
     rdiv!(rdiv!(A, UpperTriangular(B.factors)), UnitLowerTriangular(B.factors))
     _apply_inverse_ipiv_cols!(B, A)
 end
 
 ldiv!(A::LU{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
-    LAPACK.getrs!('N', A.factors, A.ipiv, B)
+    (check_inplace_aliasing(B, A); LAPACK.getrs!('N', A.factors, A.ipiv, B))
 
 function ldiv!(A::LU, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
     _apply_ipiv_rows!(A, B)
     ldiv!(UpperTriangular(A.factors), ldiv!(UnitLowerTriangular(A.factors), B))
 end
 
 ldiv!(transA::TransposeFactorization{T,<:LU{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
-    (A = transA.parent; LAPACK.getrs!('T', A.factors, A.ipiv, B))
+    (check_inplace_aliasing(B, transA); (A = transA.parent; LAPACK.getrs!('T', A.factors, A.ipiv, B)))
 
 function ldiv!(transA::TransposeFactorization{<:Any,<:LU}, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, transA)
     A = transA.parent
     ldiv!(transpose(UnitLowerTriangular(A.factors)), ldiv!(transpose(UpperTriangular(A.factors)), B))
     _apply_inverse_ipiv_rows!(A, B)
 end
 
 ldiv!(adjA::AdjointFactorization{T,<:LU{T,<:StridedMatrix}}, B::StridedVecOrMat{T}) where {T<:BlasComplex} =
-    (A = adjA.parent; LAPACK.getrs!('C', A.factors, A.ipiv, B))
+    (check_inplace_aliasing(B, adjA); (A = adjA.parent; LAPACK.getrs!('C', A.factors, A.ipiv, B)))
 
 function ldiv!(adjA::AdjointFactorization{<:Any,<:LU}, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, adjA)
     A = adjA.parent
     ldiv!(adjoint(UnitLowerTriangular(A.factors)), ldiv!(adjoint(UpperTriangular(A.factors)), B))
     _apply_inverse_ipiv_rows!(A, B)
@@ -740,6 +744,7 @@ end
 
 # See dgtts2.f
 function ldiv!(A::LU{T,Tridiagonal{T,V}}, B::AbstractVecOrMat) where {T,V}
+    check_inplace_aliasing(B, A)
     require_one_based_indexing(B)
     n = size(A,1)
     if n != size(B,1)
@@ -772,6 +777,7 @@ function ldiv!(A::LU{T,Tridiagonal{T,V}}, B::AbstractVecOrMat) where {T,V}
 end
 
 function ldiv!(transA::TransposeFactorization{<:Any,<:LU{T,Tridiagonal{T,V}}}, B::AbstractVecOrMat) where {T,V}
+    check_inplace_aliasing(B, transA)
     require_one_based_indexing(B)
     A = transA.parent
     n = size(A,1)
@@ -809,6 +815,7 @@ end
 
 # Ac_ldiv_B!(A::LU{T,Tridiagonal{T}}, B::AbstractVecOrMat) where {T<:Real} = At_ldiv_B!(A,B)
 function ldiv!(adjA::AdjointFactorization{<:Any,<:LU{T,Tridiagonal{T,V}}}, B::AbstractVecOrMat) where {T,V}
+    check_inplace_aliasing(B, adjA)
     require_one_based_indexing(B)
     A = adjA.parent
     n = size(A,1)
@@ -890,3 +897,6 @@ AbstractMatrix(F::LU{T,Tridiagonal{T,V}}) where {T,V} = Tridiagonal(F)
 AbstractArray(F::LU{T,Tridiagonal{T,V}}) where {T,V} = AbstractMatrix(F)
 Matrix(F::LU{T,Tridiagonal{T,V}}) where {T,V} = Array(AbstractArray(F))
 Array(F::LU{T,Tridiagonal{T,V}}) where {T,V} = Matrix(F)
+
+# the arrays the factorization is stored in, for the aliasing checks (see `_mightalias`)
+_aliasparts(F::LU) = (_aliasparts(getfield(F, :factors))..., _aliasparts(getfield(F, :ipiv))...)
