@@ -990,7 +990,7 @@ end
         @test_throws ArgumentError mul!(A, B, W(A))
     end
     @test_throws ArgumentError mul!(A, A, Tridiagonal(B))
-    @test_throws ArgumentError mul!(A, Diagonal(B), A)
+    @test_throws ArgumentError mul!(A, Diagonal(view(A, :, 1)), A)
     Ab = big.(A)
     @test_throws ArgumentError mul!(Ab, Ab, big.(B))
     # non-overlapping views of the same parent do not alias
@@ -1000,21 +1000,88 @@ end
     @static if COMPREHENSIVE
         wrappers = (identity, adjoint, transpose, M -> view(M, :, :), Symmetric, Hermitian,
             UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular, UpperHessenberg)
-        others = (M -> M, Diagonal, M -> Bidiagonal(M, :U), Tridiagonal, M -> SymTridiagonal(Symmetric(M)))
+        others = (M -> M, Tridiagonal, M -> SymTridiagonal(Symmetric(M)))
         @testset for T in (Float64, ComplexF64, BigFloat), n in (2, 5)
-            for W in wrappers, O in others
-                C = rand(T, n, n); X = O(rand(T, n, n))
-                @test_throws ArgumentError mul!(C, W(C), X)
+            for W in wrappers
+                for O in others
+                    C = rand(T, n, n); X = O(rand(T, n, n))
+                    @test_throws ArgumentError mul!(C, W(C), X)
+                    @test_throws ArgumentError mul!(C, W(C), X, 2, 3)
+                end
+                C = rand(T, n, n); X = rand(T, n, n); v = rand(T, n)
                 @test_throws ArgumentError mul!(C, X, W(C))
-                @test_throws ArgumentError mul!(C, W(C), X, 2, 3)
                 @test_throws ArgumentError mul!(C, X, W(C), 2, 3)
-                @test_throws ArgumentError mul!(C, W(C), W(C))
-                v = rand(T, n)
-                @test_throws ArgumentError mul!(v, X, v)
-                @test_throws ArgumentError mul!(v, X, v, 2, 3)
+                @test_throws ArgumentError mul!(C, W(C), W(C), 2, 3)
                 @test_throws ArgumentError mul!(view(C, :, 1), W(C), v)
             end
+            X = rand(T, n, n); v = rand(T, n)
+            @test_throws ArgumentError mul!(v, X, v)
+            @test_throws ArgumentError mul!(v, X, v, 2, 3)
         end
+    end
+end
+
+@testset "mul! with a factor that is applied in place" begin
+    @testset for T in (Float64, BigFloat, (@static COMPREHENSIVE ? (ComplexF64,) : ())...)
+        n = 4
+        M = rand(T, n, n)
+        factors = (UpperTriangular(M), UnitLowerTriangular(M), UpperTriangular(M)', Diagonal(M[:, 1]),
+            Bidiagonal(M[:, 1], M[1:n-1, 2], :U), Bidiagonal(M[:, 1], M[1:n-1, 2], :L))
+        for X in factors
+            Xm = Matrix(X)
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C, X, C) ≈ Xm * C0
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C, C, X) ≈ C0 * Xm
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C', X, C') ≈ Xm * C0'
+            v = rand(T, n); v0 = copy(v)
+            @test mul!(v, X, v) ≈ Xm * v0
+            # the same holds for a view or a wrapper that reads C at the same positions
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C, X, view(C, :, :)) ≈ Xm * C0
+            v = rand(T, n); v0 = copy(v)
+            @test mul!(v, X, view(v, :)) ≈ Xm * v0
+            C = rand(T, n, n); C0 = triu(C)
+            @test mul!(C, X, UpperTriangular(C)) ≈ Xm * C0
+            C = rand(T, n, n); C0 = triu(C)
+            if X isa LinearAlgebra.AbstractTriangular # of two triangular factors, the left one is applied in place
+                @test_throws ArgumentError mul!(C, UpperTriangular(C), X)
+            else
+                @test mul!(C, UpperTriangular(C), X) ≈ C0 * Xm
+            end
+            # a partial overlap is only fine for the BLAS methods, which copy the other factor
+            # into the output first
+            V = rand(T, n, n+1); B0 = V[:, 1:n]
+            W = rand(T, n+1, n); A0 = W[1:n, :]
+            if X isa LinearAlgebra.AbstractTriangular && T <: LinearAlgebra.BlasFloat
+                @test mul!(view(V, :, 2:n+1), X, view(V, :, 1:n)) ≈ Xm * B0
+                @test mul!(view(W, 2:n+1, :), view(W, 1:n, :), X) ≈ A0 * Xm
+            else
+                @test_throws ArgumentError mul!(view(V, :, 2:n+1), X, view(V, :, 1:n))
+                @test_throws ArgumentError mul!(view(W, 2:n+1, :), view(W, 1:n, :), X)
+            end
+            C = rand(T, n, n); C0 = copy(C)
+            if X isa Union{Diagonal,Bidiagonal}
+                @test mul!(C, X, C, 2, 3) ≈ 2Xm * C0 + 3C0
+                C = copy(C0)
+                @test mul!(C, C, X, 2, 3) ≈ 2C0 * Xm + 3C0
+            else
+                @test_throws ArgumentError mul!(C, X, C, 2, 3)
+                @test_throws ArgumentError mul!(C, C, X, 2, 3)
+            end
+        end
+        # the kernel for a Tridiagonal or SymTridiagonal left factor works in place as well
+        for X in (Tridiagonal(M), SymTridiagonal(Symmetric(M)))
+            Xm = Matrix(X)
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C, X, C, 2, 3) ≈ 2Xm * C0 + 3C0
+            v = rand(T, n); v0 = copy(v)
+            @test mul!(v, X, v) ≈ Xm * v0
+        end
+        # the structured kernels assume that the output is not one of the factors
+        U = UpperTriangular(rand(T, n, n))
+        @test_throws ArgumentError mul!(U, U, UpperTriangular(M))
     end
 end
 

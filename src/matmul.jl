@@ -75,14 +75,33 @@ _aliasparts(A) = (A,)
 _aliasparts(A::Base.ReshapedArray) = _aliasparts(parent(A)) # e.g. the bands of the adjoint of a complex Bidiagonal
 _mightalias(A, B) = any(a -> any(b -> Base.mightalias(a, b), _aliasparts(B)), _aliasparts(A))
 
-# The output of `mul!` must not share memory with the factors, as the kernels
-# overwrite the output while still reading the factors.
-@inline function check_mul_aliasing(C, A, B)
-    (_mightalias(C, A) || _mightalias(C, B)) && throw_mul_aliasing()
+# `mul!(C, A, B, α, β)` overwrites `C` while still reading `A` and `B`, so `C` must not share
+# memory with them. A factor that `mul!` applies in place, as `lmul!` and `rmul!` do, can
+# overwrite the other factor, though, so `C` may be that other factor itself, unless it is
+# structured: the structured kernels assume that the output is not one of the factors. If the
+# kernels for that factor check partial overlaps themselves, `C` may also overlap a strided
+# other factor otherwise.
+@inline function check_mul_aliasing(C, A, B, α, β)
+    if _mightalias(C, A) && !_mul_mayalias(C, A, B, _mul_inplace_right(A, B, α, β)) ||
+            _mightalias(C, B) && !_mul_mayalias(C, B, A, _mul_inplace_left(A, α, β))
+        throw_mul_aliasing()
+    end
     return nothing
 end
 @noinline throw_mul_aliasing() =
     throw(ArgumentError("output array must not be aliased with an input array"))
+# whether `C` may share memory with the factor `X`, if the other factor `Y` is applied in place
+_mul_mayalias(C, X, Y, inplace::Bool) = inplace && !_isstructured(C) &&
+    (_isinplace(C, X) || _mul_checks_overlap(Y) && X isa StridedMaybeAdjOrTransVecOrMat)
+# whether `mul!(C, A, B, α, β)` applies `A` in place to `B`, or `B` in place to `A`
+_mul_inplace_left(A, α, β) = false
+_mul_inplace_right(B, α, β) = false
+_mul_inplace_right(A, B, α, β) = _mul_inplace_right(B, α, β)
+# whether the kernels that apply `Y` in place throw if the output partially overlaps the other
+# factor, where they can't copy that factor into the output first
+_mul_checks_overlap(Y) = false
+_isstructured(C) = C isa Union{AbstractTriangular,Diagonal,Bidiagonal,Tridiagonal,SymTridiagonal,
+    HermOrSym,UpperHessenberg}
 
 # `lmul!(A, B)`, `rmul!(B, A)`, `ldiv!(A, B)` and `rdiv!(B, A)` overwrite `B` while still
 # reading `A`, and so does `ldiv!(B, A, C)`
@@ -98,13 +117,15 @@ end
     !_isinplace(Y, B) && _mightalias(Y, B) && throw_inplace_aliasing()
     return nothing
 end
-# whether `Y` and `B` are the same array, element by element
+# whether `Y` and `B` are the same array, element by element, e.g. `view(B, :, :)` and `B`
 _isinplace(Y, B) = Y === B
+_isinplace(Y::StridedArray{T,N}, B::StridedArray{T,N}) where {T,N} = Y === B ||
+    size(Y) == size(B) && strides(Y) == strides(B) && pointer(Y) == pointer(B)
 
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
 @inline function mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
                 alpha::Number, beta::Number)
-    check_mul_aliasing(y, A, x)
+    check_mul_aliasing(y, A, x, alpha, beta)
     _mul!(y, A, x, alpha, beta)
 end
 
@@ -293,7 +314,11 @@ end
 Calculates the matrix-matrix or matrix-vector product ``A B`` and stores the result in `Y`,
 overwriting the existing value of `Y`. Note that `Y` must not be aliased with either `A` or
 `B`; an `ArgumentError` is thrown if `Base.mightalias` detects that they share memory.
-As an exception, if `A` or `B` is an `AbstractQ`, the other factor may be aliased with `Y`.
+As an exception, if one factor is triangular, `Diagonal`, `Bidiagonal` or an `AbstractQ`, or
+if `A` is `Tridiagonal` or `SymTridiagonal`, the other factor may be `Y` itself, unless `Y`
+is a structured matrix, e.g., `mul!(B, UpperTriangular(A), B)`, as in [`lmul!`](@ref) and
+[`rmul!`](@ref). For a triangular factor and BLAS element types, `Y` may also overlap a
+strided other factor otherwise, as that is copied into `Y` first.
 
 # Examples
 ```jldoctest
@@ -324,7 +349,10 @@ mul!(C, A, B) = mul!(C, A, B, true, false)
 Combined inplace matrix-matrix or matrix-vector multiply-add ``A B α + C β``.
 The result is stored in `C` by overwriting it.  Note that `C` must not be
 aliased with either `A` or `B`; an `ArgumentError` is thrown if `Base.mightalias`
-detects that they share memory.
+detects that they share memory. As an exception, if one factor is `Diagonal` or
+`Bidiagonal`, if `A` is `Tridiagonal` or `SymTridiagonal`, or if one factor is triangular
+and `α == 1` and `β == 0`, the other factor may be `C` itself, unless `C` is a structured
+matrix.
 
 !!! compat "Julia 1.3"
     Five-argument `mul!` requires at least Julia 1.3.
@@ -350,7 +378,7 @@ true
 ```
 """
 @inline function mul!(C::AbstractMatrix, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number)
-    check_mul_aliasing(C, A, B)
+    check_mul_aliasing(C, A, B, α, β)
     _mul!(C, A, B, α, β)
 end
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!

@@ -198,13 +198,15 @@ end
             @test_throws ArgumentError op(Q, S)
             @test S == S0 # the check comes before anything is written
         end
-        # sharing memory with the other factor is fine, as it is copied into the output first
+        # the output may be the other factor, as that is copied into the output first
         Q, S = mk(T); Q = adj ? Q' : Q
         Qm = Matrix(Q)
         B = rand(T, n, n); B0 = copy(B)
         @test mul!(B, Q, B) ≈ Qm * B0
         B = rand(T, n, n); B0 = copy(B)
         @test mul!(B, B, Q) ≈ B0 * Qm
+        V = rand(T, n, n+1)
+        @test_throws ArgumentError mul!(view(V, :, 2:n+1), Q, view(V, :, 1:n))
         @test mul!(similar(S), Q, S) ≈ Qm * S
     end
     # generic (non-BLAS) kernels
