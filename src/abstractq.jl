@@ -205,36 +205,50 @@ qsize_check(Q::AbstractQ, P::AbstractQ) =
 # mimic the AbstractArray fallback
 *(Q::AbstractQ{<:Number}) = Q
 
+# Element types for multiplying a dimensionless factor (such as Q) of element type `TQ` with
+# an array of element type `TB`: the factor is promoted only with the dimensionless
+# counterpart of `TB`, while the result has the element type of the product. Without units,
+# both coincide with `promote_type(TQ, TB)`.
+function _qmul_eltypes(TQ::Type, TB::Type)
+    if TB <: Number && isconcretetype(TB)
+        S = promote_type(TQ, typeof(one(TB)))
+        return S, promote_op(matprod, S, TB)
+    else
+        S = promote_type(TQ, TB)
+        return S, S
+    end
+end
+
 (*)(Q::AbstractQ, b::Number) = Q*(b*I)
 function (*)(Q::AbstractQ, J::UniformScaling)
-    T = promote_type(eltype(Q), eltype(J))
-    lmul!(convert(AbstractQ{T}, Q), Matrix{T}(J, size(Q)))
+    S, T = _qmul_eltypes(eltype(Q), eltype(J))
+    lmul!(convert(AbstractQ{S}, Q), Matrix{T}(J, size(Q)))
 end
 function (*)(Q::AbstractQ, B::AbstractVector)
-    T = promote_type(eltype(Q), eltype(B))
+    S, T = _qmul_eltypes(eltype(Q), eltype(B))
     qsize_check(Q, B)
-    mul!(similar(B, T, size(Q, 1)), convert(AbstractQ{T}, Q), B)
+    mul!(similar(B, T, size(Q, 1)), convert(AbstractQ{S}, Q), B)
 end
 function (*)(Q::AbstractQ, B::AbstractMatrix)
-    T = promote_type(eltype(Q), eltype(B))
+    S, T = _qmul_eltypes(eltype(Q), eltype(B))
     qsize_check(Q, B)
-    mul!(similar(B, T, (size(Q, 1), size(B, 2))), convert(AbstractQ{T}, Q), B)
+    mul!(similar(B, T, (size(Q, 1), size(B, 2))), convert(AbstractQ{S}, Q), B)
 end
 
 (*)(a::Number, Q::AbstractQ) = (a*I)*Q
 function (*)(J::UniformScaling, Q::AbstractQ)
-    T = promote_type(eltype(J), eltype(Q))
-    rmul!(Matrix{T}(J, size(Q)), convert(AbstractQ{T}, Q))
+    S, T = _qmul_eltypes(eltype(Q), eltype(J))
+    rmul!(Matrix{T}(J, size(Q)), convert(AbstractQ{S}, Q))
 end
 function (*)(A::AbstractVector, Q::AbstractQ)
-    T = promote_type(eltype(A), eltype(Q))
+    S, T = _qmul_eltypes(eltype(Q), eltype(A))
     qsize_check(A, Q)
-    return mul!(similar(A, T, length(A)), A, convert(AbstractQ{T}, Q))
+    return mul!(similar(A, T, length(A)), A, convert(AbstractQ{S}, Q))
 end
 function (*)(A::AbstractMatrix, Q::AbstractQ)
-    T = promote_type(eltype(A), eltype(Q))
+    S, T = _qmul_eltypes(eltype(Q), eltype(A))
     qsize_check(A, Q)
-    return mul!(similar(A, T, (size(A, 1), size(Q, 2))), A, convert(AbstractQ{T}, Q))
+    return mul!(similar(A, T, (size(A, 1), size(Q, 2))), A, convert(AbstractQ{S}, Q))
 end
 (*)(u::AdjointAbsVec, Q::AbstractQ) = (Q'u')'
 
@@ -242,7 +256,7 @@ end
 (*)(Q::AbstractQ, P::AbstractQ) = Q * (P*I)
 
 ### mul!
-function mul!(C::AbstractVecOrMat{T}, Q::AbstractQ{T}, B::Union{AbstractVecOrMat,AbstractQ}) where {T}
+function mul!(C::AbstractVecOrMat, Q::AbstractQ, B::Union{AbstractVecOrMat,AbstractQ})
     require_one_based_indexing(C, B)
     mB, nB = size(B, 1), size(B, 2)
     mC, nC = size(C, 1), size(C, 2)
@@ -254,13 +268,13 @@ function mul!(C::AbstractVecOrMat{T}, Q::AbstractQ{T}, B::Union{AbstractVecOrMat
     if mB < mC
         inds = CartesianIndices(axes(B))
         copyto!(view(C, inds), B)
-        C[CartesianIndices((mB+1:mC, axes(C, 2)))] .= zero(T)
+        C[CartesianIndices((mB+1:mC, axes(C, 2)))] .= zero(eltype(C))
         return lmul!(Q, C)
     else
         return lmul!(Q, copyto!(C, B))
     end
 end
-function mul!(C::AbstractVecOrMat{T}, A::AbstractVecOrMat, Q::AbstractQ{T}) where {T}
+function mul!(C::AbstractVecOrMat, A::AbstractVecOrMat, Q::AbstractQ)
     require_one_based_indexing(C, A)
     mA, nA = size(A, 1), size(A, 2)
     mC, nC = size(C, 1), size(C, 2)
@@ -271,7 +285,7 @@ function mul!(C::AbstractVecOrMat{T}, A::AbstractVecOrMat, Q::AbstractQ{T}) wher
     if nA < nC
         inds = CartesianIndices(axes(A))
         copyto!(view(C, inds), A)
-        C[CartesianIndices((axes(C, 1), nA+1:nC))] .= zero(T)
+        C[CartesianIndices((axes(C, 1), nA+1:nC))] .= zero(eltype(C))
         return rmul!(C, Q)
     else
         return rmul!(copyto!(C, A), Q)
@@ -688,7 +702,8 @@ LQPackedQ{T}(Q::LQPackedQ) where {T} = LQPackedQ(convert(AbstractMatrix{T}, Q.fa
 @deprecate(AbstractMatrix{T}(Q::LQPackedQ) where {T},
     convert(AbstractQ{T}, Q),
     false)
-Matrix{T}(A::LQPackedQ) where {T} = convert(Matrix{T}, LAPACK.orglq!(copy(A.factors), A.τ))
+Matrix{T}(Q::LQPackedQ{S}) where {T,S} =
+    convert(Matrix{T}, rmul!(Matrix{S}(I, min(size(Q.factors)...), size(Q, 2)), Q))
 convert(::Type{AbstractQ{T}}, Q::LQPackedQ) where {T} = LQPackedQ{T}(Q)
 
 # size(Q::LQPackedQ) yields the shape of Q's square form
