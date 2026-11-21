@@ -17,6 +17,7 @@ using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 include("testutils.jl") # test_approx_eq_modphase
 
@@ -1371,6 +1372,127 @@ end
     F = eigen(SymTridiagonal([1.0, 2.0], [0.5]), 10.0, 11.0)
     @test isempty(F.values)
     @test size(F.vectors) == (2, 0)
+end
+
+@testset "svdvals(::SymTridiagonal)" begin
+    for T in (Float32, Float64)
+        n = 10
+        A = SymTridiagonal(randn(T, n), randn(T, n - 1))
+        s = svdvals(A)
+        @test s ≈ svdvals(Matrix(A))
+        @test issorted(s; rev=true)
+        @test eltype(s) == T
+
+        s! = svdvals!(copy(A))
+        @test s! == s
+    end
+
+    # Int: eigtype promotion and inference through the non-mutating entry point
+    Ai = SymTridiagonal([1, 2, 3, 4], [1, 1, 1])
+    @test @inferred(svdvals(Ai)) isa Vector{Float64}
+    @test svdvals(Ai) ≈ svdvals(Matrix(Ai))
+
+    # empty: guard must fire before eigen (eigen([]) throws in LAPACK)
+    Ae = SymTridiagonal(Float64[], Float64[])
+    @test isempty(svdvals(Ae))
+    @test @inferred(svdvals(SymTridiagonal(Int[], Int[]))) isa Vector{Float64}
+end
+
+@testset "svd(::SymTridiagonal)" begin
+    for T in (Float32, Float64)
+        n = 10
+        A = SymTridiagonal(randn(T, n), randn(T, n - 1))
+        F = svd(A)
+
+        # Check reconstruction and orthogonality
+        @test F.U * Diagonal(F.S) * F.Vt ≈ A
+        @test F.U' * F.U ≈ I
+        @test F.Vt * F.Vt' ≈ I
+
+        # Check properties against the svdvals we added in the previous PR
+        @test issorted(F.S; rev=true)
+        @test F.S ≈ svdvals(A)
+        @test eltype(F.S) == T
+
+        # Check the mutating version
+        F! = svd!(copy(A))
+        @test F!.U * Diagonal(F!.S) * F!.Vt ≈ A
+    end
+
+    # Int: eigtype promotion and inference
+    Ai = SymTridiagonal([1, 2, 3, 4], [1, 1, 1])
+    @test @inferred(svd(Ai)).S isa Vector{Float64}
+    @test svd(Ai).U * Diagonal(svd(Ai).S) * svd(Ai).Vt ≈ Matrix(Ai)
+
+        # Float16: verifies internal promotion to Float32 and demotion back to Float16
+    Ah = SymTridiagonal(Float16[1, 2, 3], Float16[0, 1])
+
+    Fh = svd(Ah)
+    @test eltype(Fh.U) == Float16
+    @test eltype(Fh.S) == Float16
+    @test eltype(Fh.Vt) == Float16
+
+    # svdvals should also correctly demote back to Float16
+    vh = svdvals(Ah)
+    @test eltype(vh) == Float16
+
+    # And the math should still be correct
+    @test Fh.U * Diagonal(Fh.S) * Fh.Vt ≈ Matrix(Ah)
+
+    # zero eigenvalue: catches the sign(0) trap in _svd_from_eigen!
+    Az = SymTridiagonal([1.0, 0.0, -2.0, 3.0], zeros(3))
+    Fz = svd(Az)
+    @test Fz.U * Diagonal(Fz.S) * Fz.Vt ≈ Matrix(Az)
+    @test Fz.U' * Fz.U ≈ I
+
+    # full kwarg: no-op for square, must not error
+    @test svd(Ai; full=true).S ≈ svd(Ai).S
+    @test svd(Ai; full=false).S ≈ svd(Ai).S
+
+    # complex falls through cleanly to dense
+    Ac = SymTridiagonal(randn(ComplexF64, 5), randn(ComplexF64, 4))
+    Fc = svd(Ac)
+    @test Fc.U * Diagonal(Fc.S) * Fc.Vt ≈ Matrix(Ac)
+
+    # empty: verifies LAPACK fixes for 0x0 matrices
+    Ae = SymTridiagonal(Float64[], Float64[])
+    Fe = svd(Ae)
+    @test size(Fe.U) == (0, 0) && isempty(Fe.S) && size(Fe.Vt) == (0, 0)
+
+    # Int: eigtype promotion for empty matrices
+    @test @inferred(svd(SymTridiagonal(Int[], Int[]))).S isa Vector{Float64}
+
+    # svdvals empty checks
+    @test isempty(svdvals(Ae))
+    @test @inferred(svdvals(SymTridiagonal(Int[], Int[]))) isa Vector{Float64}
+end
+
+@static if COMPREHENSIVE
+@testset "isposdef and cholesky of empty banded matrices (#1874)" begin
+    @testset for elty in (Float64, ComplexF64)
+        for A in (SymTridiagonal(elty[], elty[]), Tridiagonal(elty[], elty[], elty[]),
+                  Bidiagonal(elty[], elty[], :U), Bidiagonal(elty[], elty[], :L))
+            @test isposdef(A)
+            F = cholesky(A)
+            @test issuccess(F)
+            @test size(F) == (0, 0)
+            @test isempty(Matrix(F))
+        end
+    end
+end
+end
+
+@testset "det of small integer matrices (#1893)" begin
+    S = SymTridiagonal(Int8[100,100,100], Int8[50,50])
+    T = Tridiagonal(Int8[1,-1,-14],Int8[-14,-6,4,4],Int8[1,-1,-14])
+    @test det(S) ≈ det(Matrix(S))
+    @test det(T) ≈ det(Matrix(T))
+    BS = BigInt.(S)
+    BT = BigInt.(T)
+    @test isa(det(BS), BigInt)
+    @test isa(det(BT), BigInt)
+    @test det(BS) == det(Matrix(BS))
+    @test det(BT) == det(Matrix(BT))
 end
 
 end # module TestTridiagonal

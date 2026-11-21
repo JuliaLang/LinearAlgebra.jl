@@ -284,7 +284,7 @@ end
 
 /(J1::UniformScaling, J2::UniformScaling) = J2.λ == 0 ? throw(SingularException(1)) : UniformScaling(J1.λ/J2.λ)
 /(J::UniformScaling, A::AbstractMatrix) =
-    (invA = inv(A); lmul!(J.λ, convert(AbstractMatrix{promote_type(eltype(J),eltype(invA))}, invA)))
+    (invA = inv(A); promote_op(*, eltype(J), eltype(invA)) == eltype(invA) ? lmul!(J.λ, invA) : J.λ * invA)
 /(A::AbstractMatrix, J::UniformScaling) = J.λ == 0 ? throw(SingularException(1)) : A/J.λ
 /(v::AbstractVector, J::UniformScaling) = reshape(v, length(v), 1) / J
 
@@ -294,7 +294,7 @@ end
 \(J1::UniformScaling, J2::UniformScaling) = J1.λ == 0 ? throw(SingularException(1)) : UniformScaling(J1.λ\J2.λ)
 \(J::UniformScaling, A::AbstractVecOrMat) = J.λ == 0 ? throw(SingularException(1)) : J.λ\A
 \(A::AbstractMatrix, J::UniformScaling) =
-    (invA = inv(A); rmul!(convert(AbstractMatrix{promote_type(eltype(invA),eltype(J))}, invA), J.λ))
+    (invA = inv(A); promote_op(*, eltype(invA), eltype(J)) == eltype(invA) ? rmul!(invA, J.λ) : invA * J.λ)
 \(F::Factorization, J::UniformScaling) = F \ J(size(F,1))
 
 \(x::Number, J::UniformScaling) = UniformScaling(x\J.λ)
@@ -370,11 +370,11 @@ isequal(A::AbstractMatrix, J::UniformScaling) = false
 isequal(J::UniformScaling, A::AbstractMatrix) = false
 
 function isapprox(J1::UniformScaling{T}, J2::UniformScaling{S};
-            atol::Real=0, rtol::Real=Base.rtoldefault(T,S,atol), nans::Bool=false) where {T<:Number,S<:Number}
+            atol::Number=zero(real(T)), rtol::Real=Base.rtoldefault(T,S,atol), nans::Bool=false) where {T<:Number,S<:Number}
     isapprox(J1.λ, J2.λ, rtol=rtol, atol=atol, nans=nans)
 end
 function isapprox(J::UniformScaling, A::AbstractMatrix;
-                  atol::Real = 0,
+                  atol::Number = zero(real(promote_leaf_eltypes(A))), # zero in the units of the elements
                   rtol::Real = Base.rtoldefault(promote_leaf_eltypes(A), eltype(J), atol),
                   nans::Bool = false, norm::Function = norm)
     n = checksquare(A)

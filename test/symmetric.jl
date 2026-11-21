@@ -477,6 +477,10 @@ end
                 @test dot(mtype(ComplexF64[;;], :U), mtype(Float64[;;], :U)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
                 @test dot(mtype(ComplexF64[;;], :L), mtype(Float64[;;], :L)) === zero(mtype == Hermitian ? Float64 : ComplexF64)
             end
+            # issue 1453
+            A = Symmetric(Int8[-1 1; 2 127])
+            B = Symmetric(Int8[127 -1; 126 0])
+            @test dot(A, B) == dot(Matrix(A), Matrix(B))
         end
 
         @testset "kronecker product of symmetric and Hermitian matrices" begin
@@ -1468,6 +1472,14 @@ end
         @test logdet(A) == -Inf
         @test logabsdet(A) == (-Inf, 0)
     end
+end
+
+@testset "factorization of integer matrices #1871" begin
+    S = Symmetric([1 2; 2 3])
+    b = [1, 2]
+    @test isa(S \ b, Vector{Float64})
+    @test isa(det(S), Float64)
+    @test isa(logabsdet(S), Tuple{Float64,Float64})
 end
 
 end # module TestSymmetric

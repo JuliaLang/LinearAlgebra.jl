@@ -4152,6 +4152,9 @@ for (stev, stebz, stegr, stein, elty) in
             @chkvalidparam 1 job ('N', 'V')
             chkstride1(dv, ev)
             n = length(dv)
+            if n == 0 # for 0x0 matrices
+                return similar(dv, $elty, 0), similar(dv, $elty, 0, 0)
+            end
             if length(ev) != n - 1
                 throw(DimensionMismatch(lazy"ev has length $(length(ev)) but needs one less than dv's length, $n)"))
             end
@@ -4215,6 +4218,9 @@ for (stev, stebz, stegr, stein, elty) in
             @chkvalidparam 2 range ('A', 'V', 'I')
             chkstride1(dv, ev)
             n = length(dv)
+            if n == 0 # for 0x0 matrices
+                return similar(dv, $elty, 0), similar(dv, $elty, jobz == 'N' ? 1 : 0, 0)
+            end
             ne = length(ev)
             if ne == n - 1
                 eev = [ev; zero($elty)]
