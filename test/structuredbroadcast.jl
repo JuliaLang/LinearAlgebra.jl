@@ -619,4 +619,24 @@ end
     @test isequal(T.ev, [NaN])
 end
 
+@testset "in-place assignment into a banded matrix aliasing its source (#1909)" begin
+    mk() = Tridiagonal([1, 2], [3, 4, 5], [6, 7])
+    T = mk(); T .= T'
+    @test T == Matrix(mk()')
+    T = mk(); copyto!(T, T')
+    @test T == Matrix(mk()')
+    T = mk(); T .+= T'
+    @test T == Matrix(mk()) .+ Matrix(mk()')
+    mkf() = Tridiagonal([1.0, 2], [3.0, 4, 5], [6.0, 7])
+    T = mkf(); T .= (T .+ T') ./ 2
+    @test T == (Matrix(mkf()) .+ Matrix(mkf()')) ./ 2
+    D = Diagonal([1, 2, 3]); D .= Diagonal(view(D.diag, 3:-1:1))
+    @test D.diag == [3, 2, 1]
+    # a destination that is itself an argument is updated elementwise, as before
+    T = mk(); T .= 2 .* T
+    @test T == 2 .* Matrix(mk())
+    S = SymTridiagonal([1, 2, 3], [4, 5]); S .= 2 .* S
+    @test S == 2 .* Matrix(SymTridiagonal([1, 2, 3], [4, 5]))
+end
+
 end
