@@ -1067,6 +1067,13 @@ end
         @test ldiv!(B, A, B) ≈ Matrix(A) \ B0
         D = Diagonal(rand(T, 4) .+ 1); B = rand(T, 4, 2); B0 = copy(B)
         @test ldiv!(B, D, B) ≈ Matrix(D) \ B0
+        # but must not overlap it otherwise, except in the BLAS methods, which copy B into the
+        # output first
+        for A in (Diagonal(M[:, 2]), Bidiagonal(M[:, 2], M[1:3, 3], :U), Bidiagonal(M[:, 2], M[1:3, 3], :L),
+                (T === BigFloat ? (UpperTriangular(M), LowerTriangular(M)') : ())...)
+            V = rand(T, 4, 3)
+            @test_throws ArgumentError ldiv!(view(V, :, 2:3), A, view(V, :, 1:2))
+        end
         # the SymTridiagonal solvers work on an LDLt copy, so sharing memory is fine there
         S = SymTridiagonal(view(M, 1:4, 2), view(M, 1:3, 3)); S0 = Matrix(S); M0 = copy(M)
         @test ldiv!(S, M) ≈ S0 \ M0
