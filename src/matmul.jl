@@ -92,6 +92,14 @@ end
 end
 @noinline throw_inplace_aliasing() =
     throw(ArgumentError("the array that is overwritten must not share memory with the other operand"))
+# for kernels that overwrite `Y` while reading `B` in a way that is correct for `Y === B`:
+# `Y` may be `B` itself, but must not overlap it otherwise
+@inline function check_partial_overlap(Y, B)
+    !_isinplace(Y, B) && _mightalias(Y, B) && throw_inplace_aliasing()
+    return nothing
+end
+# whether `Y` and `B` are the same array, element by element
+_isinplace(Y, B) = Y === B
 
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
 @inline function mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,

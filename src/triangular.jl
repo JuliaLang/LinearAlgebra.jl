@@ -154,6 +154,8 @@ lowertriangular(U::LowerOrUnitLowerTriangular) = U
 
 Base.dataids(A::UpperOrLowerTriangular) = Base.dataids(A.data)
 _aliasparts(A::UpperOrLowerTriangular) = _aliasparts(A.data)
+# e.g. in `ldiv!(A, B::UpperTriangular)`, which writes to `parent(B)`
+_isinplace(Y, B::UpperOrLowerTriangular) = Y === B || Y === parent(B)
 
 function Matrix{T}(U::UpperOrLowerTriangular) where {T}
     M = Matrix{T}(undef, size(U))
@@ -1669,6 +1671,7 @@ end
 # accumulating in z rather than b[j,k] significantly improves performance as of Dec 2015
 function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractVecOrMat) where {F<:Function}
     require_one_based_indexing(C, A, B)
+    check_partial_overlap(C, B)
     mA, nA = size(A)
     m = size(B, 1)
     if nA != m
@@ -1806,6 +1809,7 @@ end
 function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA::AdjOrTrans, B::AbstractVecOrMat)
     A = parent(xA)
     require_one_based_indexing(C, A, B)
+    check_partial_overlap(C, B)
     mA, nA = size(A)
     m = size(B, 1)
     if nA != m
