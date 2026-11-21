@@ -1196,22 +1196,32 @@ _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::UpperOrLowerTriangular) =
     generic_mattrimul!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 # methods for LinearAlgebra.jl's own triangular types, to avoid `istriu` checks
-lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _trimul!(B, A, B)
+function lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
+    @inline _trimul!(B, A, B)
+end
 function lmul!(A::AbstractTriangular, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
     if istriu(A)
         _trimul!(B, uppertriangular(A), B)
     else
         _trimul!(B, lowertriangular(A), B)
     end
 end
-rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _trimul!(A, A, B)
+function rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular)
+    check_inplace_aliasing(A, B)
+    @inline _trimul!(A, A, B)
+end
 function rmul!(A::AbstractMatrix, B::AbstractTriangular)
+    check_inplace_aliasing(A, B)
     if istriu(B)
-        _trimul!(A, A, uppertriangular(B))
+        rmul!(A, uppertriangular(B))
     else
-        _trimul!(A, A, lowertriangular(B))
+        rmul!(A, lowertriangular(B))
     end
 end
+rmul!(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
+    generic_mattrimul!(A, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 for TC in (:AbstractVector, :AbstractMatrix)
     @eval @inline function _mul!(C::$TC, A::AbstractTriangular, B::AbstractVector, alpha::Number, beta::Number)
@@ -1968,11 +1978,13 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
     return C
 end
 
-# these are needed because we don't keep track of left- and right-multiplication in tritrimul!
-rmul!(A::UpperTriangular, B::UpperTriangular)     = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::UpperTriangular, B::UnitUpperTriangular) = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::LowerTriangular, B::LowerTriangular)     = LowerTriangular(rmul!(tril!(A.data), B))
-rmul!(A::LowerTriangular, B::UnitLowerTriangular) = LowerTriangular(rmul!(tril!(A.data), B))
+# structure-preserving products are computed in the parent, where BLAS may apply
+for (TA, TB) in ((:UpperTriangular, :UpperTriangular), (:UpperTriangular, :UnitUpperTriangular),
+                 (:UnitUpperTriangular, :UnitUpperTriangular),
+                 (:LowerTriangular, :LowerTriangular), (:LowerTriangular, :UnitLowerTriangular),
+                 (:UnitLowerTriangular, :UnitLowerTriangular))
+    @eval rmul!(A::$TA, B::$TB) = (check_inplace_aliasing(A, B); $TA(rmul!(full!(A), B)))
+end
 
 # Promotion
 ## Promotion methods in matmul don't apply to triangular multiplication since

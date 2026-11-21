@@ -394,6 +394,12 @@ end
     end
 end
 
+@testset "cond of singular dimensionful matrices" begin
+    for p in (1, Inf)
+        @test (@inferred cond(Diagonal(Furlong.([0.0, 2.0])), p)) === Furlong{0}(Inf)
+    end
+end
+
 @testset "eigtype and dimensionless results" begin
     # eigtype keeps the units and is concrete
     for (T, S) in (Furlong{1,Float64} => Furlong{1,Float64}, Furlong{1,Float32} => Furlong{1,Float32},
@@ -402,7 +408,6 @@ end
     end
     # the condition number and the null space are dimensionless, also for empty matrices
     @test (@inferred cond(Furlong.(zeros(0, 0)))) === Furlong{0}(0.0)
-    @test (@inferred cond(Diagonal(Furlong.([0.0, 0.0])))) === Furlong{0}(Inf)
     @test nullspace(Furlong.(zeros(0, 3)))::Matrix{Float64} == I
     # the Schur vectors are dimensionless, so they share an abstract type with the Schur form
     M = Furlong.([4.0 1 2; 0 3 1; 0 0 5])
