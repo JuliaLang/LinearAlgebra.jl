@@ -259,6 +259,7 @@ similar(B::Bidiagonal, ::Type{T}) where {T} = Bidiagonal(similar(B.dv, T), simil
 similar(B::Bidiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = similar(B.dv, T, dims)
 
 Base.dataids(B::Bidiagonal) = (_band_dataids(B.dv)..., _band_dataids(B.ev)...)
+_aliasparts(B::Bidiagonal) = (_aliasparts(B.dv)..., _aliasparts(B.ev)...)
 Base.unaliascopy(B::Bidiagonal) = Bidiagonal(Base.unaliascopy(B.dv), Base.unaliascopy(B.ev), B.uplo)
 
 tr(B::Bidiagonal) = sum(B.dv)

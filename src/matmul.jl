@@ -67,10 +67,18 @@ function (*)(a::AbstractVector, B::AbstractMatrix)
     reshape(a, length(a), 1) * B
 end
 
+# The arrays that a (structured) matrix is made of. `Base.dataids` of a wrapper are those of
+# its parent, so `Base.mightalias` reports wrappers of non-overlapping views of the same array,
+# e.g. `Diagonal(view(M, :, 1))` and `view(M, :, 2)`, as aliased. Comparing the arrays inside
+# the wrappers pairwise lets `mightalias` compare views of the same parent by their indices.
+_aliasparts(A) = (A,)
+_aliasparts(A::Base.ReshapedArray) = _aliasparts(parent(A)) # e.g. the bands of the adjoint of a complex Bidiagonal
+_mightalias(A, B) = any(a -> any(b -> Base.mightalias(a, b), _aliasparts(B)), _aliasparts(A))
+
 # The output of `mul!` must not share memory with the factors, as the kernels
 # overwrite the output while still reading the factors.
 @inline function check_mul_aliasing(C, A, B)
-    (Base.mightalias(C, A) || Base.mightalias(C, B)) && throw_mul_aliasing()
+    (_mightalias(C, A) || _mightalias(C, B)) && throw_mul_aliasing()
     return nothing
 end
 @noinline throw_mul_aliasing() =
@@ -79,7 +87,7 @@ end
 # `lmul!(A, B)`, `rmul!(B, A)`, `ldiv!(A, B)` and `rdiv!(B, A)` overwrite `B` while still
 # reading `A`, and so does `ldiv!(B, A, C)`
 @inline function check_inplace_aliasing(B, A)
-    Base.mightalias(B, A) && throw_inplace_aliasing()
+    _mightalias(B, A) && throw_inplace_aliasing()
     return nothing
 end
 @noinline throw_inplace_aliasing() =

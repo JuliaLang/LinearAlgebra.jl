@@ -153,6 +153,7 @@ uppertriangular(U::UpperOrUnitUpperTriangular) = U
 lowertriangular(U::LowerOrUnitLowerTriangular) = U
 
 Base.dataids(A::UpperOrLowerTriangular) = Base.dataids(A.data)
+_aliasparts(A::UpperOrLowerTriangular) = _aliasparts(A.data)
 
 function Matrix{T}(U::UpperOrLowerTriangular) where {T}
     M = Matrix{T}(undef, size(U))

@@ -91,6 +91,7 @@ _unwrap_at(A::Adjoint)   = parent(A)
 _unwrap_at(A::Transpose) = parent(A)
 
 Base.dataids(A::Union{Adjoint, Transpose}) = Base.dataids(A.parent)
+_aliasparts(A::Union{Adjoint, Transpose}) = _aliasparts(A.parent)
 Base.unaliascopy(A::Union{Adjoint,Transpose}) = typeof(A)(Base.unaliascopy(A.parent))
 
 # wrapping lowercase quasi-constructors
