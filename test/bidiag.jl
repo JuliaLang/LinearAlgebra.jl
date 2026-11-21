@@ -28,12 +28,8 @@ Random.seed!(1)
         (@static COMPREHENSIVE ? ((Int, Complex{Int}), (Float32, Float32), (Float32, ComplexF32),
                                   (BigFloat, Complex{BigFloat})) : ())...)
     if relty <: AbstractFloat
-        dv = convert(Vector{elty}, randn(n))
-        ev = convert(Vector{elty}, randn(n-1))
-        if (elty <: Complex)
-            dv += im*convert(Vector{elty}, randn(n))
-            ev += im*convert(Vector{elty}, randn(n-1))
-        end
+        dv = randn(elty, n)
+        ev = randn(elty, n - 1)
     elseif relty <: Integer
         dv = convert(Vector{elty}, rand(1:10, n))
         ev = convert(Vector{elty}, rand(1:10, n-1))
@@ -42,6 +38,8 @@ Random.seed!(1)
             ev += im*convert(Vector{elty}, rand(1:10, n-1))
         end
     end
+    ev[rand(1:n - 1)] = 0 # non-trivial block structure for #1900
+    ev[rand(1:n - 1)] = 0
     dv0 = zeros(elty, 0)
     ev0 = zeros(elty, 0)
 
@@ -405,14 +403,8 @@ Random.seed!(1)
         end
 
         @testset "Eigensystems" begin
-            if relty <: AbstractFloat
-                d1, v1 = eigen(T; sortby=nothing)
-                d2, v2 = eigen(map(elty<:Complex ? ComplexF64 : Float64,Tfull); sortby=nothing)
-                @test (uplo === :U ? d1 : reverse(d1)) ≈ d2
-                if elty <: Real
-                    test_approx_eq_modphase(v1, uplo === :U ? v2 : v2[:,n:-1:1])
-                end
-            end
+            λ, V = eigen(T; sortby=nothing)
+            @test T * V ≈ V * Diagonal(λ)
         end
 
         @testset "Singular systems" begin
