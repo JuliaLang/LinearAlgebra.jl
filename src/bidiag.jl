@@ -277,7 +277,16 @@ end
 svdvals!(M::Bidiagonal{<:BlasReal}) = LAPACK.bdsdc!(M.uplo, 'N', M.dv, M.ev)[1]
 # M is square, so the full and the thin SVD coincide and `full` has no effect
 function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Number=zero(real(eltype(M))), rtol::Real=0)
+    # LAPACK's QR sweep can overflow and fail or loop forever on large entries, even if all
+    # singular values are finite; scale like xGESDD, by a power of two to avoid rounding
+    T = eltype(M)
+    bignum = eps(T) / sqrt(floatmin(T))
+    m = max(maximum(abs, M.dv; init=zero(T)), maximum(abs, M.ev; init=zero(T)))
+    k = isfinite(m) && m > bignum ? exponent(m) - exponent(bignum) : 0
+    M.dv .= ldexp.(M.dv, -k)
+    M.ev .= ldexp.(M.ev, -k)
     d, U, Vt = _svd!(M, alg)
+    d .= ldexp.(d, k)
     d[_count_svdvals(d, atol, rtol)+1:end] .= 0
     return SVD(U, d, Vt)
 end
