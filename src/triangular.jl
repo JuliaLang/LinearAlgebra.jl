@@ -154,6 +154,8 @@ lowertriangular(U::LowerOrUnitLowerTriangular) = U
 
 Base.dataids(A::UpperOrLowerTriangular) = Base.dataids(A.data)
 _aliasparts(A::UpperOrLowerTriangular) = _aliasparts(A.data)
+_mul_inplace_left(::AbstractTriangular, α, β) = isone(α) && iszero(β)
+_mul_inplace_right(::AbstractTriangular, α, β) = isone(α) && iszero(β)
 
 function Matrix{T}(U::UpperOrLowerTriangular) where {T}
     M = Matrix{T}(undef, size(U))
