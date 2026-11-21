@@ -1369,4 +1369,47 @@ end
     end
 end
 
+@testset "integer powers of Bool unit triangular matrices (#1869)" begin
+    for (T, B) in ((UnitUpperTriangular, Bool[1 1 1; 0 1 1; 0 0 1]),
+                   (UnitLowerTriangular, Bool[1 0 0; 1 1 0; 1 1 1]))
+        A = T(B)
+        M = Matrix(A)
+        for p in 0:4
+            @test A^p == M^p
+        end
+        @test A^2 isa T{Int}
+    end
+end
+
+@testset "cbrt of integer triangular matrices" begin
+    for (T, A) in ((UpperTriangular, [2 1; 0 3]), (LowerTriangular, [2 0; 1 3]))
+        C = cbrt(T(A))
+        @test C isa T{Float64}
+        @test C ≈ cbrt(float(A))
+        @test C^3 ≈ A
+    end
+    E = cbrt(UpperTriangular([8 0; 0 27]))
+    @test E isa UpperTriangular{Float64}
+    @test E == [2 0; 0 3]
+end
+
+@testset "issue #1907: rmul! of two triangular matrices" begin
+    @testset for T in (Int, Float64)
+        a, b, c = T[9 2 3; 9 9 4; 9 9 9], T[7 -1 2; 7 7 5; 7 7 7], T[1 -1 2; 7 1 5; 7 7 1]
+        at, bt, ct = (copy(transpose(x)) for x in (a, b, c))
+        for (A, B) in ((UnitUpperTriangular(a), UnitUpperTriangular(b)),
+                       (UnitUpperTriangular(a), UpperTriangular(c)),
+                       (UnitUpperTriangular(a), transpose(UnitLowerTriangular(bt))),
+                       (UnitLowerTriangular(at), UnitLowerTriangular(bt)),
+                       (UnitLowerTriangular(at), LowerTriangular(ct)),
+                       (UnitLowerTriangular(at), adjoint(UnitUpperTriangular(b))))
+            MA, MB = Matrix(A), Matrix(B)
+            @test rmul!(A, B)::typeof(A) == MA * MB
+        end
+        # the product is not lower triangular
+        L = LowerTriangular(T[0 0 0; -2 2 0; 0 -2 0])
+        @test_throws ArgumentError rmul!(L, UnitUpperTriangular(T[1 2 -1; 0 1 1; 0 0 1]))
+    end
+end
+
 end # module TestTriangular
