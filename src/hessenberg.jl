@@ -323,7 +323,7 @@ end
 # Cost is O(m²) with O(m) storage.
 function det(F::UpperHessenberg; shift::Number=false)
     checksquare(F)
-    H = F.data
+    H = convert(AbstractMatrix{_dettype(eltype(F))}, F.data)
     m = size(H,1)
     μ = shift
     m == 0 && return one(zero(eltype(H)) + μ)

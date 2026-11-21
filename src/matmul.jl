@@ -258,14 +258,14 @@ Base.muladd(x::TransposeAbsVec, A::AbstractMatrix, z::Union{Number, AbstractVecO
     transpose(muladd(transpose(A), transpose(x), transpose(z)))
 
 function Base.muladd(A::StridedMaybeAdjOrTransMat{<:Number}, y::AbstractVector{<:Number}, z::Union{Number, AbstractVector})
-    T = promote_type(eltype(A), eltype(y), eltype(z))
+    T = promote_type(_matprod_type(A, y), eltype(z))
     C = similar(A, T, axes(A,1))
     C .= z
     mul!(C, A, y, true, true)
 end
 
 function Base.muladd(A::StridedMaybeAdjOrTransMat{<:Number}, B::StridedMaybeAdjOrTransMat{<:Number}, z::Union{Number, AbstractVecOrMat})
-    T = promote_type(eltype(A), eltype(B), eltype(z))
+    T = promote_type(_matprod_type(A, B), eltype(z))
     C = similar(A, T, axes(A,1), axes(B,2))
     C .= z
     mul!(C, A, B, true, true)
@@ -652,6 +652,24 @@ function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.HEMM})
 end
 Base.@constprop :aggressive function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.NONE})
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
+end
+# Symmetric/Hermitian matrices that can't be passed to BLAS, e.g. Symmetric(A) * B'.
+# We wrap the matrices in a method that is inlined into _mul!, where tA and tB are known.
+# This ensures that the wrapped matrices are concretely inferred, without relying on
+# the larger method above being inlined (JuliaLang/julia#53951)
+Base.@constprop :aggressive @inline function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
+                                    α::Number, β::Number, ::Val{BlasFlag.NONE}) where {T<:BlasFloat}
+    _generic_matmatmul_wrapped!(C, tA, tB, A, B, wrap(A, tA), wrap(B, tB), α, β)
+end
+function _generic_matmatmul_wrapped!(C, tA, tB, A, B, wA, wB, α, β)
+    mA, nA = lapack_size(tA, A)
+    mB, nB = lapack_size(tB, B)
+    matmul_size_check(size(C), (mA, nA), (mB, nB))
+    if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
+        return _rmul_or_fill!(C, β)
+    end
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    return _generic_matmatmul!(C, wA, wB, α, β)
 end
 
 """

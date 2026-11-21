@@ -276,7 +276,7 @@ end
 #Singular values
 svdvals!(M::Bidiagonal{<:BlasReal}) = LAPACK.bdsdc!(M.uplo, 'N', M.dv, M.ev)[1]
 # M is square, so the full and the thin SVD coincide and `full` has no effect
-function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Real=0, rtol::Real=0)
+function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Number=zero(real(eltype(M))), rtol::Real=0)
     d, U, Vt = _svd!(M, alg)
     d[_count_svdvals(d, atol, rtol)+1:end] .= 0
     return SVD(U, d, Vt)
@@ -572,7 +572,7 @@ function lmul!(D::Diagonal, B::Bidiagonal)
 end
 # B .= B * A
 function rmul!(B::AbstractMatrix, A::Bidiagonal)
-    matmul_size_check(size(A), size(B))
+    matmul_size_check(size(B), size(A))
     check_inplace_aliasing(B, A)
     (; dv, ev) = A
     if A.uplo == 'U'
@@ -1445,7 +1445,7 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
         ev = A.ev
         n = length(dv)
         @inbounds for i in 1:n-1
-            iszero(dv[i]) && throw(ZeroPivotException(i))
+            iszero(dv[i]) && return $T(A), convert(BlasInt, i)
             ev[i] /= dv[i]
             dv[i+1] -= abs2(ev[i])*dv[i]
             Akk = dv[i]
@@ -1456,12 +1456,14 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
             dv[i] = Akk
             ev[i] *= dv[i]
         end
-        Akk = dv[n]
-        Akk, info = _chol!(Akk, $T)
-        if info != 0
-            return $T(A), convert(BlasInt, n)
+        if n > 0
+            Akk = dv[n]
+            Akk, info = _chol!(Akk, $T)
+            if info != 0
+                return $T(A), convert(BlasInt, n)
+            end
+            dv[n] = Akk
         end
-        dv[n] = Akk
         B = Bidiagonal(dv, ev, $uplo)
         return $T(B), convert(BlasInt, 0)
     end
