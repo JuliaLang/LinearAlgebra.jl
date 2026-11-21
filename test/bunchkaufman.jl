@@ -88,11 +88,8 @@ bimint = rand(1:5, n, 2)
         end
 
         # check that factorize gives a Bunch-Kaufman
-        if eltya <: Union{Float32, Float64, ComplexF32, ComplexF64, Int}
-            # Default behaviour only uses Bunch-Kaufman for these types, for now.
-            @test isa(factorize(asym), LinearAlgebra.BunchKaufman)
-            @test isa(factorize(aher), LinearAlgebra.BunchKaufman)
-        end
+        @test isa(factorize(asym), LinearAlgebra.BunchKaufman)
+        @test isa(factorize(aher), LinearAlgebra.BunchKaufman)
         @testset "$uplo Bunch-Kaufman factor of indefinite matrix" for uplo in (:L, :U)
             bc1 = bunchkaufman(Hermitian(aher, uplo))
             @test LinearAlgebra.issuccess(bc1)
