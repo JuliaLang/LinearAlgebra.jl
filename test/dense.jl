@@ -718,6 +718,12 @@ end
     Qd = [Quaternion(1.0, 0.5, -2.0, 0.3) zero(Quaternion{Float64})
           zero(Quaternion{Float64}) Quaternion(0.5, 0.0, -0.1, 0.2)]
     @test flat(cplx.(exp(Qd)::Matrix{Quaternion{Float64}})) ≈ exp(flat(cplx.(Qd)))
+    # blocks whose size is not part of their type, like matrices, which need not be square
+    block(m, n, i, j) = [(i == j && r == c ? 1.0 : 0.0) + (r + i) / (c + 2j) for r in 1:m, c in 1:n]
+    for sz in ((2, 2), (1, 2))
+        B = [block(sz[i], sz[j], i, j) for i in 1:2, j in 1:2]
+        @test flat(exp(B)::typeof(B)) ≈ exp(flat(B))
+    end
 end
 
 @testset "Matrix trigonometry" begin
