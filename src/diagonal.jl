@@ -376,6 +376,7 @@ end
 
 function rmul!(A::AbstractMatrix, D::Diagonal)
     matmul_size_check(size(A), size(D))
+    check_inplace_aliasing(A, D)
     axes(A, 2) == axes(D.diag, 1) ||
         throw(ArgumentError(lazy"second axis of A, $(axes(A,2)), does not match first axis of D, $(axes(D, 1))"))
     for I in CartesianIndices(A)
@@ -395,6 +396,7 @@ end
 # T .= T * D
 function rmul!(T::Tridiagonal, D::Diagonal)
     matmul_size_check(size(T), size(D))
+    check_inplace_aliasing(T, D)
     (; dl, d, du) = T
     d[1] *= D.diag[1]
     for i in axes(dl,1)
@@ -409,6 +411,7 @@ for T in (:UpperTriangular, :LowerTriangular)
     @eval lmul!(D::Diagonal, A::$T{<:Any, <:StridedMatrix}) = _lmul!(D, A)
 end
 function _rmul!(A::UpperOrLowerTriangular, D::Diagonal)
+    check_inplace_aliasing(A, D)
     P = parent(A)
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
@@ -424,6 +427,7 @@ end
 
 function lmul!(D::Diagonal, B::AbstractVecOrMat)
     matmul_size_check(size(D), size(B))
+    check_inplace_aliasing(B, D)
     axes(D.diag, 1) == axes(B, 1) ||
         throw(ArgumentError(lazy"second axis of D, $(axes(D, 2)), does not match first axis of B, $(axes(B, 1))"))
     for I in CartesianIndices(B)
@@ -445,6 +449,7 @@ end
 # T .= D * T
 function lmul!(D::Diagonal, T::Tridiagonal)
     matmul_size_check(size(D), size(T))
+    check_inplace_aliasing(T, D)
     (; dl, d, du) = T
     d[1] = D.diag[1] * d[1]
     for i in axes(dl,1)
@@ -455,6 +460,7 @@ function lmul!(D::Diagonal, T::Tridiagonal)
     return T
 end
 function _lmul!(D::Diagonal, A::UpperOrLowerTriangular)
+    check_inplace_aliasing(A, D)
     P = parent(A)
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)

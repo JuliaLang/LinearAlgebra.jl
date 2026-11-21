@@ -1196,16 +1196,24 @@ _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::UpperOrLowerTriangular) =
     generic_mattrimul!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 # methods for LinearAlgebra.jl's own triangular types, to avoid `istriu` checks
-lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _trimul!(B, A, B)
+function lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
+    @inline _trimul!(B, A, B)
+end
 function lmul!(A::AbstractTriangular, B::AbstractVecOrMat)
+    check_inplace_aliasing(B, A)
     if istriu(A)
         _trimul!(B, uppertriangular(A), B)
     else
         _trimul!(B, lowertriangular(A), B)
     end
 end
-rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _trimul!(A, A, B)
+function rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular)
+    check_inplace_aliasing(A, B)
+    @inline _trimul!(A, A, B)
+end
 function rmul!(A::AbstractMatrix, B::AbstractTriangular)
+    check_inplace_aliasing(A, B)
     if istriu(B)
         rmul!(A, uppertriangular(B))
     else
@@ -1975,7 +1983,7 @@ for (TA, TB) in ((:UpperTriangular, :UpperTriangular), (:UpperTriangular, :UnitU
                  (:UnitUpperTriangular, :UnitUpperTriangular),
                  (:LowerTriangular, :LowerTriangular), (:LowerTriangular, :UnitLowerTriangular),
                  (:UnitLowerTriangular, :UnitLowerTriangular))
-    @eval rmul!(A::$TA, B::$TB) = $TA(rmul!(full!(A), B))
+    @eval rmul!(A::$TA, B::$TB) = (check_inplace_aliasing(A, B); $TA(rmul!(full!(A), B)))
 end
 
 # Promotion
