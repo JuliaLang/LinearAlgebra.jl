@@ -356,8 +356,8 @@ function eigvals!(A::StridedMatrix{<:BlasComplex}; permute::Bool=true, scale::Bo
     return sorteig!(LAPACK.geevx!(permute ? (scale ? 'B' : 'P') : (scale ? 'S' : 'N'), 'N', 'N', 'N', A)[2], sortby)
 end
 
-# promotion type to use for eigenvalues of a Matrix{T}
-eigtype(T) = promote_type(Float32, typeof(zero(T)/sqrt(abs2(one(T)))))
+# promotion type to use for eigenvalues of a Matrix{T}: at least single precision, keeping units
+eigtype(T) = typeof(zero(T)/sqrt(abs2(one(T))) * one(Float32))
 # for arrays with an abstract eltype, take the promoted type of the stored values into account
 eigtype(A::AbstractArray) = eigtype(_valeltype(A))
 
