@@ -2157,6 +2157,9 @@ function log_quasitriu(A0::AbstractMatrix{T}) where T<:BlasFloat
         return Y
     end
 end
+# half precision is computed in single precision and converted back, as for dense matrices
+log_quasitriu(A0::AbstractMatrix{T}) where {T<:Union{Float16,ComplexF16}} =
+    _tohalf(T, log_quasitriu(convert(AbstractMatrix{eigtype(T)}, A0)))
 # The copy of A0 that _log_quasitriu! overwrites. For a triangular A0, it is upper triangular with
 # dense storage, also if the parent of A0 is banded, since the logarithm fills the upper triangle,
 # and it has zeros below the diagonal, which _sqrt_quasitriu! reads in the parent.

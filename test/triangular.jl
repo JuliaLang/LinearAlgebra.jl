@@ -1369,6 +1369,19 @@ end
     end
 end
 
+@testset "log of half-precision triangular matrices" begin
+    for T in (Float16, ComplexF16), W in (UpperTriangular, UnitUpperTriangular)
+        A = W(T[1 0.5 0.25; 0 2 0.5; 0 0 3])
+        L = log(A)
+        @test L isa UpperTriangular{T}
+        @test L ≈ log(T <: Complex ? ComplexF64.(Matrix(A)) : Float64.(Matrix(A)))
+    end
+    # a negative eigenvalue gives a complex logarithm
+    A = UpperTriangular(Float16[-1 0.5; 0 2])
+    @test log(A) isa UpperTriangular{ComplexF16}
+    @test log(A) ≈ log(Float64.(Matrix(A)))
+end
+
 @testset "integer powers of Bool unit triangular matrices (#1869)" begin
     for (T, B) in ((UnitUpperTriangular, Bool[1 1 1; 0 1 1; 0 0 1]),
                    (UnitLowerTriangular, Bool[1 0 0; 1 1 0; 1 1 1]))
