@@ -2033,7 +2033,8 @@ function cond(A::AbstractMatrix, p::Real=2)
             return opnorm(A, p)*opnorm(Ainv, p)
         catch e
             if isa(e, LAPACKException) || isa(e, SingularException)
-                return convert(float(real(eltype(A))), Inf)
+                x = oneunit(real(eltype(A)))
+                return oftype(float(x / x), Inf)
             else
                 rethrow()
             end
