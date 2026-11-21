@@ -1681,6 +1681,17 @@ function atanh(A::AbstractMatrix)
     return SchurF.Z * R * SchurF.Z'
 end
 
+# Half-precision input is computed in single precision (LAPACK has no half-precision routines)
+# and the result is converted back, as for `eigen`, `svd` and `schur`, independently of
+# the method (e.g., eigendecomposition for Hermitian input) used for the computation.
+for f in (:exp, :cis, :log, :cos, :sin, :tan, :cosh, :sinh, :tanh, :acos, :asin, :atan, :acosh, :asinh, :atanh)
+    @eval $f(A::AbstractMatrix{T}) where {T<:Union{Float16,ComplexF16}} = _tohalf(T, $f(eigencopy_oftype(A, eigtype(T))))
+end
+sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Float16,ComplexF16}} =
+    _tohalf(T, sqrt(eigencopy_oftype(A, eigtype(T)); check))
+sincos(A::AbstractMatrix{T}) where {T<:Union{Float16,ComplexF16}} = map(X -> _tohalf(T, X), sincos(eigencopy_oftype(A, eigtype(T))))
+cbrt(A::AbstractMatrix{Float16}) = _tohalf(Float16, cbrt(eigencopy_oftype(A, eigtype(Float16))))
+
 for (finv, f, finvh, fh, fn) in ((:sec, :cos, :sech, :cosh, "secant"),
                                  (:csc, :sin, :csch, :sinh, "cosecant"),
                                  (:cot, :tan, :coth, :tanh, "cotangent"))
