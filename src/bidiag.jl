@@ -1322,6 +1322,7 @@ end
 ldiv!(A::Bidiagonal, b::AbstractVecOrMat) = @inline ldiv!(b, A, b)
 function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     require_one_based_indexing(c, A, b)
+    check_inplace_aliasing(c, A) # c may be b, as in the 2-arg ldiv!(A, b)
     N = size(A, 1)
     mb, nb = size(b, 1), size(b, 2)
     if N != mb
@@ -1416,7 +1417,7 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     end
     C
 end
-rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
+rdiv!(A::AbstractMatrix, B::Bidiagonal) = (check_inplace_aliasing(A, B); @inline _rdiv!(A, A, B))
 # backward compatibility
 rdiv!(A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) = rdiv!(A, wrapperop(B)(parent(B)))
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) =

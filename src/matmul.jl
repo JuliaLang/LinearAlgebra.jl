@@ -76,13 +76,14 @@ end
 @noinline throw_mul_aliasing() =
     throw(ArgumentError("output array must not be aliased with an input array"))
 
-# `lmul!(A, B)` and `rmul!(B, A)` overwrite `B` while still reading `A`
+# `lmul!(A, B)`, `rmul!(B, A)`, `ldiv!(A, B)` and `rdiv!(B, A)` overwrite `B` while still
+# reading `A`, and so does `ldiv!(B, A, C)`
 @inline function check_inplace_aliasing(B, A)
     Base.mightalias(B, A) && throw_inplace_aliasing()
     return nothing
 end
 @noinline throw_inplace_aliasing() =
-    throw(ArgumentError("the factor that is overwritten must not share memory with the other factor"))
+    throw(ArgumentError("the array that is overwritten must not share memory with the other operand"))
 
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
 @inline function mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
