@@ -908,6 +908,23 @@ end
     @test transpose([1, 2]) * [1.5, 2.5] == 6.5
     @test transpose(Int[]) * Float64[] === 0.0
     @test_throws DimensionMismatch transpose([1, 2]) * [1.0]
+
+end
+
+
+@testset "istriu/istril and \\ with a transposed vector (#1906)" begin
+    v = [3.0]
+    @test istriu(transpose(v)) && istril(transpose(v))
+    @test istriu(v') && istril(v')
+    @test transpose(v) \ [1.0] ≈ [1/3]
+    @test v' \ [1.0] ≈ [1/3]
+    w = [1.0, 2.0]
+    @test istriu(transpose(w)) && !istril(transpose(w))
+    @test istriu(w', 0) && istril(w', 1)
+    @test transpose(w) \ [1.0] ≈ [0.2, 0.4]
+    # a transposed matrix still forwards to its parent
+    M = [1 2; 0 3]
+    @test istril(transpose(M)) && !istriu(transpose(M))
 end
 
 end # module TestAdjointTranspose
