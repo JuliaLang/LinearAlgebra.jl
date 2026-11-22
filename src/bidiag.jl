@@ -260,6 +260,8 @@ similar(B::Bidiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = simi
 
 Base.dataids(B::Bidiagonal) = (_band_dataids(B.dv)..., _band_dataids(B.ev)...)
 _aliasparts(B::Bidiagonal) = (_aliasparts(B.dv)..., _aliasparts(B.ev)...)
+_mul_inplace_left(::Bidiagonal, α, β) = true
+_mul_inplace_right(::Bidiagonal, α, β) = true
 Base.unaliascopy(B::Bidiagonal) = Bidiagonal(Base.unaliascopy(B.dv), Base.unaliascopy(B.ev), B.uplo)
 
 tr(B::Bidiagonal) = sum(B.dv)
@@ -1324,6 +1326,7 @@ ldiv!(A::Bidiagonal, b::AbstractVecOrMat) = @inline ldiv!(b, A, b)
 function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     require_one_based_indexing(c, A, b)
     check_inplace_aliasing(c, A) # c may be b, as in the 2-arg ldiv!(A, b)
+    check_partial_overlap(c, b)
     N = size(A, 1)
     mb, nb = size(b, 1), size(b, 2)
     if N != mb

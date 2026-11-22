@@ -255,6 +255,8 @@ copy(D::Diagonal) = Diagonal(copy(D.diag))
 
 Base.dataids(D::Diagonal) = Base.dataids(D.diag)
 _aliasparts(D::Diagonal) = _aliasparts(D.diag)
+_mul_inplace_left(::Diagonal, α, β) = true
+_mul_inplace_right(::Diagonal, α, β) = true
 Base.unaliascopy(D::Diagonal) = Diagonal(Base.unaliascopy(D.diag))
 
 Base._reverse(A::Diagonal, dims) = reverse!(Matrix(A); dims)
@@ -677,6 +679,7 @@ function _ldiv_Diagonal_loop!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOr
     B
 end
 function _ldiv_Diagonal_loop!(B::StridedVecOrMat, D::Diagonal, A::StridedVecOrMat)
+    check_partial_overlap(B, A)
     dd = D.diag
     @inbounds for j in axes(A,2), i in axes(A,1)
         B[i, j] = dd[i] \ A[i, j]
