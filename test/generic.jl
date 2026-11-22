@@ -262,6 +262,15 @@ end
     @test isequal(BigFloat[1.0] * 2.0im,     Complex{BigFloat}[2.0im])
     @test isequal(BigFloat[1.0] * 2.0f0im,   Complex{BigFloat}[2.0im])
 end
+@testset "mul! with a scalar and arrays that share memory" begin
+    v = [1.0, 2, 3, 4]
+    @test mul!(v, 2, view(v, :)) == [2, 4, 6, 8]
+    @test_throws ArgumentError mul!(view(v, 2:4), 2, view(v, 1:3))
+    @test_throws ArgumentError mul!(view(v, 2:4), view(v, 1:3), 2)
+    @test_throws ArgumentError mul!(view(v, 2:4), 2I, view(v, 1:3))
+    M = [1.0 2; 3 4; 5 6]
+    @test_throws ArgumentError mul!(view(M, 2:3, :), view(M, 1:2, :), 2I)
+end
 @testset "* and mul! for non-commutative scaling" begin
     q = Quaternion(0.44567, 0.755871, 0.882548, 0.423612)
     qmat = [Quaternion(0.015007, 0.355067, 0.418645, 0.318373)]

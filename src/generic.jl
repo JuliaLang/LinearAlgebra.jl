@@ -181,6 +181,7 @@ function generic_mul!(C::AbstractArray, X::AbstractArray, s::Number, alpha::Numb
     if length(C) != length(X)
         throw(DimensionMismatch(lazy"first array has length $(length(C)) which does not match the length of the second, $(length(X))."))
     end
+    check_partial_overlap(C, X)
     for (IC, IX) in zip(eachindex(C), eachindex(X))
         @inbounds @stable_muladdmul _modify!(MulAddMul(alpha,beta), X[IX] * s, C, IC)
     end
@@ -192,6 +193,7 @@ function generic_mul!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Numb
         throw(DimensionMismatch(LazyString(lazy"first array has length $(length(C)) which does not",
             lazy"match the length of the second, $(length(X)).")))
     end
+    check_partial_overlap(C, X)
     for (IC, IX) in zip(eachindex(C), eachindex(X))
         @inbounds @stable_muladdmul _modify!(MulAddMul(alpha,beta), s * X[IX], C, IC)
     end
