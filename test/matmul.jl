@@ -1071,6 +1071,12 @@ end
                 @test_throws ArgumentError mul!(C, C, X, 2, 3)
             end
         end
+        # a triangular factor with a parent that is not strided may have other kernels, so mul!
+        # throws for a partial overlap itself
+        Y = UpperTriangular(view(M, collect(1:n), :))
+        V = rand(T, n, n+1); W = rand(T, n+1, n)
+        @test_throws "output array" mul!(view(V, :, 2:n+1), Y, view(V, :, 1:n))
+        @test_throws "output array" mul!(view(W, 2:n+1, :), view(W, 1:n, :), Y)
         # the kernel for a Tridiagonal or SymTridiagonal left factor works in place as well
         for X in (Tridiagonal(M), SymTridiagonal(Symmetric(M)))
             Xm = Matrix(X)
