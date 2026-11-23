@@ -217,7 +217,6 @@ function ldiv!(A::LQ, B::AbstractVecOrMat)
 end
 
 function ldiv!(Fadj::AdjointFactorization{<:Any,<:LQ}, B::AbstractVecOrMat)
-    check_inplace_aliasing(B, Fadj)
     require_one_based_indexing(B)
     m, n = size(Fadj)
     m >= n || throw(DimensionMismatch("solver does not support underdetermined systems (more columns than rows)"))

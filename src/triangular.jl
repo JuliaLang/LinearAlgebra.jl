@@ -1222,7 +1222,6 @@ function rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular)
     @inline _trimul!(A, A, B)
 end
 function rmul!(A::AbstractMatrix, B::AbstractTriangular)
-    check_inplace_aliasing(A, B)
     if istriu(B)
         rmul!(A, uppertriangular(B))
     else

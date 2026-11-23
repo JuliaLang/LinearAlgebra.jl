@@ -103,6 +103,12 @@ _mul_checks_overlap(Y) = false
 _isstructured(C) = C isa Union{AbstractTriangular,Diagonal,Bidiagonal,Tridiagonal,SymTridiagonal,
     HermOrSym,UpperHessenberg}
 
+# A method checks the arrays it overwrites against those it only reads, unless the methods
+# it calls check the same arguments in full before anything is written. So kernels that
+# compute the output in loops or call BLAS or LAPACK check, and so do methods that overwrite
+# an argument first, e.g. to permute it, or that copy their result into it last: the error
+# comes before anything is overwritten, and a solve never overwrites the factorization.
+
 # `lmul!(A, B)`, `rmul!(B, A)`, `ldiv!(A, B)` and `rdiv!(B, A)` overwrite `B` while still
 # reading `A`, and so does `ldiv!(B, A, C)`
 @inline function check_inplace_aliasing(B, A)
