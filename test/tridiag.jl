@@ -1369,7 +1369,7 @@ end
     # direct solves with empty Tridiagonal
     T = Tridiagonal(Float64[], Float64[], Float64[])
     @test ldiv!(copy(T), ones(0)) == ones(0)
-    @test_throws DimensionMismatch @test ldiv!(copy(T), ones(1))
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(1))
     @test ldiv!(copy(T), ones(0,2)) == ones(0,2)
     @test_throws DimensionMismatch ldiv!(copy(T), ones(1,0))
 end

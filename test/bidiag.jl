@@ -1351,7 +1351,7 @@ end
     @test sum(E; dims = 2) == zeros(0, 1)
     @test ones(0,0) / E == ones(0,0)
     @test ones(2,0) / E == ones(2,0)
-    @test_throws ones(0,1) / E
+    @test_throws DimensionMismatch ones(0,1) / E
 end
 
 @testset "log" begin
