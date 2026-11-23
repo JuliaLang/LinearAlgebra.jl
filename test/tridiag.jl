@@ -1256,4 +1256,12 @@ end
     end
 end
 
+@testset "solves with empty SymTridiagonal" begin
+    S = SymTridiagonal(Float64[], Float64[])
+    @test factorize(S) isa Factorization{Float64}
+    @test S \ ones(0, 0) == ones(0, 0)
+    @test S \ ones(0, 2) == ones(0, 2)
+    @test inv(S) == S
+end
+
 end # module TestTridiagonal
