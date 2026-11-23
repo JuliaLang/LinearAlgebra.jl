@@ -1189,7 +1189,7 @@ norm_x_minus_y(D1::Diagonal, D2::Diagonal, ::typeof(norm)) = norm_x_minus_y(D1.d
 
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)
-_opnorm12Inf(A::Diagonal, p) = maximum(opnorm(x, p) for x in A.diag)
+_opnorm12Inf(A::Diagonal, p) = isempty(A.diag) ? norm(A.diag) : maximum(opnorm(x, p) for x in A.diag)
 
 function opnorm(A::Diagonal, p::Real=2)
     if p == 1 || p == Inf || p == 2

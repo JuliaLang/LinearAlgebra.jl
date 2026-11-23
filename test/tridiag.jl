@@ -1089,6 +1089,14 @@ end
         @test_skip opnorm(T, 2) ≈ opnorm(Matrix(T), 2) # currently missing
         @test opnorm(T, Inf) == opnorm(Matrix(T), Inf)
     end
+
+    @testset "empty" for E in (Float64, ComplexF64),
+            T in (Tridiagonal(E[], E[], E[]), SymTridiagonal(E[], E[]))
+        for p in (1, 2, Inf)
+            @test opnorm(T, p) === opnorm(Matrix(T), p)
+            @test cond(T, p) === cond(Matrix(T), p)
+        end
+    end
 end
 
 @testset "block-bidiagonal matrix indexing" begin

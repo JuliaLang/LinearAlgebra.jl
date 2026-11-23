@@ -1329,9 +1329,9 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
         # Condition numbers
         function cond(A::$t{<:BlasFloat,<:StridedMatrix}, p::Real=2)
             checksquare(A)
-            if p == 1
+            if p == 1 && !isempty(A)
                 return inv(LAPACK.trcon!('O', $uploc, $isunitc, A.data))
-            elseif p == Inf
+            elseif p == Inf && !isempty(A)
                 return inv(LAPACK.trcon!('I', $uploc, $isunitc, A.data))
             else # use fallback
                 return cond(copy!(similar(parent(A)), A), p)
