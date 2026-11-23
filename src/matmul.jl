@@ -77,29 +77,32 @@ _mightalias(A, B) = any(a -> any(b -> Base.mightalias(a, b), _aliasparts(B)), _a
 
 # `mul!(C, A, B, α, β)` overwrites `C` while still reading `A` and `B`, so `C` must not share
 # memory with them. A factor that `mul!` applies in place, as `lmul!` and `rmul!` do, can
-# overwrite the other factor, though, so `C` may be that other factor itself, unless it is
-# structured: the structured kernels assume that the output is not one of the factors. If the
-# kernels for that factor check partial overlaps themselves, `C` may also overlap a strided
-# other factor otherwise.
+# overwrite the other factor, though, so `C` may share memory with that other factor, unless
+# `C` is structured: the structured kernels assume that the output is not one of the factors.
+# The kernels see the other factor itself if it is `C` element by element. Otherwise, it is
+# copied into `C` first, which needs `β == 0` and its elements to be storable in `C`.
 @inline function check_mul_aliasing(C, A, B, α, β)
-    if _mightalias(C, A) && !_mul_mayalias(C, A, B, _mul_inplace_right(A, B, α, β)) ||
-            _mightalias(C, B) && !_mul_mayalias(C, B, A, _mul_inplace_left(A, α, β))
+    aliasA, aliasB = _mightalias(C, A), _mightalias(C, B)
+    if aliasA && (aliasB || !_mul_mayalias(C, A, _mul_inplace_right(A, B, α, β), β)) ||
+            aliasB && !_mul_mayalias(C, B, _mul_inplace_left(A, α, β), β)
         throw_mul_aliasing()
     end
     return nothing
 end
 @noinline throw_mul_aliasing() =
     throw(ArgumentError("output array must not be aliased with an input array"))
-# whether `C` may share memory with the factor `X`, if the other factor `Y` is applied in place
-_mul_mayalias(C, X, Y, inplace::Bool) = inplace && !_isstructured(C) &&
-    (_isinplace(C, X) || _mul_checks_overlap(Y) && X isa StridedMaybeAdjOrTransVecOrMat)
+# whether `C` may share memory with the factor `X`, if the other factor is applied in place
+_mul_mayalias(C, X, inplace::Bool, β) = inplace && !_isstructured(C) && X isa AbstractArray &&
+    (_isinplace(C, X) || iszero(β) && promote_type(eltype(X), eltype(C)) === eltype(C))
 # whether `mul!(C, A, B, α, β)` applies `A` in place to `B`, or `B` in place to `A`
 _mul_inplace_left(A, α, β) = false
 _mul_inplace_right(B, α, β) = false
 _mul_inplace_right(A, B, α, β) = _mul_inplace_right(B, α, β)
-# whether the kernels that apply `Y` in place throw if the output partially overlaps the other
-# factor, where they can't copy that factor into the output first
-_mul_checks_overlap(Y) = false
+@noinline function _mul_aliased!(C, A, B, α, β)
+    check_mul_aliasing(C, A, B, α, β)
+    return _mul!(C, _mul_operand(C, A), _mul_operand(C, B), α, β)
+end
+_mul_operand(C, X) = !_mightalias(C, X) || _isinplace(C, X) ? X : copyto!(C, X)
 _isstructured(C) = C isa Union{AbstractTriangular,Diagonal,Bidiagonal,Tridiagonal,SymTridiagonal,
     HermOrSym,UpperHessenberg}
 
@@ -131,7 +134,7 @@ _isinplace(Y::StridedArray{T,N}, B::StridedArray{T,N}) where {T,N} = Y === B ||
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
 @inline function mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
                 alpha::Number, beta::Number)
-    check_mul_aliasing(y, A, x, alpha, beta)
+    (_mightalias(y, A) || _mightalias(y, x)) && return _mul_aliased!(y, A, x, alpha, beta)
     _mul!(y, A, x, alpha, beta)
 end
 
@@ -321,10 +324,10 @@ Calculates the matrix-matrix or matrix-vector product ``A B`` and stores the res
 overwriting the existing value of `Y`. Note that `Y` must not be aliased with either `A` or
 `B`; an `ArgumentError` is thrown if `Base.mightalias` detects that they share memory.
 As an exception, if one factor is triangular, `Diagonal`, `Bidiagonal` or an `AbstractQ`, or
-if `A` is `Tridiagonal` or `SymTridiagonal`, the other factor may be `Y` itself, unless `Y`
-is a structured matrix, e.g., `mul!(B, UpperTriangular(A), B)`, as in [`lmul!`](@ref) and
-[`rmul!`](@ref). For a triangular factor and BLAS element types, `Y` may also overlap a
-strided other factor otherwise, as that is copied into `Y` first.
+if `A` is `Tridiagonal` or `SymTridiagonal`, the other factor may share memory with `Y`,
+unless `Y` is a structured matrix: as in [`lmul!`](@ref) and [`rmul!`](@ref), it may be `Y`
+itself, e.g., `mul!(B, UpperTriangular(A), B)`, and otherwise it is copied into `Y` first,
+which requires that its elements can be stored in `Y`.
 
 # Examples
 ```jldoctest
@@ -358,7 +361,8 @@ aliased with either `A` or `B`; an `ArgumentError` is thrown if `Base.mightalias
 detects that they share memory. As an exception, if one factor is `Diagonal` or
 `Bidiagonal`, if `A` is `Tridiagonal` or `SymTridiagonal`, or if one factor is triangular
 and `α == 1` and `β == 0`, the other factor may be `C` itself, unless `C` is a structured
-matrix.
+matrix. If `β == 0`, it may also share memory with `C` otherwise, as it is then copied
+into `C` first, provided that its elements can be stored in `C`.
 
 !!! compat "Julia 1.3"
     Five-argument `mul!` requires at least Julia 1.3.
@@ -384,7 +388,7 @@ true
 ```
 """
 @inline function mul!(C::AbstractMatrix, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number)
-    check_mul_aliasing(C, A, B, α, β)
+    (_mightalias(C, A) || _mightalias(C, B)) && return _mul_aliased!(C, A, B, α, β)
     _mul!(C, A, B, α, β)
 end
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
