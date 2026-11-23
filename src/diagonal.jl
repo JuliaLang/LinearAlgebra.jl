@@ -6,7 +6,6 @@ struct Diagonal{T,V<:AbstractVector{T}} <: AbstractMatrix{T}
     diag::V
 
     function Diagonal{T,V}(diag) where {T,V<:AbstractVector{T}}
-        require_one_based_indexing(diag)
         new{T,V}(diag)
     end
 end
