@@ -1187,6 +1187,20 @@ end
     end
 end
 
+@testset "empty views of different arrays do not alias" begin
+    # empty arrays of different shapes may share their memory
+    E = view(zeros(0, 0), 1:0, 1:0)
+    @test ldiv!(UpperTriangular(E), view(zeros(0), 1:0)) == zeros(0)
+    @test lmul!(UpperTriangular(E), view(zeros(0, 2), 1:0, :)) == zeros(0, 2)
+    @test mul!(E, view(zeros(0, 3), 1:0, :), view(zeros(3, 0), :, 1:0)) == zeros(0, 0)
+    # a nonempty banded matrix with an empty off-diagonal
+    B = Bidiagonal(view([2.0], 1:1), view(zeros(0), 1:0), :U)
+    X = view(zeros(1, 0), :, 1:0)
+    @test ldiv!(B, X) == zeros(1, 0)
+    @test lmul!(B, X) == zeros(1, 0)
+    @test mul!(X, B, zeros(1, 0)) == zeros(1, 0)
+end
+
 @testset "#35163" begin
     # typemax(Int32) * Int32(1) + Int32(1) * Int32(1) should wrap around
     # not promote to Int64, convert to Int32 and throw inexacterror
