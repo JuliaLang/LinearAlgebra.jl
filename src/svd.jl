@@ -13,6 +13,8 @@ The singular values in `S` are sorted in descending order.
 
 Iterating the decomposition produces the components `U`, `S`, and `V`.
 
+`F \\ b` gives the least-squares solution of minimum norm of `A x = b`; see [`svd`](@ref).
+
 # Examples
 ```jldoctest
 julia> A = [1. 0. 0. 0. 2.; 0. 0. 3. 0. 0.; 0. 0. 0. 0. 0.; 0. 2. 0. 0. 0.]
@@ -187,6 +189,12 @@ dropping (setting to zero) singular values less than `max(atol, rtol*σ₁)` whe
 !!! compat "Julia 1.13"
     The `atol` and `rtol` arguments require Julia 1.13 or later.
 
+`F \\ b` solves `A x = b` in the least-squares sense with the factorization: it returns
+the solution of minimum norm, `pinv(A) * b`, ignoring singular values below a small
+relative tolerance (see [`ldiv!`](@ref) for setting it). Unlike `A \\ b`, it also
+works when `A` is singular or rank-deficient, and it is less affected by an
+ill-conditioned `A`, at the cost of computing the SVD.
+
 # Examples
 ```jldoctest
 julia> A = rand(4,3);
@@ -204,6 +212,21 @@ true
 julia> Uonly, = svd(A); # Store U only
 
 julia> Uonly == U
+true
+```
+
+Solving a singular system, for which `A \\ b` throws a `SingularException`:
+```jldoctest
+julia> A = [1.0 2.0; 2.0 4.0];
+
+julia> b = [1.0, 2.0];
+
+julia> x = svd(A) \\ b; # the least-squares solution of minimum norm
+
+julia> x ≈ [0.2, 0.4]
+true
+
+julia> A * x ≈ b
 true
 ```
 """
