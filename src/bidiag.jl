@@ -1518,14 +1518,14 @@ end
 eigvals(M::Bidiagonal) = copy(M.dv)
 function eigvecs(M::Bidiagonal{T}) where T
     n = length(M.dv)
-    Q = Matrix{T}(undef, n,n)
+    Q = Matrix{float(T)}(undef, n,n)
     blks = [0; findall(iszero, M.ev); n]
-    v = zeros(T, n)
+    v = zeros(float(T), n)
     if M.uplo == 'U'
         for idx_block = 1:length(blks) - 1, i = blks[idx_block] + 1:blks[idx_block + 1] #index of eigenvector
-            fill!(v, zero(T))
-            v[blks[idx_block] + 1] = one(T)
-            for j = blks[idx_block] + 1:i - 1 #Starting from j=i, eigenvector elements will be 0
+            fill!(v, zero(float(T)))
+            v[blks[idx_block] + 1] = one(float(T))
+            for j = blks[idx_block] + 1:i - 1 #Starting from j=i+1, eigenvector elements will be 0
                 v[j+1] = (M.dv[i] - M.dv[j])/M.ev[j] * v[j]
             end
             c = norm(v)
@@ -1535,9 +1535,9 @@ function eigvecs(M::Bidiagonal{T}) where T
         end
     else
         for idx_block = 1:length(blks) - 1, i = blks[idx_block + 1]:-1:blks[idx_block] + 1 #index of eigenvector
-            fill!(v, zero(T))
-            v[blks[idx_block+1]] = one(T)
-            for j = (blks[idx_block+1] - 1):-1:max(1, (i - 1)) #Starting from j=i, eigenvector elements will be 0
+            fill!(v, zero(float(T)))
+            v[blks[idx_block+1]] = one(float(T))
+            for j = (blks[idx_block+1] - 1):-1:i #Starting from j=i-1, eigenvector elements will be 0
                 v[j] = (M.dv[i] - M.dv[j+1])/M.ev[j] * v[j+1]
             end
             c = norm(v)
