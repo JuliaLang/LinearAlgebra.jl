@@ -217,6 +217,12 @@ rdiv!(B::AbstractVecOrMat, H::AdjOrTransUpperHessenberg) =
 # Essentially, it works by doing a Givens RQ factorization of H+µI from
 # right to left, and doing backsubstitution *simultaneously*.
 
+# (H+μI) \\ B → 0 and B / (H+μI) → 0 as |μ| → ∞, provided that H and B are finite
+function _div_infinite_shift!(B::AbstractVecOrMat, F::UpperHessenberg)
+    T = eltype(B)
+    return fill!(B, all(isfinite, F) && all(isfinite, B) ? zero(T) : T(NaN))
+end
+
 # solve (H+μI)X = B, storing result in B
 function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     checksquare(F)
@@ -225,6 +231,7 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     m != size(B,1) && throw(DimensionMismatch(lazy"wrong right-hand-side # rows != $m"))
     iszero(m) && return B
     require_one_based_indexing(B)
+    isinf(shift) && return _div_infinite_shift!(B, F)
     n = size(B,2)
     H = F.data
     μ = shift
@@ -277,6 +284,7 @@ function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
     m != size(B,2) && throw(DimensionMismatch(lazy"wrong right-hand-side # cols != $m"))
     iszero(m) && return B
     require_one_based_indexing(B)
+    isinf(shift) && return _div_infinite_shift!(B, F)
     n = size(B,1)
     H = F.data
     μ = shift
