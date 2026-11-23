@@ -619,4 +619,17 @@ end
     @test isequal(T.ev, [NaN])
 end
 
+@testset "broadcast over three or more incompatible structured matrices (issue #1910)" begin
+    A = [1.0 2 3; 4 5 6; 7 8 9]
+    Bu, Bl = Bidiagonal(A, :U), Bidiagonal(A, :L)
+    D, T, S = Diagonal(A), Tridiagonal(A), SymTridiagonal(A + A')
+    U, L, UH = UpperTriangular(A), LowerTriangular(A), UpperHessenberg(A)
+    Sy, H = Symmetric(A), Hermitian(A)
+    for (X, Y) in ((Bu, U), (Bl, Sy), (T, L), (S, U), (U, Bl), (L, Sy), (UH, H))
+        @test X .+ Y .+ X == Matrix(X) .+ Matrix(Y) .+ Matrix(X)
+    end
+    @test (+).(D, U, T) == Matrix(D) .+ Matrix(U) .+ Matrix(T)
+    @test ifelse.(Bu .== 0, U, Bu) == ifelse.(Matrix(Bu) .== 0, Matrix(U), Matrix(Bu))
+end
+
 end
