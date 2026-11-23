@@ -1337,6 +1337,14 @@ end
     end
 end
 
+@testset "direct solves with empty Tridiagonal" begin
+    T = Tridiagonal(Float64[], Float64[], Float64[])
+    @test ldiv!(copy(T), ones(0)) == ones(0)
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(1))
+    @test ldiv!(copy(T), ones(0,2)) == ones(0,2)
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(1,0))
+end
+
 @static if COMPREHENSIVE
 @testset "isposdef and cholesky of empty banded matrices (#1874)" begin
     @testset for elty in (Float64, ComplexF64)

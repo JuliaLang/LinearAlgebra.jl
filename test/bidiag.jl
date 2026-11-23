@@ -1330,6 +1330,13 @@ end
     end
 end
 
+@testset "solves with empty Bidiagonal" begin
+    E = Bidiagonal(Float64[], Float64[], :U)
+    @test ones(0,0) / E == ones(0,0)
+    @test ones(2,0) / E == ones(2,0)
+    @test_throws DimensionMismatch ones(0,1) / E
+end
+
 @testset "log" begin
     for B in (Bidiagonal([1.0, 2, 3], [1.0, 2], :U), Bidiagonal([2.0, 3, 4, 5], [1.0, 1, 1], :U),
               Bidiagonal([-1.0, 2, 3], [1.0, 2], :U), Bidiagonal([1.0, 2, 3], [1.0, 2], :L))
