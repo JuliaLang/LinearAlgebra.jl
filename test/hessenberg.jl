@@ -475,6 +475,20 @@ end # COMPREHENSIVE
     # scaling that would change the eltype of F.H
     @test_throws MethodError hessenberg(A) * (1 + 2im)
     @test_throws MethodError (1 + 2im) * hessenberg(A)
+    # empty Hessenberg
+    E = zeros(0, 0)
+    F = hessenberg(E)
+    U = UpperHessenberg(E)
+    for A in (F, U)
+        @test inv(A) == E
+        @test A \ ones(0) == ones(0)
+        @test A \ ones(0,2) == ones(0,2)
+        @test_throws DimensionMismatch A \ ones(1)
+        @test_throws DimensionMismatch A \ ones(1,0)
+        @test ones(2,0) / A == ones(2,0)
+        @test_throws DimensionMismatch ones(2,1) / A
+        @test_throws DimensionMismatch ones(0,1) / A
+    end
 end
 
 @testset "det of small integer matrices (#1895)" begin
