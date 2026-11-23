@@ -21,18 +21,16 @@ jobs:
       matrix:
         # Standard mode everywhere (see test/README.md).
         os:
-          - ubuntu-latest
           - windows-latest
         arch:
           - x64
-          - x86
         julia-version:
           - '1.14-nightly'
-        exclude:
-          # ubuntu x64 runs the comprehensive tests below instead
-          - os: ubuntu-latest
-            arch: x64
         include:
+          # 32-bit on Linux only: Julia has no 32-bit Windows nightly
+          - os: ubuntu-latest
+            arch: x86
+            julia-version: '1.14-nightly'
           - os: macOS-15-intel
             arch: x64
             julia-version: '1.14-nightly'
