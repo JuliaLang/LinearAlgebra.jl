@@ -1405,7 +1405,7 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     if mc != m || nc != n
         throw(DimensionMismatch(lazy"expect output to have size ($m, $n), but got ($mc, $nc)"))
     end
-
+    iszero(n) && return C
     zi = findfirst(iszero, B.dv)
     isnothing(zi) || throw(SingularException(zi))
 
