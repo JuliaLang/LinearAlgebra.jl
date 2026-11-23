@@ -1349,6 +1349,8 @@ end
     E = Bidiagonal(Float64[], Float64[], :U)
     @test sum(E; dims = 1) == zeros(1, 0)
     @test sum(E; dims = 2) == zeros(0, 1)
+    @test ones(0,0) / E == ones(0,0)
+    @test ones(2,0) / E == ones(2,0)
 end
 
 @testset "log" begin

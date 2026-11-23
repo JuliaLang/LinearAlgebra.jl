@@ -571,6 +571,10 @@ end
     b = ComplexF64[1, 2, 3]
     @test Fc' \ b ≈ Matrix(Tc)' \ b
     @test_throws DimensionMismatch ldiv!(Fc', ones(ComplexF64, 2))
+    # empty Tridiagonal
+    T = Tridiagonal(Float64[], Float64[], Float64[])
+    @test ldiv!(lu(T), ones(0)) == ones(0)
+    @test ldiv!(lu(T), ones(0,2)) == ones(0,2)
 end
 
 end # module TestLU

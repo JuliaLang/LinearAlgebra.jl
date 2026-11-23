@@ -750,6 +750,7 @@ function ldiv!(A::LU{T,Tridiagonal{T,V}}, B::AbstractVecOrMat) where {T,V}
     if n != size(B,1)
         throw(DimensionMismatch(lazy"matrix has dimensions ($n,$n) but right hand side has $(size(B,1)) rows"))
     end
+    iszero(n) && return B
     nrhs = size(B,2)
     dl = A.factors.dl
     d = A.factors.d

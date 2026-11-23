@@ -1366,6 +1366,10 @@ end
     @test_throws SingularException(1) ldiv!(copy(S), ones(3))
     M = [1 2; 2 3]
     @test_throws "asymmetric value" LinearAlgebra.fillband!(SymTridiagonal([M, M], [M]), [1 2; 3 4], 0, 0)
+    # direct solves with empty Tridiagonal
+    T = Tridiagonal(Float64[], Float64[], Float64[])
+    @test ldiv!(copy(T), ones(0)) == ones(0)
+    @test ldiv!(copy(T), ones(0,2)) == ones(0,2)
 end
 
 @testset "eigen with no eigenvalues in the interval" begin
