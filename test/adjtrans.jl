@@ -908,9 +908,7 @@ end
     @test transpose([1, 2]) * [1.5, 2.5] == 6.5
     @test transpose(Int[]) * Float64[] === 0.0
     @test_throws DimensionMismatch transpose([1, 2]) * [1.0]
-
 end
-
 
 @testset "reductions over an empty Adjoint/Transpose (#1905)" begin
     for T in (Float64, Int, ComplexF64, Bool), A in (Matrix{T}(undef, 1, 0), Matrix{T}(undef, 0, 2), Matrix{T}(undef, 0, 0))
