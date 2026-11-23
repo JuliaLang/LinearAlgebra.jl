@@ -238,4 +238,70 @@ end
     end
 end
 
+@testset "half precision" begin
+    # the factors are converted back to half precision, as for `eigen` and `svd`
+    A = Float16[4 1 2; 0.5 3 1; 0.25 0.5 2]
+    N = Float16[0 1; -1 0] # complex eigenvalues
+    C = ComplexF16[1 2im; 3 4]
+    for (M, T, Tv) in ((A, Float16, Float16), (N, Float16, ComplexF16), (C, ComplexF16, ComplexF16),
+                       (UpperTriangular(A), Float16, Float16), (UnitLowerTriangular(A), Float16, Float16),
+                       (Bidiagonal(A, :U), Float16, Float16), (Bidiagonal(A, :L), Float16, Float16),
+                       (Bidiagonal(C, :L), ComplexF16, ComplexF16))
+        F = schur(M)
+        @test F.T isa Matrix{T}
+        @test F.Z isa Matrix{T}
+        @test F.values isa Vector{Tv}
+        @test F.Z * F.T * F.Z' ≈ M
+        F32 = schur(LinearAlgebra.eigtype(T).(Matrix(M)))
+        @test sort(F.values, by=LinearAlgebra.eigsortby) ≈ sort(F32.values, by=LinearAlgebra.eigsortby)
+    end
+    # generalized Schur decomposition; the generalized eigenvalues are complex for real input
+    for (M, B, T, Tα) in ((N, Float16[1 0.5; 0 2], Float16, ComplexF16), (C, ComplexF16[1 0; 1im 2], ComplexF16, ComplexF16),
+                          (N, Float32[1 0.5; 0 2], Float32, ComplexF32))
+        F = schur(M, B)
+        @test F.S isa Matrix{T}
+        @test F.T isa Matrix{T}
+        @test F.Q isa Matrix{T}
+        @test F.Z isa Matrix{T}
+        @test F.α isa Vector{Tα}
+        @test F.β isa Vector{T}
+        @test F.Q * F.S * F.Z' ≈ M
+        @test F.Q * F.T * F.Z' ≈ B
+    end
+    # reordering, which goes through single precision as LAPACK has no half-precision routines
+    select = [false, true, true]
+    for M in (A, ComplexF16.(A) .+ 0.5im)
+        F = schur(M)
+        G = ordschur(F, select)
+        @test G.T isa Matrix{eltype(M)}
+        @test G.Z isa Matrix{eltype(M)}
+        @test G.Z * G.T * G.Z' ≈ M
+        @test sort(G.values[1:2], by=LinearAlgebra.eigsortby) ≈ sort(F.values[2:3], by=LinearAlgebra.eigsortby)
+        H = copy(F)
+        @test ordschur!(H, select) === H
+        @test H.values == G.values
+        @test H.T == G.T
+    end
+    B = Float16[1 0.5 0; 0 2 0.25; 0 0 3]
+    F = schur(A, B)
+    G = ordschur(F, select)
+    @test G.S isa Matrix{Float16}
+    @test G.Q isa Matrix{Float16}
+    @test G.α isa Vector{ComplexF16}
+    @test G.β isa Vector{Float16}
+    @test G.Q * G.S * G.Z' ≈ A
+    @test G.Q * G.T * G.Z' ≈ B
+    λ(F) = F.α ./ F.β
+    @test sort(λ(G)[1:2], by=LinearAlgebra.eigsortby) ≈ sort(λ(F)[2:3], by=LinearAlgebra.eigsortby)
+    H = copy(F)
+    @test ordschur!(H, select) === H
+    @test H.S == G.S
+    # matrix functions using the Schur decomposition still compute in single precision
+    @test log(A) isa Matrix{Float32}
+    @test sqrt(A) isa Matrix{Float32}
+    @test sqrt(N) isa Matrix{ComplexF32}
+    @test atan(C) isa Matrix{ComplexF32}
+    @test log(A) ≈ log(Float32.(A))
+end
+
 end # module TestSchur
