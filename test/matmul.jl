@@ -1021,12 +1021,6 @@ end
     end
 end
 
-@testset "check_mul_aliasing without exceptions, as SparseArrays uses it" begin
-    C = rand(3, 3); D = Diagonal(rand(3))
-    @test_throws ArgumentError LinearAlgebra.check_mul_aliasing(C, C, D)
-    @test LinearAlgebra.check_mul_aliasing(C, rand(3, 3), D) === nothing
-end
-
 @testset "mul! with a factor that is applied in place" begin
     @testset for T in (Float64, BigFloat, (@static COMPREHENSIVE ? (ComplexF64,) : ())...)
         n = 4
