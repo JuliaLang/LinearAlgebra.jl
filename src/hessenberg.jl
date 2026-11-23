@@ -223,6 +223,7 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     check_inplace_aliasing(B, F)
     m = size(F,1)
     m != size(B,1) && throw(DimensionMismatch(lazy"wrong right-hand-side # rows != $m"))
+    iszero(m) && return B
     require_one_based_indexing(B)
     n = size(B,2)
     H = F.data
@@ -274,6 +275,7 @@ function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
     check_inplace_aliasing(B, F)
     m = size(F,1)
     m != size(B,2) && throw(DimensionMismatch(lazy"wrong right-hand-side # cols != $m"))
+    iszero(m) && return B
     require_one_based_indexing(B)
     n = size(B,1)
     H = F.data
