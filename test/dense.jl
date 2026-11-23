@@ -641,6 +641,13 @@ end
         @test exp(log(adjoint(A7))) ≈ adjoint(A7)
     end
 
+    @testset "log and sqrt of a real adjoint with a negative eigenvalue" begin
+        A = [-1.0 3; 1 2]
+        for f in (log, sqrt)
+            @test f(A') ≈ f(transpose(A)) ≈ f(Matrix(A'))
+        end
+    end
+
     @testset "Integer promotion tests" begin
         for (elty1, elty2) in ((Int64, Float64), (Complex{Int64}, ComplexF64))
             A4int  = convert(Matrix{elty1}, [1 2; 3 4])
