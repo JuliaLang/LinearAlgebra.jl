@@ -762,4 +762,18 @@ end
     @test_throws PosDefException cholesky(A)
 end
 
+@testset "CholeskyPivoted of empty matrix" begin
+    for T in (Float64, ComplexF64, BigFloat), uplo in (:U, :L), pivot in (NoPivot(), RowMaximum())
+        A = Hermitian(zeros(T, 0, 0), uplo)
+        F = cholesky(A, pivot)
+        @test issuccess(F)
+        pivot == RowMaximum() && @test rank(F) == 0
+        @test F \ T[] == T[]
+        @test_throws DimensionMismatch F \ ones(T, 1, 0)
+        @test T[;;] / F == T[;;]
+        @test_throws DimensionMismatch ones(T, 0, 1) / F
+        uplo == :U ? (@test F.U'F.U == A) : (@test F.L*F.L' == A)
+    end
+end
+
 end # module TestCholesky
