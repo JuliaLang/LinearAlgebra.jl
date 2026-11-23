@@ -741,7 +741,6 @@ ldiv!(C::Cholesky{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat
     (check_inplace_aliasing(B, C); LAPACK.potrs!(C.uplo, C.factors, B))
 
 function ldiv!(C::Cholesky, B::AbstractVecOrMat)
-    check_inplace_aliasing(B, C)
     if C.uplo == 'L'
         return ldiv!(adjoint(LowerTriangular(C.factors)), ldiv!(LowerTriangular(C.factors), B))
     else
@@ -798,7 +797,6 @@ function ldiv!(C::CholeskyPivoted, B::AbstractMatrix)
 end
 
 function rdiv!(B::AbstractMatrix, C::Cholesky)
-    check_inplace_aliasing(B, C)
     if C.uplo == 'L'
         return rdiv!(rdiv!(B, adjoint(LowerTriangular(C.factors))), LowerTriangular(C.factors))
     else

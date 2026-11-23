@@ -1210,11 +1210,10 @@ function lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat)
     @inline _trimul!(B, A, B)
 end
 function lmul!(A::AbstractTriangular, B::AbstractVecOrMat)
-    check_inplace_aliasing(B, A)
     if istriu(A)
-        _trimul!(B, uppertriangular(A), B)
+        lmul!(uppertriangular(A), B)
     else
-        _trimul!(B, lowertriangular(A), B)
+        lmul!(lowertriangular(A), B)
     end
 end
 function rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular)
@@ -1222,7 +1221,6 @@ function rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular)
     @inline _trimul!(A, A, B)
 end
 function rmul!(A::AbstractMatrix, B::AbstractTriangular)
-    check_inplace_aliasing(A, B)
     if istriu(B)
         rmul!(A, uppertriangular(B))
     else
@@ -1283,11 +1281,10 @@ function ldiv!(A::UpperOrLowerTriangular, B::AbstractVecOrMat)
     @inline _ldiv!(B, A, B)
 end
 function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
-    check_inplace_aliasing(B, A)
     if istriu(A)
-        _ldiv!(B, uppertriangular(A), B)
+        ldiv!(uppertriangular(A), B)
     else
-        _ldiv!(B, lowertriangular(A), B)
+        ldiv!(lowertriangular(A), B)
     end
 end
 function rdiv!(A::AbstractMatrix, B::UpperOrLowerTriangular)
@@ -1295,11 +1292,10 @@ function rdiv!(A::AbstractMatrix, B::UpperOrLowerTriangular)
     @inline _rdiv!(A, A, B)
 end
 function rdiv!(A::AbstractMatrix, B::AbstractTriangular)
-    check_inplace_aliasing(A, B)
     if istriu(B)
-        _rdiv!(A, A, uppertriangular(B))
+        rdiv!(A, uppertriangular(B))
     else
-        _rdiv!(A, A, lowertriangular(B))
+        rdiv!(A, lowertriangular(B))
     end
 end
 

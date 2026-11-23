@@ -531,14 +531,12 @@ size(F::Union{QR,QRCompactWY,QRPivoted}, dim::Integer) = size(getfield(F, :facto
 
 
 function ldiv!(A::QRCompactWY, b::AbstractVector)
-    check_inplace_aliasing(b, A)
     require_one_based_indexing(b)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), b), 1:size(A, 2)))
     return b
 end
 function ldiv!(A::QRCompactWY, B::AbstractMatrix)
-    check_inplace_aliasing(B, A)
     require_one_based_indexing(B)
     m, n = size(A)
     ldiv!(UpperTriangular(view(A.factors, 1:min(m,n), 1:n)), view(lmul!(adjoint(A.Q), B), 1:size(A, 2), 1:size(B, 2)))
