@@ -1166,6 +1166,14 @@ end
         @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
         @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
     end
+
+    @testset "empty" for T in (Float64, ComplexF64), uplo in ('U', 'L')
+        B = Bidiagonal(T[], T[], uplo)
+        for p in (1, 2, Inf)
+            @test opnorm(B, p) === opnorm(Matrix(B), p)
+            @test cond(B, p) === cond(Matrix(B), p)
+        end
+    end
 end
 
 @testset "convert to Bidiagonal" begin

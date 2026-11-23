@@ -358,6 +358,15 @@ end
     end
 end
 
+@testset "cond of empty triangular matrices" for T in (Float64, ComplexF64),
+        tri in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+    A = tri(zeros(T, 0, 0))
+    for p in (1, 2, Inf)
+        @test cond(A, p) === cond(Matrix(A), p)
+    end
+    @test_throws ArgumentError cond(A, 3)
+end
+
 @testset "Error condition for powm" begin
     A = UpperTriangular(rand(ComplexF64, 10, 10))
     @test_throws ArgumentError LinearAlgebra.powm!(A, 2.2)
