@@ -178,6 +178,7 @@ function ldiv!(S::LDLt{<:Any,<:SymTridiagonal}, B::AbstractVecOrMat)
     if size(S,1) != n
         throw(DimensionMismatch(lazy"Matrix has dimensions $(size(S)) but right hand side has first dimension $n"))
     end
+    iszero(n) && return B
     d = S.data.dv
     l = S.data.ev
     @inbounds begin
