@@ -1387,7 +1387,7 @@ function issymmetric(A::AbstractMatrix)
     return true
 end
 
-issymmetric(x::Number) = x == x
+issymmetric(x::Number) = true
 
 """
     ishermitian(A) -> Bool
@@ -1426,7 +1426,7 @@ function ishermitian(A::AbstractMatrix)
     return true
 end
 
-ishermitian(x::Number) = (x == conj(x))
+ishermitian(x::Number) = isreal(x)
 
 # helper function equivalent to `iszero(v)`, but potentially without the fast exit feature
 # of `all` if this improves performance
