@@ -303,6 +303,7 @@ svd(M::Bidiagonal{<:BlasReal}; kw...) = svd!(copy(M); kw...)
 ###################
 
 function _opnorm1Inf(B::Bidiagonal, p)
+    isempty(B.dv) && return norm(B.dv)
     size(B, 1) == 1 && return norm(first(B.dv))
     case = xor(p == 1, istriu(B))
     normd1, normdend = norm(first(B.dv)), norm(last(B.dv))
