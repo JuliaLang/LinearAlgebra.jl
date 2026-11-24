@@ -101,7 +101,25 @@ julia> LinearAlgebra.deepmightalias(Diagonal(view(M, :, 1)), view(M, :, 2))
 false
 ```
 """
-deepmightalias(A, B) = any(a -> any(b -> Base.mightalias(a, b), aliasparts(B)), aliasparts(A))
+deepmightalias(A, B) = any(a -> any(b -> _partsmightalias(a, b), aliasparts(B)), aliasparts(A))
+
+_partsmightalias(a, b) = Base.mightalias(a, b) && !_disjointmemory(a, b)
+_disjointmemory(a, b) = false
+function _disjointmemory(a::StridedArray{T}, b::StridedArray{S}) where {T,S}
+    (isbitstype(T) && isbitstype(S)) || return false
+    alo, ahi = _memoryrange(a)
+    blo, bhi = _memoryrange(b)
+    return ahi < blo || bhi < alo
+end
+function _memoryrange(A::StridedArray{T}) where {T}
+    p = UInt(pointer(A))
+    lo = hi = p
+    for (n, s) in zip(size(A), strides(A))
+        d = (n - 1) * s * sizeof(T)
+        d < 0 ? (lo -= UInt(-d)) : (hi += UInt(d))
+    end
+    return lo, hi + UInt(sizeof(T) - 1)
+end
 
 # `mul!(C, A, B, α, β)` overwrites `C` while still reading `A` and `B`, so `C` must not share
 # memory with them. A factor that `mul!` applies in place, as `lmul!` and `rmul!` do, can
@@ -119,6 +137,11 @@ deepmightalias(A, B) = any(a -> any(b -> Base.mightalias(a, b), aliasparts(B)), 
 end
 @noinline throw_mul_aliasing() =
     throw(ArgumentError("output array must not be aliased with an input array"))
+# without exceptions, for kernels that apply neither factor in place, e.g. in SparseArrays
+@inline function check_mul_aliasing(C, A, B)
+    (_mightalias(C, A) || _mightalias(C, B)) && throw_mul_aliasing()
+    return nothing
+end
 # whether `C` may share memory with the factor `X`, if the other factor is applied in place
 _mul_mayalias(C, X, inplace::Bool, β) = inplace && !_isstructured(C) && X isa AbstractArray &&
     (_isinplace(C, X) || iszero(β) && promote_type(eltype(X), eltype(C)) === eltype(C))
