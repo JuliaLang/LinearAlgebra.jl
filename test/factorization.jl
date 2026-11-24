@@ -179,4 +179,12 @@ end
     end
 end
 
+@testset "deepmightalias of a factorization of arrays of different types does not allocate" begin
+    nalloc(x, F) = @allocated LinearAlgebra.deepmightalias(x, F)
+    x = zeros(3)
+    F = qr([4.0 1 0; 1 4 1; 0 1 4], ColumnNorm()) # stored in a Matrix{Float64} and two vectors
+    nalloc(x, F)
+    @test nalloc(x, F) == 0
+end
+
 end

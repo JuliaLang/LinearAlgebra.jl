@@ -99,7 +99,13 @@ julia> LinearAlgebra.deepmightalias(Diagonal(view(M, :, 1)), view(M, :, 2))
 false
 ```
 """
-deepmightalias(A, B) = any(a -> any(b -> _partsmightalias(a, b), aliasparts(B)), aliasparts(A))
+deepmightalias(A, B) = _anymightalias(aliasparts(A), aliasparts(B))
+# recursion over the tuples rather than `any` with closures, whose calls are not inferred for
+# tuples of different array types
+_anymightalias(::Tuple{}, bs::Tuple) = false
+_anymightalias(as::Tuple, bs::Tuple) = _mightaliasany(first(as), bs) || _anymightalias(Base.tail(as), bs)
+_mightaliasany(a, ::Tuple{}) = false
+_mightaliasany(a, bs::Tuple) = _partsmightalias(a, first(bs)) || _mightaliasany(a, Base.tail(bs))
 
 _partsmightalias(a, b) = Base.mightalias(a, b) && !_disjointmemory(a, b)
 _disjointmemory(a, b) = false
