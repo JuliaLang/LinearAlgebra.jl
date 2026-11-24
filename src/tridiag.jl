@@ -169,7 +169,7 @@ similar(S::SymTridiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = 
 _band_dataids(v::AbstractVector) = isempty(v) ? () : Base.dataids(v)
 
 Base.dataids(S::SymTridiagonal) = (_band_dataids(S.dv)..., _band_dataids(S.ev)...)
-_aliasparts(S::SymTridiagonal) = (_aliasparts(S.dv)..., _aliasparts(S.ev)...)
+aliasparts(S::SymTridiagonal) = (aliasparts(S.dv)..., aliasparts(S.ev)...)
 Base.unaliascopy(S::SymTridiagonal) = SymTridiagonal(Base.unaliascopy(S.dv), Base.unaliascopy(S.ev))
 
 # copyto! for matching axes
@@ -760,12 +760,12 @@ function Base.dataids(M::Tridiagonal)
     ids = (_band_dataids(M.dl)..., _band_dataids(M.d)..., _band_dataids(M.du)...)
     isdefined(M, :du2) ? (ids..., _band_dataids(M.du2)...) : ids
 end
-function _aliasparts(M::Tridiagonal)
-    parts = (_aliasparts(M.dl)..., _aliasparts(M.d)..., _aliasparts(M.du)...)
-    isdefined(M, :du2) ? (parts..., _aliasparts(M.du2)...) : parts
+function aliasparts(M::Tridiagonal)
+    parts = (aliasparts(M.dl)..., aliasparts(M.d)..., aliasparts(M.du)...)
+    isdefined(M, :du2) ? (parts..., aliasparts(M.du2)...) : parts
 end
 # the kernel for a left factor caches the rows of the other factor that it still needs
-_mul_inplace_left(::Union{SymTridiagonal,Tridiagonal}, α, β) = true
+lmulinplace(::Union{SymTridiagonal,Tridiagonal}, α, β) = true
 _isstructured(::Union{SymTridiagonal,Tridiagonal}) = true
 function Base.unaliascopy(M::Tridiagonal)
     dl, d, du = Base.unaliascopy(M.dl), Base.unaliascopy(M.d), Base.unaliascopy(M.du)
@@ -1172,7 +1172,7 @@ in `B`, returning the result. In the process, the diagonals of `A` are overwritt
 """
 function ldiv!(A::Tridiagonal, B::AbstractVecOrMat)
     LinearAlgebra.require_one_based_indexing(B)
-    check_inplace_aliasing(B, A)
+    checkaliasing(B, A)
     n = size(A, 1)
     if n != size(B,1)
         throw(DimensionMismatch(lazy"matrix has dimensions ($n,$n) but right hand side has $(size(B,1)) rows"))

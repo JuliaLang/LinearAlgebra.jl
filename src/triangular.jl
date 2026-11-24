@@ -153,14 +153,14 @@ uppertriangular(U::UpperOrUnitUpperTriangular) = U
 lowertriangular(U::LowerOrUnitLowerTriangular) = U
 
 Base.dataids(A::UpperOrLowerTriangular) = Base.dataids(A.data)
-_aliasparts(A::UpperOrLowerTriangular) = _aliasparts(A.data)
+aliasparts(A::UpperOrLowerTriangular) = aliasparts(A.data)
 # e.g. in `lmul!(A, B::UpperTriangular)` and `ldiv!(A, B::UpperTriangular)`, which write to
 # `parent(B)`; a wrapper reads its parent at the same positions, or a constant
 _isinplace(Y, B::UpperOrLowerTriangular) = Y === B || _isinplace(Y, parent(B))
-_mul_inplace_left(::AbstractTriangular, α, β) = isone(α) && iszero(β)
-_mul_inplace_right(::AbstractTriangular, α, β) = isone(α) && iszero(β)
+lmulinplace(::AbstractTriangular, α, β) = isone(α) && iszero(β)
+rmulinplace(::AbstractTriangular, α, β) = isone(α) && iszero(β)
 # the kernels for two triangular factors apply the left one in place
-_mul_inplace_right(::AbstractTriangular, ::AbstractTriangular, α, β) = false
+_rmulinplace(::AbstractTriangular, ::AbstractTriangular, α, β) = false
 _isstructured(::AbstractTriangular) = true
 
 function Matrix{T}(U::UpperOrLowerTriangular) where {T}
@@ -1207,7 +1207,7 @@ _trimul!(C::AbstractMatrix, A::AbstractTriangular, B::UpperOrLowerTriangular) =
 
 # methods for LinearAlgebra.jl's own triangular types, to avoid `istriu` checks
 function lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat)
-    check_inplace_aliasing(B, A)
+    checkaliasing(B, A)
     @inline _trimul!(B, A, B)
 end
 function lmul!(A::AbstractTriangular, B::AbstractVecOrMat)
@@ -1218,7 +1218,7 @@ function lmul!(A::AbstractTriangular, B::AbstractVecOrMat)
     end
 end
 function rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular)
-    check_inplace_aliasing(A, B)
+    checkaliasing(A, B)
     @inline _trimul!(A, A, B)
 end
 function rmul!(A::AbstractMatrix, B::AbstractTriangular)
@@ -1265,7 +1265,7 @@ for (TA, TB) in ((:UpperOrLowerTriangularStrided, :StridedMatrix),
 end
 
 ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) =
-    (check_inplace_aliasing(C, A); _ldiv!(C, A, B))
+    (checkaliasing(C, A); _ldiv!(C, A, B))
 # generic fallback for AbstractTriangular, directs to 2-arg [l/r]div!
 _ldiv!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) =
     ldiv!(A, _copy_or_copyto!(C, B))
@@ -1278,7 +1278,7 @@ _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
     generic_mattridiv!(C, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 function ldiv!(A::UpperOrLowerTriangular, B::AbstractVecOrMat)
-    check_inplace_aliasing(B, A)
+    checkaliasing(B, A)
     @inline _ldiv!(B, A, B)
 end
 function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
@@ -1289,7 +1289,7 @@ function ldiv!(A::AbstractTriangular, B::AbstractVecOrMat)
     end
 end
 function rdiv!(A::AbstractMatrix, B::UpperOrLowerTriangular)
-    check_inplace_aliasing(A, B)
+    checkaliasing(A, B)
     @inline _rdiv!(A, A, B)
 end
 function rdiv!(A::AbstractMatrix, B::AbstractTriangular)
@@ -1674,7 +1674,7 @@ end
 # accumulating in z rather than b[j,k] significantly improves performance as of Dec 2015
 function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractVecOrMat) where {F<:Function}
     require_one_based_indexing(C, A, B)
-    check_partial_overlap(C, B)
+    checkoverlap(C, B)
     mA, nA = size(A)
     m = size(B, 1)
     if nA != m
@@ -1812,7 +1812,7 @@ end
 function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA::AdjOrTrans, B::AbstractVecOrMat)
     A = parent(xA)
     require_one_based_indexing(C, A, B)
-    check_partial_overlap(C, B)
+    checkoverlap(C, B)
     mA, nA = size(A)
     m = size(B, 1)
     if nA != m
@@ -2000,7 +2000,7 @@ for (TA, TB) in ((:UpperTriangular, :UpperTriangular), (:UpperTriangular, :UnitU
                  (:UnitUpperTriangular, :UnitUpperTriangular),
                  (:LowerTriangular, :LowerTriangular), (:LowerTriangular, :UnitLowerTriangular),
                  (:UnitLowerTriangular, :UnitLowerTriangular))
-    @eval rmul!(A::$TA, B::$TB) = (check_inplace_aliasing(A, B); $TA(rmul!(full!(A), B)))
+    @eval rmul!(A::$TA, B::$TB) = (checkaliasing(A, B); $TA(rmul!(full!(A), B)))
 end
 
 # Promotion

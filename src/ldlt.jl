@@ -173,7 +173,7 @@ end
 factorize(S::SymTridiagonal) = ldlt(S)
 
 function ldiv!(S::LDLt{<:Any,<:SymTridiagonal}, B::AbstractVecOrMat)
-    check_inplace_aliasing(B, S)
+    checkaliasing(B, S)
     require_one_based_indexing(B)
     n, nrhs = size(B, 1), size(B, 2)
     if size(S,1) != n
@@ -226,5 +226,5 @@ AbstractArray(F::LDLt) = AbstractMatrix(F)
 Matrix(F::LDLt) = Array(AbstractArray(F))
 Array(F::LDLt) = Matrix(F)
 
-# the arrays the factorization is stored in, for the aliasing checks (see `_mightalias`)
-_aliasparts(F::LDLt) = _aliasparts(getfield(F, :data))
+# the arrays the factorization is stored in, for the aliasing checks (see `deepmightalias`)
+aliasparts(F::LDLt) = aliasparts(getfield(F, :data))

@@ -154,7 +154,7 @@ end
     @invoke \(F::typeof(F), B::VecOrMat)
 
 function ldiv!(Y::AbstractVector, A::Factorization, B::AbstractVector)
-    check_inplace_aliasing(Y, A)
+    checkaliasing(Y, A)
     require_one_based_indexing(Y, B)
     m, n = size(A)
     if m > n
@@ -166,7 +166,7 @@ function ldiv!(Y::AbstractVector, A::Factorization, B::AbstractVector)
     end
 end
 function ldiv!(Y::AbstractMatrix, A::Factorization, B::AbstractMatrix)
-    check_inplace_aliasing(Y, A)
+    checkaliasing(Y, A)
     require_one_based_indexing(Y, B)
     m, n = size(A)
     if m > n
@@ -202,5 +202,5 @@ end
 rdiv!(B::AbstractMatrix, A::TransposeFactorization) = transpose(ldiv!(A.parent, transpose(B)))
 rdiv!(B::AbstractMatrix, A::AdjointFactorization) = adjoint(ldiv!(A.parent, adjoint(B)))
 
-# the arrays the factorization is stored in, for the aliasing checks (see `_mightalias`)
-_aliasparts(F::Union{AdjointFactorization,TransposeFactorization}) = _aliasparts(parent(F))
+# the arrays the factorization is stored in, for the aliasing checks (see `deepmightalias`)
+aliasparts(F::Union{AdjointFactorization,TransposeFactorization}) = aliasparts(parent(F))

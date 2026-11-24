@@ -738,7 +738,7 @@ function show(io::IO, mime::MIME{Symbol("text/plain")}, C::CholeskyPivoted)
 end
 
 ldiv!(C::Cholesky{T,<:StridedMatrix}, B::StridedVecOrMat{T}) where {T<:BlasFloat} =
-    (check_inplace_aliasing(B, C); LAPACK.potrs!(C.uplo, C.factors, B))
+    (checkaliasing(B, C); LAPACK.potrs!(C.uplo, C.factors, B))
 
 function ldiv!(C::Cholesky, B::AbstractVecOrMat)
     if C.uplo == 'L'
@@ -749,11 +749,11 @@ function ldiv!(C::Cholesky, B::AbstractVecOrMat)
 end
 
 function ldiv!(C::CholeskyPivoted{T,<:StridedMatrix}, B::StridedVector{T}) where T<:BlasFloat
-    check_inplace_aliasing(B, C)
+    checkaliasing(B, C)
     invpermute!(LAPACK.potrs!(C.uplo, C.factors, permute!(B, C.piv)), C.piv)
 end
 function ldiv!(C::CholeskyPivoted{T,<:StridedMatrix}, B::StridedMatrix{T}) where T<:BlasFloat
-    check_inplace_aliasing(B, C)
+    checkaliasing(B, C)
     n = size(C, 1)
     for i=1:size(B, 2)
         permute!(view(B, 1:n, i), C.piv)
@@ -766,7 +766,7 @@ function ldiv!(C::CholeskyPivoted{T,<:StridedMatrix}, B::StridedMatrix{T}) where
 end
 
 function ldiv!(C::CholeskyPivoted, B::AbstractVector)
-    check_inplace_aliasing(B, C)
+    checkaliasing(B, C)
     if C.uplo == 'L'
         ldiv!(adjoint(LowerTriangular(C.factors)),
             ldiv!(LowerTriangular(C.factors), permute!(B, C.piv)))
@@ -778,7 +778,7 @@ function ldiv!(C::CholeskyPivoted, B::AbstractVector)
 end
 
 function ldiv!(C::CholeskyPivoted, B::AbstractMatrix)
-    check_inplace_aliasing(B, C)
+    checkaliasing(B, C)
     n = size(C, 1)
     for i in 1:size(B, 2)
         permute!(view(B, 1:n, i), C.piv)
@@ -805,7 +805,7 @@ function rdiv!(B::AbstractMatrix, C::Cholesky)
 end
 
 function rdiv!(B::AbstractMatrix, C::CholeskyPivoted)
-    check_inplace_aliasing(B, C)
+    checkaliasing(B, C)
     n = size(C, 2)
     for i in 1:size(B, 1)
         permute!(view(B, i, 1:n), C.piv)
@@ -1048,6 +1048,6 @@ function diag(C::Cholesky{T}, k::Int = 0) where {T}
     return z
 end
 
-# the arrays the factorization is stored in, for the aliasing checks (see `_mightalias`)
-_aliasparts(F::Cholesky) = _aliasparts(getfield(F, :factors))
-_aliasparts(F::CholeskyPivoted) = (_aliasparts(getfield(F, :factors))..., _aliasparts(getfield(F, :piv))...)
+# the arrays the factorization is stored in, for the aliasing checks (see `deepmightalias`)
+aliasparts(F::Cholesky) = aliasparts(getfield(F, :factors))
+aliasparts(F::CholeskyPivoted) = (aliasparts(getfield(F, :factors))..., aliasparts(getfield(F, :piv))...)

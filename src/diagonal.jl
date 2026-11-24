@@ -254,9 +254,9 @@ parent(D::Diagonal) = D.diag
 copy(D::Diagonal) = Diagonal(copy(D.diag))
 
 Base.dataids(D::Diagonal) = Base.dataids(D.diag)
-_aliasparts(D::Diagonal) = _aliasparts(D.diag)
-_mul_inplace_left(::Diagonal, α, β) = true
-_mul_inplace_right(::Diagonal, α, β) = true
+aliasparts(D::Diagonal) = aliasparts(D.diag)
+lmulinplace(::Diagonal, α, β) = true
+rmulinplace(::Diagonal, α, β) = true
 _isstructured(::Diagonal) = true
 Base.unaliascopy(D::Diagonal) = Diagonal(Base.unaliascopy(D.diag))
 
@@ -380,7 +380,7 @@ end
 
 function rmul!(A::AbstractMatrix, D::Diagonal)
     matmul_size_check(size(A), size(D))
-    check_inplace_aliasing(A, D)
+    checkaliasing(A, D)
     axes(A, 2) == axes(D.diag, 1) ||
         throw(ArgumentError(lazy"second axis of A, $(axes(A,2)), does not match first axis of D, $(axes(D, 1))"))
     for I in CartesianIndices(A)
@@ -400,7 +400,7 @@ end
 # T .= T * D
 function rmul!(T::Tridiagonal, D::Diagonal)
     matmul_size_check(size(T), size(D))
-    check_inplace_aliasing(T, D)
+    checkaliasing(T, D)
     (; dl, d, du) = T
     d[1] *= D.diag[1]
     for i in axes(dl,1)
@@ -415,7 +415,7 @@ for T in (:UpperTriangular, :LowerTriangular)
     @eval lmul!(D::Diagonal, A::$T{<:Any, <:StridedMatrix}) = _lmul!(D, A)
 end
 function _rmul!(A::UpperOrLowerTriangular, D::Diagonal)
-    check_inplace_aliasing(A, D)
+    checkaliasing(A, D)
     P = parent(A)
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
@@ -431,7 +431,7 @@ end
 
 function lmul!(D::Diagonal, B::AbstractVecOrMat)
     matmul_size_check(size(D), size(B))
-    check_inplace_aliasing(B, D)
+    checkaliasing(B, D)
     axes(D.diag, 1) == axes(B, 1) ||
         throw(ArgumentError(lazy"second axis of D, $(axes(D, 2)), does not match first axis of B, $(axes(B, 1))"))
     for I in CartesianIndices(B)
@@ -453,7 +453,7 @@ end
 # T .= D * T
 function lmul!(D::Diagonal, T::Tridiagonal)
     matmul_size_check(size(D), size(T))
-    check_inplace_aliasing(T, D)
+    checkaliasing(T, D)
     (; dl, d, du) = T
     d[1] = D.diag[1] * d[1]
     for i in axes(dl,1)
@@ -464,7 +464,7 @@ function lmul!(D::Diagonal, T::Tridiagonal)
     return T
 end
 function _lmul!(D::Diagonal, A::UpperOrLowerTriangular)
-    check_inplace_aliasing(A, D)
+    checkaliasing(A, D)
     P = parent(A)
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
@@ -635,7 +635,7 @@ matop_dest(::typeof(/), A::HermOrSym, D::Diagonal) = similar(A, promote_op(/, el
 
 /(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matop_dest(/, A, D), A, D)
 
-rdiv!(A::AbstractVecOrMat, D::Diagonal) = (check_inplace_aliasing(A, D); @inline _rdiv!(A, A, D))
+rdiv!(A::AbstractVecOrMat, D::Diagonal) = (checkaliasing(A, D); @inline _rdiv!(A, A, D))
 # avoid copy when possible via internal 3-arg backend
 function _rdiv!(B::AbstractVecOrMat, A::AbstractVecOrMat, D::Diagonal)
     require_one_based_indexing(A)
@@ -662,7 +662,7 @@ matop_dest(::typeof(\), D::Diagonal, B::HermOrSym) = similar(B, promote_op(\, el
 ldiv!(D::Diagonal, B::AbstractVecOrMat) = @inline ldiv!(B, D, B)
 function ldiv!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
     require_one_based_indexing(A, B)
-    check_inplace_aliasing(B, D) # B may be A, as in the 2-arg ldiv!(D, B)
+    checkaliasing(B, D) # B may be A, as in the 2-arg ldiv!(D, B)
     dd = D.diag
     d = length(dd)
     m, n = size(A, 1), size(A, 2)
@@ -680,7 +680,7 @@ function _ldiv_Diagonal_loop!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOr
     B
 end
 function _ldiv_Diagonal_loop!(B::StridedVecOrMat, D::Diagonal, A::StridedVecOrMat)
-    check_partial_overlap(B, A)
+    checkoverlap(B, A)
     dd = D.diag
     @inbounds for j in axes(A,2), i in axes(A,1)
         B[i, j] = dd[i] \ A[i, j]
