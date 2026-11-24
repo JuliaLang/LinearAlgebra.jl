@@ -600,6 +600,12 @@ end
             B = T(view(M, 2:6, 2:6))
             @test copyto!(B, A) == A2
         end
+        # a wrapper of the adjoint of the destination, whose diagonal is conjugated
+        M = [1+2im 3im; 4 5-6im]
+        for T in (UpperTriangular, LowerTriangular)
+            A = copy(M)
+            @test copyto!(A, T(A')) == T(M')
+        end
     end
 
     @testset "copyto! with different matrix types" begin

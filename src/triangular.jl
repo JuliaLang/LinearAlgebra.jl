@@ -665,6 +665,7 @@ function copy!(dest::StridedMatrix, U::UpperOrLowerTriangular)
 end
 
 @propagate_inbounds function _copy!(dest::StridedMatrix, U::UpperOrLowerTriangular)
+    U = Base.unalias(dest, U) # the second copy reads the diagonal of `U` after the first one wrote it
     copytrito!(dest, parent(U), U isa UpperOrUnitUpperTriangular ? 'U' : 'L')
     copytrito!(dest, U, U isa UpperOrUnitUpperTriangular ? 'L' : 'U')
     return dest
