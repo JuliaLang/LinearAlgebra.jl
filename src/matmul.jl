@@ -73,7 +73,27 @@ end
 # the wrappers pairwise lets `mightalias` compare views of the same parent by their indices.
 _aliasparts(A) = (A,)
 _aliasparts(A::Base.ReshapedArray) = _aliasparts(parent(A)) # e.g. the bands of the adjoint of a complex Bidiagonal
-_mightalias(A, B) = any(a -> any(b -> Base.mightalias(a, b), _aliasparts(B)), _aliasparts(A))
+_mightalias(A, B) = any(a -> any(b -> _partsmightalias(a, b), _aliasparts(B)), _aliasparts(A))
+# `mightalias` compares only views of the same parent by their indices, and otherwise just
+# `dataids`, which e.g. a view of a reshaped view of a vector shares with the vector.
+# Strided arrays of bits elements whose ranges of memory addresses are disjoint don't alias.
+_partsmightalias(a, b) = Base.mightalias(a, b) && !_disjointmemory(a, b)
+_disjointmemory(a, b) = false
+function _disjointmemory(a::StridedArray{T}, b::StridedArray{S}) where {T,S}
+    (isbitstype(T) && isbitstype(S)) || return false
+    alo, ahi = _memoryrange(a)
+    blo, bhi = _memoryrange(b)
+    return ahi < blo || bhi < alo
+end
+function _memoryrange(A::StridedArray{T}) where {T}
+    p = UInt(pointer(A))
+    lo = hi = p
+    for (n, s) in zip(size(A), strides(A))
+        d = (n - 1) * s * sizeof(T)
+        d < 0 ? (lo -= UInt(-d)) : (hi += UInt(d))
+    end
+    return lo, hi + UInt(sizeof(T) - 1)
+end
 
 # `mul!(C, A, B, α, β)` overwrites `C` while still reading `A` and `B`, so `C` must not share
 # memory with them. A factor that `mul!` applies in place, as `lmul!` and `rmul!` do, can
