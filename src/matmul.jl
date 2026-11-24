@@ -111,6 +111,11 @@ end
 end
 @noinline throw_mul_aliasing() =
     throw(ArgumentError("output array must not be aliased with an input array"))
+# without exceptions, for kernels that apply neither factor in place, e.g. in SparseArrays
+@inline function check_mul_aliasing(C, A, B)
+    (_mightalias(C, A) || _mightalias(C, B)) && throw_mul_aliasing()
+    return nothing
+end
 # whether `C` may share memory with the factor `X`, if the other factor is applied in place
 _mul_mayalias(C, X, inplace::Bool, β) = inplace && !_isstructured(C) && X isa AbstractArray &&
     (_isinplace(C, X) || iszero(β) && promote_type(eltype(X), eltype(C)) === eltype(C))
