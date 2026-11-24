@@ -85,9 +85,7 @@ aliasparts(A::Base.ReshapedArray) = aliasparts(parent(A)) # e.g. the bands of th
     LinearAlgebra.deepmightalias(A, B) -> Bool
 
 Return whether `A` and `B` might share memory. Like `Base.mightalias`, but applied pairwise
-to the arrays that `A` and `B` consist of, see [`LinearAlgebra.aliasparts`](@ref). The
-`dataids` of a wrapper are those of its parent, so `Base.mightalias` cannot compare views
-of the same parent inside wrappers by their indices, whereas `deepmightalias` can.
+to the arrays that `A` and `B` consist of, see [`LinearAlgebra.aliasparts`](@ref).
 `A` and `B` may also be factorizations or `AbstractQ`s.
 
 # Examples
