@@ -17,6 +17,7 @@ using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.OffsetArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 include("testutils.jl") # test_approx_eq_modphase
 
@@ -570,6 +571,37 @@ end
     @test all(==(0.1), f)
 end
 
+@testset "dataids and unaliascopy" begin
+    # structured matrices whose bands are columns of M
+    symtri(M) = SymTridiagonal(view(M, 1:4, 1), view(M, 1:3, 2))
+    tri(M) = Tridiagonal(view(M, 1:3, 1), view(M, 1:4, 2), view(M, 1:3, 3))
+    for mk in (symtri, tri)
+        M = rand(4, 4)
+        A = mk(M)
+        @test Base.mightalias(M, A)
+        @test Base.mightalias(view(M, 1:3, 1), A) # aliasing with a single band
+        @test !Base.mightalias(M, mk(copy(M)))
+        U = Base.unaliascopy(A)
+        @test U isa typeof(A) && U == A && !Base.mightalias(M, U)
+        # copying and broadcasting into the memory backing the source
+        M0 = copy(M)
+        copyto!(M, mk(M))
+        @test M == mk(M0)
+        M = rand(4, 4); M0 = copy(M)
+        M .= 2 .* mk(M) .- M
+        @test M ≈ 2 .* mk(M0) .- M0
+    end
+    # empty arrays may share their memory address, so empty bands must not alias
+    @test !Base.mightalias(SymTridiagonal([1.0], Float64[]), SymTridiagonal([2.0], Float64[]))
+    @test !Base.mightalias(Tridiagonal(Float64[], [1.0], Float64[]), Tridiagonal(Float64[], [2.0], Float64[]))
+    @test !Base.mightalias(lu(Tridiagonal([1.0], [2.0, 3.0], [4.0])).factors, Tridiagonal(Float64[], [2.0], Float64[]))
+    # du2 is part of the data of a factorized Tridiagonal
+    F = lu(Tridiagonal(rand(4), rand(5) .+ 3, rand(4))).factors
+    @test Base.mightalias(F.du2, F)
+    U = Base.unaliascopy(F)
+    @test U isa typeof(F) && isdefined(U, :du2) && U.du2 == F.du2 && !Base.mightalias(F, U)
+end
+
 @testset "Issue #26994 (and the empty case)" begin
     T = SymTridiagonal([1.0],Float64[])
     x = ones(1)
@@ -1057,6 +1089,14 @@ end
         @test_skip opnorm(T, 2) ≈ opnorm(Matrix(T), 2) # currently missing
         @test opnorm(T, Inf) == opnorm(Matrix(T), Inf)
     end
+
+    @testset "empty" for E in (Float64, ComplexF64),
+            T in (Tridiagonal(E[], E[], E[]), SymTridiagonal(E[], E[]))
+        for p in (1, 2, Inf)
+            @test opnorm(T, p) === opnorm(Matrix(T), p)
+            @test cond(T, p) === cond(Matrix(T), p)
+        end
+    end
 end
 
 @testset "block-bidiagonal matrix indexing" begin
@@ -1295,6 +1335,50 @@ end
         @test fact == eigen!(fB, 2, 4; sortby = eigsortby)
         @test fact == Eigen(sorteig!(fact.values, fact.vectors)...)
     end
+end
+
+@testset "direct solves with empty Tridiagonal" begin
+    T = Tridiagonal(Float64[], Float64[], Float64[])
+    @test ldiv!(copy(T), ones(0)) == ones(0)
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(1))
+    @test ldiv!(copy(T), ones(0,2)) == ones(0,2)
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(1,0))
+end
+
+@static if COMPREHENSIVE
+@testset "isposdef and cholesky of empty banded matrices (#1874)" begin
+    @testset for elty in (Float64, ComplexF64)
+        for A in (SymTridiagonal(elty[], elty[]), Tridiagonal(elty[], elty[], elty[]),
+                  Bidiagonal(elty[], elty[], :U), Bidiagonal(elty[], elty[], :L))
+            @test isposdef(A)
+            F = cholesky(A)
+            @test issuccess(F)
+            @test size(F) == (0, 0)
+            @test isempty(Matrix(F))
+        end
+    end
+end
+end
+
+@testset "det of small integer matrices (#1893)" begin
+    S = SymTridiagonal(Int8[100,100,100], Int8[50,50])
+    T = Tridiagonal(Int8[1,-1,-14],Int8[-14,-6,4,4],Int8[1,-1,-14])
+    @test det(S) ≈ det(Matrix(S))
+    @test det(T) ≈ det(Matrix(T))
+    BS = BigInt.(S)
+    BT = BigInt.(T)
+    @test isa(det(BS), BigInt)
+    @test isa(det(BT), BigInt)
+    @test det(BS) == det(Matrix(BS))
+    @test det(BT) == det(Matrix(BT))
+end
+
+@testset "solves with empty SymTridiagonal" begin
+    S = SymTridiagonal(Float64[], Float64[])
+    @test factorize(S) isa Factorization{Float64}
+    @test S \ ones(0, 0) == ones(0, 0)
+    @test S \ ones(0, 2) == ones(0, 2)
+    @test inv(S) == S
 end
 
 end # module TestTridiagonal

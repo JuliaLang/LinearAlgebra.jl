@@ -578,6 +578,13 @@ end
     @test lam == [1, 2, 3]
 end
 
+@testset "issue #1875" begin
+    D = Diagonal(Int8[-128, 3, 0])
+    @test svdvals(D) == [128, 3, 0]
+    @test svd(D).S == [128, 3, 0]
+    @test rank(D) == 2
+end
+
 @testset "eigmin (#27847)" begin
     for _ in 1:100
         d = randn(rand(1:10))
@@ -1537,6 +1544,15 @@ end
     @test opnorm(D, 1) == opnorm(A, 1)
     @test opnorm(D, 2) ≈ opnorm(A, 2)
     @test opnorm(D, Inf) == opnorm(A, Inf)
+
+    @testset "empty" for T in (Float64, ComplexF64)
+        D = Diagonal(T[])
+        for p in (1, 2, Inf)
+            @test opnorm(D, p) === opnorm(Matrix(D), p)
+            @test cond(D, p) === cond(Matrix(D), p)
+        end
+        @test_throws ArgumentError opnorm(D, 3)
+    end
 end
 
 @testset "issymmetric with NaN" begin
@@ -1623,7 +1639,7 @@ end
         @test @inferred(tr(D)) == zero(T)
         @test @inferred(det(D)) == one(T)
         @test typeof(tr(D)) == typeof(tr(Diagonal(T[1]))) == T
-        @test typeof(det(D)) == typeof(det(Diagonal(T[1]))) == T
+        @test typeof(det(D)) == typeof(det(Diagonal(T[1]))) == LinearAlgebra._dettype(T)
     end
     @test tr(Diagonal(Number[])) == 0
     @test det(Diagonal(Number[])) == 1
@@ -1649,6 +1665,31 @@ end
         @test rmul!(op(copy(M)), D) == Matrix(op(M)) * D
         @test lmul!(D, op(copy(M))) == D * Matrix(op(M))
     end
+end
+
+@testset "dataids and unaliascopy" begin
+    M = rand(4, 4)
+    D = Diagonal(view(M, :, 2))
+    @test Base.mightalias(M, D)
+    @test !Base.mightalias(M, Diagonal(M[:, 2]))
+    U = Base.unaliascopy(D)
+    @test U isa typeof(D) && U == D && !Base.mightalias(M, U)
+    # copying and broadcasting into the memory backing the source
+    M0 = copy(M)
+    copyto!(M, Diagonal(view(M, :, 2)))
+    @test M == Diagonal(M0[:, 2])
+    M = rand(4, 4); M0 = copy(M)
+    M .= Diagonal(view(M, :, 1)) .+ M
+    @test M ≈ Diagonal(M0[:, 1]) .+ M0
+end
+
+@testset "det of integer matrices (#1895)" begin
+    D = Diagonal([typemax(Int), typemax(Int)])
+    @test det(D) == det(float(D))
+    @test_throws OverflowError det(Rational.(D))
+    BD = BigInt.(D)
+    @test isa(det(BD), BigInt)
+    @test det(BD) == det(Matrix(BD))
 end
 
 end # module TestDiagonal

@@ -166,7 +166,7 @@ imag(A::UpperTriangular{<:Any,<:StridedMaybeAdjOrTransMat}) = imag.(A)
 imag(A::LowerTriangular{<:Any,<:StridedMaybeAdjOrTransMat}) = imag.(A)
 function imag(A::UnitLowerTriangular)
     L = LowerTriangular(A.data)
-    Lim = similar(L) # must be mutable to set diagonals to zero
+    Lim = similar(L, real(eltype(L))) # must be mutable to set diagonals to zero
     Lim .= imag.(L)
     for i in axes(Lim,1)
         Lim[i,i] = zero(Lim[i,i])
@@ -175,7 +175,7 @@ function imag(A::UnitLowerTriangular)
 end
 function imag(A::UnitUpperTriangular)
     U = UpperTriangular(A.data)
-    Uim = similar(U) # must be mutable to set diagonals to zero
+    Uim = similar(U, real(eltype(U))) # must be mutable to set diagonals to zero
     Uim .= imag.(U)
     for i in axes(Uim,1)
         Uim[i,i] = zero(Uim[i,i])
@@ -556,7 +556,7 @@ diag(A::Union{UnitLowerTriangular, UnitUpperTriangular}) = fill(oneunit(eltype(A
 -(A::UpperTriangular) = UpperTriangular(-A.data)
 function -(A::UnitLowerTriangular)
     Adata = A.data
-    Anew = similar(Adata) # must be mutable, even if Adata is not
+    Anew = similar(Adata, promote_op(-, eltype(Adata))) # must be mutable, even if Adata is not
     @. Anew = -Adata
     for i in axes(A, 1)
         Anew[i, i] = -A[i, i]
@@ -565,7 +565,7 @@ function -(A::UnitLowerTriangular)
 end
 function -(A::UnitUpperTriangular)
     Adata = A.data
-    Anew = similar(Adata) # must be mutable, even if Adata is not
+    Anew = similar(Adata, promote_op(-, eltype(Adata))) # must be mutable, even if Adata is not
     @. Anew = -Adata
     for i in axes(A, 1)
         Anew[i, i] = -A[i, i]
@@ -665,6 +665,7 @@ function copy!(dest::StridedMatrix, U::UpperOrLowerTriangular)
 end
 
 @propagate_inbounds function _copy!(dest::StridedMatrix, U::UpperOrLowerTriangular)
+    U = Base.unalias(dest, U) # the second copy reads the diagonal of `U` after the first one wrote it
     copytrito!(dest, parent(U), U isa UpperOrUnitUpperTriangular ? 'U' : 'L')
     copytrito!(dest, U, U isa UpperOrUnitUpperTriangular ? 'L' : 'U')
     return dest
@@ -1204,11 +1205,13 @@ end
 rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _trimul!(A, A, B)
 function rmul!(A::AbstractMatrix, B::AbstractTriangular)
     if istriu(B)
-        _trimul!(A, A, uppertriangular(B))
+        rmul!(A, uppertriangular(B))
     else
-        _trimul!(A, A, lowertriangular(B))
+        rmul!(A, lowertriangular(B))
     end
 end
+rmul!(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
+    generic_mattrimul!(A, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 for TC in (:AbstractVector, :AbstractMatrix)
     @eval @inline function _mul!(C::$TC, A::AbstractTriangular, B::AbstractVector, alpha::Number, beta::Number)
@@ -1327,9 +1330,9 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
         # Condition numbers
         function cond(A::$t{<:BlasFloat,<:StridedMatrix}, p::Real=2)
             checksquare(A)
-            if p == 1
+            if p == 1 && !isempty(A)
                 return inv(LAPACK.trcon!('O', $uploc, $isunitc, A.data))
-            elseif p == Inf
+            elseif p == Inf && !isempty(A)
                 return inv(LAPACK.trcon!('I', $uploc, $isunitc, A.data))
             else # use fallback
                 return cond(copy!(similar(parent(A)), A), p)
@@ -1339,21 +1342,21 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
 end
 
 # multiplication
-function generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector) where {T<:BlasFloat}
+function generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::F, A::StridedMatrix{T}, b::AbstractVector) where {T<:BlasFloat, F<:Function}
     if stride(A,1) == 1 && _fullstride2(A)
         BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copy!(c, b))
     else # incompatible with BLAS
         @invoke generic_trimatmul!(c::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, b::AbstractVecOrMat)
     end
 end
-function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat}
+function generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::F, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat, F<:Function}
     if stride(C,1) == stride(A,1) == 1 && _fullstride2(C) && _fullstride2(A)
         BLAS.trmm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copy!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatmul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
-function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat}
+function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::F, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat, F<:Function}
     if stride(C,1) == stride(B,1) == 1 && _fullstride2(C) && _fullstride2(B)
         BLAS.trmm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
@@ -1361,21 +1364,21 @@ function generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function,
     end
 end
 # division
-function generic_trimatdiv!(C::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVector) where {T<:BlasFloat}
+function generic_trimatdiv!(C::StridedVector{T}, uploc, isunitc, tfun::F, A::StridedMatrix{T}, B::AbstractVector) where {T<:BlasFloat, F<:Function}
     if stride(A,1) == 1 && _fullstride2(A)
         BLAS.trsv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : copyto!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
     end
 end
-function generic_trimatdiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat}
+function generic_trimatdiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::F, A::StridedMatrix{T}, B::AbstractMatrix) where {T<:BlasFloat, F<:Function}
     if stride(C,1) == stride(A,1) == 1 && _fullstride2(C) && _fullstride2(A)
         BLAS.trsm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : _copy_or_copyto!(C, B))
     else # incompatible with BLAS
         @invoke generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     end
 end
-function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat}
+function generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::F, A::AbstractMatrix, B::StridedMatrix{T}) where {T<:BlasFloat, F<:Function}
     if stride(C,1) == stride(B,1) == 1 && _fullstride2(C) && _fullstride2(B)
         BLAS.trsm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copy!(C, A))
     else # incompatible with BLAS
@@ -1468,7 +1471,7 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
 end
 
 ## Generic triangular multiplication
-function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
+function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractVecOrMat) where {F<:Function}
     require_one_based_indexing(C, A, B)
     matmul_size_check(size(C), size(A), size(B))
     oA = oneunit(eltype(A))
@@ -1551,7 +1554,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
     return C
 end
 
-function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
+function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractMatrix) where {F<:Function}
     require_one_based_indexing(C, A, B)
     matmul_size_check(size(C), size(A), size(B))
     oB = oneunit(eltype(B))
@@ -1645,7 +1648,7 @@ end
 # does not significantly impact performance as of Dec 2015
 # in the transpose and conjugate transpose naive substitution variants,
 # accumulating in z rather than b[j,k] significantly improves performance as of Dec 2015
-function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractVecOrMat)
+function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractVecOrMat) where {F<:Function}
     require_one_based_indexing(C, A, B)
     mA, nA = size(A)
     m = size(B, 1)
@@ -1866,7 +1869,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA:
     return C
 end
 
-function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
+function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractMatrix) where {F<:Function}
     require_one_based_indexing(C, A, B)
     n = size(A,2)
     if size(B, 1) != n
@@ -1966,11 +1969,13 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
     return C
 end
 
-# these are needed because we don't keep track of left- and right-multiplication in tritrimul!
-rmul!(A::UpperTriangular, B::UpperTriangular)     = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::UpperTriangular, B::UnitUpperTriangular) = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::LowerTriangular, B::LowerTriangular)     = LowerTriangular(rmul!(tril!(A.data), B))
-rmul!(A::LowerTriangular, B::UnitLowerTriangular) = LowerTriangular(rmul!(tril!(A.data), B))
+# structure-preserving products are computed in the parent, where BLAS may apply
+for (TA, TB) in ((:UpperTriangular, :UpperTriangular), (:UpperTriangular, :UnitUpperTriangular),
+                 (:UnitUpperTriangular, :UnitUpperTriangular),
+                 (:LowerTriangular, :LowerTriangular), (:LowerTriangular, :UnitLowerTriangular),
+                 (:UnitLowerTriangular, :UnitLowerTriangular))
+    @eval rmul!(A::$TA, B::$TB) = $TA(rmul!(full!(A), B))
+end
 
 # Promotion
 ## Promotion methods in matmul don't apply to triangular multiplication since
@@ -3146,5 +3151,5 @@ end
 end
 
 # Cube roots of real-valued triangular matrices
-cbrt(A::UpperTriangular{T}) where {T<:Real} = UpperTriangular(_cbrt_quasi_triu!(Matrix{T}(A)))
-cbrt(A::LowerTriangular{T}) where {T<:Real} = LowerTriangular(_cbrt_quasi_triu!(Matrix{T}(A'))')
+cbrt(A::UpperTriangular{T}) where {T<:Real} = UpperTriangular(_cbrt_quasi_triu!(Matrix{float(T)}(A)))
+cbrt(A::LowerTriangular{T}) where {T<:Real} = LowerTriangular(_cbrt_quasi_triu!(Matrix{float(T)}(A'))')

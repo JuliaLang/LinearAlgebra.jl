@@ -308,6 +308,7 @@ function _cholpivoted!(A::AbstractMatrix, ::Type{UpperTriangular}, tol::Real, ch
     n = checksquare(A)
     # initialization
     piv = collect(1:n)
+    iszero(n) && return A, piv, convert(BlasInt, n), convert(BlasInt, 0)
     dots = zeros(rTA, n)
     temp = similar(dots)
 
@@ -357,6 +358,7 @@ function _cholpivoted!(A::AbstractMatrix, ::Type{LowerTriangular}, tol::Real, ch
     n = checksquare(A)
     # initialization
     piv = collect(1:n)
+    iszero(n) && return A, piv, convert(BlasInt, n), convert(BlasInt, 0)
     dots = zeros(rTA, n)
     temp = similar(dots)
 

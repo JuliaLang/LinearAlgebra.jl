@@ -253,6 +253,9 @@ parent(D::Diagonal) = D.diag
 
 copy(D::Diagonal) = Diagonal(copy(D.diag))
 
+Base.dataids(D::Diagonal) = Base.dataids(D.diag)
+Base.unaliascopy(D::Diagonal) = Diagonal(Base.unaliascopy(D.diag))
+
 Base._reverse(A::Diagonal, dims) = reverse!(Matrix(A); dims)
 Base._reverse(A::Diagonal, ::Colon) = Diagonal(reverse(A.diag))
 Base._reverse!(A::Diagonal, ::Colon) = (reverse!(A.diag); A)
@@ -806,8 +809,10 @@ end
     valA = A.diag; mA, nA = size(A)
     valB = B.diag; mB, nB = size(B)
     nC = checksquare(C)
-    @boundscheck nC == nA*nB ||
-        throw(DimensionMismatch(lazy"expect C to be a $(nA*nB)x$(nA*nB) matrix, got size $(nC)x$(nC)"))
+    @boundscheck begin
+        n = checked_mul(nA, nB)
+        nC == n || throw(DimensionMismatch(lazy"expect C to be a $(n)x$(n) matrix, got size $(nC)x$(nC)"))
+    end
     zerofilled = false
     if !(isempty(A) || isempty(B))
         z = A[1,1] * B[1,1]
@@ -878,8 +883,11 @@ end
     (mA, nA) = size(A)
     (mB, nB) = size(B)
     (mC, nC) = size(C)
-    @boundscheck (mC, nC) == (mA * mB, nA * nB) ||
-        throw(DimensionMismatch(lazy"expect C to be a $(mA * mB)x$(nA * nB) matrix, got size $(mC)x$(nC)"))
+    @boundscheck begin
+        m, n = _kronsize(A, B)
+        (mC, nC) == (m, n) ||
+            throw(DimensionMismatch(lazy"expect C to be a $(m)x$(n) matrix, got size $(mC)x$(nC)"))
+    end
     zerofilled = false
     if !(isempty(A) || isempty(B))
         z = A[1,1] * B[1,1]
@@ -921,8 +929,11 @@ end
     (mA, nA) = size(A)
     (mB, nB) = size(B)
     (mC, nC) = size(C)
-    @boundscheck (mC, nC) == (mA * mB, nA * nB) ||
-        throw(DimensionMismatch(lazy"expect C to be a $(mA * mB)x$(nA * nB) matrix, got size $(mC)x$(nC)"))
+    @boundscheck begin
+        m, n = _kronsize(A, B)
+        (mC, nC) == (m, n) ||
+            throw(DimensionMismatch(lazy"expect C to be a $(m)x$(n) matrix, got size $(mC)x$(nC)"))
+    end
     zerofilled = false
     if !(isempty(A) || isempty(B))
         z = A[1,1] * B[1,1]
@@ -979,7 +990,7 @@ function diag(D::Diagonal, k::Integer=0)
     return v
 end
 tr(D::Diagonal{<:Number}) = sum(D.diag)
-det(D::Diagonal{<:Number}) = prod(D.diag)
+det(D::Diagonal{T}) where {T<:Number} = prod(convert(AbstractVector{_dettype(T)}, D.diag))
 tr(D::Diagonal) = isempty(D.diag) ? zero(promote_leaf_eltypes(D.diag)) : sum(tr, D.diag)
 # for block-diagonal matrices, the empty case returns the determinant of an empty block
 det(D::Diagonal) = isempty(D.diag) ? det(zeros(promote_leaf_eltypes(D.diag), 0, 0)) : prod(det, D.diag)
@@ -1134,11 +1145,13 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
 end
 
 #Singular system
-svdvals(D::Diagonal{<:Number}) = sort!(abs.(D.diag), rev = true)
+_svdabs(x) = abs(x)
+_svdabs(x::Base.BitSigned) = abs(float(x))
+svdvals(D::Diagonal{<:Number}) = sort!(_svdabs.(D.diag), rev = true)
 svdvals(D::Diagonal) = [svdvals(v) for v in D.diag]
 function svd(D::Diagonal{T}) where {T<:Number}
     d = D.diag
-    s = abs.(d)
+    s = _svdabs.(d)
     piv = sortperm(s, rev = true)
     S = s[piv]
     Td  = _ortho_eltype(T)
@@ -1176,7 +1189,7 @@ norm_x_minus_y(D1::Diagonal, D2::Diagonal, ::typeof(norm)) = norm_x_minus_y(D1.d
 
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)
-_opnorm12Inf(A::Diagonal, p) = maximum(opnorm(x, p) for x in A.diag)
+_opnorm12Inf(A::Diagonal, p) = isempty(A.diag) ? norm(A.diag) : maximum(opnorm(x, p) for x in A.diag)
 
 function opnorm(A::Diagonal, p::Real=2)
     if p == 1 || p == Inf || p == 2

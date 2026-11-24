@@ -220,6 +220,7 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     checksquare(F)
     m = size(F,1)
     m != size(B,1) && throw(DimensionMismatch(lazy"wrong right-hand-side # rows != $m"))
+    iszero(m) && return B
     require_one_based_indexing(B)
     n = size(B,2)
     H = F.data
@@ -270,6 +271,7 @@ function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
     checksquare(F)
     m = size(F,1)
     m != size(B,2) && throw(DimensionMismatch(lazy"wrong right-hand-side # cols != $m"))
+    iszero(m) && return B
     require_one_based_indexing(B)
     n = size(B,1)
     H = F.data
@@ -321,7 +323,7 @@ end
 # Cost is O(m²) with O(m) storage.
 function det(F::UpperHessenberg; shift::Number=false)
     checksquare(F)
-    H = F.data
+    H = convert(AbstractMatrix{_dettype(eltype(F))}, F.data)
     m = size(H,1)
     μ = shift
     m == 0 && return one(zero(eltype(H)) + μ)

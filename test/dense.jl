@@ -160,6 +160,7 @@ bimg  = randn(n,2)/2
             @test -a2' ≈ a'y + y*a
             z = lyap(Tridiagonal(a)', Diagonal(a2))
             @test z ≈ lyap(Array(Tridiagonal(a)'), Array(Diagonal(a2)))
+            @test_throws ArgumentError lyap(big.(a), big.(a2))
             @test -Diagonal(a2) ≈ Tridiagonal(a)'*z + z*Tridiagonal(a)
             x2 = sylvester(a[1:3, 1:3], a[4:n, 4:n], a2[1:3,4:n])
             @test -a2[1:3, 4:n] ≈ a[1:3, 1:3]*x2 + x2*a[4:n, 4:n]
@@ -169,6 +170,8 @@ bimg  = randn(n,2)/2
             z2 = sylvester(Tridiagonal(a[1:3, 1:3]), Diagonal(a[4:n, 4:n]), a2[1:3,4:n])
             @test z2 ≈ sylvester(Array(Tridiagonal(a[1:3, 1:3])), Array(Diagonal(a[4:n, 4:n])), Array(a2[1:3,4:n]))
             @test -a2[1:3, 4:n] ≈ Tridiagonal(a[1:3, 1:3])*z2 + z2*Diagonal(a[4:n, 4:n])
+            ab = big.(a)
+            @test_throws ArgumentError sylvester(ab[1:3, 1:3], ab[4:n, 4:n], a2[1:3,4:n])
         end
 
         @testset "Matrix square root" begin
@@ -491,6 +494,28 @@ end
     c = Matrix{Float64}(undef, 2, 2)
     kron!(c, a, b')
     @test c == [0.0 1.0; 0.0 0.0]
+end
+
+@testset "kron dimension overflow" begin
+    # Lazy inputs exercise unrepresentable output dimensions without a large allocation.
+    v = 1:(typemax(Int) ÷ 4)
+    col = reshape(v, :, 1)
+    row = reshape(v, 1, :)
+    b = collect(1:5)
+    B = reshape(b, :, 1)
+    @test_throws OverflowError kron(v, b)
+    @test_throws OverflowError kron!(Int[], v, b)
+    for (x, y) in ((v, B), (col, b), (col, B), (row, transpose(B)))
+        @test_throws OverflowError kron(x, y)
+        @test_throws OverflowError kron!(zeros(Int, 0, 0), x, y)
+    end
+    D = Diagonal(v)
+    for (x, y) in ((D, Diagonal(b)), (D, B), (B, D))
+        @test_throws OverflowError kron!(zeros(Int, 0, 0), x, y)
+    end
+    a = falses(0, typemax(Int) ÷ 4)
+    @test_throws OverflowError kron(a, falses(0, 5))
+    @test_throws OverflowError kron!(falses(0, 0), a, falses(0, 5))
 end
 
 @testset "kron adjoint" begin
@@ -1547,6 +1572,31 @@ end
     H = Hermitian([1.0 2.0im; -2.0im 1.0])
     @test (@inferred abs(H)) ≈ Hermitian([2.0 1.0im; -1.0im 2.0])
     @test abs(H) isa Hermitian
+end
+
+@testset "real diagonal matrix with negative entries to an integer-valued real power" begin
+    A = [-1.0 0; 0 2]
+    for p in (2.0, 3.0, -1.0)
+        @test A^p isa Matrix{Float64}
+        @test A^p == A^Int(p)
+    end
+    @test A^0.5 isa Matrix{ComplexF64}
+    @test A^0.5 ≈ Diagonal([im, sqrt(2)])
+end
+
+@testset "cond of an all-zero integer Diagonal" begin
+    for p in (1, 2, Inf)
+        @test (@inferred cond(Diagonal([0, 0]), p)) == Inf
+    end
+    @test (@inferred cond(Diagonal(Int8[0]))) == Inf
+    @test (@inferred cond(Diagonal([0, 2]))) == Inf
+end
+
+@testset "matrix functions on diagonals outside the real domain" begin
+    A = [0.5 0.0;0.0 2.0]
+    for f ∈ (acos, asin, acosh, atanh)
+        @test f(A) == f(complex(A))
+    end
 end
 
 end # module TestDense
