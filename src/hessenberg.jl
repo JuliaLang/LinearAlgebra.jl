@@ -71,6 +71,7 @@ AbstractMatrix{T}(H::UpperHessenberg{T}) where {T} = copy(H)
 
 Base.dataids(A::UpperHessenberg) = Base.dataids(parent(A))
 _aliasparts(A::UpperHessenberg) = _aliasparts(parent(A))
+_isstructured(::UpperHessenberg) = true
 _isinplace(Y, B::UpperHessenberg) = Y === B || _isinplace(Y, parent(B))
 Base.unaliascopy(A::UpperHessenberg) = UpperHessenberg(Base.unaliascopy(parent(A)))
 

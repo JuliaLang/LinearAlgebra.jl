@@ -161,6 +161,7 @@ _mul_inplace_left(::AbstractTriangular, α, β) = isone(α) && iszero(β)
 _mul_inplace_right(::AbstractTriangular, α, β) = isone(α) && iszero(β)
 # the kernels for two triangular factors apply the left one in place
 _mul_inplace_right(::AbstractTriangular, ::AbstractTriangular, α, β) = false
+_isstructured(::AbstractTriangular) = true
 
 function Matrix{T}(U::UpperOrLowerTriangular) where {T}
     M = Matrix{T}(undef, size(U))

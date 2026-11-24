@@ -103,8 +103,8 @@ _mul_inplace_right(A, B, α, β) = _mul_inplace_right(B, α, β)
     return _mul!(C, _mul_operand(C, A), _mul_operand(C, B), α, β)
 end
 _mul_operand(C, X) = !_mightalias(C, X) || _isinplace(C, X) ? X : copyto!(C, X)
-_isstructured(C) = C isa Union{AbstractTriangular,Diagonal,Bidiagonal,Tridiagonal,SymTridiagonal,
-    HermOrSym,UpperHessenberg}
+# whether the kernels assume that `C` is not one of the factors
+_isstructured(C) = false
 
 # A method checks the arrays it overwrites against those it only reads, unless the methods
 # it calls check the same arguments in full before anything is written. So kernels that

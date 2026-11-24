@@ -257,6 +257,7 @@ Base.dataids(D::Diagonal) = Base.dataids(D.diag)
 _aliasparts(D::Diagonal) = _aliasparts(D.diag)
 _mul_inplace_left(::Diagonal, α, β) = true
 _mul_inplace_right(::Diagonal, α, β) = true
+_isstructured(::Diagonal) = true
 Base.unaliascopy(D::Diagonal) = Diagonal(Base.unaliascopy(D.diag))
 
 Base._reverse(A::Diagonal, dims) = reverse!(Matrix(A); dims)
