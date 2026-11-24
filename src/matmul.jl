@@ -215,6 +215,7 @@ end
 const _aliasparts = aliasparts
 const _mightalias = deepmightalias
 const check_inplace_aliasing = checkaliasing
+const check_q_aliasing = checkaliasing
 
 """
     LinearAlgebra.checkoverlap(Y, B)
