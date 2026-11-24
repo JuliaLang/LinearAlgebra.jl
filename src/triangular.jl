@@ -166,7 +166,7 @@ imag(A::UpperTriangular{<:Any,<:StridedMaybeAdjOrTransMat}) = imag.(A)
 imag(A::LowerTriangular{<:Any,<:StridedMaybeAdjOrTransMat}) = imag.(A)
 function imag(A::UnitLowerTriangular)
     L = LowerTriangular(A.data)
-    Lim = similar(L) # must be mutable to set diagonals to zero
+    Lim = similar(L, real(eltype(L))) # must be mutable to set diagonals to zero
     Lim .= imag.(L)
     for i in axes(Lim,1)
         Lim[i,i] = zero(Lim[i,i])
@@ -175,7 +175,7 @@ function imag(A::UnitLowerTriangular)
 end
 function imag(A::UnitUpperTriangular)
     U = UpperTriangular(A.data)
-    Uim = similar(U) # must be mutable to set diagonals to zero
+    Uim = similar(U, real(eltype(U))) # must be mutable to set diagonals to zero
     Uim .= imag.(U)
     for i in axes(Uim,1)
         Uim[i,i] = zero(Uim[i,i])
@@ -665,6 +665,7 @@ function copy!(dest::StridedMatrix, U::UpperOrLowerTriangular)
 end
 
 @propagate_inbounds function _copy!(dest::StridedMatrix, U::UpperOrLowerTriangular)
+    U = Base.unalias(dest, U) # the second copy reads the diagonal of `U` after the first one wrote it
     copytrito!(dest, parent(U), U isa UpperOrUnitUpperTriangular ? 'U' : 'L')
     copytrito!(dest, U, U isa UpperOrUnitUpperTriangular ? 'L' : 'U')
     return dest
@@ -1199,11 +1200,13 @@ end
 rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular) = @inline _trimul!(A, A, B)
 function rmul!(A::AbstractMatrix, B::AbstractTriangular)
     if istriu(B)
-        _trimul!(A, A, uppertriangular(B))
+        rmul!(A, uppertriangular(B))
     else
-        _trimul!(A, A, lowertriangular(B))
+        rmul!(A, lowertriangular(B))
     end
 end
+rmul!(A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
+    generic_mattrimul!(A, uplo_char(B), isunit_char(B), _wrapperop(parent(B)), A, _unwrap_at(parent(B)))
 
 for TC in (:AbstractVector, :AbstractMatrix)
     @eval @inline function _mul!(C::$TC, A::AbstractTriangular, B::AbstractVector, alpha::Number, beta::Number)
@@ -1318,9 +1321,9 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
         # Condition numbers
         function cond(A::$t{<:BlasFloat,<:StridedMatrix}, p::Real=2)
             checksquare(A)
-            if p == 1
+            if p == 1 && !isempty(A)
                 return inv(LAPACK.trcon!('O', $uploc, $isunitc, A.data))
-            elseif p == Inf
+            elseif p == Inf && !isempty(A)
                 return inv(LAPACK.trcon!('I', $uploc, $isunitc, A.data))
             else # use fallback
                 return cond(copy!(similar(parent(A)), A), p)
@@ -1945,11 +1948,13 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, ::Function, A::Ab
     return C
 end
 
-# these are needed because we don't keep track of left- and right-multiplication in tritrimul!
-rmul!(A::UpperTriangular, B::UpperTriangular)     = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::UpperTriangular, B::UnitUpperTriangular) = UpperTriangular(rmul!(triu!(A.data), B))
-rmul!(A::LowerTriangular, B::LowerTriangular)     = LowerTriangular(rmul!(tril!(A.data), B))
-rmul!(A::LowerTriangular, B::UnitLowerTriangular) = LowerTriangular(rmul!(tril!(A.data), B))
+# structure-preserving products are computed in the parent, where BLAS may apply
+for (TA, TB) in ((:UpperTriangular, :UpperTriangular), (:UpperTriangular, :UnitUpperTriangular),
+                 (:UnitUpperTriangular, :UnitUpperTriangular),
+                 (:LowerTriangular, :LowerTriangular), (:LowerTriangular, :UnitLowerTriangular),
+                 (:UnitLowerTriangular, :UnitLowerTriangular))
+    @eval rmul!(A::$TA, B::$TB) = $TA(rmul!(full!(A), B))
+end
 
 # Promotion
 ## Promotion methods in matmul don't apply to triangular multiplication since
@@ -3155,5 +3160,5 @@ end
 end
 
 # Cube roots of real-valued triangular matrices
-cbrt(A::UpperTriangular{T}) where {T<:Real} = UpperTriangular(_cbrt_quasi_triu!(Matrix{T}(A)))
-cbrt(A::LowerTriangular{T}) where {T<:Real} = LowerTriangular(_cbrt_quasi_triu!(Matrix{T}(A'))')
+cbrt(A::UpperTriangular{T}) where {T<:Real} = UpperTriangular(_cbrt_quasi_triu!(Matrix{float(T)}(A)))
+cbrt(A::LowerTriangular{T}) where {T<:Real} = LowerTriangular(_cbrt_quasi_triu!(Matrix{float(T)}(A'))')

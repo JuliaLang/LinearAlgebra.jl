@@ -486,4 +486,12 @@ end
     end
 end
 
+@testset "empty Tridiagonal" begin
+    T = Tridiagonal(Float64[], Float64[], Float64[])
+    @test ldiv!(lu(T), ones(0)) == ones(0)
+    @test_throws DimensionMismatch ldiv!(lu(T), ones(1))
+    @test ldiv!(lu(T), ones(0,2)) == ones(0,2)
+    @test_throws DimensionMismatch ldiv!(lu(T), ones(1,0))
+end
+
 end # module TestLU

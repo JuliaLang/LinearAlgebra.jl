@@ -286,6 +286,7 @@ end
 ###################
 
 function _opnorm1Inf(B::Bidiagonal, p)
+    isempty(B.dv) && return norm(B.dv)
     size(B, 1) == 1 && return norm(first(B.dv))
     case = xor(p == 1, istriu(B))
     normd1, normdend = norm(first(B.dv)), norm(last(B.dv))
@@ -556,7 +557,7 @@ function lmul!(D::Diagonal, B::Bidiagonal)
 end
 # B .= B * A
 function rmul!(B::AbstractMatrix, A::Bidiagonal)
-    matmul_size_check(size(A), size(B))
+    matmul_size_check(size(B), size(A))
     (; dv, ev) = A
     if A.uplo == 'U'
         for k in reverse(axes(dv,1)[2:end])
@@ -1404,7 +1405,7 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     if mc != m || nc != n
         throw(DimensionMismatch(lazy"expect output to have size ($m, $n), but got ($mc, $nc)"))
     end
-
+    iszero(n) && return C
     zi = findfirst(iszero, B.dv)
     isnothing(zi) || throw(SingularException(zi))
 
@@ -1491,7 +1492,7 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
         ev = A.ev
         n = length(dv)
         @inbounds for i in 1:n-1
-            iszero(dv[i]) && throw(ZeroPivotException(i))
+            iszero(dv[i]) && return $T(A), convert(BlasInt, i)
             ev[i] /= dv[i]
             dv[i+1] -= abs2(ev[i])*dv[i]
             Akk = dv[i]
@@ -1517,14 +1518,14 @@ end
 eigvals(M::Bidiagonal) = copy(M.dv)
 function eigvecs(M::Bidiagonal{T}) where T
     n = length(M.dv)
-    Q = Matrix{T}(undef, n,n)
+    Q = Matrix{float(T)}(undef, n,n)
     blks = [0; findall(iszero, M.ev); n]
-    v = zeros(T, n)
+    v = zeros(float(T), n)
     if M.uplo == 'U'
         for idx_block = 1:length(blks) - 1, i = blks[idx_block] + 1:blks[idx_block + 1] #index of eigenvector
-            fill!(v, zero(T))
-            v[blks[idx_block] + 1] = one(T)
-            for j = blks[idx_block] + 1:i - 1 #Starting from j=i, eigenvector elements will be 0
+            fill!(v, zero(float(T)))
+            v[blks[idx_block] + 1] = one(float(T))
+            for j = blks[idx_block] + 1:i - 1 #Starting from j=i+1, eigenvector elements will be 0
                 v[j+1] = (M.dv[i] - M.dv[j])/M.ev[j] * v[j]
             end
             c = norm(v)
@@ -1534,9 +1535,9 @@ function eigvecs(M::Bidiagonal{T}) where T
         end
     else
         for idx_block = 1:length(blks) - 1, i = blks[idx_block + 1]:-1:blks[idx_block] + 1 #index of eigenvector
-            fill!(v, zero(T))
-            v[blks[idx_block+1]] = one(T)
-            for j = (blks[idx_block+1] - 1):-1:max(1, (i - 1)) #Starting from j=i, eigenvector elements will be 0
+            fill!(v, zero(float(T)))
+            v[blks[idx_block+1]] = one(float(T))
+            for j = (blks[idx_block+1] - 1):-1:i #Starting from j=i-1, eigenvector elements will be 0
                 v[j] = (M.dv[i] - M.dv[j+1])/M.ev[j] * v[j+1]
             end
             c = norm(v)

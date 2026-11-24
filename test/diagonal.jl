@@ -575,6 +575,13 @@ end
     @test lam == [1, 2, 3]
 end
 
+@testset "issue #1875" begin
+    D = Diagonal(Int8[-128, 3, 0])
+    @test svdvals(D) == [128, 3, 0]
+    @test svd(D).S == [128, 3, 0]
+    @test rank(D) == 2
+end
+
 @testset "eigmin (#27847)" begin
     for _ in 1:100
         d = randn(rand(1:10))
@@ -1518,6 +1525,15 @@ end
     @test opnorm(D, 1) == opnorm(A, 1)
     @test opnorm(D, 2) ≈ opnorm(A, 2)
     @test opnorm(D, Inf) == opnorm(A, Inf)
+
+    @testset "empty" for T in (Float64, ComplexF64)
+        D = Diagonal(T[])
+        for p in (1, 2, Inf)
+            @test opnorm(D, p) === opnorm(Matrix(D), p)
+            @test cond(D, p) === cond(Matrix(D), p)
+        end
+        @test_throws ArgumentError opnorm(D, 3)
+    end
 end
 
 @testset "issymmetric with NaN" begin

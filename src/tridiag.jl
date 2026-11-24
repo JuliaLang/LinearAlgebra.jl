@@ -1069,6 +1069,7 @@ function ldiv!(A::Tridiagonal, B::AbstractVecOrMat)
     if n != size(B,1)
         throw(DimensionMismatch(lazy"matrix has dimensions ($n,$n) but right hand side has $(size(B,1)) rows"))
     end
+    iszero(n) && return B
     nrhs = size(B, 2)
 
     # Initialize variables
@@ -1167,6 +1168,7 @@ end
 # Tridiagonal
 
 function _opnorm1Inf(A::Tridiagonal, p)
+    isempty(A.d) && return norm(A.d)
     size(A, 1) == 1 && return norm(first(A.d))
     case = p == Inf
     lowerrange, upperrange = case ? (1:length(A.dl)-1, 2:length(A.dl)) : (2:length(A.dl), 1:length(A.dl)-1)
@@ -1183,6 +1185,7 @@ end
 # SymTridiagonal
 
 function _opnorm1Inf(A::SymTridiagonal, p::Real)
+    isempty(A.dv) && return norm(A.dv)
     size(A, 1) == 1 && return norm(first(A.dv))
     lowerrange, upperrange = 1:length(A.ev)-1, 2:length(A.ev)
     normfirst, normend = norm(first(A.dv))+norm(first(A.ev)), norm(last(A.ev))+norm(last(A.dv))

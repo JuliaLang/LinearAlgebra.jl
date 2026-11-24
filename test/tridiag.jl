@@ -1079,6 +1079,14 @@ end
         @test_skip opnorm(T, 2) ≈ opnorm(Matrix(T), 2) # currently missing
         @test opnorm(T, Inf) == opnorm(Matrix(T), Inf)
     end
+
+    @testset "empty" for E in (Float64, ComplexF64),
+            T in (Tridiagonal(E[], E[], E[]), SymTridiagonal(E[], E[]))
+        for p in (1, 2, Inf)
+            @test opnorm(T, p) === opnorm(Matrix(T), p)
+            @test cond(T, p) === cond(Matrix(T), p)
+        end
+    end
 end
 
 @testset "block-bidiagonal matrix indexing" begin
@@ -1254,6 +1262,22 @@ end
         LinearAlgebra.fillband!(S, 0, 10, 10)
         @test S == S2
     end
+end
+
+@testset "direct solves with empty Tridiagonal" begin
+    T = Tridiagonal(Float64[], Float64[], Float64[])
+    @test ldiv!(copy(T), ones(0)) == ones(0)
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(1))
+    @test ldiv!(copy(T), ones(0,2)) == ones(0,2)
+    @test_throws DimensionMismatch ldiv!(copy(T), ones(1,0))
+end
+
+@testset "solves with empty SymTridiagonal" begin
+    S = SymTridiagonal(Float64[], Float64[])
+    @test factorize(S) isa Factorization{Float64}
+    @test S \ ones(0, 0) == ones(0, 0)
+    @test S \ ones(0, 2) == ones(0, 2)
+    @test inv(S) == S
 end
 
 end # module TestTridiagonal

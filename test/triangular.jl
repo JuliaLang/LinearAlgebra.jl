@@ -358,6 +358,15 @@ end
     end
 end
 
+@testset "cond of empty triangular matrices" for T in (Float64, ComplexF64),
+        tri in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+    A = tri(zeros(T, 0, 0))
+    for p in (1, 2, Inf)
+        @test cond(A, p) === cond(Matrix(A), p)
+    end
+    @test_throws ArgumentError cond(A, 3)
+end
+
 @testset "Error condition for powm" begin
     A = UpperTriangular(rand(ComplexF64, 10, 10))
     @test_throws ArgumentError LinearAlgebra.powm!(A, 2.2)
@@ -587,6 +596,12 @@ end
             A2 = copy(A)
             B = T(view(M, 2:6, 2:6))
             @test copyto!(B, A) == A2
+        end
+        # a wrapper of the adjoint of the destination, whose diagonal is conjugated
+        M = [1+2im 3im; 4 5-6im]
+        for T in (UpperTriangular, LowerTriangular)
+            A = copy(M)
+            @test copyto!(A, T(A')) == T(M')
         end
     end
 
@@ -1232,6 +1247,37 @@ end
         Mnan[CartesianIndices(M)[[i > j for i in 1:200, j in 1:200]]] .= NaN
         @test isequal(log(UpperTriangular(Mnan)), log(UpperTriangular(M)))
         @test isequal(log(UnitUpperTriangular(Mnan)), log(UnitUpperTriangular(M)))
+    end
+end
+
+@testset "cbrt of integer triangular matrices" begin
+    for (T, A) in ((UpperTriangular, [2 1; 0 3]), (LowerTriangular, [2 0; 1 3]))
+        C = cbrt(T(A))
+        @test C isa T{Float64}
+        @test C ≈ cbrt(float(A))
+        @test C^3 ≈ A
+    end
+    E = cbrt(UpperTriangular([8 0; 0 27]))
+    @test E isa UpperTriangular{Float64}
+    @test E == [2 0; 0 3]
+end
+
+@testset "issue #1907: rmul! of two triangular matrices" begin
+    @testset for T in (Int, Float64)
+        a, b, c = T[9 2 3; 9 9 4; 9 9 9], T[7 -1 2; 7 7 5; 7 7 7], T[1 -1 2; 7 1 5; 7 7 1]
+        at, bt, ct = (copy(transpose(x)) for x in (a, b, c))
+        for (A, B) in ((UnitUpperTriangular(a), UnitUpperTriangular(b)),
+                       (UnitUpperTriangular(a), UpperTriangular(c)),
+                       (UnitUpperTriangular(a), transpose(UnitLowerTriangular(bt))),
+                       (UnitLowerTriangular(at), UnitLowerTriangular(bt)),
+                       (UnitLowerTriangular(at), LowerTriangular(ct)),
+                       (UnitLowerTriangular(at), adjoint(UnitUpperTriangular(b))))
+            MA, MB = Matrix(A), Matrix(B)
+            @test rmul!(A, B)::typeof(A) == MA * MB
+        end
+        # the product is not lower triangular
+        L = LowerTriangular(T[0 0 0; -2 2 0; 0 -2 0])
+        @test_throws ArgumentError rmul!(L, UnitUpperTriangular(T[1 2 -1; 0 1 1; 0 0 1]))
     end
 end
 

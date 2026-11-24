@@ -25,12 +25,8 @@ Random.seed!(1)
 
 @testset for relty in (Int, Float32, Float64, BigFloat), elty in (relty, Complex{relty})
     if relty <: AbstractFloat
-        dv = convert(Vector{elty}, randn(n))
-        ev = convert(Vector{elty}, randn(n-1))
-        if (elty <: Complex)
-            dv += im*convert(Vector{elty}, randn(n))
-            ev += im*convert(Vector{elty}, randn(n-1))
-        end
+        dv = randn(elty, n)
+        ev = randn(elty, n - 1)
     elseif relty <: Integer
         dv = convert(Vector{elty}, rand(1:10, n))
         ev = convert(Vector{elty}, rand(1:10, n-1))
@@ -39,6 +35,8 @@ Random.seed!(1)
             ev += im*convert(Vector{elty}, rand(1:10, n-1))
         end
     end
+    ev[rand(1:n - 1)] = 0 # non-trivial block structure for #1900
+    ev[rand(1:n - 1)] = 0
     dv0 = zeros(elty, 0)
     ev0 = zeros(elty, 0)
 
@@ -402,14 +400,8 @@ Random.seed!(1)
         end
 
         @testset "Eigensystems" begin
-            if relty <: AbstractFloat
-                d1, v1 = eigen(T)
-                d2, v2 = eigen(map(elty<:Complex ? ComplexF64 : Float64,Tfull), sortby=nothing)
-                @test (uplo === :U ? d1 : reverse(d1)) ≈ d2
-                if elty <: Real
-                    test_approx_eq_modphase(v1, uplo === :U ? v2 : v2[:,n:-1:1])
-                end
-            end
+            λ, V = eigen(T)
+            @test T * V ≈ V * Diagonal(λ)
         end
 
         @testset "Singular systems" begin
@@ -442,9 +434,10 @@ Random.seed!(1)
                 for op in (+, -, *)
                     @test Array(op(T, T2)) ≈ op(Tfull, Tfull2)
                 end
-                A = kron(T.dv, T.dv')
-                @test T * A ≈ lmul!(T, copy(A))
-                @test A * T ≈ rmul!(copy(A), T)
+                L = T.dv * T.ev'
+                R = T.ev * T.dv'
+                @test T * L ≈ lmul!(T, copy(L))
+                @test R * T ≈ rmul!(copy(R), T)
             end
             # test pass-through of mul! for SymTridiagonal*Bidiagonal
             TriSym = SymTridiagonal(T.dv, T.ev)
@@ -1165,6 +1158,14 @@ end
         @test opnorm(B, 2) ≈ opnorm(Matrix(B), 2)
         @test opnorm(B, Inf) == opnorm(Matrix(B), Inf)
     end
+
+    @testset "empty" for T in (Float64, ComplexF64), uplo in ('U', 'L')
+        B = Bidiagonal(T[], T[], uplo)
+        for p in (1, 2, Inf)
+            @test opnorm(B, p) === opnorm(Matrix(B), p)
+            @test cond(B, p) === cond(Matrix(B), p)
+        end
+    end
 end
 
 @testset "convert to Bidiagonal" begin
@@ -1306,6 +1307,13 @@ end
     end
 end
 
+@testset "solves with empty Bidiagonal" begin
+    E = Bidiagonal(Float64[], Float64[], :U)
+    @test ones(0,0) / E == ones(0,0)
+    @test ones(2,0) / E == ones(2,0)
+    @test_throws DimensionMismatch ones(0,1) / E
+end
+
 @testset "log" begin
     for B in (Bidiagonal([1.0, 2, 3], [1.0, 2], :U), Bidiagonal([2.0, 3, 4, 5], [1.0, 1, 1], :U),
               Bidiagonal([-1.0, 2, 3], [1.0, 2], :U), Bidiagonal([1.0, 2, 3], [1.0, 2], :L))
@@ -1314,6 +1322,20 @@ end
     # NaNs propagate into the result instead of throwing
     L = log(Bidiagonal([1.0, NaN, 3], [1.0, 2], :U))
     @test isnan(L[2,2]) && L[3,3] ≈ log(3)
+end
+
+@testset "cholesky of banded matrices with a zero pivot honours check=false (#1899)" begin
+    S = SymTridiagonal([1.0, 0.0, 0.0], [0.0, 1.0])
+    F = cholesky(S; check=false)
+    @test !issuccess(F)
+    @test F.info == 2
+    @test_throws PosDefException cholesky(S)
+    @test !isposdef(SymTridiagonal([0.0, 1.0], [1.0]))
+    @test !isposdef(Tridiagonal([1.0], [0.0, 1.0], [1.0]))
+    # a non-positive-definite but nonzero pivot still reports failure consistently
+    @test !issuccess(cholesky(SymTridiagonal([1.0, -1.0], [0.0]); check=false))
+    # a genuinely positive-definite banded matrix is unaffected
+    @test issuccess(cholesky(SymTridiagonal([2.0, 2.0], [1.0]); check=false))
 end
 
 end # module TestBidiagonal

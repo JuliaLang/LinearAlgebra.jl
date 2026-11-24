@@ -159,6 +159,7 @@ bimg  = randn(n,2)/2
             @test -a2' ≈ a'y + y*a
             z = lyap(Tridiagonal(a)', Diagonal(a2))
             @test z ≈ lyap(Array(Tridiagonal(a)'), Array(Diagonal(a2)))
+            @test_throws ArgumentError lyap(big.(a), big.(a2))
             @test -Diagonal(a2) ≈ Tridiagonal(a)'*z + z*Tridiagonal(a)
             x2 = sylvester(a[1:3, 1:3], a[4:n, 4:n], a2[1:3,4:n])
             @test -a2[1:3, 4:n] ≈ a[1:3, 1:3]*x2 + x2*a[4:n, 4:n]
@@ -168,6 +169,8 @@ bimg  = randn(n,2)/2
             z2 = sylvester(Tridiagonal(a[1:3, 1:3]), Diagonal(a[4:n, 4:n]), a2[1:3,4:n])
             @test z2 ≈ sylvester(Array(Tridiagonal(a[1:3, 1:3])), Array(Diagonal(a[4:n, 4:n])), Array(a2[1:3,4:n]))
             @test -a2[1:3, 4:n] ≈ Tridiagonal(a[1:3, 1:3])*z2 + z2*Diagonal(a[4:n, 4:n])
+            ab = big.(a)
+            @test_throws ArgumentError sylvester(ab[1:3, 1:3], ab[4:n, 4:n], a2[1:3,4:n])
         end
 
         @testset "Matrix square root" begin
@@ -1442,6 +1445,23 @@ end
     @test log(D) ≈ log(UpperTriangular(D))
     D = diagm([2.0, 2.0*im])
     @test log(D) ≈ log(UpperTriangular(D))
+end
+
+@testset "real diagonal matrix with negative entries to an integer-valued real power" begin
+    A = [-1.0 0; 0 2]
+    for p in (2.0, 3.0, -1.0)
+        @test A^p isa Matrix{Float64}
+        @test A^p == A^Int(p)
+    end
+    @test A^0.5 isa Matrix{ComplexF64}
+    @test A^0.5 ≈ Diagonal([im, sqrt(2)])
+end
+
+@testset "matrix functions on diagonals outside the real domain" begin
+    A = [0.5 0.0;0.0 2.0]
+    for f ∈ (acos, asin, acosh, atanh)
+        @test f(A) == f(complex(A))
+    end
 end
 
 end # module TestDense

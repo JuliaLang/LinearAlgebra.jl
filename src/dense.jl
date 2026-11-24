@@ -640,7 +640,7 @@ function (^)(A::AbstractMatrix{T}, p::Real) where T
     checksquare(A)
     # Quicker return if A is diagonal
     if isdiag(A)
-        if T <: Real && any(<(0), diagview(A))
+        if T <: Real && !isinteger(p) && any(<(0), diagview(A))
             return applydiagonal(x -> complex(x)^p, A)
         else
             return applydiagonal(x -> x^p, A)
@@ -1420,7 +1420,11 @@ julia> acos(cos([0.5 0.1; -0.2 0.3]))
 """
 function acos(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(acos, A)
+        if eltype(A) <: Real && any(x -> abs(x) > 1, diagview(A))
+            return applydiagonal(acos ∘ complex, A)
+        else
+            return applydiagonal(acos, A)
+        end
     elseif ishermitian(A)
         return _safe_parent(acos(Hermitian(A)))
     end
@@ -1452,7 +1456,11 @@ julia> asin(sin([0.5 0.1; -0.2 0.3]))
 """
 function asin(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(asin, A)
+        if eltype(A) <: Real && any(x -> abs(x) > 1, diagview(A))
+            return applydiagonal(asin ∘ complex, A)
+        else
+            return applydiagonal(asin, A)
+        end
     elseif ishermitian(A)
         asinHermA = asin(Hermitian(A))
         P = parent(asinHermA)
@@ -1512,7 +1520,11 @@ logarithmic formulas used to compute this function, see [^AH16_4].
 """
 function acosh(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(acosh, A)
+        if eltype(A) <: Real && any(<(1), diagview(A))
+            return applydiagonal(acosh ∘ complex, A)
+        else
+            return applydiagonal(acosh, A)
+        end
     elseif ishermitian(A)
         return _safe_parent(acosh(Hermitian(A)))
     end
@@ -1558,7 +1570,11 @@ logarithmic formulas used to compute this function, see [^AH16_6].
 """
 function atanh(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(atanh, A)
+        if eltype(A) <: Real && any(x -> abs(x) > 1, diagview(A))
+            return applydiagonal(atanh ∘ complex, A)
+        else
+            return applydiagonal(atanh, A)
+        end
     elseif ishermitian(A)
         return _safe_parent(atanh(Hermitian(A)))
     end
@@ -1957,6 +1973,7 @@ true
 """
 function sylvester(A::AbstractMatrix, B::AbstractMatrix, C::AbstractMatrix)
     T = promote_type(float(eltype(A)), float(eltype(B)), float(eltype(C)))
+    T <: BlasFloat || throw(ArgumentError(lazy"sylvester for eltype $T not supported."))
     return sylvester(copy_similar(A, T), copy_similar(B, T), copy_similar(C, T))
 end
 function sylvester(A::AbstractMatrix{T}, B::AbstractMatrix{T}, C::AbstractMatrix{T}) where {T<:BlasFloat}
@@ -2030,6 +2047,7 @@ true
 """
 function lyap(A::AbstractMatrix, C::AbstractMatrix)
     T = promote_type(float(eltype(A)), float(eltype(C)))
+    T <: BlasFloat || throw(ArgumentError(lazy"lyap for eltype $T not supported."))
     return lyap(copy_similar(A, T), copy_similar(C, T))
 end
 function lyap(A::AbstractMatrix{T}, C::AbstractMatrix{T}) where {T<:BlasFloat}
