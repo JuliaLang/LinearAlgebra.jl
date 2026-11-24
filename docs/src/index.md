@@ -901,6 +901,138 @@ LinearAlgebra.LAPACK.hseqr!
 LinearAlgebra.haszero
 ```
 
+### Aliasing checks
+
+In-place operations throw an `ArgumentError` if the array they overwrite shares memory with an
+operand that they still read, which would give wrong results, or with a factorization, which
+would be overwritten. They determine shared memory with [`LinearAlgebra.deepmightalias`](@ref),
+which compares the arrays that the arguments store their data in, as returned by
+[`LinearAlgebra.aliasparts`](@ref).
+
+A package should define `aliasparts` for its matrix types, factorizations and other operators
+that consist of other arrays. Otherwise, the checks cannot see that such an object shares memory
+with another array: for an `AbstractArray`, `Base.mightalias` compares `Base.dataids`, which by
+default only identify the object itself, and for other types it returns `false`. Defining
+`Base.dataids` as well lets Base's own unaliasing, e.g., in broadcasting, see the shared memory.
+For example, a rank-one matrix stored as two vectors consists of these vectors:
+
+```jldoctest aliasing
+julia> struct RankOneMatrix{T} <: AbstractMatrix{T}
+           u::Vector{T}
+           v::Vector{T}
+       end
+
+julia> Base.size(A::RankOneMatrix) = (length(A.u), length(A.v))
+
+julia> Base.getindex(A::RankOneMatrix, i::Int, j::Int) = A.u[i] * conj(A.v[j])
+
+julia> LinearAlgebra.aliasparts(A::RankOneMatrix) = (A.u, A.v)
+
+julia> u = [1.0, 2.0]; A = RankOneMatrix(u, [3.0, 4.0]);
+
+julia> mul!(u, A, [1.0, 1.0])
+ERROR: ArgumentError: output array must not be aliased with an input array
+[...]
+```
+
+Without the `aliasparts` method, this `mul!` would overwrite `u` while still reading it, and
+return a wrong result.
+
+A package that implements in-place operations for its own types checks their arguments in the
+same way: with [`LinearAlgebra.checkaliasing`](@ref) if the array that is overwritten must not
+share memory with an operand, and with [`LinearAlgebra.checkoverlap`](@ref) if it may be that
+operand itself, but must not overlap it otherwise. A method needs no check of its own if the
+methods it calls check the same arguments in full before anything is written. For example,
+`lmul!` with a `RankOneMatrix` reads `u` and `v` while it overwrites `B` column by column:
+
+```jldoctest aliasing
+julia> function LinearAlgebra.lmul!(A::RankOneMatrix, B::AbstractVecOrMat)
+           LinearAlgebra.checkaliasing(B, A)
+           for j in axes(B, 2)
+               w = dot(A.v, view(B, :, j))
+               for i in axes(B, 1)
+                   B[i, j] = A.u[i] * w
+               end
+           end
+           return B
+       end
+
+julia> lmul!(A, [1.0 2.0; 3.0 4.0])
+2×2 Matrix{Float64}:
+ 15.0  22.0
+ 30.0  44.0
+
+julia> lmul!(A, u)
+ERROR: ArgumentError: the array that is overwritten must not share memory with the other operand
+[...]
+```
+
+The operations with a separate output build on the in-place ones:
+
+- `ldiv!(Y, A, B)`, unless a package defines it for the type of `A`, copies `B` into `Y` and
+  calls `ldiv!(A, Y)`, so `Y` may share memory with `B`. An in-place `ldiv!(A, B)` that checks
+  its arguments, as above, is all a type needs.
+- `mul!(C, A, B, α, β)` throws in LinearAlgebra's generic method if `C` shares memory with
+  `A` or `B`, unless the other factor is one that the method applies in place, as `lmul!` and
+  `rmul!` do, which [`LinearAlgebra.lmulinplace`](@ref) and [`LinearAlgebra.rmulinplace`](@ref)
+  tell: triangular matrices (for `α == 1` and `β == 0`), `Diagonal`, `Bidiagonal` and others.
+  This is why `mul!(B, UpperTriangular(A), B)` works. For other types, the generic method
+  computes the product with a kernel that does not work in place. So a type with a kernel
+  that does defines `mul!` itself, to accept an output that is the other factor. The
+  3-argument `mul!(C, A, B)` calls its 5-argument method with `α = true` and `β = false`:
+
+```jldoctest aliasing
+julia> function LinearAlgebra.mul!(C::AbstractMatrix, A::RankOneMatrix, B::AbstractMatrix,
+                                   α::Number, β::Number)
+           LinearAlgebra.checkaliasing(C, A)
+           LinearAlgebra.checkoverlap(C, B)
+           for j in axes(B, 2)
+               w = α * dot(A.v, view(B, :, j))
+               for i in axes(C, 1)
+                   C[i, j] = iszero(β) ? A.u[i] * w : A.u[i] * w + β * C[i, j]
+               end
+           end
+           return C
+       end
+
+julia> B = [1.0 2.0; 3.0 4.0];
+
+julia> mul!(B, A, B, 2, 1)
+2×2 Matrix{Float64}:
+ 31.0  46.0
+ 63.0  92.0
+
+julia> mul!(B, A, [1.0 2.0; 3.0 4.0])
+2×2 Matrix{Float64}:
+ 15.0  22.0
+ 30.0  44.0
+```
+
+The kernel reads each column of `B` before it overwrites that column of `C`, so `C` may be
+`B` for any `α` and `β`, but must not overlap it otherwise. As `mul!` requires, it ignores the
+old values of `C` if `β` is zero.
+
+A package may instead extend LinearAlgebra's generic `mul!` method at a lower level, with
+methods for the internal functions that it calls to compute the product. Then the generic
+method checks the arguments before it calls them, and the package declares the types whose
+products its methods compute in place with [`LinearAlgebra.lmulinplace`](@ref) and
+[`LinearAlgebra.rmulinplace`](@ref), e.g., `LinearAlgebra.lmulinplace(::MyMatrix, α, β) = true`
+for a kernel that computes `mul!(B, A, B, α, β)` correctly, for any `α` and `β`. Its methods
+then see an output that shares memory with the other factor only if the output is that factor
+itself, element by element, e.g., `B` or `view(B, :, :)`, which they must handle. The same
+holds for methods for LinearAlgebra's own types that `mul!` applies in place, e.g., for
+triangular matrices with a parent of the package's type, as `lmul!` and `rmul!` call them
+with the output as the other factor.
+
+```@docs
+LinearAlgebra.aliasparts
+LinearAlgebra.deepmightalias
+LinearAlgebra.checkaliasing
+LinearAlgebra.checkoverlap
+LinearAlgebra.lmulinplace
+LinearAlgebra.rmulinplace
+```
+
 ```@meta
 DocTestSetup = nothing
 ```

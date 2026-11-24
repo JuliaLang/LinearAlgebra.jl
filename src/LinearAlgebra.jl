@@ -171,7 +171,13 @@ export
 # not exported, but public names
 public AbstractTriangular,
         Givens,
+        aliasparts,
+        checkaliasing,
+        checkoverlap,
         checksquare,
+        deepmightalias,
+        lmulinplace,
+        rmulinplace,
         haszero,
         hermitian,
         hermitian_type,

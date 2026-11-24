@@ -224,7 +224,7 @@ end
     @test_throws ArgumentError LAPACK.ormqr!('L', 'N', A, τ, view(A, :, 1:2))
     # empty fields don't count as shared memory (all empty arrays may share an address)
     Q1 = hessenberg(rand(1, 1)).Q # empty τ
-    @test isempty(Q1.τ) && !LinearAlgebra._mightalias(Bidiagonal([1.0], Float64[], :U), Q1)
+    @test isempty(Q1.τ) && !LinearAlgebra.deepmightalias(Bidiagonal([1.0], Float64[], :U), Q1)
     # factorizations of views: only overlapping views of the same parent count as shared memory
     for T in (Float64, BigFloat)
         M = rand(T, 6, 5)

@@ -259,9 +259,9 @@ similar(B::Bidiagonal, ::Type{T}) where {T} = Bidiagonal(similar(B.dv, T), simil
 similar(B::Bidiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = similar(B.dv, T, dims)
 
 Base.dataids(B::Bidiagonal) = (_band_dataids(B.dv)..., _band_dataids(B.ev)...)
-_aliasparts(B::Bidiagonal) = (_aliasparts(B.dv)..., _aliasparts(B.ev)...)
-_mul_inplace_left(::Bidiagonal, α, β) = true
-_mul_inplace_right(::Bidiagonal, α, β) = true
+aliasparts(B::Bidiagonal) = (aliasparts(B.dv)..., aliasparts(B.ev)...)
+lmulinplace(::Bidiagonal, α, β) = true
+rmulinplace(::Bidiagonal, α, β) = true
 _isstructured(::Bidiagonal) = true
 Base.unaliascopy(B::Bidiagonal) = Bidiagonal(Base.unaliascopy(B.dv), Base.unaliascopy(B.ev), B.uplo)
 
@@ -542,7 +542,7 @@ end
 # B .= A * B
 function lmul!(A::Bidiagonal, B::AbstractVecOrMat)
     matmul_size_check(size(A), size(B))
-    check_inplace_aliasing(B, A)
+    checkaliasing(B, A)
     (; dv, ev) = A
     if A.uplo == 'U'
         for k in axes(B,2)
@@ -564,7 +564,7 @@ end
 # B .= D * B
 function lmul!(D::Diagonal, B::Bidiagonal)
     matmul_size_check(size(D), size(B))
-    check_inplace_aliasing(B, D)
+    checkaliasing(B, D)
     (; dv, ev) = B
     isL = B.uplo == 'L'
     iszero(size(D,1)) && return B
@@ -578,7 +578,7 @@ end
 # B .= B * A
 function rmul!(B::AbstractMatrix, A::Bidiagonal)
     matmul_size_check(size(B), size(A))
-    check_inplace_aliasing(B, A)
+    checkaliasing(B, A)
     (; dv, ev) = A
     if A.uplo == 'U'
         for k in reverse(axes(dv,1)[2:end])
@@ -604,7 +604,7 @@ end
 # B .= B * D
 function rmul!(B::Bidiagonal, D::Diagonal)
     matmul_size_check(size(B), size(D))
-    check_inplace_aliasing(B, D)
+    checkaliasing(B, D)
     (; dv, ev) = B
     isU = B.uplo == 'U'
     iszero(size(D,1)) && return B
@@ -1327,8 +1327,8 @@ end
 ldiv!(A::Bidiagonal, b::AbstractVecOrMat) = @inline ldiv!(b, A, b)
 function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     require_one_based_indexing(c, A, b)
-    check_inplace_aliasing(c, A) # c may be b, as in the 2-arg ldiv!(A, b)
-    check_partial_overlap(c, b)
+    checkaliasing(c, A) # c may be b, as in the 2-arg ldiv!(A, b)
+    checkoverlap(c, b)
     N = size(A, 1)
     mb, nb = size(b, 1), size(b, 2)
     if N != mb
@@ -1423,7 +1423,7 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     end
     C
 end
-rdiv!(A::AbstractMatrix, B::Bidiagonal) = (check_inplace_aliasing(A, B); @inline _rdiv!(A, A, B))
+rdiv!(A::AbstractMatrix, B::Bidiagonal) = (checkaliasing(A, B); @inline _rdiv!(A, A, B))
 # backward compatibility
 rdiv!(A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) = rdiv!(A, wrapperop(B)(parent(B)))
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) =
