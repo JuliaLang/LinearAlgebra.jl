@@ -161,7 +161,7 @@ _mul_inplace_left(::AbstractTriangular, α, β) = isone(α) && iszero(β)
 _mul_inplace_right(::AbstractTriangular, α, β) = isone(α) && iszero(β)
 # the kernels for two triangular factors apply the left one in place
 _mul_inplace_right(::AbstractTriangular, ::AbstractTriangular, α, β) = false
-_mul_checks_overlap(::AbstractTriangular) = true
+_isstructured(::AbstractTriangular) = true
 
 function Matrix{T}(U::UpperOrLowerTriangular) where {T}
     M = Matrix{T}(undef, size(U))
@@ -1497,7 +1497,6 @@ end
 ## Generic triangular multiplication
 function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractVecOrMat) where {F<:Function}
     require_one_based_indexing(C, A, B)
-    check_partial_overlap(C, B)
     matmul_size_check(size(C), size(A), size(B))
     oA = oneunit(eltype(A))
     unit = isunitc == 'U'
@@ -1551,7 +1550,6 @@ end
 # conjugate cases
 function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA::AdjOrTrans, B::AbstractVecOrMat)
     require_one_based_indexing(C, xA, B)
-    check_partial_overlap(C, B)
     matmul_size_check(size(C), size(xA), size(B))
     A = parent(xA)
     oA = oneunit(eltype(A))
@@ -1582,7 +1580,6 @@ end
 
 function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::F, A::AbstractMatrix, B::AbstractMatrix) where {F<:Function}
     require_one_based_indexing(C, A, B)
-    check_partial_overlap(C, A)
     matmul_size_check(size(C), size(A), size(B))
     oB = oneunit(eltype(B))
     unit = isunitc == 'U'
@@ -1636,7 +1633,6 @@ end
 # conjugate cases
 function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, ::Function, A::AbstractMatrix, xB::AdjOrTrans)
     require_one_based_indexing(C, A, xB)
-    check_partial_overlap(C, A)
     matmul_size_check(size(C), size(A), size(xB))
     B = parent(xB)
     oB = oneunit(eltype(B))

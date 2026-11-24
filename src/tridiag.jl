@@ -766,6 +766,7 @@ function _aliasparts(M::Tridiagonal)
 end
 # the kernel for a left factor caches the rows of the other factor that it still needs
 _mul_inplace_left(::Union{SymTridiagonal,Tridiagonal}, α, β) = true
+_isstructured(::Union{SymTridiagonal,Tridiagonal}) = true
 function Base.unaliascopy(M::Tridiagonal)
     dl, d, du = Base.unaliascopy(M.dl), Base.unaliascopy(M.d), Base.unaliascopy(M.du)
     isdefined(M, :du2) ? Tridiagonal(dl, d, du, Base.unaliascopy(M.du2)) : Tridiagonal(dl, d, du)

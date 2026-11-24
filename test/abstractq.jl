@@ -205,8 +205,8 @@ end
         @test mul!(B, Q, B) ≈ Qm * B0
         B = rand(T, n, n); B0 = copy(B)
         @test mul!(B, B, Q) ≈ B0 * Qm
-        V = rand(T, n, n+1)
-        @test_throws ArgumentError mul!(view(V, :, 2:n+1), Q, view(V, :, 1:n))
+        V = rand(T, n, n+1); B0 = V[:, 1:n]
+        @test mul!(view(V, :, 2:n+1), Q, view(V, :, 1:n)) ≈ Qm * B0
         @test mul!(similar(S), Q, S) ≈ Qm * S
     end
     # generic (non-BLAS) kernels

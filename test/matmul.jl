@@ -1050,16 +1050,13 @@ end
             else
                 @test mul!(C, UpperTriangular(C), X) ≈ C0 * Xm
             end
-            # a partial overlap is only fine for the BLAS methods, which copy the other factor
-            # into the output first
+            # a factor that overlaps C otherwise is copied into C first, which needs β == 0
             V = rand(T, n, n+1); B0 = V[:, 1:n]
+            @test mul!(view(V, :, 2:n+1), X, view(V, :, 1:n)) ≈ Xm * B0
             W = rand(T, n+1, n); A0 = W[1:n, :]
-            if X isa LinearAlgebra.AbstractTriangular && T <: LinearAlgebra.BlasFloat
-                @test mul!(view(V, :, 2:n+1), X, view(V, :, 1:n)) ≈ Xm * B0
-                @test mul!(view(W, 2:n+1, :), view(W, 1:n, :), X) ≈ A0 * Xm
-            else
-                @test_throws ArgumentError mul!(view(V, :, 2:n+1), X, view(V, :, 1:n))
-                @test_throws ArgumentError mul!(view(W, 2:n+1, :), view(W, 1:n, :), X)
+            @test mul!(view(W, 2:n+1, :), view(W, 1:n, :), X) ≈ A0 * Xm
+            if X isa Union{Diagonal,Bidiagonal}
+                @test_throws ArgumentError mul!(view(V, :, 2:n+1), X, view(V, :, 1:n), 2, 3)
             end
             C = rand(T, n, n); C0 = copy(C)
             if X isa Union{Diagonal,Bidiagonal}
@@ -1082,6 +1079,13 @@ end
         # the structured kernels assume that the output is not one of the factors
         U = UpperTriangular(rand(T, n, n))
         @test_throws ArgumentError mul!(U, U, UpperTriangular(M))
+        # only one factor can be C or copied into it
+        C = rand(T, n, n)
+        @test_throws ArgumentError mul!(C, UpperTriangular(C), Diagonal(view(C, diagind(C))))
+        if T === Float64 # a factor whose elements cannot be stored in C is not copied
+            V = rand(T, n, n+1)
+            @test_throws ArgumentError mul!(reinterpret(Int, view(V, :, 2:n+1)), Diagonal(ones(Int, n)), view(V, :, 1:n))
+        end
     end
 end
 
