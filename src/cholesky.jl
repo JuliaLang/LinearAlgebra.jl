@@ -920,12 +920,13 @@ function nullspace(F::CholeskyPivoted; atol::Real=0, rtol::Real=size(F, 1) * eps
     T = eltype(F)
     n == 0 && return Matrix{T}(I, 0, 0)
     F.info < 0 && throw(PosDefException(F.info))
-    # an Inf or NaN leaves the rank undefined, also where the factorization stopped before it
-    LAPACK.chkuplofinite(F.factors, F.uplo)
+    # a NaN leaves the rank undefined, also where the factorization stopped before it
+    LAPACK.chknan(F.uplo == 'U' ? UpperTriangular(F.factors) : LowerTriangular(F.factors))
     # only the first F.rank rows of U are computed; read them directly from F.factors
     Uf = F.uplo == 'U' ? F.factors : F.factors'
-    tol = max(atol, rtol*abs2(Uf[1,1]))
-    r = something(findfirst(i -> !(abs2(Uf[i,i]) > tol), 1:F.rank), F.rank + 1) - 1
+    # an infinite pivot is nonzero, and for a nonzero rtol every finite one is negligible next to it
+    tol = iszero(rtol) ? atol : max(atol, rtol*abs2(Uf[1,1]))
+    r = something(findfirst(i -> (a = abs2(Uf[i,i]); a <= tol && !isinf(a)), 1:F.rank), F.rank + 1) - 1
     U₁₁ = F.uplo == 'U' ? UpperTriangular(view(F.factors, 1:r, 1:r)) :
                           LowerTriangular(view(F.factors, 1:r, 1:r))'
     # A[p, p] * [-U₁₁ \ U₁₂; I] = U' * [0; U₂₂] ≈ 0

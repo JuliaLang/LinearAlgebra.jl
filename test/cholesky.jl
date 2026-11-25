@@ -845,9 +845,14 @@ end
     @test size(nullspace(cholesky([1.0 0.0; 0.0 0.81], RowMaximum(); tol = 0.9, check = false)), 2) == 1
     # a failed factorization of a non-Hermitian matrix
     @test_throws PosDefException nullspace(cholesky([1.0 2.0; 0.0 1.0], RowMaximum(); check = false))
-    # an Inf or NaN leaves the nullspace undefined, also where the factorization stops before it
-    for T in (Float64, ComplexF64, BigFloat), uplo in (:U, :L), A in ([1 0 0; 0 1 0; 0 0 NaN], [Inf 1 0; 1 1 0; 0 0 1])
-        @test_throws ArgumentError nullspace(cholesky(Hermitian(T.(A), uplo), RowMaximum(); check = false))
+    for T in (Float64, ComplexF64, BigFloat), uplo in (:U, :L)
+        # a NaN leaves the nullspace undefined, also where the factorization stops before it
+        @test_throws ArgumentError nullspace(cholesky(Hermitian(T[1 0 0; 0 1 0; 0 0 NaN], uplo), RowMaximum(); check = false))
+        # an infinite pivot is nonzero, and every finite one is negligible next to it
+        F = cholesky(Hermitian(T[Inf 1 0; 1 1 0; 0 0 1], uplo), RowMaximum(); check = false)
+        @test abs.(nullspace(F)) == [0 0; 1 0; 0 1]
+        # only the absolute tolerance applies
+        @test size(nullspace(F; atol = 0.5)) == (3, 0)
     end
 end
 
