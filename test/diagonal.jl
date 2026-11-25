@@ -1729,6 +1729,14 @@ end
     @test (@allocated nullspace(D)) < 2 * sizeof(Float64) * 200 * 100
 end
 
+@testset "rank and nullspace with Inf or NaN" begin
+    for T in (Float64, ComplexF64), x in (NaN, Inf)
+        D = Diagonal(T[x, 1, 0])
+        @test_throws ArgumentError rank(D)
+        @test_throws ArgumentError nullspace(D)
+    end
+end
+
 @testset "Diagonal eigen and cholesky errors" begin
     @test_throws ArgumentError eigen(Diagonal([[1.0 NaN; 0 1], [1.0 0; 0 1]]))
     @test_throws ArgumentError eigen(Diagonal([1.0, Inf]), Diagonal([1.0, 2]))

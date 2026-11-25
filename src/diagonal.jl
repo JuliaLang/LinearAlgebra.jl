@@ -1182,6 +1182,7 @@ function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (siz
     Td = _ortho_eltype(T)
     n == 0 && return zeros(Td, 0, 0)
     d = D.diag
+    LAPACK.chkfinite(d)
     tol = max(atol, rtol*maximum(abs, d))
     inds = findall(x -> !(abs(x) > tol), d)
     N = zeros(Td, n, length(inds))

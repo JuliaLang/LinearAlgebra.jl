@@ -290,6 +290,7 @@ and `ϵ` is the [`eps`](@ref) of the element type of `S`.
     The `rank(::SVD)` method requires at least Julia 1.12.
 """
 function rank(S::SVD; atol::Number=zero(eltype(S.S)), rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
+    LAPACK.chkfinite(S.S)
     tol = max(atol, rtol*S.S[1])
     count(>(tol), S.S)
 end
