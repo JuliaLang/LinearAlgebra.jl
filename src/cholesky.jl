@@ -316,7 +316,8 @@ function _cholpivoted!(A::AbstractMatrix, ::Type{UpperTriangular}, tol::Real, ch
         # first step
         Akk, q = findmax(i -> real(A[i,i]), 1:n)
         stop = tol < 0 ? eps(rTA)*n*abs(Akk) : tol
-        Akk ≤ stop && return A, piv, convert(BlasInt, 0), convert(BlasInt, 1)
+        # stop at a pivot that is too small, or NaN, as LAPACK does
+        !(Akk > stop) && return A, piv, convert(BlasInt, 0), convert(BlasInt, 1)
         # swap
         _swap_rowcols!(A, UpperTriangular, n, 1, q)
         piv[1], piv[q] = piv[q], piv[1]
@@ -332,7 +333,7 @@ function _cholpivoted!(A::AbstractMatrix, ::Type{UpperTriangular}, tol::Real, ch
                 temp[j] = real(A[j,j]) - dots[j]
             end
             Akk, q = findmax(j -> temp[j], k:n)
-            Akk ≤ stop && return A, piv, convert(BlasInt, k - 1), convert(BlasInt, 1)
+            !(Akk > stop) && return A, piv, convert(BlasInt, k - 1), convert(BlasInt, 1)
             q += k - 1
             # swap
             _swap_rowcols!(A, UpperTriangular, n, k, q)
@@ -366,7 +367,8 @@ function _cholpivoted!(A::AbstractMatrix, ::Type{LowerTriangular}, tol::Real, ch
         # first step
         Akk, q = findmax(i -> real(A[i,i]), 1:n)
         stop = tol < 0 ? eps(rTA)*n*abs(Akk) : tol
-        Akk ≤ stop && return A, piv, convert(BlasInt, 0), convert(BlasInt, 1)
+        # stop at a pivot that is too small, or NaN, as LAPACK does
+        !(Akk > stop) && return A, piv, convert(BlasInt, 0), convert(BlasInt, 1)
         # swap
         _swap_rowcols!(A, LowerTriangular, n, 1, q)
         piv[1], piv[q] = piv[q], piv[1]
@@ -382,7 +384,7 @@ function _cholpivoted!(A::AbstractMatrix, ::Type{LowerTriangular}, tol::Real, ch
                 temp[j] = real(A[j,j]) - dots[j]
             end
             Akk, q = findmax(i -> temp[i], k:n)
-            Akk ≤ stop && return A, piv, convert(BlasInt, k-1), convert(BlasInt, 1)
+            !(Akk > stop) && return A, piv, convert(BlasInt, k-1), convert(BlasInt, 1)
             q += k - 1
             # swap
             _swap_rowcols!(A, LowerTriangular, n, k, q)

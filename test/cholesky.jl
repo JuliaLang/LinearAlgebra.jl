@@ -776,4 +776,16 @@ end
     end
 end
 
+@testset "pivoted cholesky of generic matrices with NaN pivots" begin
+    for uplo in (:U, :L)
+        # a NaN on the diagonal, and one off the diagonal only, which gives a NaN pivot later
+        for M in (BigFloat[4 1 0; 1 NaN 2; 0 2 9], BigFloat[4 1 0; 1 5 NaN; 0 NaN 9])
+            A = Hermitian(M, uplo)
+            F = cholesky(A, RowMaximum(); check=false)
+            @test !isposdef(F) && F.rank < 3
+            @test_throws RankDeficientException cholesky(A, RowMaximum())
+        end
+    end
+end
+
 end # module TestCholesky
