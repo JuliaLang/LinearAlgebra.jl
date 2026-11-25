@@ -185,11 +185,18 @@ cholcopy(A::AbstractMatrix) = eigencopy_oftype(A, choltype(A))
 ## BLAS/LAPACK element types
 function _chol!(A::StridedMatrix{<:BlasFloat}, ::Type{UpperTriangular})
     C, info = LAPACK.potrf!('U', A)
-    return UpperTriangular(C), info
+    return UpperTriangular(C), _nanpivot(C, info)
 end
 function _chol!(A::StridedMatrix{<:BlasFloat}, ::Type{LowerTriangular})
     C, info = LAPACK.potrf!('L', A)
-    return LowerTriangular(C), info
+    return LowerTriangular(C), _nanpivot(C, info)
+end
+# LAPACK's test for a positive pivot misses NaN, which the generic factorization rejects. A NaN
+# in the factorized triangle reaches the diagonal of the factor, at the first NaN pivot.
+function _nanpivot(C, info)
+    iszero(info) || return info
+    k = findfirst(isnan, diagview(C))
+    return k === nothing ? info : convert(BlasInt, k)
 end
 
 ## Non BLAS/LAPACK element types (generic)
