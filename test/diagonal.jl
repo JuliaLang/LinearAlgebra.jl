@@ -1730,10 +1730,17 @@ end
 end
 
 @testset "rank and nullspace with Inf or NaN" begin
-    for T in (Float64, ComplexF64), x in (NaN, Inf)
-        D = Diagonal(T[x, 1, 0])
+    for T in (Float64, ComplexF64)
+        D = Diagonal(T[NaN, 1, 0])
         @test_throws ArgumentError rank(D)
         @test_throws ArgumentError nullspace(D)
+        # an infinite singular value is nonzero, and every finite one is negligible next to it
+        D = Diagonal(T[Inf, 1, 0])
+        @test rank(D) == rank(svd(D)) == 1
+        @test nullspace(D) == nullspace(svd(D)) == [0 0; 1 0; 0 1]
+        # only the absolute tolerance applies
+        @test rank(D; atol = 0.5) == 2
+        @test nullspace(D; atol = 0.5) == [0; 0; 1;;]
     end
 end
 

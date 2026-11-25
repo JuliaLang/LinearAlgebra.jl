@@ -290,9 +290,15 @@ and `ϵ` is the [`eps`](@ref) of the element type of `S`.
     The `rank(::SVD)` method requires at least Julia 1.12.
 """
 function rank(S::SVD; atol::Number=zero(eltype(S.S)), rtol::Real = (min(size(S)...)*eps(real(float(eltype(S))))))
-    LAPACK.chkfinite(S.S)
-    tol = max(atol, rtol*S.S[1])
-    count(>(tol), S.S)
+    return _rank_svdvals(S.S, atol, rtol)
+end
+
+# count the singular values S above the tolerances. A NaN leaves the rank undefined. An infinite
+# singular value is nonzero, and for a nonzero rtol every finite one is negligible next to it.
+function _rank_svdvals(S, atol::Number, rtol::Real)
+    LAPACK.chknan(S)
+    tol = iszero(rtol) ? atol : max(atol, rtol*S[1])
+    return count(σ -> σ > tol || isinf(σ), S)
 end
 
 ### SVD least squares ###

@@ -1182,9 +1182,10 @@ function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (siz
     Td = _ortho_eltype(T)
     n == 0 && return zeros(Td, 0, 0)
     d = D.diag
-    LAPACK.chkfinite(d)
-    tol = max(atol, rtol*maximum(abs, d))
-    inds = findall(x -> !(abs(x) > tol), d)
+    # as in rank: a NaN leaves the nullspace undefined, an infinite entry is nonzero
+    LAPACK.chknan(d)
+    tol = iszero(rtol) ? atol : max(atol, rtol*maximum(abs, d))
+    inds = findall(x -> !(abs(x) > tol || isinf(x)), d)
     N = zeros(Td, n, length(inds))
     for (j, i) in enumerate(inds)
         N[i, j] = oneunit(Td)
