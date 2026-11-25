@@ -1073,6 +1073,9 @@ function inertia(B::BunchKaufman{TS}; atol::Real = 0, rtol::Real = 0) where {TS 
     # Quick return if possible
     if N == 0; return np, nn, nz; end
 
+    # a NaN leaves the inertia undefined
+    LAPACK.chknan(B.uplo == 'U' ? UpperTriangular(B.LD) : LowerTriangular(B.LD))
+
     # Compute default relative tolerance
     if rtol <= 0 && atol <= 0
         rtol = TR <: AbstractFloat ? (N * eps(TR)) : TR(0)
@@ -1127,6 +1130,9 @@ function inertia(B::BunchKaufman{TS}; atol::Real = 0, rtol::Real = 0) where {TS 
                 smin_block = c * abs1_fun(D[i,i]*(D[i+1,i+1]/s1_block) -
                     (D[i,i+1]/s1_block)*D[i+1,i])
             end
+            # An infinite diagonal entry is chosen as a 1x1 pivot, so an infinite 2x2 block has
+            # infinite off-diagonal entries and two infinite eigenvalues.
+            isinf(s1_block) && (smin_block = s1_block)
             # Store lower bound in-place in the lower off-diagonal and upper bound
             # in-place in the upper off-diagonal. The trace is stored in the first
             # diagonal entry block, but only if the full inertia is needed.
@@ -1143,6 +1149,9 @@ function inertia(B::BunchKaufman{TS}; atol::Real = 0, rtol::Real = 0) where {TS 
 
     # Second pass, count eigenvalue signs
     tol = max(atol, rtol * s1)
+    # an infinite eigenvalue is nonzero, and for a nonzero rtol every finite one is negligible
+    # next to it
+    isnonzero(x) = x > tol || isinf(x)
     i = 1
     while i <= N; @inbounds begin
         if i < N && D[i,i+1] != 0
@@ -1150,7 +1159,7 @@ function inertia(B::BunchKaufman{TS}; atol::Real = 0, rtol::Real = 0) where {TS 
             # eigenvalues' magnitude. This way, if an eigenvalue is deemed non-zero, then
             # it is guaranteed that its magnitude is greater than the tolerance.
             s1_block = real_fun(D[i,i+1])
-            if (c / 2) * s1_block <= tol
+            if !isnonzero((c / 2) * s1_block)
                 # Lower bound of largest eigenvalue is smaller than the tolerance,
                 # we consider the both eigenvalues of this block to be zero.
                 nz += 2
@@ -1160,7 +1169,7 @@ function inertia(B::BunchKaufman{TS}; atol::Real = 0, rtol::Real = 0) where {TS 
             # Reaching this part of the lopp implies that 's1_block' != 0.
             smin_block = real_fun(D[i+1,i])
             trace_block = real_fun(D[i,i])
-            if smin_block > tol || trace_block == 0
+            if isnonzero(smin_block) || trace_block == 0
                 # If first condition holds then the lower bound of the smallest eigenvalue
                 # is larger than the tolerance. If the second condition holds then the trace
                 # is exactly zero, so both eigenvalues have the same magnitude, and we
@@ -1192,14 +1201,14 @@ function inertia(B::BunchKaufman{TS}; atol::Real = 0, rtol::Real = 0) where {TS 
             # 1x1 block
             if get_inertia
                 eig = real_fun(D[i,i])
-                if eig > tol
+                if eig > tol || isinf(eig) && eig > 0
                     np += 1
-                elseif eig < -tol
+                elseif eig < -tol || isinf(eig)
                     nn += 1
                 else
                     nz += 1
                 end
-            elseif abs1_fun(D[i,i]) <= tol
+            elseif !isnonzero(abs1_fun(D[i,i]))
                 nz += 1
             end
             i += 1

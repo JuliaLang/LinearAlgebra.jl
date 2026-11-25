@@ -379,6 +379,19 @@ end
     @test inertia(bunchkaufman(Symmetric(ComplexF64[1 0; 0 1e-20]))) == (nothing, nothing, 1)
 end
 
+@testset "inertia with Inf or NaN" begin
+    for T in (Float64, ComplexF64, BigFloat), uplo in (:U, :L), rook in (false, true)
+        F = bunchkaufman(Hermitian(T[4 NaN 0; NaN 4 1; 0 1 4], uplo), rook; check = false)
+        @test_throws ArgumentError inertia(F)
+        # an infinite eigenvalue is nonzero, and every finite one is negligible next to it
+        F = bunchkaufman(Hermitian(T[-Inf 1 0; 1 4 1; 0 1 -4], uplo), rook)
+        @test inertia(F) == (0, 1, 2)
+        # a 2x2 block with infinite off-diagonal entries has two infinite eigenvalues
+        @test inertia(bunchkaufman(Hermitian(T[1 Inf; Inf 1], uplo), rook)) == (1, 1, 0)
+    end
+    @test inertia(bunchkaufman(Symmetric(ComplexF64[-Inf 1 0; 1 4 1; 0 1 -4]))) == (nothing, nothing, 2)
+end
+
 @testset "right division (#1032)" begin
     # the example from the issue
     A = rand(3, 3)
