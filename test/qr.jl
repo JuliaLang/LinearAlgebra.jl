@@ -575,6 +575,15 @@ end
     @test rank(qr([1.0 2.0 3.0; 4.0 5.0 6.0 ; 7.0 8.0 9.0], ColumnNorm())) == 2
 end
 
+@testset "rank(::QRPivoted) of matrices with Inf or NaN" begin
+    # a NaN that does not reach the diagonal of R, and an Inf that makes the tolerance infinite
+    for T in (Float64, ComplexF64, BigFloat), A in ([1 1 NaN; 1 1 0], [1 1 1; 1 1 1; 1 1 Inf])
+        F = qr(T.(A), ColumnNorm())
+        @test_throws ArgumentError rank(F)
+        @test_throws ArgumentError nullspace(F)
+    end
+end
+
 @testset "nullspace(::QRPivoted)" begin
     @testset for elty in (Float32, Float64, ComplexF32, ComplexF64)
         ε = eps(real(elty))
