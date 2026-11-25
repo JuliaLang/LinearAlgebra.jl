@@ -578,6 +578,13 @@ end
     @test lam == [1, 2, 3]
 end
 
+@testset "issue #1875" begin
+    D = Diagonal(Int8[-128, 3, 0])
+    @test svdvals(D) == [128, 3, 0]
+    @test svd(D).S == [128, 3, 0]
+    @test rank(D) == 2
+end
+
 @testset "eigmin (#27847)" begin
     for _ in 1:100
         d = randn(rand(1:10))
@@ -1540,6 +1547,15 @@ end
     @test opnorm(D, 1) == opnorm(A, 1)
     @test opnorm(D, 2) ≈ opnorm(A, 2)
     @test opnorm(D, Inf) == opnorm(A, Inf)
+
+    @testset "empty" for T in (Float64, ComplexF64)
+        D = Diagonal(T[])
+        for p in (1, 2, Inf)
+            @test opnorm(D, p) === opnorm(Matrix(D), p)
+            @test cond(D, p) === cond(Matrix(D), p)
+        end
+        @test_throws ArgumentError opnorm(D, 3)
+    end
 end
 
 @testset "issymmetric with NaN" begin
@@ -1626,7 +1642,7 @@ end
         @test @inferred(tr(D)) == zero(T)
         @test @inferred(det(D)) == one(T)
         @test typeof(tr(D)) == typeof(tr(Diagonal(T[1]))) == T
-        @test typeof(det(D)) == typeof(det(Diagonal(T[1]))) == T
+        @test typeof(det(D)) == typeof(det(Diagonal(T[1]))) == LinearAlgebra._dettype(T)
     end
     @test tr(Diagonal(Number[])) == 0
     @test det(Diagonal(Number[])) == 1
@@ -1681,6 +1697,38 @@ end
     @test C[1, 1] == [1 4; 3 8] && C[1, 2] == zeros(Int, 2, 2)
 end
 
+@testset "nullspace" begin
+    for T in (Float16, Float32, Float64, ComplexF64, Int, BigFloat)
+        for d in ([1, 0, 2, 0, 0, 3], [0, 0, 0], [1, 2, 3], [0], [5], [1e-20, 1, 0, -2])
+            D = Diagonal(convert(Vector{T}, T <: Integer ? round.(Int, d) : d))
+            N = @inferred nullspace(D)
+            # the generic path through the SVD, which nullspace(D) used before
+            Ns = nullspace(svd(D))
+            @test N isa Matrix{eltype(Ns)}
+            @test size(N) == size(Ns)
+            @test N * N' ≈ Ns * Ns'
+            @test norm(D * N) ≤ 10 * eps(real(float(one(T)))) * max(1, opnorm(D))
+            @test N' * N ≈ I
+            # tolerances
+            for kw in ((atol = 1.5,), (rtol = 0.5,), (atol = 0.5, rtol = 0.1))
+                Nk = nullspace(D; kw...)
+                Nks = nullspace(svd(D); kw...)
+                @test size(Nk) == size(Nks)
+                @test Nk * Nk' ≈ Nks * Nks'
+            end
+        end
+    end
+    for T in (Float16, Float64, ComplexF32, Int)
+        @test @inferred(nullspace(Diagonal(T[]))) isa Matrix{eltype(svd(Diagonal(T[1])).Vt)}
+        @test size(nullspace(Diagonal(T[]))) == (0, 0)
+    end
+    @test nullspace(Diagonal([1.0, 0.0, 2.0, 0.0])) == [0 0; 1 0; 0 0; 0 1]
+    # only the result is allocated, not the n×n matrices of the SVD
+    D = Diagonal([isodd(i) ? 0.0 : 1.0 + i for i in 1:200])
+    nullspace(D)
+    @test (@allocated nullspace(D)) < 2 * sizeof(Float64) * 200 * 100
+end
+
 @testset "Diagonal eigen and cholesky errors" begin
     @test_throws ArgumentError eigen(Diagonal([[1.0 NaN; 0 1], [1.0 0; 0 1]]))
     @test_throws ArgumentError eigen(Diagonal([1.0, Inf]), Diagonal([1.0, 2]))
@@ -1689,6 +1737,31 @@ end
     D = Diagonal([1.0+im, 2])
     @test_throws PosDefException cholesky(D, RowMaximum())
     @test !issuccess(cholesky(D, RowMaximum(); check = false))
+end
+
+@testset "dataids and unaliascopy" begin
+    M = rand(4, 4)
+    D = Diagonal(view(M, :, 2))
+    @test Base.mightalias(M, D)
+    @test !Base.mightalias(M, Diagonal(M[:, 2]))
+    U = Base.unaliascopy(D)
+    @test U isa typeof(D) && U == D && !Base.mightalias(M, U)
+    # copying and broadcasting into the memory backing the source
+    M0 = copy(M)
+    copyto!(M, Diagonal(view(M, :, 2)))
+    @test M == Diagonal(M0[:, 2])
+    M = rand(4, 4); M0 = copy(M)
+    M .= Diagonal(view(M, :, 1)) .+ M
+    @test M ≈ Diagonal(M0[:, 1]) .+ M0
+end
+
+@testset "det of integer matrices (#1895)" begin
+    D = Diagonal([typemax(Int), typemax(Int)])
+    @test det(D) == det(float(D))
+    @test_throws OverflowError det(Rational.(D))
+    BD = BigInt.(D)
+    @test isa(det(BD), BigInt)
+    @test det(BD) == det(Matrix(BD))
 end
 
 end # module TestDiagonal

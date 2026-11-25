@@ -970,6 +970,8 @@ end
     G = qr(zeros(3, 0), ColumnNorm())
     C = ones(3, 2)
     @test ldiv!(G, C, 1e-8) === (C, 0)
+    @test qr(zeros(0, 0)) \ zeros(0) == zeros(0)
+    @test qr(zeros(BigFloat, 0, 0), ColumnNorm()) \ BigFloat[] == BigFloat[]
     @test_throws DimensionMismatch ldiv!(qr([1.0 2; 3 4])', ones(3))
 end
 

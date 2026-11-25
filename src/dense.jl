@@ -458,9 +458,9 @@ function tr(A::StridedMatrix{T}) where T
     reduce(+, (A[i] for i in diagind(A, IndexStyle(A))))
 end
 
-_kronsize(A::AbstractMatrix, B::AbstractMatrix) = map(*, size(A), size(B))
-_kronsize(A::AbstractMatrix, B::AbstractVector) = (size(A, 1)*length(B), size(A, 2))
-_kronsize(A::AbstractVector, B::AbstractMatrix) = (length(A)*size(B, 1), size(B, 2))
+_kronsize(A::AbstractMatrix, B::AbstractMatrix) = map(checked_mul, size(A), size(B))
+_kronsize(A::AbstractMatrix, B::AbstractVector) = (checked_mul(size(A, 1), length(B)), size(A, 2))
+_kronsize(A::AbstractVector, B::AbstractMatrix) = (checked_mul(length(A), size(B, 1)), size(B, 2))
 
 """
     kron!(C, A, B)
@@ -476,7 +476,7 @@ function kron!(C::AbstractVecOrMat, A::AbstractVecOrMat, B::AbstractVecOrMat)
     _kron!(C, A, B)
 end
 function kron!(c::AbstractVector, a::AbstractVector, b::AbstractVector)
-    length(c) == length(a) * length(b) || throw(DimensionMismatch("kron!"))
+    length(c) == checked_mul(length(a), length(b)) || throw(DimensionMismatch("kron!"))
     m = firstindex(c)
     @inbounds for i in eachindex(a)
         ai = a[i]
@@ -575,7 +575,7 @@ function kron(A::AbstractVecOrMat{T}, B::AbstractVecOrMat{S}) where {T,S}
     return kron!(C, A, B)
 end
 function kron(a::AbstractVector{T}, b::AbstractVector{S}) where {T,S}
-    c = Vector{promote_op(*,T,S)}(undef, length(a)*length(b))
+    c = Vector{promote_op(*,T,S)}(undef, checked_mul(length(a), length(b)))
     return kron!(c, a, b)
 end
 kron(a::Number, b::Union{Number, AbstractVecOrMat}) = a * b
@@ -646,7 +646,7 @@ function (^)(A::AbstractMatrix{T}, p::Real) where T
     checksquare(A)
     # Quicker return if A is diagonal
     if isdiag(A)
-        if T <: Real && any(<(0), diagview(A))
+        if T <: Real && !isinteger(p) && any(<(0), diagview(A))
             return applydiagonal(x -> complex(x)^p, A)
         else
             return applydiagonal(x -> x^p, A)
@@ -719,7 +719,7 @@ julia> exp(A)
  0.0      2.71828
 ```
 """
-exp(A::AbstractMatrix) = exp!(copy_similar(A, eigtype(A)))
+exp(A::AbstractMatrix) = exp!(copy_similar(A, _exp_eltype(A)))
 exp(A::AdjointAbsMat) = adjoint(exp(parent(A)))
 exp(A::TransposeAbsMat) = transpose(exp(parent(A)))
 
@@ -926,6 +926,70 @@ function exp!(A::StridedMatrix{T}) where T<:BlasFloat
     X
 end
 
+# matrices with elements that are not numbers, like matrices, are exponentiated as block
+# matrices, keeping their element type
+_exp_eltype(A::AbstractMatrix) = _valeltype(A) <: Number ? eigtype(A) : eltype(A)
+
+## Generic matrix exponential for element types not supported by LAPACK, including matrices
+## with matrix elements (block matrices): scaling and squaring with a diagonal Padé
+## approximant of a degree chosen for the precision of the elements, from Golub and Van Loan,
+## "Matrix Computations", 4th edition, 2013, Algorithm 9.3.1
+function exp!(A::AbstractMatrix)
+    require_one_based_indexing(A)
+    n = checksquare(A)
+    # the exponential of a diagonal matrix is that of its diagonal elements, which can be
+    # numbers or square blocks. Element types without an exp take the general path.
+    if isdiag(A) && hasmethod(exp, Tuple{eltype(A)})
+        for i in diagind(A, IndexStyle(A))
+            A[i] = exp(A[i])
+        end
+        return A
+    end
+    # scale A by 2^-s, so that its norm is at most 1/2. The Frobenius norm, which is also
+    # defined for block matrices, bounds the 2-norm.
+    nA = norm(A)
+    isfinite(nA) || throw(ArgumentError("matrix contains Infs or NaNs"))
+    R = typeof(nA)
+    s = nA > 1//2 ? ceil(Int, log2(2nA)) : 0
+    s > 0 && rmul!(A, inv(R(2)^s))
+    # the smallest degree q such that the bound 2^(3-2q) (q!)^2/((2q)!(2q+1)!) of the
+    # relative backward error of the Padé approximant is at most the machine precision
+    q = 1
+    bound = inv(R(6))
+    while bound > eps(R)
+        q += 1
+        bound /= 16 * (4R(q)^2 - 1)
+    end
+    # the numerator N = Σⱼ cⱼ Aʲ and denominator D = Σⱼ (-1)ʲ cⱼ Aʲ of the Padé approximant,
+    # with cⱼ = (2q-j)! q! / ((2q)! j! (q-j)!), starting from the identity with the element
+    # types (and block sizes) of A
+    eye() = [i == j ? one(A[i,j]) : zero(A[i,j]) for i in 1:n, j in 1:n]
+    N, D = eye(), eye()
+    X = copyto!(similar(N), A)
+    Y = similar(X)
+    c = one(R)
+    for j in 1:q
+        c *= R(q - j + 1) / R(j * (2q - j + 1))
+        if j > 1
+            X, Y = mul!(Y, X, A), X
+        end
+        cD = isodd(j) ? -c : c
+        for k in eachindex(N, D, X)
+            N[k] += c * X[k]
+            D[k] += cD * X[k]
+        end
+    end
+    # F = D \ N, overwriting N, and square it s times, reusing X as work space. As D is
+    # finite and close to the identity, it is nonsingular, and elimination without pivoting
+    # is stable for elements that are not numbers and can't be compared for pivoting.
+    pivot = eltype(D) <: Number ? RowMaximum() : NoPivot()
+    F, G = ldiv!(lu!(D, pivot; check = false), N), X
+    for _ in 1:s
+        F, G = mul!(G, F, F), F
+    end
+    return copyto!(A, F)
+end
+
 ## Swap rows i and j and columns i and j in X
 function rcswap!(i::Integer, j::Integer, X::AbstractMatrix{<:Number})
     for k = axes(X,1)
@@ -1002,6 +1066,7 @@ function log(A::AbstractMatrix)
 end
 
 log(A::AdjointAbsMat) = adjoint(log(parent(A)))
+log(A::AdjointAbsMat{<:Real}) = transpose(log(parent(A)))
 log(A::TransposeAbsMat) = transpose(log(parent(A)))
 
 """
@@ -1090,6 +1155,7 @@ function sqrt(A::AbstractMatrix{T}; check::Bool=true) where {T<:Union{Real,Compl
 end
 
 sqrt(A::AdjointAbsMat; check::Bool=true) = adjoint(sqrt(parent(A); check))
+sqrt(A::AdjointAbsMat{<:Real}; check::Bool=true) = transpose(sqrt(parent(A); check))
 sqrt(A::TransposeAbsMat; check::Bool=true) = transpose(sqrt(parent(A); check))
 
 """
@@ -1453,7 +1519,11 @@ julia> acos(cos([0.5 0.1; -0.2 0.3]))
 """
 function acos(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(acos, A)
+        if eltype(A) <: Real && any(x -> abs(x) > 1, diagview(A))
+            return applydiagonal(acos ∘ complex, A)
+        else
+            return applydiagonal(acos, A)
+        end
     elseif ishermitian(A)
         return _safe_parent(acos(Hermitian(A)))
     end
@@ -1485,7 +1555,11 @@ julia> asin(sin([0.5 0.1; -0.2 0.3]))
 """
 function asin(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(asin, A)
+        if eltype(A) <: Real && any(x -> abs(x) > 1, diagview(A))
+            return applydiagonal(asin ∘ complex, A)
+        else
+            return applydiagonal(asin, A)
+        end
     elseif ishermitian(A)
         asinHermA = asin(Hermitian(A))
         P = parent(asinHermA)
@@ -1545,7 +1619,11 @@ logarithmic formulas used to compute this function, see [^AH16_4].
 """
 function acosh(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(acosh, A)
+        if eltype(A) <: Real && any(<(1), diagview(A))
+            return applydiagonal(acosh ∘ complex, A)
+        else
+            return applydiagonal(acosh, A)
+        end
     elseif ishermitian(A)
         return _safe_parent(acosh(Hermitian(A)))
     end
@@ -1591,7 +1669,11 @@ logarithmic formulas used to compute this function, see [^AH16_6].
 """
 function atanh(A::AbstractMatrix)
     if isdiag(A)
-        return applydiagonal(atanh, A)
+        if eltype(A) <: Real && any(x -> abs(x) > 1, diagview(A))
+            return applydiagonal(atanh ∘ complex, A)
+        else
+            return applydiagonal(atanh, A)
+        end
     elseif ishermitian(A)
         return _safe_parent(atanh(Hermitian(A)))
     end
@@ -1945,7 +2027,7 @@ function cond(A::AbstractMatrix, p::Real=2)
         end
         v = svdvals(A)
         maxv = maximum(v)
-        return iszero(maxv) ? oftype(real(maxv), Inf) : maxv / minimum(v)
+        return iszero(maxv) ? oftype(real(maxv) / oneunit(real(maxv)), Inf) : maxv / minimum(v)
     elseif p == 1 || p == Inf
         checksquare(A)
         try
@@ -1953,7 +2035,8 @@ function cond(A::AbstractMatrix, p::Real=2)
             return opnorm(A, p)*opnorm(Ainv, p)
         catch e
             if isa(e, LAPACKException) || isa(e, SingularException)
-                return convert(float(real(eltype(A))), Inf)
+                x = oneunit(real(eltype(A)))
+                return oftype(float(x / x), Inf)
             else
                 rethrow()
             end
@@ -2000,6 +2083,7 @@ true
 """
 function sylvester(A::AbstractMatrix, B::AbstractMatrix, C::AbstractMatrix)
     T = promote_type(float(eltype(A)), float(eltype(B)), float(eltype(C)))
+    T <: BlasFloat || throw(ArgumentError(lazy"sylvester for eltype $T not supported."))
     return sylvester(copy_similar(A, T), copy_similar(B, T), copy_similar(C, T))
 end
 function sylvester(A::AbstractMatrix{T}, B::AbstractMatrix{T}, C::AbstractMatrix{T}) where {T<:BlasFloat}
@@ -2073,6 +2157,7 @@ true
 """
 function lyap(A::AbstractMatrix, C::AbstractMatrix)
     T = promote_type(float(eltype(A)), float(eltype(C)))
+    T <: BlasFloat || throw(ArgumentError(lazy"lyap for eltype $T not supported."))
     return lyap(copy_similar(A, T), copy_similar(C, T))
 end
 function lyap(A::AbstractMatrix{T}, C::AbstractMatrix{T}) where {T<:BlasFloat}

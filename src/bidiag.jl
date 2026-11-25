@@ -258,6 +258,13 @@ end
 similar(B::Bidiagonal, ::Type{T}) where {T} = Bidiagonal(similar(B.dv, T), similar(B.ev, T), B.uplo)
 similar(B::Bidiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = similar(B.dv, T, dims)
 
+Base.dataids(B::Bidiagonal) = (_band_dataids(B.dv)..., _band_dataids(B.ev)...)
+aliasparts(B::Bidiagonal) = (aliasparts(B.dv)..., aliasparts(B.ev)...)
+lmulinplace(::Bidiagonal, α, β) = true
+rmulinplace(::Bidiagonal, α, β) = true
+_isstructured(::Bidiagonal) = true
+Base.unaliascopy(B::Bidiagonal) = Bidiagonal(Base.unaliascopy(B.dv), Base.unaliascopy(B.ev), B.uplo)
+
 tr(B::Bidiagonal) = sum(B.dv)
 
 function kron(A::Diagonal, B::Bidiagonal)
@@ -273,7 +280,7 @@ end
 #Singular values
 svdvals!(M::Bidiagonal{<:BlasReal}) = LAPACK.bdsdc!(M.uplo, 'N', M.dv, M.ev)[1]
 # M is square, so the full and the thin SVD coincide and `full` has no effect
-function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Real=0, rtol::Real=0)
+function svd!(M::Bidiagonal{<:BlasReal}; full::Bool = false, alg::Algorithm = default_svd_alg(M), atol::Number=zero(real(eltype(M))), rtol::Real=0)
     d, U, Vt = _svd!(M, alg)
     d[_count_svdvals(d, atol, rtol)+1:end] .= 0
     return SVD(U, d, Vt)
@@ -297,6 +304,7 @@ svd(M::Bidiagonal{<:BlasReal}; kw...) = svd!(copy(M); kw...)
 ###################
 
 function _opnorm1Inf(B::Bidiagonal, p)
+    isempty(B.dv) && return norm(B.dv)
     size(B, 1) == 1 && return norm(first(B.dv))
     case = xor(p == 1, istriu(B))
     normd1, normdend = norm(first(B.dv)), norm(last(B.dv))
@@ -534,6 +542,7 @@ end
 # B .= A * B
 function lmul!(A::Bidiagonal, B::AbstractVecOrMat)
     matmul_size_check(size(A), size(B))
+    checkaliasing(B, A)
     (; dv, ev) = A
     if A.uplo == 'U'
         for k in axes(B,2)
@@ -555,6 +564,7 @@ end
 # B .= D * B
 function lmul!(D::Diagonal, B::Bidiagonal)
     matmul_size_check(size(D), size(B))
+    checkaliasing(B, D)
     (; dv, ev) = B
     isL = B.uplo == 'L'
     iszero(size(D,1)) && return B
@@ -567,7 +577,8 @@ function lmul!(D::Diagonal, B::Bidiagonal)
 end
 # B .= B * A
 function rmul!(B::AbstractMatrix, A::Bidiagonal)
-    matmul_size_check(size(A), size(B))
+    matmul_size_check(size(B), size(A))
+    checkaliasing(B, A)
     (; dv, ev) = A
     if A.uplo == 'U'
         for k in reverse(axes(dv,1)[2:end])
@@ -593,6 +604,7 @@ end
 # B .= B * D
 function rmul!(B::Bidiagonal, D::Diagonal)
     matmul_size_check(size(B), size(D))
+    checkaliasing(B, D)
     (; dv, ev) = B
     isU = B.uplo == 'U'
     iszero(size(D,1)) && return B
@@ -1315,6 +1327,8 @@ end
 ldiv!(A::Bidiagonal, b::AbstractVecOrMat) = @inline ldiv!(b, A, b)
 function ldiv!(c::AbstractVecOrMat, A::Bidiagonal, b::AbstractVecOrMat)
     require_one_based_indexing(c, A, b)
+    checkaliasing(c, A) # c may be b, as in the 2-arg ldiv!(A, b)
+    checkoverlap(c, b)
     N = size(A, 1)
     mb, nb = size(b, 1), size(b, 2)
     if N != mb
@@ -1378,7 +1392,7 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     if mc != m || nc != n
         throw(DimensionMismatch(lazy"expect output to have size ($m, $n), but got ($mc, $nc)"))
     end
-
+    iszero(n) && return C
     zi = findfirst(iszero, B.dv)
     isnothing(zi) || throw(SingularException(zi))
 
@@ -1409,7 +1423,7 @@ function _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::Bidiagonal)
     end
     C
 end
-rdiv!(A::AbstractMatrix, B::Bidiagonal) = @inline _rdiv!(A, A, B)
+rdiv!(A::AbstractMatrix, B::Bidiagonal) = (checkaliasing(A, B); @inline _rdiv!(A, A, B))
 # backward compatibility
 rdiv!(A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) = rdiv!(A, wrapperop(B)(parent(B)))
 _rdiv!(C::AbstractMatrix, A::AbstractMatrix, B::AdjOrTrans{<:Any,<:Bidiagonal}) =
@@ -1437,7 +1451,7 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
         ev = A.ev
         n = length(dv)
         @inbounds for i in 1:n-1
-            iszero(dv[i]) && throw(ZeroPivotException(i))
+            iszero(dv[i]) && return $T(A), convert(BlasInt, i)
             ev[i] /= dv[i]
             dv[i+1] -= abs2(ev[i])*dv[i]
             Akk = dv[i]
@@ -1448,12 +1462,14 @@ for (T, uplo) in ((:UpperTriangular, :(:U)), (:LowerTriangular, :(:L)))
             dv[i] = Akk
             ev[i] *= dv[i]
         end
-        Akk = dv[n]
-        Akk, info = _chol!(Akk, $T)
-        if info != 0
-            return $T(A), convert(BlasInt, n)
+        if n > 0
+            Akk = dv[n]
+            Akk, info = _chol!(Akk, $T)
+            if info != 0
+                return $T(A), convert(BlasInt, n)
+            end
+            dv[n] = Akk
         end
-        dv[n] = Akk
         B = Bidiagonal(dv, ev, $uplo)
         return $T(B), convert(BlasInt, 0)
     end
@@ -1464,23 +1480,23 @@ end
 eigvals(M::Bidiagonal; permute::Bool=true, scale::Bool=true, sortby=eigsortby) = sorteig!(copy(M.dv), sortby)
 function eigvecs(M::Bidiagonal{T}; permute::Bool=true, scale::Bool=true, sortby=eigsortby) where T
     n = length(M.dv)
-    Q = Matrix{T}(undef, n,n)
+    Q = Matrix{float(T)}(undef, n,n)
     blks = [0; findall(iszero, M.ev); n]
-    v = zeros(T, n)
+    v = zeros(float(T), n)
     if M.uplo == 'U'
         for idx_block = 1:length(blks) - 1, i = blks[idx_block] + 1:blks[idx_block + 1] #index of eigenvector
-            fill!(v, zero(T))
-            v[blks[idx_block] + 1] = one(T)
-            for j = blks[idx_block] + 1:i - 1 #Starting from j=i, eigenvector elements will be 0
+            fill!(v, zero(float(T)))
+            v[blks[idx_block] + 1] = one(float(T))
+            for j = blks[idx_block] + 1:i - 1 #Starting from j=i+1, eigenvector elements will be 0
                 v[j+1] = (M.dv[i] - M.dv[j])/M.ev[j] * v[j]
             end
             Q[:, i] = normalize!(v)
         end
     else
         for idx_block = 1:length(blks) - 1, i = blks[idx_block + 1]:-1:blks[idx_block] + 1 #index of eigenvector
-            fill!(v, zero(T))
-            v[blks[idx_block+1]] = one(T)
-            for j = (blks[idx_block+1] - 1):-1:max(1, (i - 1)) #Starting from j=i, eigenvector elements will be 0
+            fill!(v, zero(float(T)))
+            v[blks[idx_block+1]] = one(float(T))
+            for j = (blks[idx_block+1] - 1):-1:i #Starting from j=i-1, eigenvector elements will be 0
                 v[j] = (M.dv[i] - M.dv[j+1])/M.ev[j] * v[j+1]
             end
             Q[:, i] = normalize!(v)

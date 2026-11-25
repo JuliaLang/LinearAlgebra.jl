@@ -14,6 +14,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.Furlongs
 
 n = 10
 
@@ -268,11 +269,13 @@ end
 end
 
 @testset "BunchKaufman array constructors #1461" begin
-    a = randn(5,5)
-    A = a'a
-    for ul in (:U, :L)
-        B = bunchkaufman(Symmetric(A, ul))
-        @test A ≈ Array(B) ≈ Matrix(B) ≈ AbstractArray(B) ≈ AbstractMatrix(B)
+    for T in (Float64, ComplexF64)
+        a = randn(T, 5, 5)
+        for ul in (:U, :L), wrapper in (Symmetric, Hermitian)
+            A = wrapper(a, ul)
+            B = bunchkaufman(A)
+            @test A ≈ Array(B) ≈ Matrix(B) ≈ AbstractArray(B) ≈ AbstractMatrix(B)
+        end
     end
 end
 
@@ -292,6 +295,39 @@ end
         @test_throws DimensionMismatch F \ T.([1, 2, 3])
         @test_throws DimensionMismatch ldiv!(F, zeros(T, 5, 2))
     end
+end
+
+@testset "solve with a right-hand side of another element type" begin
+    # the generic solver does not need the element types of the factorization and of the
+    # right-hand side to agree, e.g., for a dimensionful right-hand side
+    getval(x) = x
+    getval(x::Furlong) = x.val
+    M = [0 1 2 0; 1 0 3 1; 2 3 1 0; 0 1 0 2]
+    C = complex.(M, [0 1 0 2; 1 0 1 0; 0 1 0 1; 2 0 1 0])
+    b = [1, 2, 3, 4]
+    B = [1 2; 3 4; 5 6; 7 8]
+    for A in (Symmetric(float(M)), Hermitian(C + C'), Symmetric(big.(M))), rook in (false, true)
+        F = bunchkaufman(A, rook)
+        MA = Matrix(A)
+        @test any(<(0), F.ipiv) # covers 2×2 pivot blocks
+        T = eltype(F)
+        for R in (b, B)
+            X = @inferred F \ Furlong.(R)
+            @test X isa Array{Furlong{1,T}}
+            @test map(getval, X) ≈ MA \ R
+            Y = Furlong.(T.(R))
+            @test ldiv!(F, Y) === Y
+            @test map(getval, Y) ≈ MA \ R
+        end
+        X = Furlong.(B') / F
+        @test X isa Matrix{Furlong{1,T}}
+        @test map(getval, X) ≈ B' / MA
+    end
+    # in-place solve with a rational factorization and a floating-point right-hand side
+    F = bunchkaufman(Symmetric(Rational{BigInt}.(M)))
+    x = big.(float.(b))
+    @test ldiv!(F, x) === x
+    @test M * x ≈ b
 end
 
 @testset "matrices with an abstract element type" begin

@@ -331,6 +331,8 @@ Base._reverse(A::Hermitian, ::Colon) = Hermitian(reverse(A.data), A.uplo == 'U' 
 end
 
 Base.dataids(A::HermOrSym) = Base.dataids(parent(A))
+aliasparts(A::HermOrSym) = aliasparts(parent(A))
+_isstructured(::HermOrSym) = true
 Base.unaliascopy(A::Hermitian) = Hermitian(Base.unaliascopy(parent(A)), _sym_uplo(A.uplo))
 Base.unaliascopy(A::Symmetric) = Symmetric(Base.unaliascopy(parent(A)), _sym_uplo(A.uplo))
 
@@ -577,10 +579,11 @@ for (T, trans, real) in [(:Symmetric, :transpose, :identity), (:(Hermitian{<:Uni
             end
             iszero(n) && return $real(zero(dot(zero(eltype(A)), zero(eltype(B)))))
             dotprod = $real(zero(dot(first(A), first(B))))
+            Tout = typeof(dotprod)
             @inbounds if A.uplo == 'U' && B.uplo == 'U'
                 for j in 1:n
                     for i in 1:(j - 1)
-                        dotprod += 2 * $real(dot(A.data[i, j], B.data[i, j]))
+                        dotprod += Tout(2) * $real(dot(A.data[i, j], B.data[i, j]))
                     end
                     dotprod += $real(dot(A[j, j], B[j, j]))
                 end
@@ -588,13 +591,13 @@ for (T, trans, real) in [(:Symmetric, :transpose, :identity), (:(Hermitian{<:Uni
                 for j in 1:n
                     dotprod += $real(dot(A[j, j], B[j, j]))
                     for i in (j + 1):n
-                        dotprod += 2 * $real(dot(A.data[i, j], B.data[i, j]))
+                        dotprod += Tout(2) * $real(dot(A.data[i, j], B.data[i, j]))
                     end
                 end
             elseif A.uplo == 'U' && B.uplo == 'L'
                 for j in 1:n
                     for i in 1:(j - 1)
-                        dotprod += 2 * $real(dot(A.data[i, j], $trans(B.data[j, i])))
+                        dotprod += Tout(2) * $real(dot(A.data[i, j], $trans(B.data[j, i])))
                     end
                     dotprod += $real(dot(A[j, j], B[j, j]))
                 end
@@ -602,7 +605,7 @@ for (T, trans, real) in [(:Symmetric, :transpose, :identity), (:(Hermitian{<:Uni
                 for j in 1:n
                     dotprod += $real(dot(A[j, j], B[j, j]))
                     for i in (j + 1):n
-                        dotprod += 2 * $real(dot(A.data[i, j], $trans(B.data[j, i])))
+                        dotprod += Tout(2) * $real(dot(A.data[i, j], $trans(B.data[j, i])))
                     end
                 end
             end
@@ -811,17 +814,18 @@ end
 
 factorize(A::HermOrSym) = _factorize(A)
 function _factorize(A::HermOrSym{T}; check::Bool=true) where T
+    A2 = convert(AbstractMatrix{float(T)}, A)
     TT = typeof(sqrt(oneunit(T)))
-    if isdiag(A)
-        return Diagonal(A)
+    if isdiag(A2)
+        return Diagonal(A2)
     elseif TT <: BlasFloat
-        return bunchkaufman(A; check=check)
+        return bunchkaufman(A2; check=check)
     else # fallback
-        return lu(A; check=check)
+        return lu(A2; check=check)
     end
 end
 
-logabsdet(A::RealHermSymComplexHerm) = ((l, s) = logabsdet(_factorize(A; check=false)); return real(l), real(s))
+logabsdet(A::RealHermSymComplexHerm) = real.(logabsdet(_factorize(A; check=false)))
 logabsdet(A::Symmetric{<:Real}) = logabsdet(_factorize(A; check=false))
 logabsdet(A::Symmetric) = logabsdet(_factorize(A; check=false))
 logdet(A::RealHermSymComplexHerm) = real(logdet(_factorize(A; check=false)))
@@ -858,18 +862,7 @@ inv(A::Symmetric{<:Any,<:StridedMatrix}) = Symmetric(_inv(A), _sym_uplo(A.uplo))
 
 function svd(A::RealHermSymComplexHerm; full::Bool=false)
     vals, vecs = eigen(A)
-    I = sortperm(vals; by=abs, rev=true)
-    permute!(vals, I)
-    Base.permutecols!!(vecs, I)         # left-singular vectors
-    V = copy(vecs)                      # right-singular vectors
-    # shifting -1 from singular values to right-singular vectors
-    @inbounds for i = 1:length(vals)
-        if vals[i] < 0
-            vals[i] = -vals[i]
-            for j = 1:size(V,1); V[j,i] = -V[j,i]; end
-        end
-    end
-    return SVD(vecs, vals, V')
+    return _svd_from_eigen!(vals, vecs)
 end
 function svd(A::RealHermSymComplexHerm{Float16}; full::Bool = false)
     T = eltype(A)
