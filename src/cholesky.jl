@@ -920,6 +920,8 @@ function nullspace(F::CholeskyPivoted; atol::Real=0, rtol::Real=size(F, 1) * eps
     T = eltype(F)
     n == 0 && return Matrix{T}(I, 0, 0)
     F.info < 0 && throw(PosDefException(F.info))
+    # an Inf or NaN leaves the rank undefined, also where the factorization stopped before it
+    LAPACK.chkuplofinite(F.factors, F.uplo)
     # only the first F.rank rows of U are computed; read them directly from F.factors
     Uf = F.uplo == 'U' ? F.factors : F.factors'
     tol = max(atol, rtol*abs2(Uf[1,1]))
