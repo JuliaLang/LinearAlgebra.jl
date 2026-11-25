@@ -776,4 +776,16 @@ end
     end
 end
 
+@testset "issue #1922: NaN pivots" begin
+    for T in (Float64, ComplexF64), uplo in (:U, :L)
+        # a NaN on the diagonal, and one off the diagonal only, with the first NaN pivot
+        for (M, k) in ((T[4 1 0; 1 NaN 2; 0 2 9], 2), (T[4 1 0; 1 5 NaN; 0 NaN 9], 3))
+            A = Hermitian(M, uplo)
+            @test !isposdef(A)
+            @test cholesky(A; check=false).info == k
+            @test_throws PosDefException cholesky(A)
+        end
+    end
+end
+
 end # module TestCholesky
