@@ -442,9 +442,23 @@ function getproperty(F::LU{T}, d::Symbol) where T
     if d === :L
         L = tril!(getfield(F, :factors)[1:m, 1:min(m,n)])
         for i = 1:min(m,n); L[i,i] = one(T); end
+        if !isconcretetype(T) || _isdimensionful(T)
+            # for dimensionful eltypes (abstract, as `L` is dimensionless and `U` carries the
+            # units of `A`), `tril!` fills the upper triangle with zeros of the units of `U`
+            for j in 1:min(m,n), i in 1:j-1
+                L[i,j] = zero(one(T))
+            end
+        end
         return L
     elseif d === :U
-        return triu!(getfield(F, :factors)[1:min(m,n), 1:n])
+        U = triu!(getfield(F, :factors)[1:min(m,n), 1:n])
+        if !isconcretetype(T) || _isdimensionful(T)
+            # `triu!` fills the lower triangle with dimensionless zeros (from `L`)
+            for j in 1:n, i in j+1:min(m,n)
+                U[i,j] = zero(U[i,i])
+            end
+        end
+        return U
     elseif d === :p
         return ipiv2perm(getfield(F, :ipiv), m)
     elseif d === :P
