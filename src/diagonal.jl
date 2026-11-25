@@ -253,6 +253,13 @@ parent(D::Diagonal) = D.diag
 
 copy(D::Diagonal) = Diagonal(copy(D.diag))
 
+Base.dataids(D::Diagonal) = Base.dataids(D.diag)
+aliasparts(D::Diagonal) = aliasparts(D.diag)
+lmulinplace(::Diagonal, α, β) = true
+rmulinplace(::Diagonal, α, β) = true
+_isstructured(::Diagonal) = true
+Base.unaliascopy(D::Diagonal) = Diagonal(Base.unaliascopy(D.diag))
+
 Base._reverse(A::Diagonal, dims) = reverse!(Matrix(A); dims)
 Base._reverse(A::Diagonal, ::Colon) = Diagonal(reverse(A.diag))
 Base._reverse!(A::Diagonal, ::Colon) = (reverse!(A.diag); A)
@@ -373,6 +380,7 @@ end
 
 function rmul!(A::AbstractMatrix, D::Diagonal)
     matmul_size_check(size(A), size(D))
+    checkaliasing(A, D)
     axes(A, 2) == axes(D.diag, 1) ||
         throw(ArgumentError(lazy"second axis of A, $(axes(A,2)), does not match first axis of D, $(axes(D, 1))"))
     for I in CartesianIndices(A)
@@ -392,6 +400,7 @@ end
 # T .= T * D
 function rmul!(T::Tridiagonal, D::Diagonal)
     matmul_size_check(size(T), size(D))
+    checkaliasing(T, D)
     (; dl, d, du) = T
     d[1] *= D.diag[1]
     for i in axes(dl,1)
@@ -406,6 +415,7 @@ for T in (:UpperTriangular, :LowerTriangular)
     @eval lmul!(D::Diagonal, A::$T{<:Any, <:StridedMatrix}) = _lmul!(D, A)
 end
 function _rmul!(A::UpperOrLowerTriangular, D::Diagonal)
+    checkaliasing(A, D)
     P = parent(A)
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
@@ -421,6 +431,7 @@ end
 
 function lmul!(D::Diagonal, B::AbstractVecOrMat)
     matmul_size_check(size(D), size(B))
+    checkaliasing(B, D)
     axes(D.diag, 1) == axes(B, 1) ||
         throw(ArgumentError(lazy"second axis of D, $(axes(D, 2)), does not match first axis of B, $(axes(B, 1))"))
     for I in CartesianIndices(B)
@@ -442,6 +453,7 @@ end
 # T .= D * T
 function lmul!(D::Diagonal, T::Tridiagonal)
     matmul_size_check(size(D), size(T))
+    checkaliasing(T, D)
     (; dl, d, du) = T
     d[1] = D.diag[1] * d[1]
     for i in axes(dl,1)
@@ -452,6 +464,7 @@ function lmul!(D::Diagonal, T::Tridiagonal)
     return T
 end
 function _lmul!(D::Diagonal, A::UpperOrLowerTriangular)
+    checkaliasing(A, D)
     P = parent(A)
     isupper = A isa UpperOrUnitUpperTriangular
     for col in axes(A,2)
@@ -622,7 +635,7 @@ matop_dest(::typeof(/), A::HermOrSym, D::Diagonal) = similar(A, promote_op(/, el
 
 /(A::AbstractVecOrMat, D::Diagonal) = _rdiv!(matop_dest(/, A, D), A, D)
 
-rdiv!(A::AbstractVecOrMat, D::Diagonal) = @inline _rdiv!(A, A, D)
+rdiv!(A::AbstractVecOrMat, D::Diagonal) = (checkaliasing(A, D); @inline _rdiv!(A, A, D))
 # avoid copy when possible via internal 3-arg backend
 function _rdiv!(B::AbstractVecOrMat, A::AbstractVecOrMat, D::Diagonal)
     require_one_based_indexing(A)
@@ -649,6 +662,7 @@ matop_dest(::typeof(\), D::Diagonal, B::HermOrSym) = similar(B, promote_op(\, el
 ldiv!(D::Diagonal, B::AbstractVecOrMat) = @inline ldiv!(B, D, B)
 function ldiv!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOrMat)
     require_one_based_indexing(A, B)
+    checkaliasing(B, D) # B may be A, as in the 2-arg ldiv!(D, B)
     dd = D.diag
     d = length(dd)
     m, n = size(A, 1), size(A, 2)
@@ -666,6 +680,7 @@ function _ldiv_Diagonal_loop!(B::AbstractVecOrMat, D::Diagonal, A::AbstractVecOr
     B
 end
 function _ldiv_Diagonal_loop!(B::StridedVecOrMat, D::Diagonal, A::StridedVecOrMat)
+    checkoverlap(B, A)
     dd = D.diag
     @inbounds for j in axes(A,2), i in axes(A,1)
         B[i, j] = dd[i] \ A[i, j]
@@ -806,8 +821,10 @@ end
     valA = A.diag; mA, nA = size(A)
     valB = B.diag; mB, nB = size(B)
     nC = checksquare(C)
-    @boundscheck nC == nA*nB ||
-        throw(DimensionMismatch(lazy"expect C to be a $(nA*nB)x$(nA*nB) matrix, got size $(nC)x$(nC)"))
+    @boundscheck begin
+        n = checked_mul(nA, nB)
+        nC == n || throw(DimensionMismatch(lazy"expect C to be a $(n)x$(n) matrix, got size $(nC)x$(nC)"))
+    end
     zerofilled = false
     if !(isempty(A) || isempty(B))
         z = A[1,1] * B[1,1]
@@ -878,8 +895,11 @@ end
     (mA, nA) = size(A)
     (mB, nB) = size(B)
     (mC, nC) = size(C)
-    @boundscheck (mC, nC) == (mA * mB, nA * nB) ||
-        throw(DimensionMismatch(lazy"expect C to be a $(mA * mB)x$(nA * nB) matrix, got size $(mC)x$(nC)"))
+    @boundscheck begin
+        m, n = _kronsize(A, B)
+        (mC, nC) == (m, n) ||
+            throw(DimensionMismatch(lazy"expect C to be a $(m)x$(n) matrix, got size $(mC)x$(nC)"))
+    end
     zerofilled = false
     if !(isempty(A) || isempty(B))
         z = A[1,1] * B[1,1]
@@ -921,8 +941,11 @@ end
     (mA, nA) = size(A)
     (mB, nB) = size(B)
     (mC, nC) = size(C)
-    @boundscheck (mC, nC) == (mA * mB, nA * nB) ||
-        throw(DimensionMismatch(lazy"expect C to be a $(mA * mB)x$(nA * nB) matrix, got size $(mC)x$(nC)"))
+    @boundscheck begin
+        m, n = _kronsize(A, B)
+        (mC, nC) == (m, n) ||
+            throw(DimensionMismatch(lazy"expect C to be a $(m)x$(n) matrix, got size $(mC)x$(nC)"))
+    end
     zerofilled = false
     if !(isempty(A) || isempty(B))
         z = A[1,1] * B[1,1]
@@ -979,7 +1002,7 @@ function diag(D::Diagonal, k::Integer=0)
     return v
 end
 tr(D::Diagonal{<:Number}) = sum(D.diag)
-det(D::Diagonal{<:Number}) = prod(D.diag)
+det(D::Diagonal{T}) where {T<:Number} = prod(convert(AbstractVector{_dettype(T)}, D.diag))
 tr(D::Diagonal) = isempty(D.diag) ? zero(promote_leaf_eltypes(D.diag)) : sum(tr, D.diag)
 # for block-diagonal matrices, the empty case returns the determinant of an empty block
 det(D::Diagonal) = isempty(D.diag) ? det(zeros(promote_leaf_eltypes(D.diag), 0, 0)) : prod(det, D.diag)
@@ -1134,11 +1157,13 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
 end
 
 #Singular system
-svdvals(D::Diagonal{<:Number}) = sort!(abs.(D.diag), rev = true)
+_svdabs(x) = abs(x)
+_svdabs(x::Base.BitSigned) = abs(float(x))
+svdvals(D::Diagonal{<:Number}) = sort!(_svdabs.(D.diag), rev = true)
 svdvals(D::Diagonal) = [svdvals(v) for v in D.diag]
 function svd(D::Diagonal{T}) where {T<:Number}
     d = D.diag
-    s = abs.(d)
+    s = _svdabs.(d)
     piv = sortperm(s, rev = true)
     S = s[piv]
     Td  = _ortho_eltype(T)
@@ -1152,7 +1177,7 @@ function svd(D::Diagonal{T}) where {T<:Number}
     return SVD(U, S, Vt)
 end
 
-function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(oneunit(T)))))*iszero(atol)) where {T<:Number}
+function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(one(T)))))*iszero(atol)) where {T<:Number}
     n = size(D, 1)
     Td = _ortho_eltype(T)
     n == 0 && return zeros(Td, 0, 0)
@@ -1190,7 +1215,7 @@ norm_x_minus_y(D1::Diagonal, D2::Diagonal, ::typeof(norm)) = norm_x_minus_y(D1.d
 
 _opnorm1(A::Diagonal) = maximum(norm(x) for x in A.diag)
 _opnormInf(A::Diagonal) = maximum(norm(x) for x in A.diag)
-_opnorm12Inf(A::Diagonal, p) = maximum(opnorm(x, p) for x in A.diag)
+_opnorm12Inf(A::Diagonal, p) = isempty(A.diag) ? norm(A.diag) : maximum(opnorm(x, p) for x in A.diag)
 
 function opnorm(A::Diagonal, p::Real=2)
     if p == 1 || p == Inf || p == 2

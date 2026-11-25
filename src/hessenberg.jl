@@ -70,6 +70,9 @@ AbstractMatrix{T}(H::UpperHessenberg) where {T} = UpperHessenberg{T}(H)
 AbstractMatrix{T}(H::UpperHessenberg{T}) where {T} = copy(H)
 
 Base.dataids(A::UpperHessenberg) = Base.dataids(parent(A))
+aliasparts(A::UpperHessenberg) = aliasparts(parent(A))
+_isstructured(::UpperHessenberg) = true
+_isinplace(Y, B::UpperHessenberg) = Y === B || _isinplace(Y, parent(B))
 Base.unaliascopy(A::UpperHessenberg) = UpperHessenberg(Base.unaliascopy(parent(A)))
 
 copy(H::UpperHessenberg) = UpperHessenberg(copy(H.data))
@@ -218,8 +221,10 @@ rdiv!(B::AbstractVecOrMat, H::AdjOrTransUpperHessenberg) =
 # solve (H+μI)X = B, storing result in B
 function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     checksquare(F)
+    checkaliasing(B, F)
     m = size(F,1)
     m != size(B,1) && throw(DimensionMismatch(lazy"wrong right-hand-side # rows != $m"))
+    iszero(m) && return B
     require_one_based_indexing(B)
     n = size(B,2)
     H = F.data
@@ -268,8 +273,10 @@ end
 # order of the H indices (or the order of the loops).
 function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
     checksquare(F)
+    checkaliasing(B, F)
     m = size(F,1)
     m != size(B,2) && throw(DimensionMismatch(lazy"wrong right-hand-side # cols != $m"))
+    iszero(m) && return B
     require_one_based_indexing(B)
     n = size(B,1)
     H = F.data
@@ -321,7 +328,7 @@ end
 # Cost is O(m²) with O(m) storage.
 function det(F::UpperHessenberg; shift::Number=false)
     checksquare(F)
-    H = F.data
+    H = convert(AbstractMatrix{_dettype(eltype(F))}, F.data)
     m = size(H,1)
     μ = shift
     m == 0 && return one(zero(eltype(H)) + μ)
@@ -658,6 +665,7 @@ end
 -(J::UniformScaling, F::Hessenberg) = Hessenberg(-F, J.λ - F.μ)
 
 function ldiv!(F::Hessenberg, B::AbstractVecOrMat)
+    checkaliasing(B, F)
     Q = F.Q
     if iszero(F.μ)
         return lmul!(Q, ldiv!(F.H, lmul!(Q', B)))
@@ -667,6 +675,7 @@ function ldiv!(F::Hessenberg, B::AbstractVecOrMat)
 end
 
 function rdiv!(B::AbstractMatrix, F::Hessenberg)
+    checkaliasing(B, F)
     Q = F.Q
     return rmul!(rdiv!(rmul!(B, Q), F.H; shift=F.μ), Q')
 end
@@ -674,6 +683,7 @@ end
 # handle case of real H and complex μ — we need to work around the
 # fact that we can't multiple a real F.Q by a complex matrix directly in LAPACK
 function ldiv!(F::Hessenberg{<:Complex,<:Any,<:AbstractMatrix{<:Real}}, B::AbstractVecOrMat{<:Complex})
+    checkaliasing(B, F)
     Q = F.Q
     Br = lmul!(Q', real(B))
     Bi = lmul!(Q', imag(B))
@@ -684,6 +694,7 @@ function ldiv!(F::Hessenberg{<:Complex,<:Any,<:AbstractMatrix{<:Real}}, B::Abstr
     return B .= Complex.(Br,Bi)
 end
 function rdiv!(B::AbstractVecOrMat{<:Complex}, F::Hessenberg{<:Complex,<:Any,<:AbstractMatrix{<:Real}})
+    checkaliasing(B, F)
     Q = F.Q
     Br = rmul!(real(B), Q)
     Bi = rmul!(imag(B), Q)
@@ -702,3 +713,6 @@ function logdet(F::Hessenberg)
     d,s = logabsdet(F)
     return d + log(s)
 end
+
+# the arrays the factorization is stored in, for the aliasing checks (see `deepmightalias`)
+aliasparts(F::Hessenberg) = (aliasparts(getfield(F, :factors))..., aliasparts(getfield(F, :τ))..., aliasparts(getfield(F, :H))...)

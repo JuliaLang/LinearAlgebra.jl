@@ -7,6 +7,10 @@ struct AdjointQ{T,S<:AbstractQ{T}} <: AbstractQ{T}
 end
 
 parent(adjQ::AdjointQ) = adjQ.Q
+
+aliasparts(adjQ::AdjointQ) = aliasparts(adjQ.Q)
+lmulinplace(::AbstractQ, α, β) = true
+rmulinplace(::AbstractQ, α, β) = true
 eltype(::Type{<:AbstractQ{T}}) where {T} = T
 Base.eltypeof(Q::AbstractQ) = eltype(Q)
 Base.IteratorSize(::Type{<:AbstractQ}) = Base.HasShape{2}()
@@ -124,11 +128,13 @@ view(A::AbstractQ, I...) = getindex(A, I...)
 
 # specialization avoiding the fallback using slow `getindex`
 function copyto!(dest::AbstractMatrix, src::AbstractQ)
+    checkaliasing(dest, src)
     copyto!(dest, I)
     lmul!(src, dest)
 end
 # needed to resolve method ambiguities
 function copyto!(dest::PermutedDimsArray{T,2,perm}, src::AbstractQ) where {T,perm}
+    checkaliasing(dest, src)
     if perm == (1, 2)
         copyto!(parent(dest), src)
     else
@@ -194,36 +200,50 @@ qsize_check(Q::AbstractQ, P::AbstractQ) =
 # mimic the AbstractArray fallback
 *(Q::AbstractQ{<:Number}) = Q
 
+# Element types for multiplying a dimensionless factor (such as Q) of element type `TQ` with
+# an array of element type `TB`: the factor is promoted only with the dimensionless
+# counterpart of `TB`, while the result has the element type of the product. Without units,
+# both coincide with `promote_type(TQ, TB)`.
+function _qmul_eltypes(TQ::Type, TB::Type)
+    if TB <: Number && isconcretetype(TB)
+        S = promote_type(TQ, typeof(one(TB)))
+        return S, promote_op(matprod, S, TB)
+    else
+        S = promote_type(TQ, TB)
+        return S, S
+    end
+end
+
 (*)(Q::AbstractQ, b::Number) = Q*(b*I)
 function (*)(Q::AbstractQ, J::UniformScaling)
-    T = promote_type(eltype(Q), eltype(J))
-    lmul!(convert(AbstractQ{T}, Q), Matrix{T}(J, size(Q)))
+    S, T = _qmul_eltypes(eltype(Q), eltype(J))
+    lmul!(convert(AbstractQ{S}, Q), Matrix{T}(J, size(Q)))
 end
 function (*)(Q::AbstractQ, B::AbstractVector)
-    T = promote_type(eltype(Q), eltype(B))
+    S, T = _qmul_eltypes(eltype(Q), eltype(B))
     qsize_check(Q, B)
-    mul!(similar(B, T, size(Q, 1)), convert(AbstractQ{T}, Q), B)
+    mul!(similar(B, T, size(Q, 1)), convert(AbstractQ{S}, Q), B)
 end
 function (*)(Q::AbstractQ, B::AbstractMatrix)
-    T = promote_type(eltype(Q), eltype(B))
+    S, T = _qmul_eltypes(eltype(Q), eltype(B))
     qsize_check(Q, B)
-    mul!(similar(B, T, (size(Q, 1), size(B, 2))), convert(AbstractQ{T}, Q), B)
+    mul!(similar(B, T, (size(Q, 1), size(B, 2))), convert(AbstractQ{S}, Q), B)
 end
 
 (*)(a::Number, Q::AbstractQ) = (a*I)*Q
 function (*)(J::UniformScaling, Q::AbstractQ)
-    T = promote_type(eltype(J), eltype(Q))
-    rmul!(Matrix{T}(J, size(Q)), convert(AbstractQ{T}, Q))
+    S, T = _qmul_eltypes(eltype(Q), eltype(J))
+    rmul!(Matrix{T}(J, size(Q)), convert(AbstractQ{S}, Q))
 end
 function (*)(A::AbstractVector, Q::AbstractQ)
-    T = promote_type(eltype(A), eltype(Q))
+    S, T = _qmul_eltypes(eltype(Q), eltype(A))
     qsize_check(A, Q)
-    return mul!(similar(A, T, length(A)), A, convert(AbstractQ{T}, Q))
+    return mul!(similar(A, T, length(A)), A, convert(AbstractQ{S}, Q))
 end
 function (*)(A::AbstractMatrix, Q::AbstractQ)
-    T = promote_type(eltype(A), eltype(Q))
+    S, T = _qmul_eltypes(eltype(Q), eltype(A))
     qsize_check(A, Q)
-    return mul!(similar(A, T, (size(A, 1), size(Q, 2))), A, convert(AbstractQ{T}, Q))
+    return mul!(similar(A, T, (size(A, 1), size(Q, 2))), A, convert(AbstractQ{S}, Q))
 end
 (*)(u::AdjointAbsVec, Q::AbstractQ) = (Q'u')'
 
@@ -231,31 +251,33 @@ end
 (*)(Q::AbstractQ, P::AbstractQ) = Q * (P*I)
 
 ### mul!
-function mul!(C::AbstractVecOrMat{T}, Q::AbstractQ{T}, B::Union{AbstractVecOrMat,AbstractQ}) where {T}
+function mul!(C::AbstractVecOrMat, Q::AbstractQ, B::Union{AbstractVecOrMat,AbstractQ})
     require_one_based_indexing(C, B)
     mB, nB = size(B, 1), size(B, 2)
     mC, nC = size(C, 1), size(C, 2)
     qsize_check(Q, B)
     nB != nC && throw(DimensionMismatch())
+    check_mul_aliasing(C, Q, B, true, false)
     if mB < mC
         inds = CartesianIndices(axes(B))
         copyto!(view(C, inds), B)
-        C[CartesianIndices((mB+1:mC, axes(C, 2)))] .= zero(T)
+        C[CartesianIndices((mB+1:mC, axes(C, 2)))] .= zero(eltype(C))
         return lmul!(Q, C)
     else
         return lmul!(Q, copyto!(C, B))
     end
 end
-function mul!(C::AbstractVecOrMat{T}, A::AbstractVecOrMat, Q::AbstractQ{T}) where {T}
+function mul!(C::AbstractVecOrMat, A::AbstractVecOrMat, Q::AbstractQ)
     require_one_based_indexing(C, A)
     mA, nA = size(A, 1), size(A, 2)
     mC, nC = size(C, 1), size(C, 2)
     mA != mC && throw(DimensionMismatch())
     qsize_check(A, Q)
+    check_mul_aliasing(C, A, Q, true, false)
     if nA < nC
         inds = CartesianIndices(axes(A))
         copyto!(view(C, inds), A)
-        C[CartesianIndices((axes(C, 1), nA+1:nC))] .= zero(T)
+        C[CartesianIndices((axes(C, 1), nA+1:nC))] .= zero(eltype(C))
         return rmul!(C, Q)
     else
         return rmul!(copyto!(C, A), Q)
@@ -303,6 +325,7 @@ QRPackedQ{T}(Q::QRPackedQ) where {T} = QRPackedQ{T}(Q.factors, Q.τ)
 # backwards-compatible constructors (remove with Julia 2.0)
 @deprecate(QRPackedQ{T,S}(factors::AbstractMatrix{T}, τ::AbstractVector{T}) where {T,S},
            QRPackedQ{T,S,typeof(τ)}(factors, τ), false)
+aliasparts(Q::QRPackedQ) = (aliasparts(Q.factors)..., aliasparts(Q.τ)...)
 
 """
     QRCompactWYQ <: LinearAlgebra.AbstractQ
@@ -327,6 +350,7 @@ QRCompactWYQ{S}(Q::QRCompactWYQ) where {S} = QRCompactWYQ{S}(Q.factors, Q.T)
 # backwards-compatible constructors (remove with Julia 2.0)
 @deprecate(QRCompactWYQ{S,M}(factors::AbstractMatrix{S}, T::AbstractMatrix{S}) where {S,M},
            QRCompactWYQ{S,M,typeof(T)}(factors, T), false)
+aliasparts(Q::QRCompactWYQ) = (aliasparts(Q.factors)..., aliasparts(Q.T)...)
 
 
 # override generic square fallback
@@ -348,6 +372,7 @@ size(Q::Union{QRCompactWYQ,QRPackedQ}) = (n = size(Q.factors, 1); (n, n))
 # `Q'` in increasing order and with `conj(τᵢ)` in place of `τᵢ`; `adj = true` selects the
 # latter. Each reflector is applied by `reflectorApply!`.
 function _lqmul!(Q::QRPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    checkaliasing(B, Q)
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
     mB, nB = size(B, 1), size(B, 2)
@@ -365,6 +390,7 @@ end
 # `Q = (I - V₁T₁V₁') ⋯ (I - V_bT_bV_b')` are applied in reverse order, resp. in increasing
 # order and with `Tⱼ'` in place of `Tⱼ` for `Q'` (`adj = true`).
 function _lqmul!(Q::QRCompactWYQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    checkaliasing(B, Q)
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
     mB, nB = size(B, 1), size(B, 2)
@@ -405,6 +431,7 @@ end
 # as `_lqmul!`, for `A*Q` resp. `A*Q'`, running over the reflectors the other way round;
 # `reflectorApply!` multiplies by `τₖ` from the right rather than from the left
 function _rqmul!(A::AbstractVecOrMat, Q::QRPackedQ, ::Val{adj}) where {adj}
+    checkaliasing(A, Q)
     require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
     mA, nA = size(A, 1), size(A, 2)
@@ -419,6 +446,7 @@ end
 
 # as `_lqmul!`, for `A*Q` resp. `A*Q'`, traversing the blocks the other way round
 function _rqmul!(A::AbstractVecOrMat, Q::QRCompactWYQ, ::Val{adj}) where {adj}
+    checkaliasing(A, Q)
     require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
     mA, nA = size(A, 1), size(A, 2)
@@ -579,6 +607,7 @@ rmul!(X::StridedVecOrMat{T}, adjQ::AdjointQ{<:Any,<:BlasHessenbergQ{T,true}}) wh
 # meaningless for the general one, as for `ormhr!` versus `ormtr!`. The two branches call
 # the kernel separately to keep the view types concrete.
 function _lqmul!(Q::HessenbergQ{<:Any,<:Any,<:Any,sym}, B::AbstractVecOrMat, ::Val{adj}) where {sym,adj}
+    checkaliasing(B, Q)
     require_one_based_indexing(B)
     n = size(Q.factors, 1)
     mB, nB = size(B, 1), size(B, 2)
@@ -594,6 +623,7 @@ function _lqmul!(Q::HessenbergQ{<:Any,<:Any,<:Any,sym}, B::AbstractVecOrMat, ::V
 end
 
 function _rqmul!(A::AbstractVecOrMat, Q::HessenbergQ{<:Any,<:Any,<:Any,sym}, ::Val{adj}) where {sym,adj}
+    checkaliasing(A, Q)
     require_one_based_indexing(A)
     n = size(Q.factors, 1)
     mA, nA = size(A, 1), size(A, 2)
@@ -648,6 +678,7 @@ qsize_check(A::AbstractVecOrMat, adjQ::AdjointQ{<:Any,<:Union{QRPackedQ,QRCompac
         throw(DimensionMismatch(lazy"second dimension of A, $(size(A,2)), must equal one of the dimensions of Q, $(size(Q.factors))")))
 
 det(Q::HessenbergQ) = _det_tau(Q.τ)
+aliasparts(Q::HessenbergQ) = (aliasparts(Q.factors)..., aliasparts(Q.τ)...)
 
 ###########################################################
 ################ Q from LQ decomposition ##################
@@ -657,12 +688,14 @@ struct LQPackedQ{T,S<:AbstractMatrix{T},C<:AbstractVector{T}} <: AbstractQ{T}
     factors::S
     τ::C
 end
+aliasparts(Q::LQPackedQ) = (aliasparts(Q.factors)..., aliasparts(Q.τ)...)
 
 LQPackedQ{T}(Q::LQPackedQ) where {T} = LQPackedQ(convert(AbstractMatrix{T}, Q.factors), convert(AbstractVector{T}, Q.τ))
 @deprecate(AbstractMatrix{T}(Q::LQPackedQ) where {T},
     convert(AbstractQ{T}, Q),
     false)
-Matrix{T}(A::LQPackedQ) where {T} = convert(Matrix{T}, LAPACK.orglq!(copy(A.factors), A.τ))
+Matrix{T}(Q::LQPackedQ{S}) where {T,S} =
+    convert(Matrix{T}, rmul!(Matrix{S}(I, min(size(Q.factors)...), size(Q, 2)), Q))
 convert(::Type{AbstractQ{T}}, Q::LQPackedQ) where {T} = LQPackedQ{T}(Q)
 
 # size(Q::LQPackedQ) yields the shape of Q's square form
@@ -692,6 +725,7 @@ qsize_check(A::AbstractVecOrMat, Q::LQPackedQ) =
 # reflectors can be applied with `reflectorApply!`. `Q` applies the `Hᵢ'` and `Q'` the `Hᵢ`,
 # in opposite orders; `adj = true` selects the latter.
 function _lqmul!(Q::LQPackedQ, B::AbstractVecOrMat, ::Val{adj}) where {adj}
+    checkaliasing(B, Q)
     require_one_based_indexing(B)
     mQ, nQ = size(Q.factors)
     mB, nB = size(B, 1), size(B, 2)
@@ -708,6 +742,7 @@ end
 
 # as `_lqmul!`, for `A*Q` resp. `A*Q'`, applying the reflectors the other way round
 function _rqmul!(A::AbstractVecOrMat, Q::LQPackedQ, ::Val{adj}) where {adj}
+    checkaliasing(A, Q)
     require_one_based_indexing(A)
     mQ, nQ = size(Q.factors)
     mA, nA = size(A, 1), size(A, 2)

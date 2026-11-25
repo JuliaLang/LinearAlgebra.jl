@@ -67,9 +67,185 @@ function (*)(a::AbstractVector, B::AbstractMatrix)
     reshape(a, length(a), 1) * B
 end
 
+"""
+    LinearAlgebra.aliasparts(A) -> Tuple
+
+Return the arrays that `A` stores its data in, e.g., the diagonal of a `Diagonal`, the
+parent of a wrapper, or the arrays that make up a factorization or an `AbstractQ`.
+[`LinearAlgebra.deepmightalias`](@ref) compares them pairwise. The fallback returns `(A,)`.
+
+Matrix types, factorizations and other operators that consist of other arrays should define
+a method, so that the checks of in-place operations see the memory they share with other
+arrays.
+"""
+aliasparts(A) = (A,)
+aliasparts(A::Base.ReshapedArray) = aliasparts(parent(A)) # e.g. the bands of the adjoint of a complex Bidiagonal
+
+"""
+    LinearAlgebra.deepmightalias(A, B) -> Bool
+
+Return whether `A` and `B` might share memory. Like `Base.mightalias`, but applied pairwise
+to the arrays that `A` and `B` consist of, see [`LinearAlgebra.aliasparts`](@ref).
+`A` and `B` may also be factorizations or `AbstractQ`s.
+
+# Examples
+```jldoctest
+julia> M = zeros(3, 3);
+
+julia> Base.mightalias(Diagonal(view(M, :, 1)), view(M, :, 2))
+true
+
+julia> LinearAlgebra.deepmightalias(Diagonal(view(M, :, 1)), view(M, :, 2))
+false
+```
+"""
+deepmightalias(A, B) = _anymightalias(aliasparts(A), aliasparts(B))
+# recursion over the tuples rather than `any` with closures, whose calls are not inferred for
+# tuples of different array types
+_anymightalias(::Tuple{}, bs::Tuple) = false
+_anymightalias(as::Tuple, bs::Tuple) = _mightaliasany(first(as), bs) || _anymightalias(Base.tail(as), bs)
+_mightaliasany(a, ::Tuple{}) = false
+_mightaliasany(a, bs::Tuple) = _partsmightalias(a, first(bs)) || _mightaliasany(a, Base.tail(bs))
+
+_partsmightalias(a, b) = Base.mightalias(a, b) && !_disjointmemory(a, b)
+_disjointmemory(a, b) = false
+function _disjointmemory(a::StridedArray{T}, b::StridedArray{S}) where {T,S}
+    (isbitstype(T) && isbitstype(S)) || return false
+    alo, ahi = _memoryrange(a)
+    blo, bhi = _memoryrange(b)
+    return ahi < blo || bhi < alo
+end
+function _memoryrange(A::StridedArray{T}) where {T}
+    p = UInt(pointer(A))
+    lo = hi = p
+    for (n, s) in zip(size(A), strides(A))
+        d = (n - 1) * s * sizeof(T)
+        d < 0 ? (lo -= UInt(-d)) : (hi += UInt(d))
+    end
+    return lo, hi + UInt(sizeof(T) - 1)
+end
+
+# `mul!(C, A, B, α, β)` overwrites `C` while still reading `A` and `B`, so `C` must not share
+# memory with them. A factor that `mul!` applies in place, as `lmul!` and `rmul!` do, can
+# overwrite the other factor, though, so `C` may share memory with that other factor, unless
+# `C` is structured: the structured kernels assume that the output is not one of the factors.
+# The kernels see the other factor itself if it is `C` element by element. Otherwise, it is
+# copied into `C` first, which needs `β == 0` and its elements to be storable in `C`.
+@inline function check_mul_aliasing(C, A, B, α, β)
+    aliasA, aliasB = deepmightalias(C, A), deepmightalias(C, B)
+    if aliasA && (aliasB || !_mul_mayalias(C, A, _rmulinplace(A, B, α, β), β)) ||
+            aliasB && !_mul_mayalias(C, B, lmulinplace(A, α, β), β)
+        throw_mul_aliasing()
+    end
+    return nothing
+end
+@noinline throw_mul_aliasing() =
+    throw(ArgumentError("output array must not be aliased with an input array"))
+# without exceptions, for kernels that apply neither factor in place, e.g. in SparseArrays
+@inline function check_mul_aliasing(C, A, B)
+    (_mightalias(C, A) || _mightalias(C, B)) && throw_mul_aliasing()
+    return nothing
+end
+# whether `C` may share memory with the factor `X`, if the other factor is applied in place
+_mul_mayalias(C, X, inplace::Bool, β) = inplace && !_isstructured(C) && X isa AbstractArray &&
+    (_isinplace(C, X) || iszero(β) && promote_type(eltype(X), eltype(C)) === eltype(C))
+"""
+    LinearAlgebra.lmulinplace(A, α, β) -> Bool
+
+Return whether `mul!(C, A, B, α, β)` applies `A` to `B` in place, as `lmul!(A, B)` does, so
+that the output `C` may be `B`, e.g., in `mul!(B, UpperTriangular(A), B)`. The fallback
+returns `false`. LinearAlgebra's generic `mul!` method uses this to decide whether `C` may
+share memory with `B`.
+
+It is `true` for `Diagonal`, `Bidiagonal`, `Tridiagonal`, `SymTridiagonal` and `AbstractQ`,
+and for triangular matrices if `α == 1` and `β == 0`. A package that computes the products
+of its type through methods for the internal functions of LinearAlgebra's generic `mul!`
+method can define a method, if those products are correct when the output is the other factor.
+
+See also [`LinearAlgebra.rmulinplace`](@ref).
+
+# Examples
+```jldoctest
+julia> LinearAlgebra.lmulinplace(UpperTriangular([1.0 2; 0 3]), true, false)
+true
+
+julia> LinearAlgebra.lmulinplace(UpperTriangular([1.0 2; 0 3]), 2.0, 1.0)
+false
+
+julia> LinearAlgebra.lmulinplace([1.0 2; 3 4], true, false)
+false
+```
+"""
+lmulinplace(A, α, β) = false
+
+"""
+    LinearAlgebra.rmulinplace(B, α, β) -> Bool
+
+Return whether `mul!(C, A, B, α, β)` applies `B` to `A` in place, as `rmul!(A, B)` does, so
+that the output `C` may be `A`. The fallback returns `false`. It is `true` for `Diagonal`,
+`Bidiagonal` and `AbstractQ`, and for triangular matrices if `α == 1` and `β == 0`.
+
+See [`LinearAlgebra.lmulinplace`](@ref).
+"""
+rmulinplace(B, α, β) = false
+# whether `mul!(C, A, B, α, β)` applies `B` in place, given `A`
+_rmulinplace(A, B, α, β) = rmulinplace(B, α, β)
+@noinline function _mul_aliased!(C, A, B, α, β)
+    check_mul_aliasing(C, A, B, α, β)
+    return _mul!(C, _mul_operand(C, A), _mul_operand(C, B), α, β)
+end
+_mul_operand(C, X) = !deepmightalias(C, X) || _isinplace(C, X) ? X : copyto!(C, X)
+# whether the kernels assume that `C` is not one of the factors
+_isstructured(C) = false
+
+# A method checks the arrays it overwrites against those it only reads, unless the methods
+# it calls check the same arguments in full before anything is written. So kernels that
+# compute the output in loops or call BLAS or LAPACK check, and so do methods that overwrite
+# an argument first, e.g. to permute it, or that copy their result into it last: the error
+# comes before anything is overwritten, and a solve never overwrites the factorization.
+
+"""
+    LinearAlgebra.checkaliasing(Y, A)
+
+Throw an `ArgumentError` if `Y` might share memory with `A`, see
+[`LinearAlgebra.deepmightalias`](@ref). For in-place operations that overwrite `Y` while
+still reading `A`, e.g., `lmul!(A, Y)`, `ldiv!(A, Y)` or `ldiv!(Y, A, B)`.
+"""
+@inline function checkaliasing(Y, A)
+    deepmightalias(Y, A) && throw_inplace_aliasing()
+    return nothing
+end
+@noinline throw_inplace_aliasing() =
+    throw(ArgumentError("the array that is overwritten must not share memory with the other operand"))
+# internal names that SparseArrays extends and calls
+const _aliasparts = aliasparts
+const _mightalias = deepmightalias
+const check_inplace_aliasing = checkaliasing
+const check_q_aliasing = checkaliasing
+
+"""
+    LinearAlgebra.checkoverlap(Y, B)
+
+Throw an `ArgumentError` if `Y` might share memory with `B`, unless `Y` is `B` itself,
+element by element, e.g., `B` or `view(B, :, :)`. For operations that overwrite `Y` while
+reading `B` in an order that is correct if `Y` is `B`, as `ldiv!(Y, A, B)` does for a
+triangular `A`, but not if the two overlap otherwise.
+"""
+@inline function checkoverlap(Y, B)
+    !_isinplace(Y, B) && deepmightalias(Y, B) && throw_inplace_aliasing()
+    return nothing
+end
+# whether `Y` and `B` are the same array, element by element, e.g. `view(B, :, :)` and `B`
+_isinplace(Y, B) = Y === B
+_isinplace(Y::StridedArray{T,N}, B::StridedArray{T,N}) where {T,N} = Y === B ||
+    size(Y) == size(B) && strides(Y) == strides(B) && pointer(Y) == pointer(B)
+
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
-@inline mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
-                alpha::Number, beta::Number) = _mul!(y, A, x, alpha, beta)
+@inline function mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
+                alpha::Number, beta::Number)
+    (deepmightalias(y, A) || deepmightalias(y, x)) && return _mul_aliased!(y, A, x, alpha, beta)
+    _mul!(y, A, x, alpha, beta)
+end
 
 _mul!(y::AbstractVector, A::AbstractVecOrMat, x::AbstractVector,
                 alpha::Number, beta::Number) =
@@ -237,14 +413,14 @@ Base.muladd(x::TransposeAbsVec, A::AbstractMatrix, z::Union{Number, AbstractVecO
     transpose(muladd(transpose(A), transpose(x), transpose(z)))
 
 function Base.muladd(A::StridedMaybeAdjOrTransMat{<:Number}, y::AbstractVector{<:Number}, z::Union{Number, AbstractVector})
-    T = promote_type(eltype(A), eltype(y), eltype(z))
+    T = promote_type(_matprod_type(A, y), eltype(z))
     C = similar(A, T, axes(A,1))
     C .= z
     mul!(C, A, y, true, true)
 end
 
 function Base.muladd(A::StridedMaybeAdjOrTransMat{<:Number}, B::StridedMaybeAdjOrTransMat{<:Number}, z::Union{Number, AbstractVecOrMat})
-    T = promote_type(eltype(A), eltype(B), eltype(z))
+    T = promote_type(_matprod_type(A, B), eltype(z))
     C = similar(A, T, axes(A,1), axes(B,2))
     C .= z
     mul!(C, A, B, true, true)
@@ -255,7 +431,12 @@ end
 
 Calculates the matrix-matrix or matrix-vector product ``A B`` and stores the result in `Y`,
 overwriting the existing value of `Y`. Note that `Y` must not be aliased with either `A` or
-`B`.
+`B`; an `ArgumentError` is thrown if `Base.mightalias` detects that they share memory.
+As an exception, if one factor is triangular, `Diagonal`, `Bidiagonal` or an `AbstractQ`, or
+if `A` is `Tridiagonal` or `SymTridiagonal`, the other factor may share memory with `Y`,
+unless `Y` is a structured matrix: as in [`lmul!`](@ref) and [`rmul!`](@ref), it may be `Y`
+itself, e.g., `mul!(B, UpperTriangular(A), B)`, and otherwise it is copied into `Y` first,
+which requires that its elements can be stored in `Y`.
 
 # Examples
 ```jldoctest
@@ -285,7 +466,12 @@ mul!(C, A, B) = mul!(C, A, B, true, false)
 
 Combined inplace matrix-matrix or matrix-vector multiply-add ``A B α + C β``.
 The result is stored in `C` by overwriting it.  Note that `C` must not be
-aliased with either `A` or `B`.
+aliased with either `A` or `B`; an `ArgumentError` is thrown if `Base.mightalias`
+detects that they share memory. As an exception, if one factor is `Diagonal` or
+`Bidiagonal`, if `A` is `Tridiagonal` or `SymTridiagonal`, or if one factor is triangular
+and `α == 1` and `β == 0`, the other factor may be `C` itself, unless `C` is a structured
+matrix. If `β == 0`, it may also share memory with `C` otherwise, as it is then copied
+into `C` first, provided that its elements can be stored in `C`.
 
 !!! compat "Julia 1.3"
     Five-argument `mul!` requires at least Julia 1.3.
@@ -310,7 +496,10 @@ julia> C == A * B * α + C_original * β
 true
 ```
 """
-@inline mul!(C::AbstractMatrix, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number) = _mul!(C, A, B, α, β)
+@inline function mul!(C::AbstractMatrix, A::AbstractVecOrMat, B::AbstractVecOrMat, α::Number, β::Number)
+    (deepmightalias(C, A) || deepmightalias(C, B)) && return _mul_aliased!(C, A, B, α, β)
+    _mul!(C, A, B, α, β)
+end
 # Add a level of indirection and specialize _mul! to avoid ambiguities in mul!
 module BlasFlag
 @enum BlasFunction SYRK HERK GEMM SYMM HEMM NONE
@@ -627,6 +816,24 @@ function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.HEMM})
 end
 Base.@constprop :aggressive function _symm_hemm_generic!(C, tA, tB, A, B, alpha, beta, ::Val{BlasFlag.NONE})
     _generic_matmatmul!(C, wrap(A, tA), wrap(B, tB), alpha, beta)
+end
+# Symmetric/Hermitian matrices that can't be passed to BLAS, e.g. Symmetric(A) * B'.
+# We wrap the matrices in a method that is inlined into _mul!, where tA and tB are known.
+# This ensures that the wrapped matrices are concretely inferred, without relying on
+# the larger method above being inlined (JuliaLang/julia#53951)
+Base.@constprop :aggressive @inline function generic_matmatmul_wrapper!(C::StridedMatrix{T}, tA, tB, A::StridedVecOrMat{T}, B::StridedVecOrMat{T},
+                                    α::Number, β::Number, ::Val{BlasFlag.NONE}) where {T<:BlasFloat}
+    _generic_matmatmul_wrapped!(C, tA, tB, A, B, wrap(A, tA), wrap(B, tB), α, β)
+end
+function _generic_matmatmul_wrapped!(C, tA, tB, A, B, wA, wB, α, β)
+    mA, nA = lapack_size(tA, A)
+    mB, nB = lapack_size(tB, B)
+    matmul_size_check(size(C), (mA, nA), (mB, nB))
+    if any(iszero, size(A)) || any(iszero, size(B)) || iszero(α)
+        return _rmul_or_fill!(C, β)
+    end
+    matmul_small_nonzeroalpha!(C, tA, tB, A, B, α, β) && return C
+    return _generic_matmatmul!(C, wA, wB, α, β)
 end
 
 """

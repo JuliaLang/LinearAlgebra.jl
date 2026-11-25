@@ -636,6 +636,7 @@ end
 
 # Julia implementation similar to xgelsy
 function ldiv!(A::QRPivoted{T,<:StridedMatrix}, B::AbstractMatrix{T}, rcond::Real) where {T<:BlasFloat}
+    checkaliasing(B, A)
     require_one_based_indexing(B)
     _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
@@ -765,6 +766,7 @@ end
 
 
 function ldiv!(A::QR, B::AbstractMatrix)
+    checkaliasing(B, A)
     require_one_based_indexing(B)
     _check_qr_ldiv_rhs(A, B)
     m, n = size(A)
@@ -800,6 +802,7 @@ end
 _apply_permutation!(::Factorization, B::AbstractVecOrMat) = B
 
 function ldiv!(Fadj::AdjointFactorization{<:Any,<:Union{QR,QRCompactWY,QRPivoted}}, B::AbstractVecOrMat)
+    checkaliasing(B, Fadj)
     require_one_based_indexing(B)
     m, n = size(Fadj)
 
@@ -859,3 +862,8 @@ end
 ## Lower priority: Add LQ, QL and RQ factorizations
 
 # FIXME! Should add balancing option through xgebal
+
+# the arrays the factorization is stored in, for the aliasing checks (see `deepmightalias`)
+aliasparts(F::QR) = (aliasparts(getfield(F, :factors))..., aliasparts(getfield(F, :τ))...)
+aliasparts(F::QRCompactWY) = (aliasparts(getfield(F, :factors))..., aliasparts(getfield(F, :T))...)
+aliasparts(F::QRPivoted) = (aliasparts(getfield(F, :factors))..., aliasparts(getfield(F, :τ))..., aliasparts(getfield(F, :jpvt))...)

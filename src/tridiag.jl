@@ -164,6 +164,14 @@ axes(M::SymTridiagonal) = (ax = axes(M.dv, 1); (ax, ax))
 similar(S::SymTridiagonal, ::Type{T}) where {T} = SymTridiagonal(similar(S.dv, T), similar(S.ev, T))
 similar(S::SymTridiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = similar(S.dv, T, dims)
 
+# All empty arrays may share the same memory address, so skip empty bands: a nonempty
+# banded matrix may have empty off-diagonals, which must not appear to alias each other
+_band_dataids(v::AbstractVector) = isempty(v) ? () : Base.dataids(v)
+
+Base.dataids(S::SymTridiagonal) = (_band_dataids(S.dv)..., _band_dataids(S.ev)...)
+aliasparts(S::SymTridiagonal) = (aliasparts(S.dv)..., aliasparts(S.ev)...)
+Base.unaliascopy(S::SymTridiagonal) = SymTridiagonal(Base.unaliascopy(S.dv), Base.unaliascopy(S.ev))
+
 # copyto! for matching axes
 _copyto_banded!(dest::SymTridiagonal, src::SymTridiagonal) =
     (copyto!(dest.dv, src.dv); copyto!(dest.ev, src.ev); dest)
@@ -396,9 +404,32 @@ julia> eigvecs(A, [1.])
 """
 eigvecs(A::SymTridiagonal{<:BlasFloat,<:StridedVector}, eigvals::StridedVector{<:Real}) = LAPACK.stein!(A.dv, A.ev, eigvals)
 
-function svdvals!(A::SymTridiagonal)
-    vals = eigvals!(A)
+function svdvals!(A::SymTridiagonal{T}) where {T<:Real}
+    vals = _tohalf(T, eigvals!(A))
     return sort!(map!(abs, vals, vals); rev=true)
+end
+
+function svdvals(A::SymTridiagonal{T}) where {T<:Real}
+    vals = _tohalf(T, eigvals(A))
+    return sort!(map!(abs, vals, vals); rev=true)
+end
+
+function svd(A::SymTridiagonal{T};
+             full::Bool = false,
+             alg::Algorithm = default_svd_alg(A),
+             atol::Real = 0, rtol::Real = 0) where {T<:Real}
+    F = svd!(copymutable_oftype(A, eigtype(T)); full, alg, atol, rtol)
+    return T <: Float16 ? SVD{T}(F) : F
+end
+
+function svd!(A::SymTridiagonal{T};
+              full::Bool = false,
+              alg::Algorithm = default_svd_alg(A),
+              atol::Real = 0, rtol::Real = 0) where {T<:Real}
+    F = eigen!(A)
+    G = _svd_from_eigen!(F.values, F.vectors)
+    G.S[_count_svdvals(G.S, atol, rtol)+1:end] .= 0
+    return G
 end
 
 # tril and triu
@@ -472,7 +503,7 @@ end
 #    R. Usmani, "Inversion of a tridiagonal Jacobi matrix",
 #    Linear Algebra and its Applications 212-213 (1994), pp.413-414
 #    doi:10.1016/0024-3795(94)90414-6
-function det_usmani(a::V, b::V, c::V, shift::Number=0) where {T,V<:AbstractVector{T}}
+function det_usmani(a::V, b::V, c::V; shift::Number=0) where {T,V<:AbstractVector{T}}
     require_one_based_indexing(a, b, c)
     n = length(b)
     θa = oneunit(T)+zero(shift)
@@ -486,8 +517,15 @@ function det_usmani(a::V, b::V, c::V, shift::Number=0) where {T,V<:AbstractVecto
     return θb
 end
 
+_dettype(::Type{BigInt}) = BigInt
+_dettype(::Type{T}) where {T} = lutype(T)
 # det with optional diagonal shift for use with shifted Hessenberg factorizations
-det(A::SymTridiagonal; shift::Number=false) = det_usmani(A.ev, A.dv, A.ev, shift)
+function det(A::SymTridiagonal; shift::Number=false)
+    Tout = _dettype(eltype(A))
+    ev2 = convert(AbstractVector{Tout}, A.ev)
+    dv2 = convert(AbstractVector{Tout}, A.dv)
+    return det_usmani(ev2, dv2, ev2; shift)
+end
 logabsdet(A::SymTridiagonal; shift::Number=false) = logabsdet(ldlt(A; shift=shift))
 
 @inline function Base.isassigned(A::SymTridiagonal, i::Signed, j::Signed)
@@ -716,6 +754,23 @@ Array(M::Tridiagonal) = Matrix(M)
 
 similar(M::Tridiagonal, ::Type{T}) where {T} = Tridiagonal(similar(M.dl, T), similar(M.d, T), similar(M.du, T))
 similar(M::Tridiagonal, ::Type{T}, dims::Union{Dims{1},Dims{2}}) where {T} = similar(M.d, T, dims)
+
+# `du2` is optional: it is only defined when it is passed to the constructor, e.g. by `lu!`
+function Base.dataids(M::Tridiagonal)
+    ids = (_band_dataids(M.dl)..., _band_dataids(M.d)..., _band_dataids(M.du)...)
+    isdefined(M, :du2) ? (ids..., _band_dataids(M.du2)...) : ids
+end
+function aliasparts(M::Tridiagonal)
+    parts = (aliasparts(M.dl)..., aliasparts(M.d)..., aliasparts(M.du)...)
+    isdefined(M, :du2) ? (parts..., aliasparts(M.du2)...) : parts
+end
+# the kernel for a left factor caches the rows of the other factor that it still needs
+lmulinplace(::Union{SymTridiagonal,Tridiagonal}, α, β) = true
+_isstructured(::Union{SymTridiagonal,Tridiagonal}) = true
+function Base.unaliascopy(M::Tridiagonal)
+    dl, d, du = Base.unaliascopy(M.dl), Base.unaliascopy(M.d), Base.unaliascopy(M.du)
+    isdefined(M, :du2) ? Tridiagonal(dl, d, du, Base.unaliascopy(M.du2)) : Tridiagonal(dl, d, du)
+end
 
 # Operations on Tridiagonal matrices
 # copyto! for matching axes
@@ -981,7 +1036,13 @@ function ==(A::Tridiagonal, B::SymTridiagonal)
 end
 ==(A::SymTridiagonal, B::Tridiagonal) = B == A
 
-det(A::Tridiagonal) = det_usmani(A.dl, A.d, A.du)
+function det(A::Tridiagonal; shift::Number=false)
+    Tout = _dettype(eltype(A))
+    dl2 = convert(AbstractVector{Tout}, A.dl)
+    d2 = convert(AbstractVector{Tout}, A.d)
+    du2 = convert(AbstractVector{Tout}, A.du)
+    return det_usmani(dl2, d2, du2; shift)
+end
 
 AbstractMatrix{T}(M::Tridiagonal) where {T} = Tridiagonal{T}(M)
 AbstractMatrix{T}(M::Tridiagonal{T}) where {T} = copy(M)
@@ -1111,10 +1172,12 @@ in `B`, returning the result. In the process, the diagonals of `A` are overwritt
 """
 function ldiv!(A::Tridiagonal, B::AbstractVecOrMat)
     LinearAlgebra.require_one_based_indexing(B)
+    checkaliasing(B, A)
     n = size(A, 1)
     if n != size(B,1)
         throw(DimensionMismatch(lazy"matrix has dimensions ($n,$n) but right hand side has $(size(B,1)) rows"))
     end
+    iszero(n) && return B
     nrhs = size(B, 2)
 
     # Initialize variables
@@ -1213,6 +1276,7 @@ end
 # Tridiagonal
 
 function _opnorm1Inf(A::Tridiagonal, p)
+    isempty(A.d) && return norm(A.d)
     size(A, 1) == 1 && return norm(first(A.d))
     case = p == Inf
     lowerrange, upperrange = case ? (1:length(A.dl)-1, 2:length(A.dl)) : (2:length(A.dl), 1:length(A.dl)-1)
@@ -1229,6 +1293,7 @@ end
 # SymTridiagonal
 
 function _opnorm1Inf(A::SymTridiagonal, p::Real)
+    isempty(A.dv) && return norm(A.dv)
     size(A, 1) == 1 && return norm(first(A.dv))
     lowerrange, upperrange = 1:length(A.ev)-1, 2:length(A.ev)
     normfirst, normend = norm(first(A.dv))+norm(first(A.ev)), norm(last(A.ev))+norm(last(A.dv))
