@@ -568,10 +568,11 @@ and `ϵ` is the [`eps`](@ref) of the element type of `A`.
 function rank(A::QRPivoted; atol::Real=0, rtol::Real=min(size(A)...) * eps(real(float(eltype(A)))) * iszero(atol))
     m = min(size(A)...)
     m == 0 && return 0
-    # an Inf or NaN need not reach the diagonal, but it leaves the rank undefined
-    LAPACK.chkfinite(A.factors)
-    tol = max(atol, rtol*abs(A.factors[1,1]))
-    return something(findfirst(i -> abs(A.factors[i,i]) <= tol, 1:m), m+1) - 1
+    # a NaN need not reach the diagonal, but it leaves the rank undefined
+    LAPACK.chknan(A.factors)
+    # an infinite entry is nonzero, and for a nonzero rtol every finite one is negligible next to it
+    tol = iszero(rtol) ? atol : max(atol, rtol*abs(A.factors[1,1]))
+    return something(findfirst(i -> (a = abs(A.factors[i,i]); a <= tol && !isinf(a)), 1:m), m+1) - 1
 end
 
 """

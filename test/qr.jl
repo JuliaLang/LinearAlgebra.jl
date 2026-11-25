@@ -576,11 +576,19 @@ end
 end
 
 @testset "rank(::QRPivoted) of matrices with Inf or NaN" begin
-    # a NaN that does not reach the diagonal of R, and an Inf that makes the tolerance infinite
-    for T in (Float64, ComplexF64, BigFloat), A in ([1 1 NaN; 1 1 0], [1 1 1; 1 1 1; 1 1 Inf])
-        F = qr(T.(A), ColumnNorm())
+    # a NaN that does not reach the diagonal of R
+    for T in (Float64, ComplexF64, BigFloat)
+        F = qr(T[1 1 NaN; 1 1 0], ColumnNorm())
         @test_throws ArgumentError rank(F)
         @test_throws ArgumentError nullspace(F)
+    end
+    # an infinite diagonal entry of R is nonzero, and every finite one is negligible next to it
+    for T in (Float64, ComplexF64)
+        F = qr(T[Inf 0 0; 0 1 0; 0 0 0], ColumnNorm())
+        @test rank(F) == 1
+        @test abs.(nullspace(F)) == [0 0; 1 0; 0 1]
+        # only the absolute tolerance applies
+        @test rank(F; atol = 0.5) == 2
     end
 end
 
