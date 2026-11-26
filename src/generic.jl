@@ -1820,7 +1820,9 @@ end
     n == 0 && return zero(eltype(x))
     ξ1 = @inbounds x[1]
     normu = norm(x)
-    if iszero(normu)
+    # As in LAPACK, no reflection if the rest of x is zero and x[1] is real. This also keeps
+    # an infinite x[1] from giving τ = Inf/Inf.
+    if iszero(normu) || ξ1 == real(ξ1) && all(iszero, @view x[2:n])
         return zero(ξ1/normu)
     end
     ν = T(copysign(normu, real(ξ1)))
@@ -1865,7 +1867,8 @@ Kernel of `reflectorApply!` for numeric elements of `x` and `A`, based on `dot` 
 """
 @inline function reflectorApplyNumeric!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
     m = _checkreflector(x, A)
-    m == 0 && return A
+    # skipped as in LAPACK, also so that an Inf in A does not give 0 * Inf
+    (m == 0 || iszero(τ)) && return A
     for j in axes(A,2)
         Aj, xj = @inbounds view(A, 2:m, j), view(x, 2:m)
         vAj = conj(τ)*(@inbounds(A[1, j]) + dot(xj, Aj))
@@ -1884,7 +1887,7 @@ may be vectors themselves, for instance.
 """
 @inline function reflectorApplyLoop!(x::AbstractVector, τ::Number, A::AbstractVecOrMat)
     m = _checkreflector(x, A)
-    m == 0 && return A
+    (m == 0 || iszero(τ)) && return A
     @inbounds for j in axes(A, 2)
         vAj = A[1, j]
         for i in 2:m

@@ -975,4 +975,15 @@ end
     @test_throws DimensionMismatch ldiv!(qr([1.0 2; 3 4])', ones(3))
 end
 
+@testset "generic qr of columns that are zero below the diagonal" begin
+    # no reflection there, as in LAPACK
+    for (T, S) in ((BigFloat, Float64), (Complex{BigFloat}, ComplexF64))
+        A = [2 1; 0 3]
+        @test qr(T.(A)).R == qr(S.(A)).R
+    end
+    # which keeps an Inf from turning into NaNs
+    @test qr(BigFloat[1 0 Inf; 0 1 0]).R == [1 0 Inf; 0 1 0]
+    @test qr(BigFloat[Inf 0; 0 1; 0 0], ColumnNorm()).R == [Inf 0; 0 1]
+end
+
 end # module TestQR
