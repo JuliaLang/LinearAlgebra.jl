@@ -365,6 +365,20 @@ end
     @test inv(cholesky(Diagonal(v)))::Diagonal ≈ Diagonal(1 ./ v)
 end
 
+@testset "lmul! with Cholesky" begin
+    for T in (Float64, ComplexF64, BigFloat), uplo in (:U, :L)
+        A = T <: Complex ? T[4 1+im 0; 1-im 5 2im; 0 -2im 6] : T[4 1 0; 1 5 2; 0 2 6]
+        C = cholesky(Hermitian(A, uplo))
+        B = T[1 2; 3 4; 5 6]
+        b = T[1, 2, 3]
+        @test lmul!(C, copy(B)) ≈ A * B
+        @test lmul!(C, copy(b)) ≈ A * b
+        if T === Float64
+            @test (@allocated lmul!(C, B)) == 0
+        end
+    end
+end
+
 struct WrappedVector{T} <: AbstractVector{T}
     data::Vector{T}
 end

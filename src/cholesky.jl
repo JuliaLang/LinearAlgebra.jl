@@ -757,6 +757,14 @@ function ldiv!(C::Cholesky, B::AbstractVecOrMat)
     end
 end
 
+function lmul!(C::Cholesky, B::AbstractVecOrMat)
+    if C.uplo == 'L'
+        return lmul!(LowerTriangular(C.factors), lmul!(adjoint(LowerTriangular(C.factors)), B))
+    else
+        return lmul!(adjoint(UpperTriangular(C.factors)), lmul!(UpperTriangular(C.factors), B))
+    end
+end
+
 function ldiv!(C::CholeskyPivoted{T,<:StridedMatrix}, B::StridedVector{T}) where T<:BlasFloat
     checkaliasing(B, C)
     invpermute!(LAPACK.potrs!(C.uplo, C.factors, permute!(B, C.piv)), C.piv)
