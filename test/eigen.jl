@@ -479,4 +479,16 @@ end
     @test_throws ArgumentError eigen([Inf 2; 1 2], [2.0 1; 1 2])
 end
 
+@testset "eigtype" begin
+    # at least single precision, complex inputs stay complex
+    for (T, S) in (Bool => Float64, Int8 => Float64, Int => Float64, UInt8 => Float64, Rational{Int} => Float64,
+                   Float16 => Float32, Float32 => Float32, Float64 => Float64, BigFloat => BigFloat,
+                   ComplexF16 => ComplexF32, ComplexF32 => ComplexF32, Complex{Int} => ComplexF64,
+                   Complex{Rational{Int}} => ComplexF64, Complex{BigFloat} => Complex{BigFloat})
+        @test eigtype(T) === S
+    end
+    # for abstract element types, the stored values are taken into account
+    @test eigtype(Number[1, 2.0f0]) === Float32
+end
+
 end # module TestEigen

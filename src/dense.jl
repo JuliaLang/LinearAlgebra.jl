@@ -2008,7 +2008,7 @@ julia> nullspace(M, atol=0.95)
 """
 function nullspace(A::AbstractVecOrMat; atol::Number=zero(real(eltype(A))), rtol::Real = (min(size(A, 1), size(A, 2))*eps(real(float(one(eltype(A))))))*iszero(atol))
     m, n = size(A, 1), size(A, 2)
-    (m == 0 || n == 0) && return Matrix{eigtype(eltype(A))}(I, n, n)
+    (m == 0 || n == 0) && return Matrix{_ortho_eltype(eigtype(eltype(A)))}(I, n, n)
     SVD = svd(A)
     return nullspace(SVD; atol, rtol)
 end
@@ -2023,7 +2023,8 @@ function cond(A::AbstractMatrix, p::Real=2)
     if p == 2
         if isempty(A)
             checksquare(A)
-            return zero(real(eigtype(eltype(A))))
+            x = oneunit(eigtype(eltype(A)))
+            return zero(real(x / x))
         end
         v = svdvals(A)
         maxv = maximum(v)
