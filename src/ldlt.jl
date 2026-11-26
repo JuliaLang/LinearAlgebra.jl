@@ -422,10 +422,10 @@ function ldiv!(S::LDLt{<:Any,<:SymTridiagonal}, B::AbstractVecOrMat)
     d = S.data.dv
     l = S.data.ev
     @inbounds begin
-        for i = 2:n
-            li1 = l[i-1]
+        for i = 1:n-1
+            li1 = l[i]
             @simd for j = 1:nrhs
-                B[i,j] -= li1*B[i-1,j]
+                B[i+1,j] -= li1*B[i,j]
             end
         end
         dn = d[n]
@@ -436,8 +436,7 @@ function ldiv!(S::LDLt{<:Any,<:SymTridiagonal}, B::AbstractVecOrMat)
             di = d[i]
             li = l[i]
             @simd for j = 1:nrhs
-                B[i,j] /= di
-                B[i,j] -= li*B[i+1,j]
+                B[i,j] = B[i,j]/di - li*B[i+1,j]
             end
         end
     end
@@ -531,11 +530,16 @@ end
 rdiv!(B::AbstractVecOrMat, F::LDLtPivoted{<:Any,<:SymTridiagonal}) =
     transpose(ldiv!(F, transpose(B)))
 
-function logabsdet(F::LDLt{<:Any,<:SymTridiagonal})
-    it = (F.data[i,i] for i in 1:size(F, 1))
-    return sum(log∘abs, it), prod(sign, it)
+function logabsdet(F::LDLt{T,<:SymTridiagonal}) where {T}
+    d = F.data.dv
+    la = zero(typeof(log(abs(one(T)))))
+    σ = sign(one(T))
+    @inbounds for di in d
+        la += log(abs(di))
+        σ *= sign(di)
+    end
+    return la, σ
 end
-
 function logabsdet(F::LDLtPivoted{T,<:SymTridiagonal}) where {T}
     Fdata = getfield(F, :data)
     d, e, blocks = Fdata.dv, Fdata.ev, getfield(F, :blocks)
@@ -562,11 +566,19 @@ end
 
 # Conversion methods
 function SymTridiagonal(F::LDLt{<:Any, <:SymTridiagonal})
-    e = copy(F.data.ev)
-    d = copy(F.data.dv)
-    e .*= d[1:end-1]
-    d[2:end] += e .* F.data.ev
-    SymTridiagonal(d, e)
+    d = F.data.dv
+    e = F.data.ev
+    n = length(d)
+    dA = similar(d)
+    eA = similar(e)
+    n > 0 && (dA[1] = d[1])
+    @inbounds begin
+        for k in 1:n-1
+            eA[k] = ek = e[k]*d[k]
+            dA[k+1] = d[k+1] + e[k]*ek
+        end
+    end
+    SymTridiagonal(dA, eA)
 end
 AbstractMatrix(F::LDLt) = SymTridiagonal(F)
 AbstractArray(F::LDLt) = AbstractMatrix(F)
