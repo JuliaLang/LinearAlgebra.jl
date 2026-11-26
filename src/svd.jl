@@ -151,7 +151,7 @@ end
 # count positive singular values S ≥ given tolerances, S assumed sorted
 function _count_svdvals(S, atol::Number, rtol::Real)
     isempty(S) && return 0
-    tol = max(rtol * S[1], atol)
+    tol = iszero(rtol) ? atol : max(rtol * S[1], atol)
     return iszero(S[1]) ? 0 : searchsortedlast(S, tol, rev=true)
 end
 

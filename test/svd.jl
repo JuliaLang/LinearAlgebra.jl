@@ -390,4 +390,11 @@ end
     end
 end
 
+@testset "svd with an overflowing singular value" begin
+    # σ₁ = √2 floatmax() overflows, and σ₂ = |det(A)|/σ₁ = 1/√2
+    F = svd([floatmax() floatmax(); 0 1])
+    @test F.S[1] == Inf
+    @test F.S[2] ≈ 1/√2
+end
+
 end # module TestSVD
