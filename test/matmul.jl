@@ -454,6 +454,29 @@ end
     end
 end
 
+@testset "allocations in Symmetric/Hermitian matmul without BLAS (issue #53951)" begin
+    for n in (0, 1, 2, 3, 6), T in (Float64, ComplexF64)
+        A = rand(T, n, n)
+        B = rand(T, n, n)
+        C = zeros(T, n, n)
+        for W in (Symmetric, Hermitian), uplo in (:U, :L), t in (adjoint, transpose, Symmetric, Hermitian)
+            WA = W(A, uplo)
+            Bt = t(B)
+            mul!(C, WA, Bt)
+            @test 0 == @allocations mul!(C, WA, Bt)
+            @test C ≈ Matrix(WA) * Matrix(Bt)
+            mul!(C, Bt, WA)
+            @test 0 == @allocations mul!(C, Bt, WA)
+            @test C ≈ Matrix(Bt) * Matrix(WA)
+            # zero α: C is only scaled by β
+            C .= 1
+            @test mul!(C, WA, Bt, false, 2) == fill(2, n, n)
+            @test mul!(C, Bt, WA, 0.0, 0.5) == ones(n, n)
+            @test 0 == @allocations mul!(C, WA, Bt, false, true)
+        end
+    end
+end
+
 @testset "mixed Blas-non-Blas matmul" begin
     AA = rand(-10:10, 6, 6)
     BB = ones(Float64, 6, 6)
@@ -503,6 +526,28 @@ end
     @test U * V ≈ Matrix(U) * Matrix(V)
 end
 
+@testset "Symmetric/Hermitian x matrix with non-contiguous or negatively strided arrays" for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
+    # sizes 2 and 3 take the small-matrix path, larger sizes may dispatch to symm!/hemm!
+    @testset "n = $n" for n in (3, 5)
+        # views equal to M, with stride(·, 1) == 2 or with stride(·, 2) < 0, respectively
+        rowstep(M) = (P = zeros(T, 2size(M, 1), size(M, 2)); P[1:2:end, :] = M; view(P, 1:2:size(P, 1), :))
+        colrev(M) = (P = zeros(T, size(M)); P[:, end:-1:1] = M; view(P, :, size(P, 2):-1:1))
+        layouts = (copy, rowstep, colrev)
+        A, B, C = rand(T, n, n), rand(T, n, n), rand(T, n, n)
+        α, β = 2, 3
+        @testset for W in (Symmetric, Hermitian), fA in layouts, fB in layouts, fC in layouts
+            WA = Matrix(W(A))
+            for (X, Y, ref) in ((W(fA(A)), fB(B), WA * B), (fB(B), W(fA(A)), B * WA))
+                Cv = fC(C)
+                @test mul!(Cv, X, Y, α, β) ≈ α * ref + β * C
+                # nothing is written outside of the view
+                @test count(!iszero, parent(Cv)) == count(!iszero, Cv)
+                @test mul!(fC(C), X, Y) ≈ ref
+            end
+        end
+    end
+end
+
 @testset "dot product of subarrays of vectors (floats, negative stride, issue #37767)" begin
     for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
         a = Vector{T}(3:2:7)
@@ -533,7 +578,7 @@ end
     A0 = randn(complex(T), 10, 10)
     B0 = randn(T, 10, 10)
     @testset "Combination Mat{$(complex(T))} Mat{$T}" for Bax1 in (1:5, 2:2:10), Bax2 in (1:5, 2:2:10)
-        B = view(A0, Bax1, Bax2)
+        B = view(B0, Bax1, Bax2)
         tB = transpose(B)
         Bd, tBd = copy(B), copy(tB)
         for Aax1 in (1:5, 2:2:10, (:)), Aax2 in (1:5, 2:2:10)
@@ -600,12 +645,53 @@ end
     end
 end
 
+@testset "mixed complex-real matmul with non-contiguous or negatively strided arrays" for T in (Float64, (@static COMPREHENSIVE ? (Float32,) : ())...)
+    n = 5
+    # views equal to M, with stride(·, 1) == 2 or with stride(·, 2) < 0, respectively
+    rowstep(M::AbstractMatrix) = (P = zeros(eltype(M), 2size(M, 1), size(M, 2)); P[1:2:end, :] = M; view(P, 1:2:size(P, 1), :))
+    colrev(M::AbstractMatrix) = (P = zeros(eltype(M), size(M)); P[:, end:-1:1] = M; view(P, :, size(P, 2):-1:1))
+    # views equal to v, with stride 2 or -1, respectively
+    step2(v::AbstractVector) = (P = zeros(eltype(v), 2length(v)); P[1:2:end] = v; view(P, 1:2:length(P)))
+    rev(v::AbstractVector) = (P = zeros(eltype(v), length(v)); P[end:-1:1] = v; view(P, length(P):-1:1))
+    A, B, C = rand(complex(T), n, n), rand(T, n, n), rand(complex(T), n, n)
+    x, xc, y = rand(T, n), rand(complex(T), n), rand(complex(T), n)
+    α, β = 2, 3
+    @testset for fA in (copy, rowstep, colrev), opA in (identity, transpose, adjoint)
+        # complex matrix x real matrix
+        for fB in (copy, rowstep, colrev), opB in (identity, transpose), fC in (copy, rowstep, colrev)
+            Cv = fC(C)
+            @test mul!(Cv, opA(fA(A)), opB(fB(B)), α, β) ≈ α * opA(A) * opB(B) + β * C
+            # nothing is written outside of the view
+            @test count(!iszero, parent(Cv)) == count(!iszero, Cv)
+        end
+        # complex matrix x real vector, and real matrix x complex vector
+        for fx in (copy, step2, rev), fy in (copy, step2, rev)
+            yv = fy(y)
+            @test mul!(yv, opA(fA(A)), fx(x), α, β) ≈ α * opA(A) * x + β * y
+            @test count(!iszero, parent(yv)) == count(!iszero, yv)
+            yv = fy(y)
+            @test mul!(yv, opA(fA(B)), fx(xc), α, β) ≈ α * opA(B) * xc + β * y
+            @test count(!iszero, parent(yv)) == count(!iszero, yv)
+        end
+    end
+end
+
 @testset "matrix x vector with negative lda or 0 stride" for T in (Float64, (@static COMPREHENSIVE ? (Float32,) : ())...)
     for TA in (T, complex(T)), TB in (T, complex(T))
         A = view(randn(TA, 10, 10), 1:10, 10:-1:1) # negative lda
         v = view([randn(TB)], 1 .+ 0(1:10)) # 0 stride
         Ad, vd = copy(A), copy(v)
         @test Ad * vd ≈ A * vd ≈ Ad * v ≈ A * v
+    end
+end
+
+@testset "Symmetric/Hermitian x vector with negative lda" for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
+    A = view(randn(T, 5, 5), :, 5:-1:1) # negative lda, unsupported by symv!/hemv!
+    Ad = copy(A)
+    x, y = randn(T, 5), randn(T, 5)
+    for W in (Symmetric, Hermitian), uplo in (:U, :L)
+        @test W(A, uplo) * x ≈ W(Ad, uplo) * x
+        @test mul!(copy(y), W(A, uplo), x, 2, 3) ≈ 2 * W(Ad, uplo) * x + 3y
     end
 end
 
@@ -734,6 +820,13 @@ end
         @test_throws DimensionMismatch muladd(u2, v3', ones(2, 3, 4))
         @test_throws DimensionMismatch muladd([1], v3', ones(7, 3))
         @test muladd(u2, v3', fill(0)) == u2 * v3'
+    end
+    @testset "Bool (#1872)" begin
+        B = Bool[1 1; 1 1]
+        b = Bool[1, 1]
+        @test muladd(B, B, B)::Matrix{Int} == B * B + B
+        @test muladd(B, b, b)::Vector{Int} == B * b + b
+        @test muladd(B', B, true)::Matrix{Int} == B' * B .+ true
     end
     @testset "dot" begin # all use muladd(::Any, ::Any, ::Any)
         @test muladd(u2', u2, 0) isa Number
@@ -880,6 +973,249 @@ end
     end
 end
 
+@testset "output aliased with a wrapped or viewed input (#1073, #925)" begin
+    A = rand(4, 4); B = rand(4, 4); x = rand(4)
+    # matrix-vector: BLAS, generic, and aliasing through views
+    @test_throws ArgumentError mul!(x, A, x)
+    @test_throws ArgumentError mul!(x, A, x, 2, 3)
+    @test_throws ArgumentError mul!(x, Symmetric(A), view(x, :))
+    @test_throws ArgumentError mul!(view(A, :, 1), A, x)
+    xb = big.(x)
+    @test_throws ArgumentError mul!(xb, big.(A), xb)
+    # row-vector output
+    @test_throws ArgumentError mul!(x', x', A)
+    # matrix-matrix: wrapped factors (symm/hemm, trmm, generic) and structured factors
+    for W in (adjoint, Symmetric, Hermitian, UpperTriangular, UpperHessenberg)
+        @test_throws ArgumentError mul!(A, W(A), B)
+        @test_throws ArgumentError mul!(A, B, W(A))
+    end
+    @test_throws ArgumentError mul!(A, A, Tridiagonal(B))
+    @test_throws ArgumentError mul!(A, Diagonal(view(A, :, 1)), A)
+    Ab = big.(A)
+    @test_throws ArgumentError mul!(Ab, Ab, big.(B))
+    # non-overlapping views of the same parent do not alias
+    V = rand(4, 3); V0 = copy(V)
+    @test mul!(view(V, :, 2), A, view(V, :, 1)) ≈ A * V0[:, 1]
+    @test mul!(view(V, 1:2, 3:3), view(V, 1:2, 1:2), view(V, 3:4, 1:1)) ≈ V[1:2, 1:2] * V[3:4, 1:1]
+    @static if COMPREHENSIVE
+        wrappers = (identity, adjoint, transpose, M -> view(M, :, :), Symmetric, Hermitian,
+            UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular, UpperHessenberg)
+        others = (M -> M, Tridiagonal, M -> SymTridiagonal(Symmetric(M)))
+        @testset for T in (Float64, ComplexF64, BigFloat), n in (2, 5)
+            for W in wrappers
+                for O in others
+                    C = rand(T, n, n); X = O(rand(T, n, n))
+                    @test_throws ArgumentError mul!(C, W(C), X)
+                    @test_throws ArgumentError mul!(C, W(C), X, 2, 3)
+                end
+                C = rand(T, n, n); X = rand(T, n, n); v = rand(T, n)
+                @test_throws ArgumentError mul!(C, X, W(C))
+                @test_throws ArgumentError mul!(C, X, W(C), 2, 3)
+                @test_throws ArgumentError mul!(C, W(C), W(C), 2, 3)
+                @test_throws ArgumentError mul!(view(C, :, 1), W(C), v)
+            end
+            X = rand(T, n, n); v = rand(T, n)
+            @test_throws ArgumentError mul!(v, X, v)
+            @test_throws ArgumentError mul!(v, X, v, 2, 3)
+        end
+    end
+end
+
+@testset "mul! with a factor that is applied in place" begin
+    @testset for T in (Float64, BigFloat, (@static COMPREHENSIVE ? (ComplexF64,) : ())...)
+        n = 4
+        M = rand(T, n, n)
+        factors = (UpperTriangular(M), UnitLowerTriangular(M), UpperTriangular(M)', Diagonal(M[:, 1]),
+            Bidiagonal(M[:, 1], M[1:n-1, 2], :U), Bidiagonal(M[:, 1], M[1:n-1, 2], :L))
+        for X in factors
+            Xm = Matrix(X)
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C, X, C) ≈ Xm * C0
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C, C, X) ≈ C0 * Xm
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C', X, C') ≈ Xm * C0'
+            v = rand(T, n); v0 = copy(v)
+            @test mul!(v, X, v) ≈ Xm * v0
+            # the same holds for a view or a wrapper that reads C at the same positions
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C, X, view(C, :, :)) ≈ Xm * C0
+            v = rand(T, n); v0 = copy(v)
+            @test mul!(v, X, view(v, :)) ≈ Xm * v0
+            C = rand(T, n, n); C0 = triu(C)
+            @test mul!(C, X, UpperTriangular(C)) ≈ Xm * C0
+            C = rand(T, n, n); C0 = triu(C)
+            if X isa LinearAlgebra.AbstractTriangular # of two triangular factors, the left one is applied in place
+                @test_throws ArgumentError mul!(C, UpperTriangular(C), X)
+            else
+                @test mul!(C, UpperTriangular(C), X) ≈ C0 * Xm
+            end
+            # a factor that overlaps C otherwise is copied into C first, which needs β == 0
+            V = rand(T, n, n+1); B0 = V[:, 1:n]
+            @test mul!(view(V, :, 2:n+1), X, view(V, :, 1:n)) ≈ Xm * B0
+            W = rand(T, n+1, n); A0 = W[1:n, :]
+            @test mul!(view(W, 2:n+1, :), view(W, 1:n, :), X) ≈ A0 * Xm
+            if X isa Union{Diagonal,Bidiagonal}
+                @test_throws ArgumentError mul!(view(V, :, 2:n+1), X, view(V, :, 1:n), 2, 3)
+            end
+            C = rand(T, n, n); C0 = copy(C)
+            if X isa Union{Diagonal,Bidiagonal}
+                @test mul!(C, X, C, 2, 3) ≈ 2Xm * C0 + 3C0
+                C = copy(C0)
+                @test mul!(C, C, X, 2, 3) ≈ 2C0 * Xm + 3C0
+            else
+                @test_throws ArgumentError mul!(C, X, C, 2, 3)
+                @test_throws ArgumentError mul!(C, C, X, 2, 3)
+            end
+        end
+        # the kernel for a Tridiagonal or SymTridiagonal left factor works in place as well
+        for X in (Tridiagonal(M), SymTridiagonal(Symmetric(M)))
+            Xm = Matrix(X)
+            C = rand(T, n, n); C0 = copy(C)
+            @test mul!(C, X, C, 2, 3) ≈ 2Xm * C0 + 3C0
+            v = rand(T, n); v0 = copy(v)
+            @test mul!(v, X, v) ≈ Xm * v0
+        end
+        # the structured kernels assume that the output is not one of the factors
+        U = UpperTriangular(rand(T, n, n))
+        @test_throws ArgumentError mul!(U, U, UpperTriangular(M))
+        # only one factor can be C or copied into it
+        C = rand(T, n, n)
+        @test_throws ArgumentError mul!(C, UpperTriangular(C), Diagonal(view(C, diagind(C))))
+        if T === Float64 # a factor whose elements cannot be stored in C is not copied
+            V = rand(T, n, n+1)
+            @test_throws ArgumentError mul!(reinterpret(Int, view(V, :, 2:n+1)), Diagonal(ones(Int, n)), view(V, :, 1:n))
+        end
+    end
+end
+
+@testset "issue #1948" begin
+    # views of different parents within one buffer are told apart by their memory ranges
+    buf = rand(9); A = rand(3, 3)
+    x0 = buf[1:3]
+    y = view(reshape(view(buf, 4:9), 3, 2), :, 1)
+    @test mul!(y, A, view(buf, 1:3)) ≈ A * x0
+    @test mul!(y, A, view(buf, 3:-1:1)) ≈ A * reverse(x0)
+    @test_throws ArgumentError mul!(y, A, view(buf, 2:4))
+    @test_throws ArgumentError mul!(y, A, view(buf, 6:-1:4))
+end
+
+@testset "lmul!/rmul! with factors that share memory" begin
+    @testset for T in (Float64, BigFloat, (@static COMPREHENSIVE ? (ComplexF64,) : ())...)
+        M = rand(T, 4, 4)
+        factors = (UpperTriangular(M), UnitLowerTriangular(M), UpperTriangular(M)',
+            Diagonal(view(M, :, 2)), Bidiagonal(view(M, 1:4, 2), view(M, 1:3, 3), :U))
+        for A in factors
+            M0 = copy(M)
+            @test_throws ArgumentError lmul!(A, M)
+            @test_throws ArgumentError rmul!(M, A)
+            @test_throws ArgumentError lmul!(A, view(M, :, 2))
+            @test_throws ArgumentError lmul!(A, M')
+            @test M == M0 # nothing is written before the check
+        end
+        # structured factors sharing memory with each other
+        d = rand(T, 4)
+        @test_throws ArgumentError lmul!(Diagonal(d), Tridiagonal(rand(T, 3), d, rand(T, 3)))
+        @test_throws ArgumentError rmul!(Tridiagonal(rand(T, 3), d, rand(T, 3)), Diagonal(d))
+        @test_throws ArgumentError lmul!(Diagonal(d), Bidiagonal(d, rand(T, 3), :U))
+        @test_throws ArgumentError rmul!(Bidiagonal(d, rand(T, 3), :U), Diagonal(d))
+        U = UpperTriangular(rand(T, 4, 4)); U0 = copy(parent(U))
+        @test_throws ArgumentError rmul!(U, U)
+        @test_throws ArgumentError rmul!(U, UnitUpperTriangular(parent(U)))
+        Dview = Diagonal(view(parent(U), diagind(parent(U))))
+        @test_throws ArgumentError lmul!(Dview, U)
+        @test_throws ArgumentError rmul!(U, Dview)
+        @test parent(U) == U0
+    end
+end
+
+@testset "ldiv!/rdiv! with operands that share memory" begin
+    @testset for T in (Float64, BigFloat, (@static COMPREHENSIVE ? (ComplexF64,) : ())...)
+        M = rand(T, 4, 4) + 4I
+        M[:, 2] .+= 10 # keep the banded matrices built from columns 1:3 well-conditioned
+        factors = (UpperTriangular(M), UnitLowerTriangular(M), UpperTriangular(M)',
+            Diagonal(view(M, :, 2)), Bidiagonal(view(M, 1:4, 2), view(M, 1:3, 3), :U),
+            Tridiagonal(view(M, 1:3, 1), view(M, 1:4, 2), view(M, 1:3, 3)), UpperHessenberg(M))
+        for A in factors
+            M0 = copy(M)
+            @test_throws ArgumentError ldiv!(A, M)
+            @test_throws ArgumentError ldiv!(A, view(M, :, 2))
+            @test_throws ArgumentError ldiv!(M, A, rand(T, 4, 4))
+            A isa Tridiagonal || @test_throws ArgumentError rdiv!(M, A) # no rdiv! for Tridiagonal
+            @test M == M0 # nothing is written before the check
+        end
+        # the right-hand side may be the output, as in the 2-arg methods
+        A = UpperTriangular(rand(T, 4, 4) + 4I); B = rand(T, 4, 2); B0 = copy(B)
+        @test ldiv!(B, A, B) ≈ Matrix(A) \ B0
+        D = Diagonal(rand(T, 4) .+ 1); B = rand(T, 4, 2); B0 = copy(B)
+        @test ldiv!(B, D, B) ≈ Matrix(D) \ B0
+        # but must not overlap it otherwise, except in the BLAS methods, which copy B into the
+        # output first
+        for A in (Diagonal(M[:, 2]), Bidiagonal(M[:, 2], M[1:3, 3], :U), Bidiagonal(M[:, 2], M[1:3, 3], :L),
+                (T === BigFloat ? (UpperTriangular(M), LowerTriangular(M)') : ())...)
+            V = rand(T, 4, 3)
+            @test_throws ArgumentError ldiv!(view(V, :, 2:3), A, view(V, :, 1:2))
+        end
+        # the SymTridiagonal solvers work on an LDLt copy, so sharing memory is fine there
+        S = SymTridiagonal(view(M, 1:4, 2), view(M, 1:3, 3)); S0 = Matrix(S); M0 = copy(M)
+        @test ldiv!(S, M) ≈ S0 \ M0
+    end
+end
+
+@testset "aliasing checks compare the views inside wrappers" begin
+    @testset for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (BigFloat,) : ())...)
+        function mkV()
+            V = rand(T, 4, 6)
+            V[:, 2] .+= 20 # keep the matrices built from columns 1:4 well-conditioned
+            for i in 1:4; V[i, i] += 10; end
+            return V
+        end
+        x = rand(T, 4)
+        # structured matrices built from views of the columns 1:4 of V
+        D(V) = Diagonal(view(V, :, 2))
+        Bi(V) = Bidiagonal(view(V, 1:4, 2), view(V, 1:3, 3), :U)
+        Tri(V) = Tridiagonal(view(V, 1:3, 1), view(V, 1:4, 2), view(V, 1:3, 3))
+        S(V) = Symmetric(view(V, :, 1:4))
+        U(V) = UpperTriangular(view(V, :, 1:4))
+        for mk in (D, Bi, V -> Bi(V)', Tri, S, U, V -> U(V)')
+            # columns 5 and 6 of V don't overlap with A (a new V each time, as ldiv! with a
+            # Tridiagonal overwrites it)
+            V = mkV(); A = mk(V); Am = Matrix(A)
+            @test mul!(view(V, :, 5), A, x) ≈ Am * x
+            if !(A isa Union{Tridiagonal,Symmetric}) # no in-place lmul! for these
+                y = V[:, 6]
+                @test lmul!(A, view(V, :, 6)) ≈ Am * y
+            end
+            if !(A isa Symmetric) # no in-place ldiv! for Symmetric
+                y = V[:, 6]
+                @test ldiv!(A, view(V, :, 6)) ≈ Am \ y
+            end
+        end
+        # overlapping views are still caught
+        V = mkV()
+        @test_throws ArgumentError mul!(view(V, :, 2), D(V), x)
+        @test_throws ArgumentError mul!(view(V, :, 4), S(V), x)
+        @test_throws ArgumentError lmul!(D(V), view(V, :, 2))
+        @test_throws ArgumentError lmul!(Bi(V)', view(V, :, 3))
+        @test_throws ArgumentError ldiv!(Tri(V), view(V, :, 1))
+        @test_throws ArgumentError ldiv!(U(V), view(V, :, 4))
+    end
+end
+
+@testset "empty views of different arrays do not alias" begin
+    # empty arrays of different shapes may share their memory
+    E = view(zeros(0, 0), 1:0, 1:0)
+    @test ldiv!(UpperTriangular(E), view(zeros(0), 1:0)) == zeros(0)
+    @test lmul!(UpperTriangular(E), view(zeros(0, 2), 1:0, :)) == zeros(0, 2)
+    @test mul!(E, view(zeros(0, 3), 1:0, :), view(zeros(3, 0), :, 1:0)) == zeros(0, 0)
+    # a nonempty banded matrix with an empty off-diagonal
+    B = Bidiagonal(view([2.0], 1:1), view(zeros(0), 1:0), :U)
+    X = view(zeros(1, 0), :, 1:0)
+    @test ldiv!(B, X) == zeros(1, 0)
+    @test lmul!(B, X) == zeros(1, 0)
+    @test mul!(X, B, zeros(1, 0)) == zeros(1, 0)
+end
+
 @testset "#35163" begin
     # typemax(Int32) * Int32(1) + Int32(1) * Int32(1) should wrap around
     # not promote to Int64, convert to Int32 and throw inexacterror
@@ -980,8 +1316,8 @@ end
         @test_throws DimensionMismatch mul!(full43, tri44, tri33)
         @test_throws DimensionMismatch mul!(full44, tri44, tri33)
         @test_throws DimensionMismatch mul!(full44, tri44, full43)
-        @test_throws DimensionMismatch mul!(full43, tri33, full43)
-        @test_throws DimensionMismatch mul!(full43, full43, tri44)
+        @test_throws DimensionMismatch mul!(copy(full43), tri33, full43)
+        @test_throws DimensionMismatch mul!(copy(full43), full43, tri44)
     end
 end
 

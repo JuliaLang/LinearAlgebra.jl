@@ -10,6 +10,11 @@ using LinearAlgebra: AbstractQ, AdjointQ
 import LinearAlgebra: lmul!, rmul!
 import Base: size, convert
 
+const TESTDIR = joinpath(dirname(pathof(LinearAlgebra)), "..", "test")
+const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
+isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
+
 n = 5
 
 @testset "custom AbstractQ type" begin
@@ -162,6 +167,77 @@ n = 5
     @test MyQ(q) / L ≈ collect(q) / L
 end
 
+@testset "arrays that are overwritten must not share memory with Q" begin
+    # each returns (Q, storage of Q)
+    factorizations = (
+        T -> (F = qr(rand(T, n, n)); (F.Q, F.factors)),              # QRCompactWYQ
+        T -> (F = qr(rand(T, n, n), ColumnNorm()); (F.Q, F.factors)), # QRPackedQ
+        T -> (F = hessenberg(rand(T, n, n)); (F.Q, F.factors)),
+        # only the uplo triangle of the factors of a Hermitian Hessenberg factorization is
+        # written; zero the other one, which Q doesn't read, so that the factors are defined
+        T -> (A = rand(T, n, n); F = hessenberg(Hermitian(A + A'));
+              F.uplo == 'U' ? triu!(F.factors) : tril!(F.factors); (F.Q, F.factors)),
+        T -> (F = lq(rand(T, n, n)); (F.Q, F.factors)),
+    )
+    overwriting = (
+        (Q, S) -> mul!(S, Q, rand(eltype(S), n, n)),
+        (Q, S) -> mul!(S, rand(eltype(S), n, n), Q),
+        (Q, S) -> mul!(view(S, :, 1), Q, rand(eltype(S), n)),
+        (Q, S) -> mul!(S, Q, Q),
+        (Q, S) -> copyto!(S, Q),
+        (Q, S) -> lmul!(Q, S),
+        (Q, S) -> rmul!(S, Q),
+        (Q, S) -> ldiv!(Q, S),
+        (Q, S) -> rdiv!(S, Q),
+        (Q, S) -> lmul!(Q, view(S, :, :)'),
+    )
+    @testset for T in (Float64, (@static COMPREHENSIVE ? (ComplexF64,) : ())...), mk in factorizations, adj in (false, true)
+        for op in overwriting
+            Q, S = mk(T); Q = adj ? Q' : Q
+            S0 = copy(S)
+            @test_throws ArgumentError op(Q, S)
+            @test S == S0 # the check comes before anything is written
+        end
+        # the output may be the other factor, as that is copied into the output first
+        Q, S = mk(T); Q = adj ? Q' : Q
+        Qm = Matrix(Q)
+        B = rand(T, n, n); B0 = copy(B)
+        @test mul!(B, Q, B) ≈ Qm * B0
+        B = rand(T, n, n); B0 = copy(B)
+        @test mul!(B, B, Q) ≈ B0 * Qm
+        V = rand(T, n, n+1); B0 = V[:, 1:n]
+        @test mul!(view(V, :, 2:n+1), Q, view(V, :, 1:n)) ≈ Qm * B0
+        @test mul!(similar(S), Q, S) ≈ Qm * S
+    end
+    # generic (non-BLAS) kernels
+    for Q in (qr(big.(rand(n, n))).Q, lq(big.(rand(n, n))).Q)
+        S = Q.factors
+        S0 = copy(S)
+        @test_throws ArgumentError lmul!(Q, S)
+        @test_throws ArgumentError rmul!(S, Q')
+        @test_throws ArgumentError mul!(S, Q, big.(rand(n, n)))
+        @test S == S0
+    end
+    # the LAPACK wrappers check this themselves
+    A = rand(n, n); τ = LAPACK.geqrf!(A)[2]
+    @test_throws ArgumentError LAPACK.ormqr!('L', 'N', A, τ, A)
+    @test_throws ArgumentError LAPACK.ormqr!('L', 'N', A, τ, view(A, :, 1:2))
+    # empty fields don't count as shared memory (all empty arrays may share an address)
+    Q1 = hessenberg(rand(1, 1)).Q # empty τ
+    @test isempty(Q1.τ) && !LinearAlgebra.deepmightalias(Bidiagonal([1.0], Float64[], :U), Q1)
+    # factorizations of views: only overlapping views of the same parent count as shared memory
+    for T in (Float64, BigFloat)
+        M = rand(T, 6, 5)
+        Q = (T === Float64 ? qr!(view(M, :, 1:3)) : qr!(view(M, :, 1:3), NoPivot())).Q
+        Qm = Q * I; M0 = copy(M) # the square Q
+        @test lmul!(Q, view(M, :, 4:5)) ≈ Qm * M0[:, 4:5]
+        B = rand(T, 6, 2)
+        @test mul!(view(M, :, 4:5), Q, B) ≈ Qm * B
+        @test_throws ArgumentError lmul!(Q, view(M, :, 3:4))
+        @test_throws ArgumentError mul!(view(M, :, 3:4), Q, B)
+    end
+end
+
 @testset "REPL display" begin
     # a Q is displayed like its matrix representation, with the entries computed columnwise
     body(str) = split(str, '\n')[2:end]
@@ -183,6 +259,20 @@ end
         show(IOContext(devnull, ctx...), "text/plain", C)
         @test 0 < length(C.columns) < 20
         @test all(j -> C.columns[j] == P[:, j], keys(C.columns))
+    end
+end
+
+@testset "multiplication with abstract element types" begin
+    # the result keeps the promoted abstract element type, as for the dense Q
+    U = [4.0 1 0; 1 3 1; 0 1 2]
+    Q = qr(U).Q
+    MQ = Matrix(Q)
+    bn = Number[1, 2.0, 3]
+    Br = Real[1 2; 3 4.0; 5 6]
+    for (A, B, MA, MB, T) in ((Q, bn, MQ, bn, Number), (Q, Br, MQ, Br, Real), (Br', Q, Br', MQ, Real),
+                              (Q', bn, MQ', bn, Number), (lq(U), bn, U, bn, Number))
+        @test eltype(A * B) === T
+        @test A * B ≈ MA * MB
     end
 end
 

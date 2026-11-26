@@ -20,6 +20,7 @@ import Base: AbstractArray, AbstractMatrix, Array, Matrix
 using Base: IndexLinear, promote_eltype, promote_op, print_matrix,
     @propagate_inbounds, reduce, typed_hvcat, typed_vcat, require_one_based_indexing,
     splat, BitInteger
+using Base.Checked: checked_mul
 using Base.Broadcast: Broadcasted, broadcasted
 using Base.PermutedDimsArrays: CommutativeOps
 using OpenBLAS_jll
@@ -172,7 +173,13 @@ export
 # not exported, but public names
 public AbstractTriangular,
         Givens,
+        aliasparts,
+        checkaliasing,
+        checkoverlap,
         checksquare,
+        deepmightalias,
+        lmulinplace,
+        rmulinplace,
         haszero,
         hermitian,
         hermitian_type,
@@ -547,6 +554,20 @@ See also: `copymutable_oftype`.
 copy_similar(A::AbstractArray, ::Type{T}) where {T} = copyto!(similar(A, T, size(A)), A)
 
 """
+    _rhs_eltype(B)
+
+The element type of the right-hand side `B` of a solve that needs to promote the matrix (or
+factorization) to the type of the solution, which requires `one`/`oneunit` of the element
+type of `B` and hence a concrete element type. Throws an `ArgumentError` for an abstract
+element type, instead of failing with a `MethodError` for `one(Any)` in the solver.
+"""
+function _rhs_eltype(B::AbstractArray)
+    T = eltype(B)
+    isconcretetype(T) && return T
+    throw(ArgumentError(lazy"the right-hand side has the abstract element type $T. Convert it to a concrete element type first, e.g. with `convert(AbstractArray{S}, B)` for a suitable `S`, such as `S = mapreduce(typeof, promote_type, B)`"))
+end
+
+"""
     _valeltype(A)
 
 Return `eltype(A)` if it is concrete (or `A` is empty). Otherwise, return the type obtained
@@ -784,7 +805,7 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
     end
 
     # scalar type of the solution (the elements of `B` may themselves be vectors)
-    TFB = typeof(zero(_scalartype(eltype(B))) / oneunit(eltype(F)))
+    TFB = typeof(zero(_scalartype(_rhs_eltype(B))) / oneunit(eltype(F)))
     # promote the numeric type of the factorization to that of the solution (e.g. `Float32` ->
     # `Float64`), but keep its units: `TFB` itself may carry different units than the factors
     TF = typeof(oneunit(eltype(F)) * one(TFB))

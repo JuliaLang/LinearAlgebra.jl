@@ -762,4 +762,43 @@ end
     @test_throws PosDefException cholesky(A)
 end
 
+@testset "CholeskyPivoted of empty matrix" begin
+    for T in (Float64, ComplexF64, BigFloat), uplo in (:U, :L), pivot in (NoPivot(), RowMaximum())
+        A = Hermitian(zeros(T, 0, 0), uplo)
+        F = cholesky(A, pivot)
+        @test issuccess(F)
+        pivot == RowMaximum() && @test rank(F) == 0
+        @test F \ T[] == T[]
+        @test_throws DimensionMismatch F \ ones(T, 1, 0)
+        @test T[;;] / F == T[;;]
+        @test_throws DimensionMismatch ones(T, 0, 1) / F
+        uplo == :U ? (@test F.U'F.U == A) : (@test F.L*F.L' == A)
+    end
+end
+
+@testset "pivoted cholesky of generic matrices with NaN pivots" begin
+    for uplo in (:U, :L)
+        # a NaN on the diagonal, and one off the diagonal only, which gives a NaN pivot later
+        for M in (BigFloat[4 1 0; 1 NaN 2; 0 2 9], BigFloat[4 1 0; 1 5 NaN; 0 NaN 9])
+            A = Hermitian(M, uplo)
+            F = cholesky(A, RowMaximum(); check=false)
+            @test !isposdef(F) && F.rank < 3
+            @test_throws RankDeficientException cholesky(A, RowMaximum())
+        end
+    end
+end
+
+@testset "issue #1922: NaN pivots" begin
+    for T in (Float64, ComplexF64), uplo in (:U, :L)
+        # a NaN on the diagonal, and one off the diagonal only, with the first NaN pivot
+        for (M, k) in ((T[4 1 0; 1 NaN 2; 0 2 9], 2), (T[4 1 0; 1 5 NaN; 0 NaN 9], 3))
+            A = Hermitian(M, uplo)
+            Ab = big.(A)
+            @test !isposdef(A) && !isposdef(Ab)
+            @test cholesky(A; check=false).info == cholesky(Ab; check=false).info == k
+            @test_throws PosDefException cholesky(A)
+        end
+    end
+end
+
 end # module TestCholesky

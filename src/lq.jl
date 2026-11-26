@@ -189,8 +189,8 @@ function lmul!(A::LQ, B::AbstractVecOrMat)
     return B
 end
 function *(A::LQ{TA}, B::AbstractVecOrMat{TB}) where {TA,TB}
-    TAB = promote_type(TA, TB)
-    _cut_B(lmul!(convert(Factorization{TAB}, A), copy_similar(B, TAB)), 1:size(A,1))
+    S, TAB = _qmul_eltypes(TA, TB)
+    _cut_B(lmul!(convert(Factorization{S}, A), copy_similar(B, TAB)), 1:size(A,1))
 end
 
 # With a real lhs and complex rhs with the same precision, we can reinterpret
@@ -207,6 +207,7 @@ end
 
 
 function ldiv!(A::LQ, B::AbstractVecOrMat)
+    checkaliasing(B, A)
     require_one_based_indexing(B)
     m, n = size(A)
     m ≤ n || throw(DimensionMismatch("LQ solver does not support overdetermined systems (more rows than columns)"))
@@ -225,3 +226,6 @@ function ldiv!(Fadj::AdjointFactorization{<:Any,<:LQ}, B::AbstractVecOrMat)
     ldiv!(UpperTriangular(adjoint(F.L)), view(B, 1:size(F,1), axes(B,2)))
     return B
 end
+
+# the arrays the factorization is stored in, for the aliasing checks (see `deepmightalias`)
+aliasparts(F::LQ) = (aliasparts(getfield(F, :factors))..., aliasparts(getfield(F, :τ))...)
