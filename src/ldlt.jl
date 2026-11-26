@@ -607,4 +607,4 @@ Array(F::LDLtPivoted) = Matrix(F)
 
 # the arrays the factorization is stored in, for the aliasing checks (see `deepmightalias`)
 aliasparts(F::LDLt) = aliasparts(getfield(F, :data))
-aliasparts(F::LDLt) = (aliasparts(getfield(F, :data))..., aliasparts(getfield(F, :blocks))...)
+aliasparts(F::LDLtPivoted) = (aliasparts(getfield(F, :data))..., aliasparts(getfield(F, :blocks))...)
