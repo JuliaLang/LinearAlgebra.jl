@@ -281,11 +281,13 @@ function dot(x::AbstractVector, S::SymTridiagonal, y::AbstractVector)
     return r
 end
 
-(\)(T::SymTridiagonal, B::AbstractVecOrMat) = ldlt(T)\B
+(\)(T::SymTridiagonal, B::AbstractVecOrMat) = ldlt(T, BunchPivot())\B
 
 # division with optional shift for use in shifted-Hessenberg solvers (hessenberg.jl):
-ldiv!(A::SymTridiagonal, B::AbstractVecOrMat; shift::Number=false) = ldiv!(ldlt(A, shift=shift), B)
-rdiv!(B::AbstractVecOrMat, A::SymTridiagonal; shift::Number=false) = rdiv!(B, ldlt(A, shift=shift))
+ldiv!(A::SymTridiagonal, B::AbstractVecOrMat; shift::Number=false) =
+    ldiv!(ldlt(A, BunchPivot(); shift=shift), B)
+rdiv!(B::AbstractVecOrMat, A::SymTridiagonal; shift::Number=false) =
+    rdiv!(B, ldlt(A, BunchPivot(); shift=shift))
 
 # tridiagonal eigensolver meta-algorithm from LAPACK.syevr! for alg==RobustRepresentations()
 #   - if all eigenvalues are desired, call stev == sterf (eigvals) or stegr == stemr (eigen)
@@ -526,7 +528,8 @@ function det(A::SymTridiagonal; shift::Number=false)
     dv2 = convert(AbstractVector{Tout}, A.dv)
     return det_usmani(ev2, dv2, ev2; shift)
 end
-logabsdet(A::SymTridiagonal; shift::Number=false) = logabsdet(ldlt(A; shift=shift))
+logabsdet(A::SymTridiagonal; shift::Number=false) =
+    logabsdet(_ldlt_bunch!(_ldlt_shiftedcopy(A, shift), false))
 
 @inline function Base.isassigned(A::SymTridiagonal, i::Signed, j::Signed)
     @boundscheck checkbounds(Bool, A, i, j) || return false
