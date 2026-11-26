@@ -577,21 +577,24 @@ function SymTridiagonal(F::LDLtPivoted{<:Any,<:SymTridiagonal})
     Fdata = getfield(F, :data)
     d, e, blocks = Fdata.dv, Fdata.ev, getfield(F, :blocks)
     n = length(d)
-    dA = copy(d)
-    eA = copy(e)
+    dA = similar(d)
+    eA = similar(e)
+    n > 0 && (dA[1] = d[1])
     k, j = 1, 1
     @inbounds while k < n
         if j <= length(blocks) && blocks[j] == k
+            eA[k] = e[k]
+            dA[k+1] = d[k+1]
             if k + 1 < n
                 Δ = d[k]*d[k+1] - e[k]*e[k]
-                eA[k+1] = e[k+1]*Δ
-                dA[k+2] += d[k]*eA[k+1]*e[k+1]
+                eA[k+1] = ekp1 = e[k+1]*Δ
+                dA[k+2] = d[k+2] + d[k]*ekp1*e[k+1]
             end
             k += 2
             j += 1
         else
-            eA[k] = e[k]*d[k]
-            dA[k+1] += e[k]*eA[k]
+            eA[k] = ek = e[k]*d[k]
+            dA[k+1] = d[k+1] + e[k]*ek
             k += 1
         end
     end
