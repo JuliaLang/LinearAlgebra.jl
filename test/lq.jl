@@ -503,4 +503,12 @@ end
     end
 end
 
+@testset "generic lq of rows that are zero right of the diagonal" begin
+    # no reflection there, as in LAPACK
+    for (T, S) in ((BigFloat, Float64), (Complex{BigFloat}, ComplexF64))
+        A = [2 0; 1 3]
+        @test lq(T.(A)).L == lq(S.(A)).L
+    end
+end
+
 end # module TestLQ
