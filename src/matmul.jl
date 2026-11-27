@@ -927,7 +927,7 @@ Base.@constprop :aggressive generic_matmatmul!(C::StridedVecOrMat{Complex{T}}, t
             A[j,i] = conjugate ? adjoint(A[i,j]) : transpose(A[i,j])
         end
     elseif uplo == 'L'
-        for i = 1:n, j = (i+off):n
+        for j = 1:n, i = 1:(j-off)
             A[i,j] = conjugate ? adjoint(A[j,i]) : transpose(A[j,i])
         end
     else
