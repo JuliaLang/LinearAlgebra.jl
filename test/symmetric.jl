@@ -11,6 +11,7 @@ const TESTHELPERS = joinpath(TESTDIR, "testhelpers", "testhelpers.jl")
 isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.Quaternions
+using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
 using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
@@ -1480,6 +1481,48 @@ end
     @test isa(S \ b, Vector{Float64})
     @test isa(det(S), Float64)
     @test isa(logabsdet(S), Tuple{Float64,Float64})
+end
+
+@testset "factorize for generic element types, uplo = $uplo" for uplo in (:U, :L)
+    # The parents are not symmetric or Hermitian: the triangle that `uplo` does not refer to
+    # holds unrelated values, and the Hermitian ones have non-real diagonals. So the tests check
+    # that only the referenced triangle is used, and for Hermitian matrices only the real part
+    # of the diagonal.
+    withjunk(M, G) = uplo == :U ? triu(M) + tril(G, -1) : tril(M) + triu(G, 1)
+    G = [10 11 12; 13 14 15; 16 17 18]
+    # rational matrices are factorized exactly with Bunch-Kaufman, here with 2-by-2 pivots
+    S = Symmetric(Rational{BigInt}.(withjunk([0 1 2; 1 0 3; 2 3 0], G)), uplo)
+    b = Rational{BigInt}[1, 2, 3]
+    F = factorize(S)
+    @test F isa LinearAlgebra.BunchKaufman{Rational{BigInt}}
+    @test any(<(0), F.ipiv)
+    @test S \ b isa Vector{Rational{BigInt}}
+    @test S \ b == Matrix(S) \ b
+    @test S \ [b b] isa Matrix{Rational{BigInt}}
+    @test S \ [b b] == Matrix(S) \ [b b]
+    @test det(S) isa Rational{BigInt}
+    @test det(S) == 12
+    H = Hermitian(Complex{Rational{Int}}.(withjunk([2+7im im; -im 3-im], G[1:2, 1:2])), uplo)
+    bc = Complex{Rational{Int}}[1, 1]
+    @test H \ bc isa Vector{Complex{Rational{Int}}}
+    @test H \ bc == Matrix(H) \ bc
+    @test det(H) isa Rational{Int}
+    @test det(H) == 5
+    # non-BLAS floating-point types also use Bunch-Kaufman, and the determinant is the product
+    # of the pivots, which is exact here, unlike `exp(logabsdet(A))`
+    M = withjunk([4 1 2; 1 -3 0; 2 0 5], G)
+    A = Symmetric(big.(M), uplo)
+    @test factorize(A) isa LinearAlgebra.BunchKaufman{BigFloat}
+    @test det(A) == -53
+    # Hermitian quaternion matrices also use Bunch-Kaufman
+    Q = Hermitian(randn(Quaternion{Float64}, 3, 3), uplo)
+    FQ = factorize(Q)
+    @test FQ isa LinearAlgebra.BunchKaufman{Quaternion{Float64}}
+    @test Matrix(FQ) ≈ Q
+    # types that the generic Bunch-Kaufman factorization does not support fall back to LU
+    D = Symmetric(Dual.(float.(M), float.(M)), uplo)
+    @test factorize(D) isa LU
+    @test det(D) == Dual(-53.0, -159.0)
 end
 
 end # module TestSymmetric

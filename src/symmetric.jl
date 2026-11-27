@@ -768,15 +768,22 @@ end
 /(A::Symmetric, x::Number) = Symmetric(parentof_applytri(y -> y/x, A), _sym_uplo(A.uplo))
 /(A::Hermitian, x::Real) = Hermitian(parentof_applytri(y -> y/x, A), _sym_uplo(A.uplo))
 
+# Whether the Bunch-Kaufman factorization supports a symmetric or Hermitian matrix with element
+# type `T`. Besides LAPACK's types, the generic implementation supports number types with a
+# floating-point or rational real type, but for symmetric, non-Hermitian matrices only real and
+# complex numbers, since the multiplication must commute.
+_bk_supported(::Type{<:Hermitian}, ::Type{T}) where {T} = T <: Number && real(T) <: ClosedReal
+_bk_supported(::Type{<:Symmetric}, ::Type{T}) where {T} =
+    T <: Union{Real,Complex} && real(T) <: ClosedReal
+
 factorize(A::HermOrSym) = _factorize(A)
 function _factorize(A::HermOrSym{T}; check::Bool=true) where T
-    A2 = convert(AbstractMatrix{float(T)}, A)
-    TT = typeof(sqrt(oneunit(T)))
+    A2 = convert(AbstractMatrix{_factorize_eltype(T)}, A)
     if isdiag(A2)
         return Diagonal(A2)
-    elseif TT <: BlasFloat
+    elseif _bk_supported(typeof(A2), eltype(A2))
         return bunchkaufman(A2; check=check)
-    else # fallback
+    else # e.g. dual or unitful numbers, or symmetric quaternion matrices
         return lu(A2; check=check)
     end
 end
@@ -792,9 +799,16 @@ det(A::Symmetric{<:Real}) = det(_factorize(A; check=false))
 det(A::Symmetric) = det(_factorize(A; check=false))
 
 \(A::HermOrSym, B::AbstractVector) = \(factorize(A), B)
-# Bunch-Kaufman solves can not utilize BLAS-3 for multiple right hand sides
-# so using LU is faster for AbstractMatrix right hand side
-\(A::HermOrSym, B::AbstractMatrix) = \(isdiag(A) ? Diagonal(A) : lu(A), B)
+# LAPACK's Bunch-Kaufman solves can not utilize BLAS-3 for multiple right hand sides
+# so using LU is faster for AbstractMatrix right hand side. This does not apply to the
+# generic implementation, which needs about half the operations of LU.
+function \(A::HermOrSym, B::AbstractMatrix)
+    T = eltype(A)
+    if T <: Number && !(_factorize_eltype(T) <: BlasFloat)
+        return \(factorize(A), B)
+    end
+    return \(isdiag(A) ? Diagonal(A) : lu(A), B)
+end
 
 function _inv(A::HermOrSym)
     n = checksquare(A)

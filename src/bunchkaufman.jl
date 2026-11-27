@@ -233,6 +233,12 @@ _bktype(::Type{<:Integer}) = Rational{BigInt}
 _bktype(::Type{<:Complex{<:Integer}}) = Complex{Rational{BigInt}}
 _bktype(::Type{T}) where {T} = typeof(oneunit(T) / oneunit(T))
 
+# The element type in which `factorize` factorizes a symmetric or Hermitian matrix. Unlike in
+# `bunchkaufman`, integers are converted to floating point, as for dense matrices, while
+# floating-point and rational numbers are kept, as the factorization is exact for the latter.
+_factorize_eltype(::Type{T}) where {T<:ClosedScalar} = T
+_factorize_eltype(::Type{T}) where {T} = float(T)
+
 BunchKaufman{T}(B::BunchKaufman) where {T} =
     BunchKaufman(convert(Matrix{T}, B.LD), B.ipiv, B.uplo, B.symmetric, B.rook, B.info)
 Factorization{T}(B::BunchKaufman) where {T} = BunchKaufman{T}(B)
@@ -454,6 +460,20 @@ end
 _bk_sgn(x::Union{Real,Complex}, herm::Bool) = herm ? sign(real(x)) : sign(x)
 _bk_sgn(x::Number, herm::Bool) = sign(real(x))
 
+# The determinant of the 2x2 block of D starting at index i. Make sure not to square before the
+# subtraction by scaling with the off-diagonal element. This is safe because the off diagonal is
+# always large for 2x2 pivots.
+function _bk_det2x2(F::BunchKaufman, i::Integer, herm::Bool)
+    M = F.LD
+    if F.uplo == 'U'
+        return M[i, i + 1]*(M[i,i]/M[i, i + 1]*M[i + 1, i + 1] -
+            (herm ? conj(M[i, i + 1]) : M[i, i + 1]))
+    else
+        return M[i + 1,i]*(M[i, i]/M[i + 1, i]*M[i + 1, i + 1] -
+            (herm ? conj(M[i + 1, i]) : M[i + 1, i]))
+    end
+end
+
 function logabsdet(F::BunchKaufman{T}) where {T}
     M = F.LD
     p = F.ipiv
@@ -468,26 +488,38 @@ function logabsdet(F::BunchKaufman{T}) where {T}
     while i <= n
         if p[i] > 0
             elm = M[i,i]
-            s *= _bk_sgn(elm, herm)
-            abs_det += log(abs(elm))
             i += 1
         else
-            # 2x2 pivot case. Make sure not to square before the subtraction by scaling
-            # with the off-diagonal element. This is safe because the off diagonal is
-            # always large for 2x2 pivots.
-            if F.uplo == 'U'
-                elm = M[i, i + 1]*(M[i,i]/M[i, i + 1]*M[i + 1, i + 1] -
-                    (herm ? conj(M[i, i + 1]) : M[i, i + 1]))
-            else
-                elm = M[i + 1,i]*(M[i, i]/M[i + 1, i]*M[i + 1, i + 1] -
-                    (herm ? conj(M[i + 1, i]) : M[i + 1, i]))
-            end
-            s *= _bk_sgn(elm, herm)
-            abs_det += log(abs(elm))
+            elm = _bk_det2x2(F, i, herm)
             i += 2
         end
+        s *= _bk_sgn(elm, herm)
+        abs_det += log(abs(elm))
     end
     return abs_det, s
+end
+
+# The product of the determinants of the blocks of D, rather than `exp(logabsdet(F))`, which is
+# more accurate and exact for rational matrices. As in `logabsdet`, the determinant of a
+# Hermitian matrix is real, so only the real part of each block's determinant is used.
+function det(F::BunchKaufman{T}) where {T}
+    M = F.LD
+    p = F.ipiv
+    n = size(M, 1)
+    herm = ishermitian(F)
+    d = one(T)
+    i = 1
+    while i <= n
+        if p[i] > 0
+            elm = M[i,i]
+            i += 1
+        else
+            elm = _bk_det2x2(F, i, herm)
+            i += 2
+        end
+        d *= herm ? real(elm) : elm
+    end
+    return d
 end
 
 ## reconstruct the original matrix
