@@ -578,6 +578,76 @@ end
     @test lam == [1, 2, 3]
 end
 
+@testset "element types of svd and eigen (#1875)" begin
+    # singular values of signed integers don't wrap around at typemin
+    for T in (Int8, Int16, Int64)
+        D = Diagonal(T[typemin(T), 0, 3])
+        @test svdvals(D) == [-float(typemin(T)), 3, 0]
+        F = svd(D)
+        @test F.S == svdvals(D)
+        @test F.U * Diagonal(F.S) * F.Vt ≈ D
+        @test rank(D) == rank(Matrix(D))
+        @test rank(Diagonal(T[typemin(T)])) == 1
+    end
+    # the element types match those of the dense methods; in particular, half precision is kept
+    # T => (eltype of singular values, eltype of eigenvalues, eltype of singular/eigenvectors)
+    for (T, (TS, Tλ, TV)) in (Int8 => (Float64, Float64, Float64), Int => (Float64, Float64, Float64),
+                             Float16 => (Float16, Float16, Float16), ComplexF16 => (Float16, ComplexF16, ComplexF16),
+                             Float32 => (Float32, Float32, Float32), ComplexF64 => (Float64, ComplexF64, ComplexF64),
+                             Rational{Int} => (Float64, Float64, Float64),
+                             Complex{Rational{Int}} => (Float64, ComplexF64, ComplexF64),
+                             BigFloat => (BigFloat, BigFloat, BigFloat))
+        D = Diagonal(T <: Complex ? T[1+im, -2, 3im] : T[1, -2, 3])
+        MD = Matrix(D)
+        @test svdvals(D) isa Vector{TS}
+        F = svd(D)
+        @test F.S isa Vector{TS}
+        @test F.U isa Matrix{TV}
+        @test F.Vt isa Matrix{TV}
+        @test F.U * Diagonal(F.S) * F.Vt ≈ MD
+        @test eigvals(D) isa Vector{Tλ}
+        E = eigen(D)
+        @test E.values isa Vector{Tλ}
+        @test E.vectors isa Matrix{TV}
+        @test MD * E.vectors ≈ E.vectors * Diagonal(E.values)
+        E = eigen(D; sortby=nothing)
+        @test E.values isa Vector{Tλ}
+        @test E.vectors isa Diagonal{TV}
+        if T !== BigFloat # no dense methods
+            @test svdvals(D) ≈ svdvals(MD)
+            @test eltype(svdvals(MD)) == TS
+            @test sort(eigvals(D), by=LinearAlgebra.eigsortby) ≈ sort(eigvals(MD), by=LinearAlgebra.eigsortby)
+            @test eltype(eigvals(MD)) == Tλ
+        end
+    end
+    # singular and nonsingular rational diagonals give the same type of condition number
+    @test (@inferred cond(Diagonal([0//1, 0//1]))) === Inf
+    # immutable diagonals, also ones that change under sorting
+    for d in (1:4, 4:-1:1, -3:2, 3.5:-1.0:0.5, Int8(-128):Int8(-125), Float16(1):Float16(4), FillArrays.Fill(-2.0, 3))
+        D = Diagonal(d)
+        MD = Matrix(D)
+        λ = eigvals(MD)
+        @test eigvals(D) isa Vector{eltype(λ)}
+        @test eigvals(D) ≈ λ
+        E = eigen(D)
+        @test E.values isa Vector{eltype(λ)}
+        @test MD * E.vectors ≈ E.vectors * Diagonal(E.values)
+        @test eigen(D; sortby=nothing).values isa Vector{eltype(λ)}
+        s = svdvals(MD)
+        @test svdvals(D) isa Vector{eltype(s)}
+        @test svdvals(D) ≈ s
+        F = svd(D)
+        @test F.S ≈ s
+        @test F.U * Diagonal(F.S) * F.Vt ≈ MD
+        @test rank(D) == rank(MD)
+    end
+    # block diagonal matrices of half precision blocks
+    D = Diagonal([Float16[1 2; 2 1], Float16[3;;]])
+    E = eigen(D)
+    @test E.values isa Vector{Float16}
+    @test E.vectors isa Matrix{Vector{Float16}}
+end
+
 @testset "issue #1875" begin
     D = Diagonal(Int8[-128, 3, 0])
     @test svdvals(D) == [128, 3, 0]

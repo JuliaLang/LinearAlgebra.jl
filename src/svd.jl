@@ -81,6 +81,8 @@ SVD{T}(F::SVD) where {T} = SVD(
     convert(AbstractMatrix{T}, F.Vt))
 Factorization{T}(F::SVD) where {T} = SVD{T}(F)
 
+_tohalf(T::Type{<:Union{Float16,Complex{Float16}}}, F::SVD) = SVD{T}(F)
+
 # iteration for destructuring into components
 Base.iterate(S::SVD) = (S.U, Val(:S))
 Base.iterate(S::SVD, ::Val{:S}) = (S.S, Val(:V))
@@ -208,11 +210,7 @@ true
 ```
 """
 function svd(A::AbstractVecOrMat; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(real(eigtype(A))), rtol::Real=0)
-    svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
-end
-function svd(A::AbstractVecOrMat{T}; full::Bool = false, alg::Algorithm = default_svd_alg(A), atol::Number=zero(Float16), rtol::Real=0) where {T <: Union{Float16,Complex{Float16}}}
-    A = svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol)
-    return SVD{T}(A)
+    _tohalf(eltype(A), svd!(eigencopy_oftype(A, eigtype(A)); full, alg, atol, rtol))
 end
 function svd(x::Number; full::Bool = false, alg::Algorithm = default_svd_alg(x), atol::Number=zero(real(x)), rtol::Real=0)
     # the dimensionless "sign" of `x`, of the type of `x/abs(x)` also when `x` is deemed zero
@@ -272,7 +270,7 @@ julia> svdvals(A)
 ```
 """
 svdvals(A::AbstractMatrix{T}) where {T} = _tohalf(T, svdvals!(eigencopy_oftype(A, eigtype(A))))
-svdvals(A::AbstractVector{T}) where {T} = _tohalf(T, [convert(eigtype(T), norm(A))])
+svdvals(A::AbstractVector{T}) where {T} = _tohalf(T, [convert(real(eigtype(A)), norm(A))])
 svdvals(x::Number) = abs(x)
 svdvals(S::SVD{<:Any,T}) where {T} = (S.S)::Vector{T}
 

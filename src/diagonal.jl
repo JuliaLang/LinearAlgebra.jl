@@ -1076,17 +1076,18 @@ _ortho_eltype(T) = Base.promote_op(/, T, T)
 _ortho_eltype(T::Type{<:Number}) = typeof(one(T)/one(T))
 
 #Eigensystem
-eigvals(D::Diagonal{<:Number}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) = sorteig!(copy(D.diag), sortby)
+eigvals(D::Diagonal{T}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) where {T<:Number} =
+    _tohalf(T, sorteig!(eigtype(D).(D.diag), sortby))
 eigvals(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby) =
     sorteig!(reduce(vcat, eigvals(x; sortby=nothing) for x in D.diag), sortby) #For block matrices, etc.
 function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
     facts = [eigen(x; sortby=nothing) for x in D.diag]
     λ = reduce(vcat, f.values for f in facts)
     diag_vecs = [f.vectors for f in facts]
-    matT = promote_type(map(typeof, diag_vecs)...)
+    Tv = promote_type(map(eltype, diag_vecs)...)
     ncols_diag = [size(x, 2) for x in D.diag]
     nrows = size(D, 1)
-    vecs = Matrix{Vector{eltype(matT)}}(undef, nrows, sum(ncols_diag))
+    vecs = Matrix{Vector{Tv}}(undef, nrows, sum(ncols_diag))
     for j in axes(D, 2), i in axes(D, 1)
         jj = sum(view(ncols_diag,1:j-1))
         if i == j
@@ -1095,7 +1096,7 @@ function _eigen(D::Diagonal{T}) where {T<:AbstractMatrix}
             end
         else
             for k in 1:ncols_diag[j]
-                vecs[i,jj+k] = zeros(eltype(T), ncols_diag[i])
+                vecs[i,jj+k] = zeros(Tv, ncols_diag[i])
             end
         end
     end
@@ -1105,7 +1106,7 @@ function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{
     if any(!isfinite, D.diag)
         throw(ArgumentError("matrix contains Infs or NaNs"))
     end
-    Td = _ortho_eltype(eltype(D))
+    Td = _ortho_eltype(eigtype(D))
     λ = eigvals(D; sortby=nothing)
     if !isnothing(sortby)
         p = sortperm(λ; alg=QuickSort, by=sortby)
@@ -1117,7 +1118,7 @@ function eigen(D::Diagonal; permute::Bool=true, scale::Bool=true, sortby::Union{
     else
         evecs = Diagonal(ones(Td, length(λ)))
     end
-    Eigen(λ, evecs)
+    _tohalf(eltype(D), Eigen(λ, evecs))
 end
 function eigen(D::Diagonal{<:AbstractMatrix}; permute::Bool=true, scale::Bool=true, sortby::Union{Function,Nothing}=eigsortby)
     if any(any(!isfinite, x) for x in D.diag)
@@ -1157,16 +1158,15 @@ function eigen(A::AbstractMatrix, D::Diagonal; sortby::Union{Function,Nothing}=e
 end
 
 #Singular system
-_svdabs(x) = abs(x)
-_svdabs(x::Base.BitSigned) = abs(float(x))
-svdvals(D::Diagonal{<:Number}) = sort!(_svdabs.(D.diag), rev = true)
+svdvals(D::Diagonal{T}) where {T<:Number} =
+    _tohalf(T, sort!(abs.(eigtype(D).(D.diag)), rev = true))
 svdvals(D::Diagonal) = [svdvals(v) for v in D.diag]
 function svd(D::Diagonal{T}) where {T<:Number}
     d = D.diag
-    s = _svdabs.(d)
+    s = abs.(eigtype(D).(d))
     piv = sortperm(s, rev = true)
     S = s[piv]
-    Td  = _ortho_eltype(T)
+    Td  = _ortho_eltype(eigtype(D))
     U = zeros(Td, size(D))
     Vt = copy(U)
     for i in 1:length(d)
@@ -1174,7 +1174,7 @@ function svd(D::Diagonal{T}) where {T<:Number}
         U[j,i] = iszero(d[j]) ? one(Td) : d[j] / S[i]
         Vt[i,j] = one(Td)
     end
-    return SVD(U, S, Vt)
+    return _tohalf(T, SVD(U, S, Vt))
 end
 
 function nullspace(D::Diagonal{T}; atol::Number=zero(real(T)), rtol::Real = (size(D, 1)*eps(real(float(one(T)))))*iszero(atol)) where {T<:Number}
