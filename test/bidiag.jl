@@ -1424,4 +1424,19 @@ end
     @test issuccess(cholesky(SymTridiagonal([2.0, 2.0], [1.0]); check=false))
 end
 
+@testset "issue #1927: svd with entries near overflow" begin
+    B = Bidiagonal([-1e305, 3e300, 1e307, 1e307, 1e250, 1e305], [3e300, 1e307, -1e305, 1e305, 1.0], :U)
+    MB = Matrix(B)
+    # the largest singular value overflows
+    L = Bidiagonal([1.0, floatmax(), 3.0], [2.0, floatmax()], :L)
+    for alg in (LinearAlgebra.DivideAndConquer(), LinearAlgebra.QRIteration())
+        F = svd(B; alg)
+        @test F.S ≈ svdvals(MB)
+        @test F.U * Diagonal(F.S) * F.Vt ≈ MB
+        F = svd(L; alg)
+        @test F.U'F.U ≈ I
+        @test F.Vt * F.Vt' ≈ I
+    end
+end
+
 end # module TestBidiagonal
