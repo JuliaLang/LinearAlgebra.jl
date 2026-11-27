@@ -1128,9 +1128,7 @@ julia> rank(diagm(0 => [1, 0.001, 2]), atol=1.5)
 """
 function rank(A::AbstractMatrix; atol::Number = zero(real(eltype(A))), rtol::Real = (min(size(A)...)*eps(real(float(one(eltype(A))))))*iszero(atol))
     isempty(A) && return 0 # 0-dimensional case
-    s = svdvals(A)
-    tol = max(atol, rtol*s[1])
-    count(>(tol), s)
+    return _rank_svdvals(svdvals(A), atol, rtol)
 end
 rank(x::Union{Number,AbstractVector}) = iszero(x) ? 0 : 1
 

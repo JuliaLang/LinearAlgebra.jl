@@ -1729,6 +1729,21 @@ end
     @test (@allocated nullspace(D)) < 2 * sizeof(Float64) * 200 * 100
 end
 
+@testset "rank and nullspace with Inf or NaN" begin
+    for T in (Float64, ComplexF64)
+        D = Diagonal(T[NaN, 1, 0])
+        @test_throws ArgumentError rank(D)
+        @test_throws ArgumentError nullspace(D)
+        # an infinite singular value is nonzero, and every finite one is negligible next to it
+        D = Diagonal(T[Inf, 1, 0])
+        @test rank(D) == rank(svd(D)) == 1
+        @test nullspace(D) == nullspace(svd(D)) == [0 0; 1 0; 0 1]
+        # only the absolute tolerance applies
+        @test rank(D; atol = 0.5) == 2
+        @test nullspace(D; atol = 0.5) == [0; 0; 1;;]
+    end
+end
+
 @testset "Diagonal eigen and cholesky errors" begin
     @test_throws ArgumentError eigen(Diagonal([[1.0 NaN; 0 1], [1.0 0; 0 1]]))
     @test_throws ArgumentError eigen(Diagonal([1.0, Inf]), Diagonal([1.0, 2]))

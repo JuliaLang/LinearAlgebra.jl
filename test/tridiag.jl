@@ -640,6 +640,13 @@ end
     @test cond(SymTridiagonal([1,2,3], [0,0])) ≈ 3
 end
 
+@testset "rank and nullspace of SymTridiag with Inf" begin
+    # the eigenvalues, and with them the singular values, are NaN
+    S = SymTridiagonal([Inf, 1.0, 0.0], [0.0, 0.0])
+    @test_throws ArgumentError rank(S)
+    @test_throws ArgumentError nullspace(S)
+end
+
 @testset "sum, mapreduce" begin
     T = Tridiagonal([1,2], [1,2,3], [7,8])
     Tdense = Matrix(T)
