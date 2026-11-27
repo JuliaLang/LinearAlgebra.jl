@@ -122,10 +122,10 @@ end
                 @test isa(similar(Hermitian(a)), Hermitian{eltya})
                 @test isa(similar(Symmetric(a), Int), Symmetric{Int})
                 @test isa(similar(Hermitian(a), Int), Hermitian{Int})
-                @test isa(similar(Symmetric(a), (3,2)), Matrix{eltya})
-                @test isa(similar(Hermitian(a), (3,2)), Matrix{eltya})
-                @test isa(similar(Symmetric(a), Int, (3,2)), Matrix{Int})
-                @test isa(similar(Hermitian(a), Int, (3,2)), Matrix{Int})
+                @test isa(similar(Symmetric(a), (3, 2)), Matrix{eltya})
+                @test isa(similar(Hermitian(a), (3, 2)), Matrix{eltya})
+                @test isa(similar(Symmetric(a), Int, (3, 2)), Matrix{Int})
+                @test isa(similar(Hermitian(a), Int, (3, 2)), Matrix{Int})
             end
 
             @testset "Array/Matrix constructor from Symmetric/Hermitian" begin
@@ -168,18 +168,18 @@ end
             end
 
             @testset "conversion" begin
-                @test Symmetric(a) == convert(Symmetric,Symmetric(a))
+                @test Symmetric(a) == convert(Symmetric, Symmetric(a))
                 if eltya <: Real
                     typs = [Float16,Float32,Float64]
                     for typ in typs
-                        @test convert(Matrix{typ},asym) == convert(Symmetric{typ,Matrix{typ}},Symmetric(a))
+                        @test convert(Matrix{typ}, asym) == convert(Symmetric{typ,Matrix{typ}}, Symmetric(a))
                     end
                 end
                 if eltya <: Complex
                     typs = [ComplexF32,ComplexF64]
                     for typ in typs
-                        @test convert(Matrix{typ},asym) == convert(Symmetric{typ,Matrix{typ}},Symmetric(a))
-                        @test convert(Matrix{typ},aherm) == convert(Hermitian{typ,Matrix{typ}},Hermitian(a))
+                        @test convert(Matrix{typ}, asym) == convert(Symmetric{typ,Matrix{typ}}, Symmetric(a))
+                        @test convert(Matrix{typ}, aherm) == convert(Hermitian{typ,Matrix{typ}}, Hermitian(a))
                     end
                 end
                 @test Symmetric{eltya, Matrix{eltya}}(Symmetric(a, :U)) === Symmetric(a, :U)
@@ -412,7 +412,7 @@ end
                 @test Hermitian(a) * [a a] ≈ aherm * [a a]
                 @test Hermitian(a) * Hermitian(a) ≈ aherm*aherm
                 @test_throws DimensionMismatch Hermitian(a) * Vector{eltya}(undef, n+1)
-                LinearAlgebra.mul!(C,a,Hermitian(a))
+                mul!(C, a, Hermitian(a))
                 @test C ≈ a*aherm
 
                 @test Symmetric(a) * Symmetric(a) ≈ asym*asym
@@ -422,7 +422,7 @@ end
                 @test Symmetric(a) * [a a] ≈ asym * [a a]
                 @test [a; a] * Symmetric(a) ≈ [a; a] * asym
                 @test_throws DimensionMismatch Symmetric(a) * Vector{eltya}(undef, n+1)
-                LinearAlgebra.mul!(C,a,Symmetric(a))
+                mul!(C, a, Symmetric(a))
                 @test C ≈ a*asym
 
                 tri_b = UpperTriangular(triu(b))
