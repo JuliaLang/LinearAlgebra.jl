@@ -78,7 +78,7 @@ end
         @testset "basic ops" begin
             @testset "constructor" begin
                 @test Symmetric(Symmetric(a, :U))     === Symmetric(a, :U)
-                @test Hermitian(Hermitian(a, :U))    === Hermitian(a, :U)
+                @test Hermitian(Hermitian(a, :U))     === Hermitian(a, :U)
                 @test Symmetric(Symmetric(a, :U), :U) === Symmetric(a, :U)
                 @test Hermitian(Hermitian(a, :U), :U) === Hermitian(a, :U)
                 @test_throws ArgumentError Symmetric(Symmetric(a, :U), :L)
@@ -159,12 +159,12 @@ end
             end
 
             @testset "getindex and unsafe_getindex" begin
-                @test Hermitian(a)[1,1] == aherm[1,1]
-                @test Symmetric(a)[1,1] == asym[1,1]
-                @test Hermitian(a)[2,1] == aherm[2,1]
-                @test Symmetric(a)[2,1] == asym[2,1]
-                @test Symmetric(a)[1:2,1:2] == asym[1:2,1:2]
-                @test Hermitian(a)[1:2,1:2] == aherm[1:2,1:2]
+                @test Hermitian(a)[1, 1] == aherm[1, 1]
+                @test Symmetric(a)[1, 1] == asym[1, 1]
+                @test Hermitian(a)[2, 1] == aherm[2, 1]
+                @test Symmetric(a)[2, 1] == asym[2, 1]
+                @test Symmetric(a)[1:2, 1:2] == asym[1:2, 1:2]
+                @test Hermitian(a)[1:2, 1:2] == aherm[1:2, 1:2]
             end
 
             @testset "conversion" begin
@@ -253,14 +253,14 @@ end
             end
 
             @testset "isposdef[!]" begin
-                @test isposdef(Symmetric(a))  == isposdef(asym)
+                @test isposdef(Symmetric(a))       == isposdef(asym)
                 @test isposdef(Symmetric(pposs.U)) == isposdef(aposs) == true
-                @test isposdef(Hermitian(a)) == isposdef(aherm)
+                @test isposdef(Hermitian(a))       == isposdef(aherm)
                 @test isposdef(Hermitian(ppos.U))  == isposdef(apos) == true
                 if eltya != Int #chol! won't work with Int
-                    @test isposdef!(Symmetric(copy(a)))  == isposdef(asym)
+                    @test isposdef!(Symmetric(copy(a)))       == isposdef(asym)
                     @test isposdef!(Symmetric(copy(pposs.U))) == isposdef(aposs) == true
-                    @test isposdef!(Hermitian(copy(a))) == isposdef(aherm)
+                    @test isposdef!(Hermitian(copy(a)))       == isposdef(aherm)
                     @test isposdef!(Hermitian(copy(ppos.U)))  == isposdef(apos) == true
                 end
             end
@@ -320,10 +320,10 @@ end
                         @test asym*v[:,1] ≈ d[1]*v[:,1]
                         @test v*Diagonal(d)*transpose(v) ≈ asym
                         @test isequal(eigvals(asym[1]), eigvals(asym[1:1,1:1])[1])
-                        @test abs.(eigen(Symmetric(a), 1:2).vectors'v[:,1:2]) ≈ Matrix(I, 2, 2)
-                        @test abs.(eigen(Symmetric(a), d[1] - 1, (d[2] + d[3])/2).vectors'v[:,1:2]) ≈ Matrix(I, 2, 2)
+                        @test abs.(eigen(Symmetric(a), 1:2).vectors'v[:, 1:2]) ≈ Matrix(I, 2, 2)
+                        @test abs.(eigen(Symmetric(a), d[1] - 1, (d[2] + d[3])/2).vectors'v[:, 1:2]) ≈ Matrix(I, 2, 2)
                         @test eigvals(Symmetric(a), 1:2) ≈ d[1:2]
-                        @test eigvals(Symmetric(a), sortby= x -> -x) ≈ eigvals(eigen(Symmetric(a), sortby = x -> -x))
+                        @test eigvals(Symmetric(a), sortby = x -> -x) ≈ eigvals(eigen(Symmetric(a), sortby = x -> -x))
                         @test eigvals(Symmetric(a), d[1] - 1, (d[2] + d[3])/2) ≈ d[1:2]
                         # eigen doesn't support Symmetric{Complex}
                         @test Matrix(eigen(Symmetric(a))) ≈ asym
@@ -338,10 +338,10 @@ end
                     @test d ≈ eigvals(Hermitian(a))
                     d = real(d)
                     @test isequal(eigvals(aherm[1]), eigvals(aherm[1:1,1:1])[1])
-                    @test abs.(eigen(Hermitian(a), 1:2).vectors'v[:,1:2]) ≈ Matrix(I, 2, 2)
-                    @test abs.(eigen(Hermitian(a), d[1] - 1, (d[2] + d[3])/2).vectors'v[:,1:2]) ≈ Matrix(I, 2, 2)
+                    @test abs.(eigen(Hermitian(a), 1:2).vectors'v[:, 1:2]) ≈ Matrix(I, 2, 2)
+                    @test abs.(eigen(Hermitian(a), d[1] - 1, (d[2] + d[3])/2).vectors'v[:, 1:2]) ≈ Matrix(I, 2, 2)
                     @test eigvals(Hermitian(a), 1:2) ≈ d[1:2]
-                    @test eigvals(Hermitian(a), sortby= x -> -x) ≈ eigvals(eigen(Hermitian(a), sortby = x -> -x))
+                    @test eigvals(Hermitian(a), sortby = x -> -x) ≈ eigvals(eigen(Hermitian(a), sortby = x -> -x))
                     @test eigvals(Hermitian(a), d[1] - 1, (d[2] + d[3])/2) ≈ d[1:2]
                     @test Matrix(eigen(Hermitian(a))) ≈ aherm
                     @test eigvecs(Hermitian(a)) ≈ eigvecs(aherm)
@@ -364,39 +364,39 @@ end
 
                 @testset "pow" begin
                     # Integer power
-                    @test (asym)^2   ≈ (Symmetric(a)^2)::Symmetric
-                    @test (asym)^-2  ≈ (Symmetric(a)^-2)::Symmetric
-                    @test (aposs)^2  ≈ (Symmetric(pposs.U)^2)::Symmetric
-                    @test (aherm)^2  ≈ (Hermitian(a)^2)::Hermitian
-                    @test (aherm)^-2 ≈ (Hermitian(a)^-2)::Hermitian
-                    @test (apos)^2   ≈ (Hermitian(ppos.U)^2)::Hermitian
+                    @test asym^2   ≈ (Symmetric(a)^2)::Symmetric
+                    @test asym^-2  ≈ (Symmetric(a)^-2)::Symmetric
+                    @test aposs^2  ≈ (Symmetric(pposs.U)^2)::Symmetric
+                    @test aherm^2  ≈ (Hermitian(a)^2)::Hermitian
+                    @test aherm^-2 ≈ (Hermitian(a)^-2)::Hermitian
+                    @test apos^2   ≈ (Hermitian(ppos.U)^2)::Hermitian
                     # integer floating point power
-                    @test (asym)^2.0   ≈ (Symmetric(a)^2.0)::Symmetric
-                    @test (asym)^-2.0  ≈ (Symmetric(a)^-2.0)::Symmetric
-                    @test (aposs)^2.0  ≈ (Symmetric(pposs.U)^2.0)::Symmetric
-                    @test (aherm)^2.0  ≈ (Hermitian(a)^2.0)::Hermitian
-                    @test (aherm)^-2.0 ≈ (Hermitian(a)^-2.0)::Hermitian
-                    @test (apos)^2.0   ≈ (Hermitian(ppos.U)^2.0)::Hermitian
+                    @test asym^2.0   ≈ (Symmetric(a)^2.0)::Symmetric
+                    @test asym^-2.0  ≈ (Symmetric(a)^-2.0)::Symmetric
+                    @test aposs^2.0  ≈ (Symmetric(pposs.U)^2.0)::Symmetric
+                    @test aherm^2.0  ≈ (Hermitian(a)^2.0)::Hermitian
+                    @test aherm^-2.0 ≈ (Hermitian(a)^-2.0)::Hermitian
+                    @test apos^2.0   ≈ (Hermitian(ppos.U)^2.0)::Hermitian
                     # non-integer floating point power
-                    @test (asym)^2.5   ≈ (Symmetric(a)^2.5)::Symmetric
-                    @test (asym)^-2.5  ≈ (Symmetric(a)^-2.5)::Symmetric
-                    @test (aposs)^2.5  ≈ (Symmetric(pposs.U)^2.5)::Symmetric
-                    @test (aherm)^2.5  ≈ (Hermitian(a)^2.5)#::Hermitian
-                    @test (aherm)^-2.5 ≈ (Hermitian(a)^-2.5)#::Hermitian
-                    @test (apos)^2.5   ≈ (Hermitian(ppos.U)^2.5)::Hermitian
+                    @test asym^2.5   ≈ (Symmetric(a)^2.5)::Symmetric
+                    @test asym^-2.5  ≈ (Symmetric(a)^-2.5)::Symmetric
+                    @test aposs^2.5  ≈ (Symmetric(pposs.U)^2.5)::Symmetric
+                    @test aherm^2.5  ≈ (Hermitian(a)^2.5)#::Hermitian
+                    @test aherm^-2.5 ≈ (Hermitian(a)^-2.5)#::Hermitian
+                    @test apos^2.5   ≈ (Hermitian(ppos.U)^2.5)::Hermitian
                 end
             end
         end
 
         @testset "linalg binary ops" begin
             @testset "mat * vec" begin
-                @test Symmetric(a)*x+y ≈ asym*x+y
+                @test Symmetric(a) * x + y ≈ asym * x + y
                 # testing fallbacks for transpose-vector * transpose(SymHerm)
                 xadj = transpose(x)
                 @test xadj * transpose(Symmetric(a)) ≈ xadj * asym
                 @test x' * Symmetric(a) ≈ x' * asym
 
-                @test Hermitian(a)*x+y ≈ aherm*x+y
+                @test Hermitian(a) * x + y ≈ aherm * x + y
                 # testing fallbacks for adjoint-vector * SymHerm'
                 xadj = x'
                 @test x' * Hermitian(a) ≈ x' * aherm
@@ -410,18 +410,18 @@ end
                 # rectangular multiplication
                 @test [a; a] * Hermitian(a) ≈ [a; a] * aherm
                 @test Hermitian(a) * [a a] ≈ aherm * [a a]
-                @test Hermitian(a) * Hermitian(a) ≈ aherm*aherm
-                @test_throws DimensionMismatch Hermitian(a) * Vector{eltya}(undef, n+1)
+                @test Hermitian(a) * Hermitian(a) ≈ aherm * aherm
+                @test_throws DimensionMismatch Hermitian(a) * Vector{eltya}(undef, n + 1)
                 mul!(C, a, Hermitian(a))
                 @test C ≈ a*aherm
 
-                @test Symmetric(a) * Symmetric(a) ≈ asym*asym
+                @test Symmetric(a) * Symmetric(a) ≈ asym * asym
                 @test Symmetric(a) * a ≈ asym * a
                 @test a * Symmetric(a) ≈ a * asym
                 # rectangular multiplication
                 @test Symmetric(a) * [a a] ≈ asym * [a a]
                 @test [a; a] * Symmetric(a) ≈ [a; a] * asym
-                @test_throws DimensionMismatch Symmetric(a) * Vector{eltya}(undef, n+1)
+                @test_throws DimensionMismatch Symmetric(a) * Vector{eltya}(undef, n + 1)
                 mul!(C, a, Symmetric(a))
                 @test C ≈ a*asym
 
@@ -439,25 +439,25 @@ end
             @testset "solver" begin
                 @test Hermitian(a)\x ≈ aherm\x
                 @test Hermitian(a)\b ≈ aherm\b
-                @test Symmetric(a)\x  ≈ asym\x
-                @test Symmetric(a)\b  ≈ asym\b
+                @test Symmetric(a)\x ≈ asym\x
+                @test Symmetric(a)\b ≈ asym\b
                 @test Hermitian(Diagonal(a))\x ≈ Diagonal(aherm)\x
                 @test Hermitian(Matrix(Diagonal(a)))\b ≈ Diagonal(aherm)\b
-                @test Symmetric(Diagonal(a))\x  ≈ Diagonal(asym)\x
-                @test Symmetric(Matrix(Diagonal(a)))\b  ≈ Diagonal(asym)\b
+                @test Symmetric(Diagonal(a))\x ≈ Diagonal(asym)\x
+                @test Symmetric(Matrix(Diagonal(a)))\b ≈ Diagonal(asym)\b
             end
         end
         @testset "generalized dot product" begin
             for (uplo, S, H) in ((:U, asym, aherm), (:L, asymL, ahermL))
-                @test dot(x, Hermitian(a, uplo), y) ≈ dot(x, Hermitian(a, uplo)*y) ≈ dot(x, H, y)
-                @test dot(x, Hermitian(a, uplo), x) ≈ dot(x, Hermitian(a, uplo)*x) ≈ dot(x, H, x)
+                @test dot(x, Hermitian(a, uplo), y) ≈ dot(x, Hermitian(a, uplo) * y) ≈ dot(x, H, y)
+                @test dot(x, Hermitian(a, uplo), x) ≈ dot(x, Hermitian(a, uplo) * x) ≈ dot(x, H, x)
                 if eltya <: Real
-                    @test dot(x, Symmetric(a, uplo), y) ≈ dot(x, Symmetric(a, uplo)*y) ≈ dot(x, S, y)
-                    @test dot(x, Symmetric(a, uplo), x) ≈ dot(x, Symmetric(a, uplo)*x) ≈ dot(x, S, x)
+                    @test dot(x, Symmetric(a, uplo), y) ≈ dot(x, Symmetric(a, uplo) * y) ≈ dot(x, S, y)
+                    @test dot(x, Symmetric(a, uplo), x) ≈ dot(x, Symmetric(a, uplo) * x) ≈ dot(x, S, x)
                 end
             end
-            @test dot(x, Hermitian(Diagonal(a)), y) ≈ dot(x, Hermitian(Diagonal(a))*y) ≈ dot(x, Diagonal(aherm), y)
-            @test dot(x, Hermitian(Diagonal(a)), x) ≈ dot(x, Hermitian(Diagonal(a))*x) ≈ dot(x, Diagonal(aherm), x)
+            @test dot(x, Hermitian(Diagonal(a)), y) ≈ dot(x, Hermitian(Diagonal(a)) * y) ≈ dot(x, Diagonal(aherm), y)
+            @test dot(x, Hermitian(Diagonal(a)), x) ≈ dot(x, Hermitian(Diagonal(a)) * x) ≈ dot(x, Diagonal(aherm), x)
         end
 
         @testset "dot product of symmetric and Hermitian matrices" begin
