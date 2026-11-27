@@ -179,14 +179,23 @@ AdjUpperHessenberg{T,S<:UpperHessenberg{T}} = Adjoint{T, S}
 TransUpperHessenberg{T,S<:UpperHessenberg{T}} = Transpose{T, S}
 AdjOrTransUpperHessenberg{T,S<:UpperHessenberg{T}} = AdjOrTrans{T, S}
 
-(\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat) =
-    ldiv!(H, copyto!(matop_dest(\, H, B), B))
+function (\)(H::Union{UpperHessenberg,AdjOrTransUpperHessenberg}, B::AbstractVecOrMat)
+    X = copyto!(matop_dest(\, H, B), B)
+    _hessldiv!(promote_op(/, eltype(X), eltype(X)), H, X)
+end
+_hessldiv!(::Type{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, H, X) = ldiv!(H, X)
+_hessldiv!(::Type, H, X) = ldiv!(lu(H), X)
 
 (/)(B::AbstractMatrix, H::UpperHessenberg) = _rdiv(B, H)
 (/)(B::AbstractMatrix, H::AdjUpperHessenberg) = _rdiv(B, H)
 (/)(B::AbstractMatrix, H::TransUpperHessenberg) = _rdiv(B, H)
 
-_rdiv(B, H) = rdiv!(copyto!(matop_dest(/, B, H), B), H)
+function _rdiv(B::AbstractMatrix, H::Union{UpperHessenberg,AdjOrTransUpperHessenberg})
+    X = copyto!(matop_dest(/, B, H), B)
+    _hessrdiv!(promote_op(/, eltype(X), eltype(X)), X, H)
+end
+_hessrdiv!(::Type{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, X, H) = rdiv!(X, H)
+_hessrdiv!(::Type, X, H) = rdiv!(X, lu(H))
 
 ldiv!(H::AdjOrTransUpperHessenberg, B::AbstractVecOrMat) =
     (rdiv!(wrapperop(H)(B), parent(H)); B)
@@ -236,6 +245,7 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
     cs = Vector{Tuple{real(float(eltype(u))),float(eltype(u))}}(undef, length(u)) # store Givens rotations
     @inbounds for k = m:-1:2
         c, s, ρ = givensAlgorithm(u[k], H[k,k-1])
+        iszero(ρ) && throw(SingularException(k))
         cs[k] = (c, s)
         for i = 1:n
             X[k,i] /= ρ
@@ -250,6 +260,7 @@ function ldiv!(F::UpperHessenberg, B::AbstractVecOrMat; shift::Number=false)
         end
         u[k-1] = (H[k-1,k-1] + μ) * c - u[k-1]*s'
     end
+    iszero(u[1]) && throw(SingularException(1))
     for i = 1:n
         τ₁ = X[1,i] / u[1]
         @inbounds for j = 2:m
@@ -288,6 +299,7 @@ function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
     cs = Vector{Tuple{real(float(eltype(u))),float(eltype(u))}}(undef, length(u)) # store Givens rotations
     @inbounds for k = 1:m-1
         c, s, ρ = givensAlgorithm(u[k], H[k+1,k])
+        iszero(ρ) && throw(SingularException(k))
         cs[k] = (c, s)
         for i = 1:n
             X[i,k] /= ρ
@@ -302,6 +314,7 @@ function rdiv!(B::AbstractMatrix, F::UpperHessenberg; shift::Number=false)
         end
         u[k+1] = (H[k+1,k+1] + μ) * c - u[k+1]*s'
     end
+    iszero(u[m]) && throw(SingularException(m))
     for i = 1:n
         τ₁ = X[i,m] / u[m]
         @inbounds for j = m-1:-1:1
@@ -351,6 +364,11 @@ function det(F::UpperHessenberg; shift::Number=false)
     return determinant
 end
 
+function logabsdet(F::UpperHessenberg; shift::Number=false)
+    S = typeof(zero(eltype(F)) + shift)
+    _logabsdet(promote_op(/, S, S), F; shift)
+end
+_logabsdet(::Type, F::UpperHessenberg; shift::Number=false) = logabsdet(lu(F + shift*I; check=false))
 # O(m²) log-determinant based on first doing Givens RQ to put H+μI into upper-triangular form and then
 # taking the product of the diagonal entries.   The trick is that we only need O(m) temporary storage,
 # because we don't need to store the whole Givens-rotated matrix, only the most recent column.
@@ -358,12 +376,12 @@ end
 # (We could also use it for det instead of the Cahill algorithm above.  Cahill is slightly faster
 #  for very small matrices where you are likely to use det, and also uses only ± and * so it can
 #  be applied to Hessenberg matrices over other number fields.)
-function logabsdet(F::UpperHessenberg; shift::Number=false)
+function _logabsdet(::Type{<:Union{AbstractFloat,Complex{<:AbstractFloat}}}, F::UpperHessenberg; shift::Number=false)
     checksquare(F)
     H = F.data
     m = size(H,1)
     μ = shift
-    P = one(zero(eltype(H)) + μ)
+    P = one(zero(float(eltype(H))) + μ)
     logdeterminant = zero(real(P))
     m == 0 && return (logdeterminant, P)
     g = Vector{typeof(P)}(undef, m) # below, g is the k-th col of Givens-rotated H+μI matrix

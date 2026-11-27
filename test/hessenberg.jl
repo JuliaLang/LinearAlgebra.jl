@@ -79,6 +79,18 @@ let n = 10
                 @test (transpose(b) / H) * H ≈ (Matrix(transpose(b)) / H) * H ≈ transpose(b)
             end
         end
+        @testset "singular ldiv and rdiv" begin
+            S1 = UpperHessenberg([0.0 0.0 0.0; 1 2 3; 3 4 5])
+            S2 = UpperHessenberg([1.0 2.0 3.0; 0 0 0; 3 4 5])
+            S3 = UpperHessenberg([1.0 2.0 3.0; 3 4 5; 0 0 0])
+            b = ones(3)
+            B = ones(3,3)
+            for H in (S1, S2, S3), op in (identity, adjoint, transpose)
+                @test_throws SingularException op(H) \ b
+                @test_throws SingularException op(H) \ B
+                @test_throws SingularException B / op(H)
+            end
+        end
         @testset "Preserve UpperHessenberg shape (issue #39388)" begin
             H = UpperHessenberg(Areal)
             A = rand(n,n)
@@ -498,6 +510,17 @@ end
     BH = BigInt.(H)
     @test isa(det(BH), BigInt)
     @test det(BH) == det(Matrix(BH))
+end
+
+@testset "exact arithmetic for rational UpperHessenberg" begin
+    Hr = UpperHessenberg(Rational{Int}[1 2; 1 3])
+    @test Hr \ Rational{Int}[1, 2] == [-1, 1]
+    @test Rational{Int}[1 2] / Hr == [1 0]
+    @test logabsdet(Hr) == logabsdet(Matrix(Hr))
+    @test logabsdet(Hr; shift=2//3) == logabsdet(Matrix(Hr) + 2//3*I)
+    @test det(Hr) == det(Matrix(Hr))
+    @test det(Hr; shift=2//3) == det(Matrix(Hr) + 2//3*I)
+    @test logdet(UpperHessenberg([2 1 1; 1 3 1; 7 1 4])) ≈ logdet([2 1 1; 1 3 1; 0 1 4])
 end
 
 end # module TestHessenberg
