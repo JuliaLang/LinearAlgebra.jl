@@ -260,7 +260,13 @@ function fzero(bc::Broadcast.Broadcasted{<:Any, <:Any, <:LeftAbsorbingFuncs, <:T
 end
 
 function fzero(bc::Broadcast.Broadcasted{<:Union{Nothing, Broadcast.BroadcastStyle}, <:Any, <:ZeroAbsorbingFuncs})
-    args = map(x -> fzero(bc.f, x), bc.args)
+    # A dense array has no structural zeros to absorb: it takes part in zero
+    # preservation only when another argument of this call is a structured
+    # matrix, whose zeros the call then preserves.
+    hastructured = count_structedmatrix(StructuredMatrix, bc) > 0
+    args = map(bc.args) do x
+        (!hastructured && x isa AbstractArray && !(x isa StructuredMatrix)) ? nothing : fzero(bc.f, x)
+    end
     return any(isnothing, args) ? nothing : Some(bc.f(map(something, args)...))
 end
 

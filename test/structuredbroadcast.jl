@@ -639,4 +639,12 @@ end
     @test S == 2 .* Matrix(SymTridiagonal([1, 2, 3], [4, 5]))
 end
 
+@testset "issue #1755" begin
+    M = [2.0 -2 -1; -2 4 -1; -1 -1 6]
+    v = [4.5, 4.0, 2.0]
+    @test 1.5 .* M .+ Diagonal(v) == 1.5 .* M + Diagonal(v)
+    @test M .* 1.5 .+ Diagonal(v) == M .* 1.5 + Diagonal(v)
+    @test M .+ Diagonal(v) == M + Diagonal(v)
+end
+
 end
