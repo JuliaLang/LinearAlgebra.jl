@@ -67,6 +67,8 @@ convert(::Type{T}, m::ConvertibleSpecialMatrix) where {T<:Tridiagonal}    = m is
 
 convert(::Type{T}, m::Union{LowerTriangular,UnitLowerTriangular}) where {T<:LowerTriangular} = m isa T ? m : T(m)::T
 convert(::Type{T}, m::Union{UpperTriangular,UnitUpperTriangular}) where {T<:UpperTriangular} = m isa T ? m : T(m)::T
+convert(::Type{T}, m::UnitLowerTriangular) where {T<:UnitLowerTriangular} = m isa T ? m : T(m)::T
+convert(::Type{T}, m::UnitUpperTriangular) where {T<:UnitUpperTriangular} = m isa T ? m : T(m)::T
 
 convert(::Type{T}, m::PossibleTriangularMatrix) where {T<:LowerTriangular} = m isa T ? m :
     istril(m) ? T(m)::T : throw(ArgumentError("matrix cannot be represented as LowerTriangular"))
@@ -360,7 +362,9 @@ dot(x::AbstractVector, A::RealHermSymComplexSym{<:Real,<:Diagonal}, y::AbstractV
 # O(N) implementations using the banded structure
 function copyto!(dest::BandedMatrix, src::BandedMatrix)
     if axes(dest) == axes(src)
-        _copyto_banded!(dest, src)
+        # the bands are copied one after the other, so a source sharing band vectors with `dest`
+        # (e.g. `copyto!(T, T')` for a `Tridiagonal`) must be unaliased first
+        _copyto_banded!(dest, Base.unalias(dest, src))
     else
         @invoke copyto!(dest::AbstractMatrix, src::AbstractMatrix)
     end

@@ -20,6 +20,7 @@ import Base: AbstractArray, AbstractMatrix, Array, Matrix
 using Base: IndexLinear, promote_eltype, promote_op, print_matrix,
     @propagate_inbounds, reduce, typed_hvcat, typed_vcat, require_one_based_indexing,
     splat, BitInteger
+using Base.Checked: checked_mul
 using Base.Broadcast: Broadcasted, broadcasted
 using Base.PermutedDimsArrays: CommutativeOps
 using OpenBLAS_jll
@@ -35,6 +36,7 @@ export
     Adjoint,
     Bidiagonal,
     BunchKaufman,
+    BunchPivot,
     Cholesky,
     CholeskyPivoted,
     ColumnNorm,
@@ -47,6 +49,7 @@ export
     Hermitian,
     Hessenberg,
     LDLt,
+    LDLtPivoted,
     LQ,
     LU,
     LowerTriangular,
@@ -170,7 +173,13 @@ export
 # not exported, but public names
 public AbstractTriangular,
         Givens,
+        aliasparts,
+        checkaliasing,
+        checkoverlap,
         checksquare,
+        deepmightalias,
+        lmulinplace,
+        rmulinplace,
         haszero,
         hermitian,
         hermitian_type,
@@ -262,6 +271,40 @@ Note that the [element type](@ref eltype) of the matrix must admit [`norm`](@ref
 [`abs`](@ref) methods, whose respective result types must admit a [`<`](@ref) method.
 """
 struct ColumnNorm <: PivotingStrategy end
+
+"""
+    BunchPivot
+
+Block diagonal pivoting strategy for symmetric tridiagonal matrices, used by the
+[`ldlt`](@ref) factorization. At each step, either a `1×1` or a `2×2` diagonal block is
+chosen as the pivot, but rows and columns are never interchanged, so that the tridiagonal
+structure is preserved. This is the diagonal pivoting method underlying the
+[`bunchkaufman`](@ref) factorization, specialized to tridiagonal matrices, for which no
+interchanges are necessary; the resulting [`LDLtPivoted`](@ref) factorization is thus a
+memory-efficient equivalent of a [`BunchKaufman`](@ref) factorization.
+
+The pivot size is chosen according to the simplified pivoting strategy of Bunch and Marcia
+(Algorithm A1 in the reference below), which only requires local information. With
+`α = (√5 - 1)/2`, the current diagonal entries `a₁ = S[k,k]` and `a₂ = S[k+1,k+1]`, the
+off-diagonal entries `b₂ = S[k+1,k]` and `b₃ = S[k+2,k+1]` (or `b₃ = 0` if `k+1 == n`), and
+`Δ = a₁*a₂ - b₂^2`, a `1×1` pivot `a₁` is chosen if
+
+```
+abs(a₁*a₂) ≥ α*abs2(b₂)  or  abs(Δ) ≤ α*abs(a₁*b₃)  or  abs(b₂*Δ) ≤ α*abs(a₁^2*b₃),
+```
+
+and otherwise the `2×2` pivot `S[k:k+1,k:k+1]`, which is then guaranteed to be nonsingular.
+This choice bounds the element growth, which makes the factorization numerically stable also
+for indefinite matrices, where [`NoPivot`](@ref) may fail or be unstable.
+
+Note that the [element type](@ref eltype) of the matrix must admit [`abs`](@ref) and
+[`abs2`](@ref) methods, whose result types must admit a [`<`](@ref) method.
+
+# References
+J. R. Bunch and R. F. Marcia, "A simplified pivoting strategy for symmetric tridiagonal
+matrices", Numerical Linear Algebra with Applications 13 (2006), 865-867.
+"""
+struct BunchPivot <: PivotingStrategy end
 
 using Base: DimOrInd
 
@@ -511,6 +554,20 @@ See also: `copymutable_oftype`.
 copy_similar(A::AbstractArray, ::Type{T}) where {T} = copyto!(similar(A, T, size(A)), A)
 
 """
+    _rhs_eltype(B)
+
+The element type of the right-hand side `B` of a solve that needs to promote the matrix (or
+factorization) to the type of the solution, which requires `one`/`oneunit` of the element
+type of `B` and hence a concrete element type. Throws an `ArgumentError` for an abstract
+element type, instead of failing with a `MethodError` for `one(Any)` in the solver.
+"""
+function _rhs_eltype(B::AbstractArray)
+    T = eltype(B)
+    isconcretetype(T) && return T
+    throw(ArgumentError(lazy"the right-hand side has the abstract element type $T. Convert it to a concrete element type first, e.g. with `convert(AbstractArray{S}, B)` for a suitable `S`, such as `S = mapreduce(typeof, promote_type, B)`"))
+end
+
+"""
     _valeltype(A)
 
 Return `eltype(A)` if it is concrete (or `A` is empty). Otherwise, return the type obtained
@@ -748,7 +805,7 @@ function ldiv(F::Factorization, B::AbstractVecOrMat)
     end
 
     # scalar type of the solution (the elements of `B` may themselves be vectors)
-    TFB = typeof(zero(_scalartype(eltype(B))) / oneunit(eltype(F)))
+    TFB = typeof(zero(_scalartype(_rhs_eltype(B))) / oneunit(eltype(F)))
     # promote the numeric type of the factorization to that of the solution (e.g. `Float32` ->
     # `Float64`), but keep its units: `TFB` itself may carry different units than the factors
     TF = typeof(oneunit(eltype(F)) * one(TFB))

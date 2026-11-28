@@ -361,6 +361,15 @@ end
     end
 end
 
+@testset "cond of empty triangular matrices" for T in (Float64, ComplexF64),
+        tri in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular)
+    A = tri(zeros(T, 0, 0))
+    for p in (1, 2, Inf)
+        @test cond(A, p) === cond(Matrix(A), p)
+    end
+    @test_throws ArgumentError cond(A, 3)
+end
+
 @testset "Error condition for powm" begin
     A = UpperTriangular(rand(ComplexF64, 10, 10))
     @test_throws ArgumentError LinearAlgebra.powm!(A, 2.2)
@@ -590,6 +599,12 @@ end
             A2 = copy(A)
             B = T(view(M, 2:6, 2:6))
             @test copyto!(B, A) == A2
+        end
+        # a wrapper of the adjoint of the destination, whose diagonal is conjugated
+        M = [1+2im 3im; 4 5-6im]
+        for T in (UpperTriangular, LowerTriangular)
+            A = copy(M)
+            @test copyto!(A, T(A')) == T(M')
         end
     end
 
@@ -945,6 +960,43 @@ end
     @test rdiv!(B2v, U) ≈ rdiv!(B2vc, U)
 end
 
+@testset "triangular matrices with non-contiguous or negatively strided parents" for T in (Float64, ComplexF64, (@static COMPREHENSIVE ? (Float32, ComplexF32) : ())...)
+    n = 5
+    # views equal to M, with stride(·, 1) == 2 or with stride(·, 2) < 0, respectively
+    rowstep(M) = (P = zeros(T, 2size(M, 1), size(M, 2)); P[1:2:end, :] = M; view(P, 1:2:size(P, 1), :))
+    colrev(M) = (P = zeros(T, size(M)); P[:, end:-1:1] = M; view(P, :, size(P, 2):-1:1))
+    M = rand(T, n, n) + n*I
+    b, B = rand(T, n), rand(T, n, n)
+    @testset for fM in (rowstep, colrev), t in (UpperTriangular, LowerTriangular, UnitUpperTriangular, UnitLowerTriangular), op in (identity, transpose, adjoint)
+        A, Ad = op(t(fM(M))), op(t(M))
+        @test A * b ≈ Ad * b
+        @test A \ b ≈ Ad \ b
+        @test A * B ≈ Ad * B
+        @test A \ B ≈ Ad \ B
+        @test B * A ≈ B * Ad
+        @test B / A ≈ B / Ad
+        # the destination may also be incompatible with BLAS
+        @test mul!(colrev(zero(B)), A, B) ≈ Ad * B
+        @test mul!(colrev(zero(B)), B, A) ≈ B * Ad
+        @test ldiv!(colrev(zero(B)), A, B) ≈ Ad \ B
+        @test lmul!(A, colrev(B)) ≈ Ad * B
+        @test rmul!(colrev(B), A) ≈ B * Ad
+        @test ldiv!(A, colrev(B)) ≈ Ad \ B
+        @test rdiv!(colrev(B), A) ≈ B / Ad
+        if T <: Complex
+            # a real operand is copied into the complex destination, so this also
+            # dispatches to the methods that call BLAS
+            br, Br = real(b), real(B)
+            @test A * br ≈ Ad * br
+            @test A \ br ≈ Ad \ br
+            @test A * Br ≈ Ad * Br
+            @test A \ Br ≈ Ad \ Br
+            @test Br * A ≈ Br * Ad
+            @test Br / A ≈ Br / Ad
+        end
+    end
+end
+
 @testset "error messages in matmul with mismatched matrix sizes" begin
     for T in (Int, Float64)
         A = UpperTriangular(ones(T,2,2))
@@ -1195,6 +1247,22 @@ end
     end
 end
 
+@static if COMPREHENSIVE
+@testset "3-arg dot: zeros in y are not strong zeros (#1836)" begin
+    n = 3
+    @testset for TT in (UpperTriangular, UnitUpperTriangular, LowerTriangular, UnitLowerTriangular)
+        for i in 1:n, j in 1:n
+            A = ones(n, n); A[i, j] = Inf
+            T = TT(A)
+            # only test entries that are actually stored (and not implicitly unit)
+            isinf(T[i, j]) || continue
+            y = ones(n); y[j] = 0
+            @test isnan(dot(ones(n), T, y))
+        end
+    end
+end
+end # COMPREHENSIVE
+
 @testset "triangular corner cases" begin
     A = [1.0 2 3; 4 5 6; 7 8 10]
     Tri = Tridiagonal(ComplexF64[1+im, 2], ComplexF64[3, 4im, 5], ComplexF64[6, 7-im])
@@ -1313,6 +1381,49 @@ end
         Mnan[CartesianIndices(M)[[i > j for i in 1:200, j in 1:200]]] .= NaN
         @test isequal(log(UpperTriangular(Mnan)), log(UpperTriangular(M)))
         @test isequal(log(UnitUpperTriangular(Mnan)), log(UnitUpperTriangular(M)))
+    end
+end
+
+@testset "integer powers of Bool unit triangular matrices (#1869)" begin
+    for (T, B) in ((UnitUpperTriangular, Bool[1 1 1; 0 1 1; 0 0 1]),
+                   (UnitLowerTriangular, Bool[1 0 0; 1 1 0; 1 1 1]))
+        A = T(B)
+        M = Matrix(A)
+        for p in 0:4
+            @test A^p == M^p
+        end
+        @test A^2 isa T{Int}
+    end
+end
+
+@testset "cbrt of integer triangular matrices" begin
+    for (T, A) in ((UpperTriangular, [2 1; 0 3]), (LowerTriangular, [2 0; 1 3]))
+        C = cbrt(T(A))
+        @test C isa T{Float64}
+        @test C ≈ cbrt(float(A))
+        @test C^3 ≈ A
+    end
+    E = cbrt(UpperTriangular([8 0; 0 27]))
+    @test E isa UpperTriangular{Float64}
+    @test E == [2 0; 0 3]
+end
+
+@testset "issue #1907: rmul! of two triangular matrices" begin
+    @testset for T in (Int, Float64)
+        a, b, c = T[9 2 3; 9 9 4; 9 9 9], T[7 -1 2; 7 7 5; 7 7 7], T[1 -1 2; 7 1 5; 7 7 1]
+        at, bt, ct = (copy(transpose(x)) for x in (a, b, c))
+        for (A, B) in ((UnitUpperTriangular(a), UnitUpperTriangular(b)),
+                       (UnitUpperTriangular(a), UpperTriangular(c)),
+                       (UnitUpperTriangular(a), transpose(UnitLowerTriangular(bt))),
+                       (UnitLowerTriangular(at), UnitLowerTriangular(bt)),
+                       (UnitLowerTriangular(at), LowerTriangular(ct)),
+                       (UnitLowerTriangular(at), adjoint(UnitUpperTriangular(b))))
+            MA, MB = Matrix(A), Matrix(B)
+            @test rmul!(A, B)::typeof(A) == MA * MB
+        end
+        # the product is not lower triangular
+        L = LowerTriangular(T[0 0 0; -2 2 0; 0 -2 0])
+        @test_throws ArgumentError rmul!(L, UnitUpperTriangular(T[1 2 -1; 0 1 1; 0 0 1]))
     end
 end
 

@@ -13,6 +13,7 @@ isdefined(Main, :LinearAlgebraTestHelpers) || Base.include(Main, TESTHELPERS)
 
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.ImmutableArrays
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 # for tuple tests below
 ≅(x,y) = all(p -> p[1] ≈ p[2], zip(x,y))
@@ -347,6 +348,25 @@ end
     end
 end
 
+@testset "singular value decomposition" begin
+    @testset for T in (Float16, Float64, ComplexF64)
+        # the entries of A below the subdiagonal are not part of H
+        A = T[1 2 3 4; 5 6 7 8; 9 10 11 12; 13 14 15 17]
+        H = UpperHessenberg(A)
+        M = Matrix(H)
+        @test svdvals(H) ≈ svdvals(M)
+        F = svd(H)
+        @test F.S ≈ svdvals(M)
+        # Float16 is computed in Float32, and the result converted back
+        @test eltype(svdvals(H)) == eltype(F.S) == real(T) && eltype(F.U) == eltype(F.Vt) == T
+        @test F.U * Diagonal(F.S) * F.Vt ≈ M
+        @test size(svd(H; full=true).U) == (4, 4)
+        @test cond(H) ≈ cond(M)
+        @test opnorm(H, 2) ≈ opnorm(M, 2)
+        @test H.data == A
+    end
+end
+
 @testset "generic multiplication with HessenbergQ and its adjoint" begin
     hessenbergQs(A) = (hessenberg(A).Q, hessenberg(Hermitian(A'A, :U)).Q, hessenberg(Hermitian(A'A, :L)).Q)
 
@@ -432,6 +452,18 @@ end
     end
 end
 
+@static if COMPREHENSIVE
+@testset "3-arg dot: zeros in y are not strong zeros (#1836)" begin
+    n = 4
+    for i in 1:n, j in max(1, i-1):n
+        A = ones(n, n); A[i, j] = Inf
+        H = UpperHessenberg(A)
+        y = ones(n); y[j] = 0
+        @test isnan(dot(ones(n), H, y))
+    end
+end
+end # COMPREHENSIVE
+
 @testset "Hessenberg corner cases" begin
     @test dot(Float64[], UpperHessenberg(zeros(0, 0)), Float64[]) === 0.0
     A = [4.0 1 2; 1 3 0; 2 1 5]
@@ -443,6 +475,29 @@ end
     # scaling that would change the eltype of F.H
     @test_throws MethodError hessenberg(A) * (1 + 2im)
     @test_throws MethodError (1 + 2im) * hessenberg(A)
+    # empty Hessenberg
+    E = zeros(0, 0)
+    F = hessenberg(E)
+    U = UpperHessenberg(E)
+    for A in (F, U)
+        @test inv(A) == E
+        @test A \ ones(0) == ones(0)
+        @test A \ ones(0,2) == ones(0,2)
+        @test_throws DimensionMismatch A \ ones(1)
+        @test_throws DimensionMismatch A \ ones(1,0)
+        @test ones(2,0) / A == ones(2,0)
+        @test_throws DimensionMismatch ones(2,1) / A
+        @test_throws DimensionMismatch ones(0,1) / A
+    end
+end
+
+@testset "det of small integer matrices (#1895)" begin
+    H = UpperHessenberg(Int8[100 100 100; 50 50 25; 1 2 3])
+    @test det(H) ≈ det(Matrix(H))
+    @test_throws OverflowError det(Rational.(H))
+    BH = BigInt.(H)
+    @test isa(det(BH), BigInt)
+    @test det(BH) == det(Matrix(BH))
 end
 
 end # module TestHessenberg

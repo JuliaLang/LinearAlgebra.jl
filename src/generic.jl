@@ -181,6 +181,7 @@ function generic_mul!(C::AbstractArray, X::AbstractArray, s::Number, alpha::Numb
     if length(C) != length(X)
         throw(DimensionMismatch(lazy"first array has length $(length(C)) which does not match the length of the second, $(length(X))."))
     end
+    checkoverlap(C, X)
     for (IC, IX) in zip(eachindex(C), eachindex(X))
         @inbounds @stable_muladdmul _modify!(MulAddMul(alpha,beta), X[IX] * s, C, IC)
     end
@@ -192,6 +193,7 @@ function generic_mul!(C::AbstractArray, s::Number, X::AbstractArray, alpha::Numb
         throw(DimensionMismatch(LazyString(lazy"first array has length $(length(C)) which does not",
             lazy"match the length of the second, $(length(X)).")))
     end
+    checkoverlap(C, X)
     for (IC, IX) in zip(eachindex(C), eachindex(X))
         @inbounds @stable_muladdmul _modify!(MulAddMul(alpha,beta), s * X[IX], C, IC)
     end
@@ -396,7 +398,8 @@ end
 ldiv!(Y::AbstractArray, s::Number, X::AbstractArray) = Y .= s .\ X
 
 # Generic fallback. This assumes that B and Y have the same sizes.
-ldiv!(Y::AbstractArray, A::AbstractMatrix, B::AbstractArray) = ldiv!(A, copyto!(Y, B))
+ldiv!(Y::AbstractArray, A::AbstractMatrix, B::AbstractArray) =
+    (checkaliasing(Y, A); ldiv!(A, copyto!(Y, B)))
 
 
 """
@@ -793,10 +796,10 @@ norm(::Missing, p::Real=2) = missing
 function opnorm1(A::AbstractMatrix{T}) where T
     require_one_based_indexing(A)
     Tnorm = typeof(float(real(zero(T))))
-    Tsum = promote_type(Float64, Tnorm)
-    nrm::Tsum = 0
+    Tsum = typeof(oneunit(Tnorm) * 1.0) # accumulate in at least Float64 precision, keeping units
+    nrm = zero(Tsum)
     for j in axes(A,2)
-        nrmj::Tsum = 0
+        nrmj = zero(Tsum)
         for i in axes(A,1)
             nrmj += norm(@inbounds A[i,j])
         end
@@ -817,10 +820,10 @@ end
 function opnormInf(A::AbstractMatrix{T}) where T
     require_one_based_indexing(A)
     Tnorm = typeof(float(real(zero(T))))
-    Tsum = promote_type(Float64, Tnorm)
-    nrm::Tsum = 0
+    Tsum = typeof(oneunit(Tnorm) * 1.0) # accumulate in at least Float64 precision, keeping units
+    nrm = zero(Tsum)
     for i in axes(A,1)
-        nrmi::Tsum = 0
+        nrmi = zero(Tsum)
         for j in axes(A,2)
             nrmi += norm(@inbounds A[i,j])
         end
@@ -1067,13 +1070,11 @@ function dot(x::AbstractVector, A::AbstractMatrix, y::AbstractVector)
     x₁ = first(x)
     for j in eachindex(y)
         yj = @inbounds y[j]
-        if !iszero(yj)
-            temp = zero(adjoint(@inbounds A[i₁,j]) * x₁)
-            @inbounds @simd for i in eachindex(x)
-                temp += adjoint(A[i,j]) * x[i]
-            end
-            s += dot(temp, yj)
+        temp = zero(adjoint(@inbounds A[i₁,j]) * x₁)
+        @inbounds @simd for i in eachindex(x)
+            temp += adjoint(A[i,j]) * x[i]
         end
+        s += dot(temp, yj)
     end
     return s
 end
@@ -1232,6 +1233,10 @@ When `A` is sparse, a similar polyalgorithm is used. For indefinite matrices, th
 factorization does not use pivoting during the numerical factorization and therefore the
 procedure can fail even for invertible matrices.
 
+The element type of `B` must be concrete, since `A` is promoted to the element type of the
+solution. For an abstractly typed `B` (e.g. a `Vector{Any}` or a `Vector{Real}`), an
+`ArgumentError` is thrown; convert `B` to a concrete element type first.
+
 See also: [`factorize`](@ref), [`pinv`](@ref).
 
 # Examples
@@ -1251,9 +1256,9 @@ function (\)(A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(A, B)
     m, n = size(A)
     # an abstract `eltype(A)` is narrowed to the promoted type of the stored values, as in the factorizations
-    # the scalar type of the solution: the elements of `B` may themselves be vectors
     TA0 = _valeltype(A)
-    T = promote_op(\, TA0, _scalartype(eltype(B)))
+    # the scalar type of the solution: the elements of `B` may themselves be vectors
+    T = promote_op(\, TA0, _scalartype(_rhs_eltype(B)))
     if m == n
         if istril(A)
             if istriu(A)
@@ -2115,7 +2120,9 @@ promote_leaf_eltypes(x::T) where {T} = T
 promote_leaf_eltypes(x::Union{AbstractArray{T},Tuple{T,Vararg{T}}}) where {T} =
     (isconcretetype(T) && !(T <: Union{AbstractArray,Tuple})) ? T : _promote_leaf_eltypes(x)
 promote_leaf_eltypes(x::Union{AbstractArray,Tuple}) = _promote_leaf_eltypes(x)
-_promote_leaf_eltypes(x::Tuple) = mapreduce(promote_leaf_eltypes, promote_type, x; init=Bool)
+_promote_leaf_eltypes(::Tuple{}) = Bool
+_promote_leaf_eltypes(x::Tuple) =
+    promote_type(promote_leaf_eltypes(first(x)), _promote_leaf_eltypes(Base.tail(x)))
 function _promote_leaf_eltypes(x::AbstractArray)
     # loop instead of mapreduce, to avoid a dynamic call to promote_type for every element
     T = Bool
@@ -2155,6 +2162,11 @@ function norm_x_minus_y(x::ArrayOrFastContiguousArrayView, y::ArrayOrFastContigu
     end
 end
 
+# `issubnormal` is only defined for a handful of floating-point-like types, so for a
+# `norm` of some other type (e.g. a dimensionful quantity) we can't check for subnormals
+# and just give up the overflow guard below, rather than erroring in `normalize`/`normalize!`
+_issubnormal(nrm) = applicable(issubnormal, nrm) && issubnormal(nrm)
+
 """
     normalize!(a::AbstractArray, p::Real=2)
 
@@ -2164,7 +2176,7 @@ See also [`normalize`](@ref) and [`norm`](@ref).
 """
 function normalize!(a::AbstractArray, p::Real=2) #logic equal to normalize, should be kept in sync
     nrm = norm(a, p)
-    if !issubnormal(nrm) # nrm is accurate and inverting won't overflow
+    if !_issubnormal(nrm) # nrm is accurate and inverting won't overflow
         rmul!(a, inv(nrm))
     else # scale elements to be non-subnormal and re-normalize
         normalize!(rmul!(a, inv(floatmin(nrm))), p)
@@ -2227,7 +2239,7 @@ NaN
 """
 function normalize(a::AbstractArray, p::Real = 2) #logic equal to normalize!, should be kept in sync
     nrm = norm(a, p)
-    if !issubnormal(nrm)
+    if !_issubnormal(nrm)
         return a * inv(nrm)
     else
         return normalize(a * inv(floatmin(nrm)), p)

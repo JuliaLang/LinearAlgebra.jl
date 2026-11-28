@@ -18,6 +18,7 @@ using Main.LinearAlgebraTestHelpers.DualNumbers
 using Main.LinearAlgebraTestHelpers.FillArrays
 using Main.LinearAlgebraTestHelpers.SizedArrays
 using Main.LinearAlgebraTestHelpers.Furlongs
+using Main.LinearAlgebraTestHelpers: COMPREHENSIVE
 
 Random.seed!(123)
 
@@ -260,6 +261,15 @@ end
     @test isequal(Float64[1.0] * big(2.0)im, Complex{BigFloat}[2.0im])
     @test isequal(BigFloat[1.0] * 2.0im,     Complex{BigFloat}[2.0im])
     @test isequal(BigFloat[1.0] * 2.0f0im,   Complex{BigFloat}[2.0im])
+end
+@testset "mul! with a scalar and arrays that share memory" begin
+    v = [1.0, 2, 3, 4]
+    @test mul!(v, 2, view(v, :)) == [2, 4, 6, 8]
+    @test_throws ArgumentError mul!(view(v, 2:4), 2, view(v, 1:3))
+    @test_throws ArgumentError mul!(view(v, 2:4), view(v, 1:3), 2)
+    @test_throws ArgumentError mul!(view(v, 2:4), 2I, view(v, 1:3))
+    M = [1.0 2; 3 4; 5 6]
+    @test_throws ArgumentError mul!(view(M, 2:3, :), view(M, 1:2, :), 2I)
 end
 @testset "* and mul! for non-commutative scaling" begin
     q = Quaternion(0.44567, 0.755871, 0.882548, 0.423612)
@@ -595,6 +605,11 @@ end
     @test @inferred(P((1.0, 2.0))) === Float64
     @test @inferred(P((1, 2.0))) === Float64
     @test @inferred(P((1, (2.0f0, 3)))) === Float32
+    @test @inferred(P(((1, 2), (3.0, (4.0f0,))))) === Float64
+    @test @inferred(P((1, ((2.0f0, (3,)), 4im)))) === ComplexF32
+    @test @inferred(P(ntuple(i -> isodd(i) ? i : (Float32(i),), 40))) === Float32
+    @test @inferred(P(())) === Bool
+    @test @inferred(P(((),))) === Bool
     @test @inferred(P(AbstractVector{Float64}[[1.0]])) === Float64
     @test P(Complex{Real}[1 + 2im]) === Complex{Real}
     # UniformScaling comparisons
@@ -674,6 +689,31 @@ LinearAlgebra.Transpose(a::ModInt{n}) where {n} = transpose(a)
     x = At \ vcat(b, [b[1]])
     @test x isa Vector{<:SizedArray{(2,),Float64}}
     @test all(i -> x[i].data ≈ Xt[i, :], 1:2)
+end
+
+@testset "abstractly typed right-hand sides" begin
+    A = [4.0 1.0 0.5; 1.0 3.0 0.2; 0.3 0.5 5.0]
+    b = [1.0, 2.0, 3.0]
+    for rhs in (Any[1.0, 2.0, 3.0], Real[1, 2, 3], Number[1, 2im, 3], AbstractFloat[1.0, 2.0, 3.0])
+        # dense `\` and solves with (LAPACK) factorizations promote `A` to the solution type, which
+        # requires a concrete element type of the right-hand side
+        @test_throws ArgumentError A \ rhs
+        @test_throws "abstract element type $(eltype(rhs))" A \ rhs
+        @test_throws ArgumentError [A; 1.0 1.0 1.0] \ vcat(rhs, rhs[1])   # least squares
+        @test_throws ArgumentError A \ permutedims(rhs)                   # matrix right-hand side
+        @test_throws ArgumentError permutedims(rhs) / A                    # right division
+        @test_throws ArgumentError Tridiagonal(A) \ rhs                    # through `lu`
+        for F in (lu(A), qr(A), qr(A, ColumnNorm()), cholesky(A'A), svd(A), lq(A), bunchkaufman(Symmetric(A)))
+            @test_throws ArgumentError F \ rhs
+        end
+        # the right-hand side is only read in the structured solves, whose result type is inferred
+        rhsc = convert(AbstractVector{mapreduce(typeof, promote_type, rhs)}, rhs)
+        for M in (UpperTriangular(A), LowerTriangular(A), Diagonal(A), Bidiagonal(A, :U), SymTridiagonal(Symmetric(A)), UpperHessenberg(A), 2I)
+            @test M \ rhs ≈ M \ rhsc
+            @test permutedims(rhs) / M ≈ permutedims(rhsc) / M
+        end
+    end
+    @test A \ convert(AbstractVector{Float64}, Any[1.0, 2.0, 3.0]) ≈ A \ b
 end
 
 @testset "Issue 22042" begin
@@ -918,6 +958,16 @@ end
     for (m, n) in ((0, 0), (1, 0), (0, 1))
         v = zeros(ComplexF64, m); a = zeros(ComplexF64, m, n); w = zeros(Float64, n)
         @test dot(v, a, w) === zero(ComplexF64)
+    end
+    # zeros in y are not strong zeros (#1836)
+    @test isnan(dot([1.0], [Inf;;], [0.0]))
+    @static if COMPREHENSIVE
+        @test isnan(dot([1.0], [NaN;;], [0.0]))
+        for i in 1:3, j in 1:3
+            A = ones(3, 3); A[i, j] = Inf
+            y = ones(3); y[j] = 0
+            @test isnan(dot(ones(3), A, y))
+        end
     end
 end
 
@@ -1170,7 +1220,18 @@ end
 end
 
 @testset "peakflops in parallel" begin
-    @test LinearAlgebra.peakflops(64, ntrials=1, parallel=true) > 0
+    # `parallel=true` runs on every worker of the cluster. This file may itself run on a
+    # Distributed worker (as in Julia's test suite), whose siblings are busy with other
+    # tests, so use a fresh process with a worker of its own.
+    code = """
+        include($(repr(joinpath(@__DIR__, "prune_old_LA.jl"))))
+        using LinearAlgebra
+        exit(LinearAlgebra.peakflops(64, ntrials=1, parallel=true) > 0 ? 0 : 1)
+        """
+    cmd = addenv(`$(Base.julia_cmd()) --startup-file=no -p 1 -e $code`,
+                 "JULIA_PROJECT" => Base.active_project(),
+                 "JULIA_LOAD_PATH" => join(LOAD_PATH, Sys.iswindows() ? ';' : ':'))
+    @test success(pipeline(cmd; stdout, stderr))
 end
 
 @testset "generic helpers corner cases" begin

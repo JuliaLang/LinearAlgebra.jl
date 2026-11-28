@@ -15,8 +15,9 @@ const ClosedScalar = Union{T, Complex{T}} where T <: ClosedReal
 # but only for Hermitian matrices, as their multiplication need not commute. Since the real type
 # can't be dispatched on, it is checked when factorizing.
 function _bk_checktype(::Type{TS}) where {TS <: Number}
-    real(TS) <: ClosedReal || throw(ArgumentError(lazy"the generic Bunch-Kaufman \
-        factorization requires a floating-point or rational real type, but the element type is $TS"))
+    real(TS) <: ClosedReal || throw(ArgumentError(LazyString(
+        "the generic Bunch-Kaufman factorization requires a floating-point or rational ",
+        lazy"real type, but the element type is $TS")))
     return nothing
 end
 ##--------------------------------------------------------------------------------
@@ -236,7 +237,13 @@ BunchKaufman{T}(B::BunchKaufman) where {T} =
     BunchKaufman(convert(Matrix{T}, B.LD), B.ipiv, B.uplo, B.symmetric, B.rook, B.info)
 Factorization{T}(B::BunchKaufman) where {T} = BunchKaufman{T}(B)
 
-AbstractMatrix(B::BunchKaufman) = B.uplo == 'U' ? B.P'B.U*B.D*B.U'B.P : B.P'B.L*B.D*B.L'B.P
+function AbstractMatrix(B::BunchKaufman)
+    if issymmetric(B)
+        return B.uplo == 'U' ? B.P'B.U*B.D*transpose(B.U)*B.P : B.P'B.L*B.D*transpose(B.L)*B.P
+    else
+        return B.uplo == 'U' ? B.P'B.U*B.D*B.U'B.P : B.P'B.L*B.D*B.L'B.P
+    end
+end
 AbstractArray(B::BunchKaufman) = AbstractMatrix(B)
 Matrix(B::BunchKaufman) = convert(Array, AbstractArray(B))
 Array(B::BunchKaufman) = Matrix(B)
@@ -407,6 +414,7 @@ function inv(B::BunchKaufman{<:BlasComplex,<:StridedMatrix})
 end
 
 function ldiv!(B::BunchKaufman{T,<:StridedMatrix}, R::StridedVecOrMat{T}) where {T<:BlasReal}
+    checkaliasing(R, B)
     if B.rook
         LAPACK.sytrs_rook!(B.uplo, B.LD, B.ipiv, R)
     else
@@ -414,6 +422,7 @@ function ldiv!(B::BunchKaufman{T,<:StridedMatrix}, R::StridedVecOrMat{T}) where 
     end
 end
 function ldiv!(B::BunchKaufman{T,<:StridedMatrix}, R::StridedVecOrMat{T}) where {T<:BlasComplex}
+    checkaliasing(R, B)
     if B.rook
         if issymmetric(B)
             LAPACK.sytrs_rook!(B.uplo, B.LD, B.ipiv, R)
@@ -433,6 +442,7 @@ end
 # A*transpose(X) = transpose(B), respectively. LAPACK has no right solves, so the transposed
 # right-hand side is copied.
 function rdiv!(B::AbstractMatrix, F::BunchKaufman)
+    checkaliasing(B, F)
     op = ishermitian(F) ? adjoint : transpose
     return copyto!(B, op(ldiv!(F, copy(op(B)))))
 end
@@ -888,7 +898,7 @@ generic_bksolve!(F, B) -> X<:AbstractVecOrMat
 `generic_bksolve!` solves a system of linear equations `A*X = B` where
 the Bunch-Kaufman factorization of `A` is provided by `F`.
 """
-function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS <: Number}
+function generic_bksolve!(F::BunchKaufman{<:Number}, B::AbstractMatrix)
     A, ipiv, symm, rook = F.LD, F.ipiv, issymmetric(F), F.rook
     require_one_based_indexing(A, ipiv, B)
     N = size(A, 1)
@@ -975,7 +985,7 @@ function generic_bksolve!(F::BunchKaufman{TS}, B::AbstractMatrix{TS}) where {TS 
     return B
 end
 # a vector is solved as a matrix with a single column
-function generic_bksolve!(F::BunchKaufman{T}, b::AbstractVector{T}) where {T <: Number}
+function generic_bksolve!(F::BunchKaufman{<:Number}, b::AbstractVector)
     generic_bksolve!(F, view(b, :, :))
     return b
 end
@@ -1214,9 +1224,9 @@ function bunchkaufman_native!(A::AbstractMatrix{TS}, rook::Bool = false; check::
         syhe = 'H'
     elseif issymmetric(A)
         # the symmetric factorization requires that the multiplication commutes
-        TS <: Union{Real,Complex} || throw(ArgumentError(lazy"the Bunch-Kaufman decomposition \
-            of a symmetric, non-Hermitian matrix requires real or complex numbers, but the \
-            element type is $TS"))
+        TS <: Union{Real,Complex} || throw(ArgumentError(LazyString(
+            "the Bunch-Kaufman decomposition of a symmetric, non-Hermitian matrix requires ",
+            lazy"real or complex numbers, but the element type is $TS")))
         syhe = 'S'
     else
         throw(ArgumentError("Bunch-Kaufman decomposition is only valid for " *
@@ -1239,8 +1249,11 @@ end
 bunchkaufman!(A::AbstractMatrix{<:Number}, rook::Bool = false; check::Bool = true) =
     bunchkaufman_native!(A, rook; check)
 
-ldiv!(B::BunchKaufman{TS}, R::AbstractVecOrMat{TS}) where {TS <: Number} =
-    generic_bksolve!(B, R)
+ldiv!(B::BunchKaufman{<:Number}, R::AbstractVecOrMat) =
+    (checkaliasing(R, B); generic_bksolve!(B, R))
 
 inv(B::BunchKaufman) =
     issymmetric(B) ? copytri!(B \ I, B.uplo) : copytri!(B \ I, B.uplo, true)
+
+# the arrays the factorization is stored in, for the aliasing checks (see `deepmightalias`)
+aliasparts(F::BunchKaufman) = (aliasparts(getfield(F, :LD))..., aliasparts(getfield(F, :ipiv))...)
