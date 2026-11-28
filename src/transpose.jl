@@ -228,14 +228,14 @@ function _copy_adjtrans!(B::AbstractVecOrMat, ir_dest::AbstractRange{Int}, jr_de
     end
     @boundscheck checkbounds(B, ir_dest, jr_dest)
     @boundscheck checkbounds(A, ir_src, jr_src)
-    idest = first(ir_dest)
-    for jsrc in jr_src
-        jdest = first(jr_dest)
-        for isrc in ir_src
+    jdest = first(jr_dest)
+    for isrc in ir_src
+        idest = first(ir_dest)
+        for jsrc in jr_src
             B[idest,jdest] = tfun(A[isrc,jsrc])
-            jdest += step(jr_dest)
+            idest += step(ir_dest)
         end
-        idest += step(ir_dest)
+        jdest += step(jr_dest)
     end
     return B
 end
