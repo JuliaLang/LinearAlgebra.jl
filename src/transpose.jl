@@ -115,23 +115,14 @@ function transpose_f!(f, B::AbstractMatrix, A::AbstractMatrix)
     end
     return B
 end
+# copy in 32×32 tiles, so that the strided accesses of a tile stay in cache; larger tiles
+# suffer from cache conflicts when the column stride is a power of two
 function transposeblock!(f, B::AbstractMatrix, A::AbstractMatrix, m::Int, n::Int, offseti::Int, offsetj::Int)
-    if m*n<=transposebaselength
-        @inbounds begin
-            for i = offseti .+ (1:m)
-                for j = offsetj .+ (1:n)
-                    B[j,i] = f(A[i,j])
-                end
-            end
+    b = 32
+    @inbounds for ib = 0:b:m-1, jb = 0:b:n-1
+        for i = offseti+ib .+ (1:min(b, m-ib)), j = offsetj+jb .+ (1:min(b, n-jb))
+            B[j,i] = f(A[i,j])
         end
-    elseif m>n
-        newm=m>>1
-        transposeblock!(f,B,A,newm,n,offseti,offsetj)
-        transposeblock!(f,B,A,m-newm,n,offseti+newm,offsetj)
-    else
-        newn=n>>1
-        transposeblock!(f,B,A,m,newn,offseti,offsetj)
-        transposeblock!(f,B,A,m,n-newn,offseti,offsetj+newn)
     end
     return B
 end
